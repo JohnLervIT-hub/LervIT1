@@ -46,12 +46,26 @@ export const bookings = pgTable("bookings", {
   images: text("images").array(),
   preferredDate: timestamp("preferred_date").notNull(),
   status: text("status").notNull().default("pending"),
+  
+  // New pricing-related fields
+  pickupDifficulty: text("pickup_difficulty").notNull().default("ground"),
+  dropoffDifficulty: text("dropoff_difficulty").notNull().default("ground"),
+  heavyItem: boolean("heavy_item").notNull().default(false),
+  numberOfMovers: integer("number_of_movers").notNull().default(1),
+  urgency: text("urgency").notNull().default("standard"),
+  
+  // Distance and pricing
   distance: decimal("distance", { precision: 8, scale: 2 }).notNull().default("0"),
   price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0"),
   baseFee: decimal("base_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   distanceFee: decimal("distance_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   loadFee: decimal("load_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   moverTravelFee: decimal("mover_travel_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  pickupDifficultyFee: decimal("pickup_difficulty_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  dropoffDifficultyFee: decimal("dropoff_difficulty_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  heavyItemFee: decimal("heavy_item_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  urgencyFee: decimal("urgency_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   notifiedAt: timestamp("notified_at"),
@@ -124,6 +138,10 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   distanceFee: true,
   loadFee: true,
   moverTravelFee: true,
+  pickupDifficultyFee: true,
+  dropoffDifficultyFee: true,
+  heavyItemFee: true,
+  urgencyFee: true,
 }).extend({
   // Override preferredDate to accept ISO date strings from the frontend
   preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),
