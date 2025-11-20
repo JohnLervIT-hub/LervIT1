@@ -88,12 +88,36 @@ export default function RequestMove() {
     }
   }, [pickupAddress, dropoffAddress, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers]);
 
-  // Calculate distance estimate when addresses change (mock calculation for now)
+  // Calculate real distance estimate when addresses change using geocoding
   useEffect(() => {
-    if (pickupAddress && dropoffAddress) {
-      const randomDistance = Math.random() * 20 + 5;
-      setEstimateDistance(randomDistance);
-    }
+    const calculateDistance = async () => {
+      if (pickupAddress && dropoffAddress) {
+        try {
+          // Use the backend geocoding API to calculate real distance
+          const response = await fetch('/api/geocode/distance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pickupAddress,
+              dropoffAddress
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setEstimateDistance(data.distance);
+          } else {
+            // Fallback to estimated distance if geocoding fails
+            setEstimateDistance(10);
+          }
+        } catch (error) {
+          // Fallback to estimated distance on error
+          setEstimateDistance(10);
+        }
+      }
+    };
+    
+    calculateDistance();
   }, [pickupAddress, dropoffAddress]);
 
   // AI Feature 2: Generate price explanation when booking is created

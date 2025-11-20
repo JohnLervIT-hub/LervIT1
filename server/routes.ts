@@ -823,6 +823,29 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
+  // Geocoding distance endpoint for AI auto-quote predictor
+  app.post("/api/geocode/distance", async (req: Request, res: Response) => {
+    try {
+      const distanceSchema = z.object({
+        pickupAddress: z.string(),
+        dropoffAddress: z.string(),
+      });
+      
+      const { pickupAddress, dropoffAddress } = validateBody(distanceSchema, req.body);
+      
+      const { geocodeAddress, calculateDistance } = await import("@shared/geocoding");
+      
+      const pickupGeo = geocodeAddress(pickupAddress);
+      const dropoffGeo = geocodeAddress(dropoffAddress);
+      
+      const distance = calculateDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
+      
+      res.json({ distance });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
   // ===== UTILITY ROUTES =====
   app.post("/api/calculate-price", async (req: Request, res: Response) => {
     try {
