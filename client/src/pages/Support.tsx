@@ -10,7 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -31,8 +31,8 @@ import type { SupportTicket } from "@shared/schema";
 
 const ticketSchema = z.object({
   subject: z.string().min(5, "Subject must be at least 5 characters"),
-  category: z.enum(["general", "booking", "payment", "technical", "account"]),
-  priority: z.enum(["low", "normal", "high", "urgent"]),
+  category: z.enum(["general", "booking", "billing", "technical"]),
+  priority: z.enum(["low", "normal", "high"]),
   message: z.string().min(20, "Message must be at least 20 characters"),
 });
 
@@ -55,9 +55,23 @@ export default function Support() {
 
   const createTicketMutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
+      // Get auth headers
+      const storedUser = localStorage.getItem("moveit_user");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (storedUser) {
+        try {
+          const userData = JSON.parse(storedUser);
+          if (userData.id) {
+            headers["Authorization"] = `Bearer ${userData.id}`;
+          }
+        } catch (e) {
+          // Invalid stored user
+        }
+      }
+      
       const res = await fetch("/api/support/tickets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         credentials: "include",
         body: JSON.stringify(data),
       });
@@ -65,6 +79,7 @@ export default function Support() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/tickets"] });
       toast({
         title: "Ticket created!",
         description: "We'll get back to you as soon as possible.",
@@ -353,9 +368,8 @@ export default function Support() {
                               <SelectContent>
                                 <SelectItem value="general">General</SelectItem>
                                 <SelectItem value="booking">Booking</SelectItem>
-                                <SelectItem value="payment">Payment</SelectItem>
+                                <SelectItem value="billing">Billing</SelectItem>
                                 <SelectItem value="technical">Technical</SelectItem>
-                                <SelectItem value="account">Account</SelectItem>
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -379,7 +393,6 @@ export default function Support() {
                                 <SelectItem value="low">Low</SelectItem>
                                 <SelectItem value="normal">Normal</SelectItem>
                                 <SelectItem value="high">High</SelectItem>
-                                <SelectItem value="urgent">Urgent</SelectItem>
                               </SelectContent>
                             </Select>
                             <FormMessage />

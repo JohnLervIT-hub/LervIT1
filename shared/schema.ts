@@ -199,13 +199,14 @@ export const supportTicketReplies = pgTable("support_ticket_replies", {
 
 export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
   id: true,
+  userId: true,
   createdAt: true,
   updatedAt: true,
   resolvedAt: true,
   assignedTo: true,
 }).extend({
-  category: z.enum(['general', 'booking', 'payment', 'technical', 'account']),
-  priority: z.enum(['low', 'normal', 'high', 'urgent']),
+  category: z.enum(['general', 'booking', 'billing', 'technical']),
+  priority: z.enum(['low', 'normal', 'high']),
 });
 
 export const insertSupportTicketReplySchema = createInsertSchema(supportTicketReplies).omit({
