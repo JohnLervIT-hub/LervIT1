@@ -29,7 +29,6 @@ export default function RequestMove() {
   const [loadSize, setLoadSize] = useState("medium");
   const [heavyItem, setHeavyItem] = useState(false);
   const [numberOfMovers, setNumberOfMovers] = useState(1);
-  const [urgency, setUrgency] = useState("standard");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -78,7 +77,6 @@ export default function RequestMove() {
         loadSize,
         heavyItem,
         numberOfMovers,
-        urgency,
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
@@ -203,14 +201,6 @@ export default function RequestMove() {
                     <div className="flex justify-between text-primary">
                       <span className="font-medium">2-Movers Multiplier (×1.75)</span>
                       <span className="font-medium">Applied</span>
-                    </div>
-                  )}
-                  {parseFloat(createdBooking.urgencyFee || "0") > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Urgency Fee</span>
-                      <span className="font-medium" data-testid="text-urgency-fee">
-                        ${parseFloat(createdBooking.urgencyFee).toFixed(2)}
-                      </span>
                     </div>
                   )}
                   <div className="h-px bg-border my-2" />
@@ -502,24 +492,6 @@ export default function RequestMove() {
                           Quick Schedule: Tomorrow at 9:00 AM
                         </Button>
                       </div>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="urgency" className="text-base font-semibold mb-2 block flex items-center gap-2">
-                        <Clock className="w-5 h-5" />
-                        Urgency Level
-                      </Label>
-                      <Select value={urgency} onValueChange={setUrgency}>
-                        <SelectTrigger id="urgency" className="h-12" data-testid="select-urgency">
-                          <SelectValue placeholder="Select urgency" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="standard">Standard (2+ hours) - $0</SelectItem>
-                          <SelectItem value="within_2_hours">Within 2 Hours - +$20</SelectItem>
-                          <SelectItem value="within_1_hour">Within 1 Hour - +$30</SelectItem>
-                          <SelectItem value="within_30_minutes">Within 30 Minutes - +$40</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
 
                     <div>

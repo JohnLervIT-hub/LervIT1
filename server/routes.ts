@@ -328,8 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bookingData.pickupDifficulty as any,
         bookingData.dropoffDifficulty as any,
         bookingData.heavyItem,
-        bookingData.numberOfMovers as 1 | 2,
-        bookingData.urgency as any
+        bookingData.numberOfMovers as 1 | 2
       );
       
       // Create booking with geocoded data and price breakdown
@@ -349,7 +348,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
         heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
         subtotal: toDecimalString(priceBreakdown.subtotal),
-        urgencyFee: toDecimalString(priceBreakdown.urgencyFee),
         notifiedAt: new Date(),
       });
       
