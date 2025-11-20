@@ -65,13 +65,23 @@ Preferred communication style: Simple, everyday language.
     *   **MyBookings.tsx:** Added distance display to each booking card. Collapsible "View Price Breakdown" section shows the same 4 components with test IDs for verification. Price breakdown persists for customer reference.
     *   **Drizzle ORM Fixes:** Fixed all `.where()` chaining issues in job acceptance endpoints using `and()` from `drizzle-orm`. Applied to POST `/api/bookings/:id/accept` and POST `/api/bookings/:id/decline`.
     *   **E2E Verified:** Tested complete flow from booking creation through job acceptance with race-condition protection. Confirmed real distance calculation, accurate price breakdown display, database storage of all components, and proper notification expiration.
-*   **Role-Specific User Experience (✅ Complete):**
-    *   **ProtectedRoute Component:** Enforces role-based access control at URL level. Redirects unauthorized users with toast notifications to their role-specific dashboards.
-    *   **Role-Specific Navigation:** Separate navigation components (CustomerNav, MoverNav, AdminNav) display only relevant pages for each role. Marketing/demo links hidden for authenticated users.
-    *   **Header Updates:** Desktop and mobile navigation show role-tailored menus. User dropdown displays role information.
-    *   **Login/Signup Flow:** Post-authentication redirects use AuthContext state with useEffect to ensure proper role-based landing (customer→/dashboard, mover→/mover-dashboard, admin→/admin).
-    *   **Route Protection:** Customer-only routes (/request-move, /dashboard, /my-bookings), Mover-only routes (/mover-dashboard), Admin-only routes (/admin), and shared routes (/messages, /review) with role validation.
-    *   **Marketing Page Guards:** Home and demo pages redirect authenticated users to role-specific dashboards, preventing access to marketing content post-login.
+*   **Role-Specific User Experience (✅ E2E Tested):**
+    *   **ProtectedRoute Component (`client/src/components/ProtectedRoute.tsx`):** Enforces role-based access control at URL level. Shows loading spinner while auth initializes and for unauthorized users. Redirects unauthorized users with toast notifications to their role-specific dashboards. Uses AuthContext `user` and `isLoading` state.
+    *   **Role-Specific Navigation Components:**
+        *   `CustomerNav.tsx`: Shows "Request Move", "My Bookings", "Dashboard" only
+        *   `MoverNav.tsx`: Shows "Dashboard" link only
+        *   `AdminNav.tsx`: Shows "Admin Dashboard" only
+        *   Marketing/demo links completely hidden for authenticated users
+    *   **Header Updates (`client/src/components/Header.tsx`):** Desktop and mobile navigation dynamically render role-specific nav components based on user role. User dropdown displays role information. Authenticated users never see marketing navigation.
+    *   **Login/Signup Flow (Auth Hydration Protected):** Post-authentication redirects use AuthContext state with useEffect watching `user && !isLoading` to ensure proper role-based landing (customer→/dashboard, mover→/mover-dashboard, admin→/admin). Auth loading state properly handled with `setIsLoading(false)` after successful login/signup.
+    *   **Route Protection Structure:**
+        *   **Public routes:** /, /demo, /lifecycle, /mover-lifecycle, /login, /signup, /browse-movers
+        *   **Customer-only (ProtectedRoute):** /request-move, /dashboard, /my-bookings
+        *   **Mover-only (ProtectedRoute):** /mover-dashboard
+        *   **Admin-only (ProtectedRoute):** /admin
+        *   **Shared authenticated:** /messages/:bookingId, /review/:bookingId (both customer & mover roles)
+    *   **Marketing Page Guards (Auth Hydration Protected):** Home, ProximityDemo, LifecycleDemo, and MoverLifecycleDemo pages all include useEffect guards checking `!isLoading && user` to redirect authenticated users to role-specific dashboards. Prevents redirect loops during auth hydration on page refresh.
+    *   **E2E Test Results:** Comprehensive test verified: (1) Customers can only access customer pages and see only customer navigation, (2) Movers can only access mover pages and see only mover navigation, (3) Login redirects to correct role dashboard, (4) Marketing pages redirect authenticated users, (5) Access denied toasts show when attempting to access unauthorized routes. Complete role separation confirmed.
 
 ## External Dependencies
 
