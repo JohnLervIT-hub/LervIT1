@@ -22,6 +22,7 @@ import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Support from "@/pages/Support";
 import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
+import Payment from "@/pages/Payment";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -51,6 +52,11 @@ function Router() {
       <Route path="/my-bookings">
         <ProtectedRoute allowedRoles={["customer"]}>
           <MyBookings />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/payment/:bookingId">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <Payment />
         </ProtectedRoute>
       </Route>
 

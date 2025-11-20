@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -83,6 +83,27 @@ export default function MyBookings() {
     return status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   };
 
+  const getPaymentStatusColor = (paymentStatus: string | null) => {
+    if (!paymentStatus || paymentStatus === 'pending') return 'secondary';
+    if (paymentStatus === 'succeeded') return 'default';
+    if (paymentStatus === 'failed') return 'destructive';
+    return 'secondary';
+  };
+
+  const getPaymentStatusLabel = (paymentStatus: string | null) => {
+    if (!paymentStatus || paymentStatus === 'pending') return 'Payment Pending';
+    if (paymentStatus === 'succeeded') return 'Paid';
+    if (paymentStatus === 'failed') return 'Payment Failed';
+    return 'Unknown';
+  };
+
+  const getPaymentStatusIcon = (paymentStatus: string | null) => {
+    if (!paymentStatus || paymentStatus === 'pending') return CreditCard;
+    if (paymentStatus === 'succeeded') return CheckCircle2;
+    if (paymentStatus === 'failed') return XCircle;
+    return CreditCard;
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -128,9 +149,27 @@ export default function MyBookings() {
                         Booked on {format(new Date(booking.createdAt), "MMM d, yyyy")}
                       </CardDescription>
                     </div>
-                    <Badge variant={getStatusColor(booking.status) as any} data-testid={`badge-status-${booking.id}`}>
-                      {getStatusLabel(booking.status)}
-                    </Badge>
+                    <div className="flex flex-col gap-2 items-end">
+                      <Badge variant={getStatusColor(booking.status) as any} data-testid={`badge-status-${booking.id}`}>
+                        {getStatusLabel(booking.status)}
+                      </Badge>
+                      {booking.status === 'confirmed' && booking.price && (
+                        <Badge 
+                          variant={getPaymentStatusColor(booking.paymentStatus) as any}
+                          data-testid={`badge-payment-${booking.id}`}
+                        >
+                          {(() => {
+                            const Icon = getPaymentStatusIcon(booking.paymentStatus);
+                            return (
+                              <>
+                                <Icon className="w-3 h-3 mr-1" />
+                                {getPaymentStatusLabel(booking.paymentStatus)}
+                              </>
+                            );
+                          })()}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -378,6 +417,17 @@ export default function MyBookings() {
 
                   <Separator />
                   <div className="flex flex-wrap gap-2">
+                    {booking.status === "confirmed" && booking.paymentStatus !== "succeeded" && booking.price && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setLocation(`/payment/${booking.id}`)}
+                        data-testid={`button-pay-${booking.id}`}
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Pay Now ${booking.price}
+                      </Button>
+                    )}
                     {booking.status === "pending" && (
                       <Button
                         variant="destructive"

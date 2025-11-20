@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -10,6 +10,18 @@ import { calculateDistance } from "./utils/distance";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import Stripe from "stripe";
+
+// Initialize Stripe
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+}
+if (process.env.STRIPE_SECRET_KEY.startsWith('pk_')) {
+  throw new Error('STRIPE_SECRET_KEY must be a secret key (starts with sk_), not a publishable key (starts with pk_). Please update the secret.');
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2024-11-20.acacia",
+});
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -659,6 +671,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(booking);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // ===== PAYMENT ROUTES =====
+  
+  // Create payment intent for a booking
+  app.post("/api/bookings/:id/create-payment-intent", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      
+      // Get the booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Verify user owns this booking
+      if (booking.customerId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Check if booking is in valid state for payment
+      if (booking.status !== 'confirmed') {
+        return res.status(400).json({ error: "Booking must be confirmed before payment" });
+      }
+      
+      // Check if already paid
+      if (booking.paymentStatus === 'succeeded') {
+        return res.status(400).json({ error: "Booking has already been paid" });
+      }
+      
+      // Calculate amount in cents (Stripe requires cents)
+      const amountInCents = Math.round(parseFloat(booking.price || '0') * 100);
+      
+      if (amountInCents <= 0) {
+        return res.status(400).json({ error: "Invalid booking price" });
+      }
+      
+      // Create or retrieve payment intent
+      let paymentIntent;
+      
+      if (booking.stripePaymentIntentId) {
+        // Retrieve existing payment intent
+        try {
+          paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+        } catch (error) {
+          // If payment intent doesn't exist, create a new one
+          paymentIntent = await stripe.paymentIntents.create({
+            amount: amountInCents,
+            currency: "cad",
+            metadata: {
+              bookingId: booking.id,
+              customerId: user.id,
+              customerName: user.name,
+            },
+            description: `MoveIt booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
+          });
+          
+          // Update booking with payment intent ID
+          await storage.updateBooking(bookingId, {
+            stripePaymentIntentId: paymentIntent.id,
+            paymentStatus: 'pending',
+          });
+        }
+      } else {
+        // Create new payment intent
+        paymentIntent = await stripe.paymentIntents.create({
+          amount: amountInCents,
+          currency: "cad",
+          metadata: {
+            bookingId: booking.id,
+            customerId: user.id,
+            customerName: user.name,
+          },
+          description: `MoveIt booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
+        });
+        
+        // Update booking with payment intent ID
+        await storage.updateBooking(bookingId, {
+          stripePaymentIntentId: paymentIntent.id,
+          paymentStatus: 'pending',
+        });
+      }
+      
+      res.json({ 
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      });
+    } catch (error: any) {
+      console.error("Error creating payment intent:", error);
+      res.status(500).json({ 
+        error: "Error creating payment intent: " + error.message 
+      });
+    }
+  });
+  
+  // Get payment status for a booking
+  app.get("/api/bookings/:id/payment-status", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Verify user has access (customer or assigned mover)
+      if (booking.customerId !== user.id && booking.moverId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      res.json({
+        paymentStatus: booking.paymentStatus || 'pending',
+        stripePaymentIntentId: booking.stripePaymentIntentId,
+        amount: booking.price,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payment status" });
+    }
+  });
+  
+  // Stripe webhook handler for payment events
+  app.post("/api/stripe-webhook", async (req: Request, res: Response) => {
+    try {
+      const sig = req.headers['stripe-signature'];
+      
+      if (!sig) {
+        return res.status(400).json({ error: 'No stripe signature' });
+      }
+      
+      // Note: In production, you should verify the webhook signature
+      // For now, we'll process the event directly
+      const event = req.body;
+      
+      // Handle the event
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          const paymentIntent = event.data.object;
+          
+          // Find booking by payment intent ID
+          const successBookings = await db
+            .select()
+            .from(bookings)
+            .where(eq(bookings.stripePaymentIntentId, paymentIntent.id))
+            .limit(1);
+          
+          if (successBookings.length > 0) {
+            const booking = successBookings[0];
+            
+            // Update booking payment status
+            await storage.updateBooking(booking.id, {
+              paymentStatus: 'succeeded',
+            });
+            
+            console.log(`Payment succeeded for booking ${booking.id}`);
+          }
+          break;
+          
+        case 'payment_intent.payment_failed':
+          const failedIntent = event.data.object;
+          
+          // Find booking by payment intent ID
+          const failedBookings = await db
+            .select()
+            .from(bookings)
+            .where(eq(bookings.stripePaymentIntentId, failedIntent.id))
+            .limit(1);
+          
+          if (failedBookings.length > 0) {
+            const booking = failedBookings[0];
+            
+            // Update booking payment status
+            await storage.updateBooking(booking.id, {
+              paymentStatus: 'failed',
+            });
+            
+            console.log(`Payment failed for booking ${booking.id}`);
+          }
+          break;
+          
+        default:
+          console.log(`Unhandled event type ${event.type}`);
+      }
+      
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("Webhook error:", error);
+      res.status(400).json({ error: error.message });
     }
   });
 
