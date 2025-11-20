@@ -212,24 +212,66 @@ export default function MyBookings() {
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">
-                                Distance Fee ({booking.distance ? parseFloat(booking.distance).toFixed(2) : '0'} km × $1.50/km)
+                                Distance Fee ({booking.distance ? parseFloat(booking.distance).toFixed(2) : '0'} km × $1.00/km)
                               </span>
                               <span className="font-medium" data-testid={`text-breakdown-distance-${booking.id}`}>
                                 ${parseFloat(booking.distanceFee || "0").toFixed(2)}
                               </span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Load Fee ({booking.loadSize})</span>
-                              <span className="font-medium" data-testid={`text-breakdown-load-${booking.id}`}>
-                                ${parseFloat(booking.loadFee || "0").toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Mover Travel Fee</span>
-                              <span className="font-medium" data-testid={`text-breakdown-travel-${booking.id}`}>
-                                ${parseFloat(booking.moverTravelFee || "0").toFixed(2)}
-                              </span>
-                            </div>
+                            {parseFloat(booking.loadFee || "0") > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Load Fee ({booking.loadSize})</span>
+                                <span className="font-medium" data-testid={`text-breakdown-load-${booking.id}`}>
+                                  ${parseFloat(booking.loadFee || "0").toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {parseFloat(booking.pickupDifficultyFee || "0") > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Pickup Difficulty Fee</span>
+                                <span className="font-medium" data-testid={`text-breakdown-pickup-difficulty-${booking.id}`}>
+                                  ${parseFloat(booking.pickupDifficultyFee).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {parseFloat(booking.dropoffDifficultyFee || "0") > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Dropoff Difficulty Fee</span>
+                                <span className="font-medium" data-testid={`text-breakdown-dropoff-difficulty-${booking.id}`}>
+                                  ${parseFloat(booking.dropoffDifficultyFee).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {parseFloat(booking.heavyItemFee || "0") > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Heavy Item Fee</span>
+                                <span className="font-medium" data-testid={`text-breakdown-heavy-item-${booking.id}`}>
+                                  ${parseFloat(booking.heavyItemFee).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {parseFloat(booking.moverTravelFee || "0") > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Mover Travel Fee</span>
+                                <span className="font-medium" data-testid={`text-breakdown-travel-${booking.id}`}>
+                                  ${parseFloat(booking.moverTravelFee || "0").toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {booking.numberOfMovers === 2 && (
+                              <div className="flex justify-between text-primary">
+                                <span className="font-medium">2-Movers Multiplier (×1.75)</span>
+                                <span className="font-medium">Applied</span>
+                              </div>
+                            )}
+                            {parseFloat(booking.urgencyFee || "0") > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Urgency Fee</span>
+                                <span className="font-medium" data-testid={`text-breakdown-urgency-${booking.id}`}>
+                                  ${parseFloat(booking.urgencyFee).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                             <div className="h-px bg-border my-2" />
                             <div className="flex justify-between font-bold">
                               <span>Total</span>
