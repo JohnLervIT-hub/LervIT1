@@ -1,11 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MoverCard from "@/components/MoverCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import moverPhoto1 from "@assets/generated_images/male_mover_profile_photo.png";
 import moverPhoto2 from "@assets/generated_images/female_mover_profile_photo.png";
 import moverPhoto3 from "@assets/generated_images/young_mover_headshot.png";
@@ -15,9 +16,33 @@ const moverPhotos = [moverPhoto1, moverPhoto2, moverPhoto3];
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.log("Location permission denied:", error);
+          setLocationDenied(true);
+        }
+      );
+    }
+  }, []);
+
+  const apiUrl = userCoords
+    ? `/api/movers?isAvailable=true&lat=${userCoords.lat}&lng=${userCoords.lng}`
+    : "/api/movers?isAvailable=true";
 
   const { data: movers, isLoading } = useQuery({
-    queryKey: ["/api/movers?isAvailable=true"],
+    queryKey: [apiUrl],
   });
 
   const filteredMovers = useMemo(() => {
@@ -91,13 +116,27 @@ export default function BrowseMovers() {
                 rating={parseFloat(mover.rating) || 0}
                 reviewCount={mover.totalMoves || 0}
                 vehicleType={mover.vehicleType}
-                distance="Nearby"
+                distance={mover.distance ? `${mover.distance} km away` : "Location unavailable"}
                 price={0}
                 verified={mover.isVerified}
                 completedMoves={mover.totalMoves || 0}
                 onSelect={handleSelectMover}
               />
             ))}
+          </div>
+        )}
+        
+        {locationDenied && (
+          <div className="mt-6 p-4 border rounded-md bg-muted/30">
+            <div className="flex items-start gap-3">
+              <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Location access required</p>
+                <p className="text-sm text-muted-foreground">
+                  Enable location access to see movers sorted by distance from you.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

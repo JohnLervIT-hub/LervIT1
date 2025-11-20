@@ -9,7 +9,10 @@ import Home from "@/pages/Home";
 import BrowseMovers from "@/pages/BrowseMovers";
 import RequestMove from "@/pages/RequestMove";
 import CustomerDashboard from "@/pages/CustomerDashboard";
+import MyBookings from "@/pages/MyBookings";
+import MoverDashboard from "@/pages/MoverDashboard";
 import Messages from "@/pages/Messages";
+import Review from "@/pages/Review";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
@@ -24,7 +27,10 @@ function Router() {
       <Route path="/browse-movers" component={BrowseMovers} />
       <Route path="/request-move" component={RequestMove} />
       <Route path="/dashboard" component={CustomerDashboard} />
-      <Route path="/messages" component={Messages} />
+      <Route path="/my-bookings" component={MyBookings} />
+      <Route path="/mover-dashboard" component={MoverDashboard} />
+      <Route path="/messages/:bookingId" component={Messages} />
+      <Route path="/review/:bookingId" component={Review} />
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>

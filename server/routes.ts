@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema } from "@shared/schema";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "./auth";
+import { calculateDistance } from "./utils/distance";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -82,6 +83,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/users", async (req: Request, res: Response) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const usersWithoutPasswords = allUsers.map((user) => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      res.json(usersWithoutPasswords);
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/users/:id", async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.params.id);
@@ -123,6 +137,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let location = req.query.location as string | undefined;
       const isAvailable = req.query.isAvailable === 'true' ? true : req.query.isAvailable === 'false' ? false : undefined;
+      const userLat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
+      const userLng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
       
       // Normalize location for matching
       if (location) {
@@ -138,16 +154,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       
-      // Enrich movers with user data
-      const enrichedMovers = await Promise.all(
+      // Enrich movers with user data and calculate distance
+      let enrichedMovers = await Promise.all(
         movers.map(async (mover) => {
           const user = await storage.getUser(mover.userId);
+          
+          let distance: number | null = null;
+          if (userLat && userLng && mover.latitude && mover.longitude) {
+            distance = calculateDistance(
+              userLat,
+              userLng,
+              parseFloat(mover.latitude),
+              parseFloat(mover.longitude)
+            );
+          }
+          
           return {
             ...mover,
+            distance,
             user: user ? { name: user.name, email: user.email, phone: user.phone } : null
           };
         })
       );
+      
+      // Sort by distance if coordinates provided
+      if (userLat && userLng) {
+        enrichedMovers.sort((a, b) => {
+          if (a.distance === null) return 1;
+          if (b.distance === null) return -1;
+          return a.distance - b.distance;
+        });
+      }
       
       res.json(enrichedMovers);
     } catch (error) {
@@ -372,6 +409,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/reviews", async (req: Request, res: Response) => {
     try {
       const reviewData = validateBody(insertReviewSchema, req.body);
+      
+      // Validate that the booking is completed before allowing a review
+      const booking = await storage.getBooking(reviewData.bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      if (booking.status !== "completed") {
+        return res.status(400).json({ error: "You can only leave a review after the move is completed" });
+      }
+      
       const review = await storage.createReview(reviewData);
       
       const customer = await storage.getUser(review.customerId);
@@ -452,13 +500,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: "mover"
       });
 
-      // Create movers
+      // Create movers (Calgary GPS coordinates)
       const mover1 = await storage.createMover({
         userId: moverUser1.id,
         vehicleType: "Large Truck (26ft)",
         vehicleCapacity: "3000 lbs",
         isVerified: true,
         location: "Calgary, AB",
+        latitude: "51.0447",
+        longitude: "-114.0719",
         bio: "Professional mover with 5+ years experience",
         isAvailable: true
       });
@@ -469,6 +519,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vehicleCapacity: "1500 lbs",
         isVerified: true,
         location: "Calgary, AB",
+        latitude: "51.0786",
+        longitude: "-113.9656",
         bio: "Fast and reliable service",
         isAvailable: true
       });

@@ -1,71 +1,198 @@
-import ChatInterface from "@/components/ChatInterface";
-import { useState } from "react";
-import moverPhoto from "@assets/generated_images/male_mover_profile_photo.png";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRoute } from "wouter";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Send, ArrowLeft } from "lucide-react";
+import { format } from "date-fns";
+import { useLocation } from "wouter";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
-//todo: remove mock functionality
-const initialMessages = [
-  {
-    id: '1',
-    senderId: 'mover-1',
-    senderName: 'Mike Johnson',
-    text: 'Hi! I can help you with your move. What items do you need to transport?',
-    timestamp: '10:30 AM',
-    isCurrentUser: false,
-  },
-  {
-    id: '2',
-    senderId: 'customer-1',
-    senderName: 'You',
-    text: 'Hello! I need to move a 2-bedroom apartment worth of furniture.',
-    timestamp: '10:32 AM',
-    isCurrentUser: true,
-  },
-  {
-    id: '3',
-    senderId: 'mover-1',
-    senderName: 'Mike Johnson',
-    text: 'Perfect! I have a large truck that can handle that. Do you need help packing as well?',
-    timestamp: '10:33 AM',
-    isCurrentUser: false,
-  },
-];
+type Message = {
+  id: string;
+  bookingId: string;
+  senderId: string;
+  text: string;
+  createdAt: string;
+};
+
+type Booking = {
+  id: string;
+  customerId: string;
+  moverId: string | null;
+  pickupAddress: string;
+  dropoffAddress: string;
+  status: string;
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  mover: {
+    id: string;
+    name: string;
+  } | null;
+};
 
 export default function Messages() {
-  const [messages, setMessages] = useState(initialMessages);
+  const { user } = useAuth();
+  const [, params] = useRoute("/messages/:bookingId");
+  const [, setLocation] = useLocation();
+  const [messageText, setMessageText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const bookingId = params?.bookingId;
 
-  const handleSendMessage = (text: string) => {
-    const newMessage = {
-      id: Date.now().toString(),
-      senderId: 'customer-1',
-      senderName: 'You',
-      text,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      isCurrentUser: true,
-    };
-    setMessages([...messages, newMessage]);
-    console.log('Sent message:', text);
+  const { data: booking } = useQuery<Booking>({
+    queryKey: [`/api/bookings/${bookingId}`],
+    enabled: !!bookingId,
+  });
+
+  const { data: messages, isLoading } = useQuery<Message[]>({
+    queryKey: [`/api/messages?bookingId=${bookingId}`],
+    enabled: !!bookingId,
+    refetchInterval: 3000,
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async (text: string) => {
+      return apiRequest("POST", "/api/messages", {
+        bookingId,
+        senderId: user?.id,
+        text,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/messages?bookingId=${bookingId}`] });
+      setMessageText("");
+    },
+  });
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (messageText.trim() && !sendMessageMutation.isPending) {
+      sendMessageMutation.mutate(messageText);
+    }
+  };
+
+  if (!user || !bookingId) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <p className="text-muted-foreground">Invalid booking.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const otherParty = booking?.customer?.id === user.id ? booking?.mover : booking?.customer;
 
   return (
     <div className="min-h-screen pt-24 pb-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold">
-            Messages
-          </h1>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocation(user.role === "mover" ? "/mover-dashboard" : "/my-bookings")}
+            className="mb-4"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <h1 className="text-3xl font-bold mb-2">Messages</h1>
+          <p className="text-muted-foreground">
+            Conversation with {otherParty?.name || "Unknown"}
+          </p>
         </div>
 
-        <ChatInterface
-          bookingId="1"
-          otherUserName="Mike Johnson"
-          otherUserPhoto={moverPhoto}
-          pickupAddress="123 Main St SW, Calgary, AB"
-          dropoffAddress="456 Oak Ave NW, Calgary, AB"
-          date="Dec 28, 2024"
-          time="2:00 PM"
-          messages={messages}
-          onSendMessage={handleSendMessage}
-        />
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarFallback>
+                  {otherParty?.name?.charAt(0) || "?"}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <CardTitle>{otherParty?.name || "Unknown"}</CardTitle>
+                <CardDescription>
+                  Move #{bookingId.slice(0, 8)}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <Separator />
+          <CardContent className="p-0">
+            <div className="h-[400px] overflow-y-auto p-4 space-y-4" data-testid="messages-container">
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground">Loading messages...</p>
+                </div>
+              ) : !messages || messages.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                </div>
+              ) : (
+                messages.map((message) => {
+                  const isOwnMessage = message.senderId === user.id;
+                  return (
+                    <div
+                      key={message.id}
+                      className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
+                      data-testid={`message-${message.id}`}
+                    >
+                      <div
+                        className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                          isOwnMessage
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        }`}
+                      >
+                        <p className="text-sm">{message.text}</p>
+                        <p className={`text-xs mt-1 ${isOwnMessage ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                          {format(new Date(message.createdAt), "h:mm a")}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            <Separator />
+            <form onSubmit={handleSendMessage} className="p-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type your message..."
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  disabled={sendMessageMutation.isPending}
+                  data-testid="input-message"
+                />
+                <Button
+                  type="submit"
+                  disabled={!messageText.trim() || sendMessageMutation.isPending}
+                  data-testid="button-send"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

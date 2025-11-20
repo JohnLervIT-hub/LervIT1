@@ -25,6 +25,8 @@ export const movers = pgTable("movers", {
   totalMoves: integer("total_moves").default(0).notNull(),
   bio: text("bio"),
   location: text("location"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   isAvailable: boolean("is_available").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
