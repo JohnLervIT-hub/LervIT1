@@ -295,7 +295,7 @@ export default function MoverDashboard() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Pickup Difficulty Fee</span>
                       <span className="font-medium">
-                        ${parseFloat(booking.pickupDifficultyFee).toFixed(2)}
+                        ${parseFloat(booking.pickupDifficultyFee || "0").toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -303,7 +303,7 @@ export default function MoverDashboard() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Dropoff Difficulty Fee</span>
                       <span className="font-medium">
-                        ${parseFloat(booking.dropoffDifficultyFee).toFixed(2)}
+                        ${parseFloat(booking.dropoffDifficultyFee || "0").toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -311,7 +311,7 @@ export default function MoverDashboard() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Heavy Item Fee</span>
                       <span className="font-medium">
-                        ${parseFloat(booking.heavyItemFee).toFixed(2)}
+                        ${parseFloat(booking.heavyItemFee || "0").toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -333,7 +333,7 @@ export default function MoverDashboard() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Urgency Fee</span>
                       <span className="font-medium">
-                        ${parseFloat(booking.urgencyFee).toFixed(2)}
+                        ${parseFloat(booking.urgencyFee || "0").toFixed(2)}
                       </span>
                     </div>
                   )}
