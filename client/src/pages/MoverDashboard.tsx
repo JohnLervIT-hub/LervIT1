@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -26,6 +27,19 @@ type Booking = {
   price: string | null;
   paymentStatus: string | null;
   createdAt: string;
+  pickupDifficulty: string | null;
+  dropoffDifficulty: string | null;
+  heavyItem: boolean | null;
+  numberOfMovers: number | null;
+  urgency: string | null;
+  baseFee: string | null;
+  distanceFee: string | null;
+  loadFee: string | null;
+  pickupDifficultyFee: string | null;
+  dropoffDifficultyFee: string | null;
+  heavyItemFee: string | null;
+  moverTravelFee: string | null;
+  urgencyFee: string | null;
   customer: {
     id: string;
     name: string;
@@ -187,6 +201,50 @@ export default function MoverDashboard() {
                 </p>
               </div>
             </div>
+            {booking.distance && (
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Distance</p>
+                  <p className="text-sm text-muted-foreground">
+                    {parseFloat(booking.distance).toFixed(2)} km
+                  </p>
+                </div>
+              </div>
+            )}
+            {booking.numberOfMovers && (
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Number of Movers</p>
+                  <p className="text-sm text-muted-foreground">
+                    {booking.numberOfMovers} Mover{booking.numberOfMovers > 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+            )}
+            {booking.heavyItem && (
+              <div className="flex items-center gap-2">
+                <Weight className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Heavy Items</p>
+                  <p className="text-sm text-muted-foreground">
+                    Yes
+                  </p>
+                </div>
+              </div>
+            )}
+            {booking.urgency && booking.urgency !== 'standard' && (
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Urgency</p>
+                  <p className="text-sm text-muted-foreground capitalize">
+                    {booking.urgency.replace(/_/g, ' ')}
+                  </p>
+                </div>
+              </div>
+            )}
             {booking.price && (
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
@@ -200,6 +258,97 @@ export default function MoverDashboard() {
             )}
           </div>
         </div>
+
+        {booking.price && booking.baseFee && (
+          <>
+            <Separator />
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate active-elevate-2 p-2 rounded-md w-full" data-testid={`button-price-breakdown-${booking.id}`}>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                View Price Breakdown
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="bg-muted/50 rounded-lg p-4 mt-2 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Base Fee</span>
+                    <span className="font-medium">
+                      ${parseFloat(booking.baseFee).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Distance Fee ({booking.distance ? parseFloat(booking.distance).toFixed(2) : '0'} km × $1.00/km)
+                    </span>
+                    <span className="font-medium">
+                      ${parseFloat(booking.distanceFee || "0").toFixed(2)}
+                    </span>
+                  </div>
+                  {parseFloat(booking.loadFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Load Fee ({booking.loadSize})</span>
+                      <span className="font-medium">
+                        ${parseFloat(booking.loadFee || "0").toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(booking.pickupDifficultyFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Pickup Difficulty Fee</span>
+                      <span className="font-medium">
+                        ${parseFloat(booking.pickupDifficultyFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(booking.dropoffDifficultyFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Dropoff Difficulty Fee</span>
+                      <span className="font-medium">
+                        ${parseFloat(booking.dropoffDifficultyFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(booking.heavyItemFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Heavy Item Fee</span>
+                      <span className="font-medium">
+                        ${parseFloat(booking.heavyItemFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(booking.moverTravelFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Mover Travel Fee</span>
+                      <span className="font-medium">
+                        ${parseFloat(booking.moverTravelFee || "0").toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {booking.numberOfMovers === 2 && (
+                    <div className="flex justify-between text-primary">
+                      <span className="font-medium">2-Movers Multiplier (×1.75)</span>
+                      <span className="font-medium">Applied</span>
+                    </div>
+                  )}
+                  {parseFloat(booking.urgencyFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Urgency Fee</span>
+                      <span className="font-medium">
+                        ${parseFloat(booking.urgencyFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="h-px bg-border my-2" />
+                  <div className="flex justify-between font-bold">
+                    <span>Total Earnings</span>
+                    <span className="text-primary">
+                      ${parseFloat(booking.price).toFixed(2)} CAD
+                    </span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </>
+        )}
 
         {booking.description && (
           <>
