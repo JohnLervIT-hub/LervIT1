@@ -10,7 +10,6 @@ export interface PriceBreakdown {
   heavyItemFee: number;
   subtotal: number;
   numberOfMoversMultiplier: number;
-  urgencyFee: number;
   totalCost: number;
 }
 
@@ -39,17 +38,10 @@ const PRICING_CONFIG = {
   },
   HEAVY_ITEM_FEE: 15.00,
   TWO_MOVERS_MULTIPLIER: 1.75,
-  URGENCY_FEES: {
-    standard: 0.00,
-    within_2_hours: 20.00,
-    within_1_hour: 30.00,
-    within_30_minutes: 40.00,
-  }
 };
 
 export type PickupDifficultyType = keyof typeof PRICING_CONFIG.PICKUP_DIFFICULTY_FEES;
 export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES;
-export type UrgencyType = keyof typeof PRICING_CONFIG.URGENCY_FEES;
 
 /**
  * Calculate the total price and breakdown for a moving job
@@ -62,7 +54,6 @@ export function calculatePrice(
   dropoffDifficulty: DropoffDifficultyType,
   heavyItem: boolean,
   numberOfMovers: 1 | 2,
-  urgency: UrgencyType,
   moverToPickupDistance?: number
 ): PriceBreakdown {
   // Base fee
@@ -98,11 +89,8 @@ export function calculatePrice(
   const numberOfMoversMultiplier = numberOfMovers === 2 ? PRICING_CONFIG.TWO_MOVERS_MULTIPLIER : 1;
   const subtotalAfterMultiplier = subtotal * numberOfMoversMultiplier;
   
-  // Urgency fee (added after multiplier)
-  const urgencyFee = PRICING_CONFIG.URGENCY_FEES[urgency] || 0;
-  
-  // Total cost
-  const totalCost = subtotalAfterMultiplier + urgencyFee;
+  // Total cost (no urgency fee for MVP)
+  const totalCost = subtotalAfterMultiplier;
   
   return {
     baseFee: Math.round(baseFee * 100) / 100,
@@ -114,7 +102,6 @@ export function calculatePrice(
     moverTravelFee: Math.round(moverTravelFee * 100) / 100,
     subtotal: Math.round(subtotal * 100) / 100,
     numberOfMoversMultiplier,
-    urgencyFee: Math.round(urgencyFee * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
   };
 }
@@ -141,7 +128,6 @@ export function formatPriceBreakdown(breakdown: PriceBreakdown): string {
     breakdown.heavyItemFee > 0 ? `Heavy Item: $${breakdown.heavyItemFee.toFixed(2)}` : null,
     breakdown.moverTravelFee > 0 ? `Mover Travel: $${breakdown.moverTravelFee.toFixed(2)}` : null,
     breakdown.numberOfMoversMultiplier > 1 ? `2-Movers Multiplier (×${breakdown.numberOfMoversMultiplier}): Applied` : null,
-    breakdown.urgencyFee > 0 ? `Urgency Fee: $${breakdown.urgencyFee.toFixed(2)}` : null,
     `Total: $${breakdown.totalCost.toFixed(2)}`,
   ];
   
@@ -167,14 +153,4 @@ export function getDropoffDifficultyLabel(difficulty: DropoffDifficultyType): st
     elevator: 'Elevator',
   };
   return labels[difficulty] || difficulty;
-}
-
-export function getUrgencyLabel(urgency: UrgencyType): string {
-  const labels: Record<UrgencyType, string> = {
-    standard: 'Standard (2+ hours)',
-    within_2_hours: 'Within 2 Hours',
-    within_1_hour: 'Within 1 Hour',
-    within_30_minutes: 'Within 30 Minutes',
-  };
-  return labels[urgency] || urgency;
 }
