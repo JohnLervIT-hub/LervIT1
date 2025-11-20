@@ -30,12 +30,17 @@ export default function Header() {
           <nav className="hidden md:flex items-center gap-1">
             <Link href="/demo" data-testid="link-demo">
               <Button variant="outline" size="sm">
-                🗺️ Map Demo
+                🗺️ Map
               </Button>
             </Link>
             <Link href="/lifecycle" data-testid="link-lifecycle">
+              <Button variant="outline" size="sm">
+                🎬 Customer
+              </Button>
+            </Link>
+            <Link href="/mover-lifecycle" data-testid="link-mover-lifecycle">
               <Button variant="default" size="sm" className="bg-gradient-to-r from-primary to-green-500">
-                🎬 Full Demo
+                🚚 Mover
               </Button>
             </Link>
             <Link href="/browse-movers" data-testid="link-browse-movers">
