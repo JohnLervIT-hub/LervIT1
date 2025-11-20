@@ -1,0 +1,116 @@
+I want to upgrade my moving app to work like Uber for movers.
+Optimize my entire booking and matching flow with the following requirements:
+
+1. Implement Real-Time Mover Proximity Matching
+
+When a customer creates a booking, automatically identify movers closest to the pickup address.
+
+Use geolocation coordinates for matching (lat/lng).
+
+Add a function to calculate distance between mover location and pickup location using Haversine formula or Google Maps Distance Matrix (mock or real).
+
+Movers within a configurable radius (e.g., 0–15 km) should appear first.
+
+If no movers are close, expand search radius automatically.
+
+2. Add Mover Location in Database
+
+For each mover profile:
+
+Store mover’s home base or default location (lat/lng).
+
+Add interface for movers to update their location (e.g., “Update My Location”).
+
+Use this location for proximity calculation.
+
+3. Intelligent Price Calculation
+
+Rebuild pricing logic to mirror Uber-style dynamic pricing:
+
+Base fee: $25
+
+Distance fee: $1.50 per km (pickup → dropoff)
+
+Load fee: adjustable constant ($10–$40 depending on item size)
+
+Mover distance fee: small surcharge if mover must travel more than X km to reach pickup
+
+Show full price breakdown to user before booking.
+
+4. Auto-Notify Closest Movers
+
+When a booking is created:
+
+Send the job ONLY to the top 5 nearest movers.
+
+Show movers: pickup distance, item type, price estimate.
+
+Add “Accept Job” button.
+
+5. Improve Customer Booking Flow
+
+Auto-fill and validate pickup/dropoff addresses using Google Places API (mock allowed for demo).
+
+Generate clear job summary screen:
+
+Distance
+
+Estimated price
+
+Time window
+
+Assigned mover (once accepted)
+
+6. Add Real-Time Mover Dashboard Improvements
+
+Movers should see:
+
+Nearby available jobs sorted by proximity
+
+Job details
+
+Distance to pickup
+
+Estimated earnings
+
+Accept/Decline buttons
+
+Moving fee breakdown
+
+7. Add Background Matching Logic
+
+System should:
+
+Reassign job if mover doesn’t accept in X minutes
+
+Keep searching for available movers
+
+Notify customer once matched
+
+8. Add Fail-Safes & Testing Mode
+
+Include mock GPS coordinates for testing (Calgary-based)
+
+No actual map API required unless available
+
+Create test movers in the database with random Calgary coordinates
+
+9. Make All Changes Without Breaking Current Functionality
+
+Keep existing customer flow
+
+Keep existing mover dashboard
+
+Add new logic on top or via new routes/components
+
+After implementing, run automated checks and show me test results
+
+After completing the changes:
+
+Provide the updated code structure
+
+Run a full simulated booking to confirm proximity matching
+
+Display the matching logic output
+
+Allow me to test live inside Replit

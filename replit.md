@@ -179,3 +179,25 @@ Preferred communication style: Simple, everyday language.
   - Images displayed in both MyBookings (customer view) and MoverDashboard (mover view)
   - Grid layout: 2 columns on mobile, 4 columns on desktop
   - Aspect-square containers with rounded borders for consistent display
+
+### Mover Dashboard Enhancements (November 2025)
+**Purpose:** Improved mover interface for better readability, cleaner UX, and streamlined job management workflow.
+
+**Implementation Details:**
+- **Auto-Profile Creation:** When users sign up with `role="mover"`, backend automatically creates mover profile with default values (vehicleType: "van", location: "Calgary, AB")
+- **Phone Field Added:** Signup form now includes optional phone field for better contact information collection
+- **Dashboard Routing:** Header component intelligently routes users based on role (movers → /mover-dashboard, customers → /dashboard, admins → /admin)
+  
+**UI Improvements:**
+- **Customer Information Prominence:** Highlighted section displaying customer name and email in muted background box at top of booking cards
+- **Enhanced CTAs:** Primary action buttons (Accept Booking, Mark Complete) with loading states and responsive sizing (full-width on mobile, auto-width on desktop)
+- **Better Empty States:** Icon-based empty states with helpful messaging and visual feedback
+- **Tab Badges:** Real-time count badges on both Available Jobs and My Bookings tabs
+- **Improved Layout:** Background tint for better contrast, better spacing, enhanced visual hierarchy
+- **Loading States:** Spinner animation for booking data loads
+- **Status Colors:** Improved badge variants for better status visibility
+
+**Bug Fixes:**
+- Fixed `/api/movers` endpoint to properly filter by `userId` query parameter, ensuring each mover sees only their own profile and bookings
+- Resolved mover profile loading issues preventing dashboard access
+- Fixed routing logic for role-based navigation

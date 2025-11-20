@@ -30,6 +30,7 @@ type Booking = {
     id: string;
     name: string;
     email: string;
+    phone?: string;
   } | null;
 };
 
@@ -114,21 +115,35 @@ export default function MoverDashboard() {
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (
     <Card key={booking.id} className="hover-elevate" data-testid={`card-booking-${booking.id}`}>
-      <CardHeader>
+      <CardHeader className="space-y-4">
         <div className="flex justify-between items-start gap-4">
           <div>
             <CardTitle className="text-xl">
               Move #{booking.id.slice(0, 8)}
             </CardTitle>
             <CardDescription>
-              {booking.customer && `${booking.customer.name} • `}
-              {format(new Date(booking.createdAt), "MMM d, yyyy")}
+              Requested {format(new Date(booking.createdAt), "MMM d, yyyy")}
             </CardDescription>
           </div>
           <Badge variant={getStatusColor(booking.status) as any} data-testid={`badge-status-${booking.id}`}>
             {getStatusLabel(booking.status)}
           </Badge>
         </div>
+        
+        {booking.customer && (
+          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-semibold text-foreground">Customer Information</p>
+            <div className="space-y-1">
+              <p className="text-sm">
+                <span className="font-medium text-foreground">{booking.customer.name}</span>
+              </p>
+              <p className="text-sm text-muted-foreground">{booking.customer.email}</p>
+              {booking.customer.phone && (
+                <p className="text-sm text-muted-foreground">{booking.customer.phone}</p>
+              )}
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
@@ -217,76 +232,89 @@ export default function MoverDashboard() {
           </>
         )}
 
-        <Separator />
-        <div className="flex flex-wrap gap-2">
-          {showActions && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => acceptBookingMutation.mutate(booking.id)}
-              disabled={acceptBookingMutation.isPending}
-              data-testid={`button-accept-${booking.id}`}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Accept Booking
-            </Button>
-          )}
-          {booking.status === "confirmed" && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => completeBookingMutation.mutate(booking.id)}
-              disabled={completeBookingMutation.isPending}
-              data-testid={`button-complete-${booking.id}`}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Mark Complete
-            </Button>
-          )}
-          {booking.status !== "cancelled" && booking.status !== "pending" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation(`/messages/${booking.id}`)}
-              data-testid={`button-message-${booking.id}`}
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Message Customer
-            </Button>
-          )}
-        </div>
+        {(showActions || booking.status === "confirmed" || (booking.status !== "cancelled" && booking.status !== "pending")) && (
+          <>
+            <Separator />
+            <div className="flex flex-wrap gap-3">
+              {showActions && (
+                <Button
+                  variant="default"
+                  onClick={() => acceptBookingMutation.mutate(booking.id)}
+                  disabled={acceptBookingMutation.isPending}
+                  data-testid={`button-accept-${booking.id}`}
+                  className="flex-1 sm:flex-none"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {acceptBookingMutation.isPending ? "Accepting..." : "Accept Booking"}
+                </Button>
+              )}
+              {booking.status === "confirmed" && (
+                <Button
+                  variant="default"
+                  onClick={() => completeBookingMutation.mutate(booking.id)}
+                  disabled={completeBookingMutation.isPending}
+                  data-testid={`button-complete-${booking.id}`}
+                  className="flex-1 sm:flex-none"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {completeBookingMutation.isPending ? "Completing..." : "Mark Complete"}
+                </Button>
+              )}
+              {booking.status !== "cancelled" && booking.status !== "pending" && (
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation(`/messages/${booking.id}`)}
+                  data-testid={`button-message-${booking.id}`}
+                  className="flex-1 sm:flex-none"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Message Customer
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-24 pb-12 bg-muted/30">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Mover Dashboard</h1>
-          <p className="text-muted-foreground">Manage your bookings and find new jobs</p>
+          <p className="text-muted-foreground text-lg">Manage your bookings and find new jobs</p>
         </div>
 
         <Tabs defaultValue="available" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="available" data-testid="tab-available">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="available" data-testid="tab-available" className="gap-2">
               Available Jobs
               {availableBookings && availableBookings.length > 0 && (
-                <Badge variant="secondary" className="ml-2">
+                <Badge variant="secondary" className="ml-1 no-default-hover-elevate">
                   {availableBookings.length}
                 </Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="my-bookings" data-testid="tab-my-bookings">
               My Bookings
+              {bookings && bookings.length > 0 && (
+                <Badge variant="secondary" className="ml-1 no-default-hover-elevate">
+                  {bookings.length}
+                </Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="available" className="space-y-4">
             {!availableBookings || availableBookings.length === 0 ? (
               <Card>
-                <CardContent className="pt-6 text-center">
-                  <p className="text-muted-foreground">No available jobs at the moment.</p>
+                <CardContent className="py-12 text-center">
+                  <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="font-semibold text-lg mb-2">No Available Jobs</h3>
+                  <p className="text-muted-foreground">
+                    Check back later for new moving requests in your area.
+                  </p>
                 </CardContent>
               </Card>
             ) : (
@@ -296,13 +324,22 @@ export default function MoverDashboard() {
 
           <TabsContent value="my-bookings" className="space-y-4">
             {isLoading ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">Loading your bookings...</p>
-              </div>
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <div className="flex justify-center mb-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                  <p className="text-muted-foreground">Loading your bookings...</p>
+                </CardContent>
+              </Card>
             ) : !bookings || bookings.length === 0 ? (
               <Card>
-                <CardContent className="pt-6 text-center">
-                  <p className="text-muted-foreground">You don't have any bookings yet.</p>
+                <CardContent className="py-12 text-center">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="font-semibold text-lg mb-2">No Bookings Yet</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Accept jobs from the Available Jobs tab to get started.
+                  </p>
                 </CardContent>
               </Card>
             ) : (

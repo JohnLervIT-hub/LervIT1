@@ -21,6 +21,7 @@ export default function Signup() {
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("customer");
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +31,7 @@ export default function Signup() {
     setIsLoading(true);
 
     try {
-      await signup(name, email, password, role);
+      await signup(name, email, password, role, phone);
       toast({
         title: "Account created!",
         description: "Welcome to MoveIt!",
@@ -84,6 +85,17 @@ export default function Signup() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 data-testid="input-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="(403) 555-1234"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                data-testid="input-phone"
               />
             </div>
             <div className="space-y-2">

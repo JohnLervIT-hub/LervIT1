@@ -331,7 +331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           return {
             ...booking,
-            customer: customer ? { id: customer.id, name: customer.name, email: customer.email } : null,
+            customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
             mover: mover && moverUser ? {
               id: mover.id,
               name: moverUser.name,

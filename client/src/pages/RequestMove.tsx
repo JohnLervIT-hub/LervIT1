@@ -67,6 +67,16 @@ export default function RequestMove() {
     if (step < 3) {
       setStep(step + 1);
     } else {
+      // Validate date before submission
+      if (!date) {
+        toast({
+          title: "Date required",
+          description: "Please select a preferred date and time.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Create the booking with all form data including images
       const bookingData = {
         customerId: user?.id,
