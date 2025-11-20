@@ -174,6 +174,45 @@ export const insertJobNotificationSchema = createInsertSchema(jobNotifications).
   expiresAt: true,
 });
 
+export const supportTickets = pgTable("support_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  subject: text("subject").notNull(),
+  category: text("category").notNull().default("general"),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("open"),
+  priority: text("priority").notNull().default("normal"),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const supportTicketReplies = pgTable("support_ticket_replies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").references(() => supportTickets.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  message: text("message").notNull(),
+  isStaff: boolean("is_staff").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  resolvedAt: true,
+  assignedTo: true,
+}).extend({
+  category: z.enum(['general', 'booking', 'payment', 'technical', 'account']),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']),
+});
+
+export const insertSupportTicketReplySchema = createInsertSchema(supportTicketReplies).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertMover = z.infer<typeof insertMoverSchema>;
@@ -186,3 +225,7 @@ export type InsertReview = z.infer<typeof insertReviewSchema>;
 export type Review = typeof reviews.$inferSelect;
 export type InsertJobNotification = z.infer<typeof insertJobNotificationSchema>;
 export type JobNotification = typeof jobNotifications.$inferSelect;
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertSupportTicketReply = z.infer<typeof insertSupportTicketReplySchema>;
+export type SupportTicketReply = typeof supportTicketReplies.$inferSelect;
