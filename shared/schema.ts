@@ -39,6 +39,7 @@ export const bookings = pgTable("bookings", {
   dropoffAddress: text("dropoff_address").notNull(),
   loadSize: text("load_size").notNull(),
   description: text("description"),
+  images: text("images").array(),
   preferredDate: timestamp("preferred_date").notNull(),
   status: text("status").notNull().default("pending"),
   distance: decimal("distance", { precision: 8, scale: 2 }),
