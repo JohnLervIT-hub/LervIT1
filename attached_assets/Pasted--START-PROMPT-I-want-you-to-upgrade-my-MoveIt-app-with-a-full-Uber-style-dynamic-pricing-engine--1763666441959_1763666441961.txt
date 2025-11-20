@@ -1,0 +1,134 @@
+<START PROMPT>
+
+I want you to upgrade my MoveIt app with a full Uber-style dynamic pricing engine. 
+Use the rules below and integrate them into the frontend, backend, and booking 
+calculation flow. If anything is unclear, ask questions before implementing. 
+Then execute the upgrade.
+
+--------------------------------------------------------------------
+PRICING ENGINE REQUIREMENTS (IMPLEMENT EXACTLY)
+--------------------------------------------------------------------
+
+1. BASE FEE
+- Base load fee: $30
+
+--------------------------------------------------------------
+2. DISTANCE FEE
+--------------------------------------------------------------
+- Charge $1 per km
+- Calculate using Google Maps (or mock data if no API key yet)
+
+--------------------------------------------------------------
+3. PICKUP & DROPOFF DIFFICULTY FEES
+--------------------------------------------------------------
+Add UI dropdowns + backend logic. Fees must apply automatically.
+
+PICKUP DIFFICULTY OPTIONS:
+- Ground floor = $0
+- Basement = +$10
+- Elevator available = $0
+- Stairs (1–5 floors) = +$10 per floor
+
+DROPOFF DIFFICULTY OPTIONS (same as pickup):
+- Ground floor = $0
+- Basement = +$10
+- Elevator available = $0
+- Stairs (1–5 floors) = +$10 per floor
+
+--------------------------------------------------------------
+4. LOAD SIZE FEE
+--------------------------------------------------------------
+Add UI selector and apply backend values:
+
+- Small Load (1–2 items) = $0
+- Medium Load = +$15
+- Large Load = +$30
+
+--------------------------------------------------------------
+5. HEAVY ITEM FEE
+--------------------------------------------------------------
+Add a toggle. If customer selects heavy item → add +$15.
+
+Examples: sofa bed, appliances, marble/glass, treadmills, sectionals.
+
+--------------------------------------------------------------
+6. NUMBER OF MOVERS (1-MAN VS 2-MAN LOGIC)
+--------------------------------------------------------------
+
+Option A — 1 Mover:
+- Customer helps with carry
+- No multiplier
+
+Option B — 2 Movers:
+- Movers handle everything
+- Multiply total price by 1.75
+
+Backend rule:
+if (movers == 2) {
+    total_price = total_price * 1.75;
+}
+
+--------------------------------------------------------------
+7. URGENCY FEE
+--------------------------------------------------------------
+Add options:
+
+- Standard (2+ hours) = $0
+- Within 2 hours = +$20
+- Within 1 hour = +$30
+- Within 30 minutes = +$40
+
+--------------------------------------------------------------
+8. FINAL PRICING FORMULA
+--------------------------------------------------------------
+
+total_price = (
+    base_fee
+    + (distance_km * 1)
+    + pickup_difficulty_fee
+    + dropoff_difficulty_fee
+    + load_size_fee
+    + heavy_item_fee
+);
+
+if (movers == 2) {
+    total_price = total_price * 1.75;
+}
+
+total_price += urgency_fee;
+
+Display total_price clearly on the booking confirmation screen BEFORE finalizing the order.
+
+--------------------------------------------------------------
+9. REQUIRED UI CHANGES
+--------------------------------------------------------------
+
+Add these fields to the customer booking form:
+- Pickup difficulty dropdown
+- Drop-off difficulty dropdown
+- Load size dropdown
+- Heavy item toggle
+- 1-mover vs 2-mover selection
+- Urgency selection
+- Dynamic price preview (optional)
+
+Ensure all values are saved to Firestore and visible to movers on job details.
+
+--------------------------------------------------------------
+10. TEST SCENARIOS (MUST PASS BEFORE COMPLETION)
+--------------------------------------------------------------
+
+Test the following:
+- 1 mover vs 2 movers pricing
+- Heavy item toggle
+- All stair levels (1–5 floors)
+- Basement pickup/drop-off
+- Urgency options
+- Load size differences
+- Distance affects price correctly
+- Mover dashboard displays payout
+- Customer confirmation screen displays full breakdown
+
+Once all tests pass, deploy the changes and summarize what was updated.
+
+<END PROMPT>
