@@ -4,11 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 type Booking = {
   id: string;
@@ -23,6 +25,10 @@ type Booking = {
   status: string;
   distance: string | null;
   price: string | null;
+  baseFee: string | null;
+  distanceFee: string | null;
+  loadFee: string | null;
+  moverTravelFee: string | null;
   paymentStatus: string | null;
   createdAt: string;
   mover: {
@@ -163,6 +169,17 @@ export default function MyBookings() {
                           </p>
                         </div>
                       </div>
+                      {booking.distance && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Distance</p>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-distance-${booking.id}`}>
+                              {parseFloat(booking.distance).toFixed(2)} km
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       {booking.price && (
                         <div className="flex items-center gap-2">
                           <DollarSign className="w-4 h-4 text-muted-foreground" />
@@ -176,6 +193,55 @@ export default function MyBookings() {
                       )}
                     </div>
                   </div>
+
+                  {booking.price && booking.baseFee && (
+                    <>
+                      <Separator />
+                      <Collapsible>
+                        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate active-elevate-2 p-2 rounded-md w-full" data-testid={`button-price-breakdown-${booking.id}`}>
+                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          View Price Breakdown
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="bg-muted/50 rounded-lg p-4 mt-2 space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Base Fee</span>
+                              <span className="font-medium" data-testid={`text-breakdown-base-${booking.id}`}>
+                                ${parseFloat(booking.baseFee).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Distance Fee ({booking.distance ? parseFloat(booking.distance).toFixed(2) : '0'} km × $1.50/km)
+                              </span>
+                              <span className="font-medium" data-testid={`text-breakdown-distance-${booking.id}`}>
+                                ${parseFloat(booking.distanceFee || "0").toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Load Fee ({booking.loadSize})</span>
+                              <span className="font-medium" data-testid={`text-breakdown-load-${booking.id}`}>
+                                ${parseFloat(booking.loadFee || "0").toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Mover Travel Fee</span>
+                              <span className="font-medium" data-testid={`text-breakdown-travel-${booking.id}`}>
+                                ${parseFloat(booking.moverTravelFee || "0").toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="h-px bg-border my-2" />
+                            <div className="flex justify-between font-bold">
+                              <span>Total</span>
+                              <span className="text-primary">
+                                ${parseFloat(booking.price).toFixed(2)} CAD
+                              </span>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </>
+                  )}
 
                   {booking.images && booking.images.length > 0 && (
                     <>

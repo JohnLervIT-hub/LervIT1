@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
-import { MapPin, Calendar, FileText } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -25,30 +26,17 @@ export default function RequestMove() {
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [images, setImages] = useState<string[]>([]);
-  const [priceData, setPriceData] = useState<any>(null);
-
-  const mockDistance = 5.2;
-
-  const priceMutation = useMutation({
-    mutationFn: async (data: { distance: number; loadSize: string }) => {
-      const res = await apiRequest("POST", "/api/calculate-price", data);
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      setPriceData(data);
-    },
-  });
+  const [createdBooking, setCreatedBooking] = useState<any>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      return apiRequest("POST", "/api/bookings", bookingData);
+      const res = await apiRequest("POST", "/api/bookings", bookingData);
+      return await res.json();
     },
-    onSuccess: () => {
-      toast({
-        title: "Booking created",
-        description: "Your move request has been created successfully.",
-      });
-      setLocation("/my-bookings");
+    onSuccess: (data) => {
+      setCreatedBooking(data);
+      setShowSuccessDialog(true);
     },
     onError: () => {
       toast({
@@ -58,10 +46,6 @@ export default function RequestMove() {
       });
     },
   });
-
-  useEffect(() => {
-    priceMutation.mutate({ distance: mockDistance, loadSize });
-  }, [loadSize]);
 
   const handleNext = () => {
     if (step < 3) {
@@ -77,7 +61,7 @@ export default function RequestMove() {
         return;
       }
 
-      // Create the booking with all form data including images
+      // Create the booking - backend will calculate distance and price
       const bookingData = {
         customerId: user?.id,
         pickupAddress,
@@ -86,9 +70,6 @@ export default function RequestMove() {
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
-        status: "pending",
-        distance: mockDistance.toString(),
-        price: priceData?.totalCost?.toString() || "0",
       };
       createBookingMutation.mutate(bookingData);
     }
@@ -101,8 +82,118 @@ export default function RequestMove() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-muted/30">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <>
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-booking-success">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <DialogTitle className="text-2xl">Booking Created Successfully!</DialogTitle>
+                <DialogDescription>
+                  We've calculated your move details and notified nearby movers
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {createdBooking && (
+            <div className="space-y-6">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium">Distance</span>
+                  </div>
+                  <span className="font-semibold" data-testid="text-calculated-distance">
+                    {parseFloat(createdBooking.distance).toFixed(2)} km
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Package className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium">Load Size</span>
+                  </div>
+                  <span className="font-semibold capitalize">{createdBooking.loadSize}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium">Movers Notified</span>
+                  </div>
+                  <span className="font-semibold">{createdBooking.notifiedMovers} nearby movers</span>
+                </div>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  Price Breakdown
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Base Fee</span>
+                    <span className="font-medium" data-testid="text-base-fee">
+                      ${parseFloat(createdBooking.baseFee).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Distance Fee ({parseFloat(createdBooking.distance).toFixed(2)} km × $1.50/km)
+                    </span>
+                    <span className="font-medium" data-testid="text-distance-fee">
+                      ${parseFloat(createdBooking.distanceFee).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Load Size Fee ({createdBooking.loadSize})</span>
+                    <span className="font-medium" data-testid="text-load-fee">
+                      ${parseFloat(createdBooking.loadFee).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Mover Travel Fee</span>
+                    <span className="font-medium" data-testid="text-mover-travel-fee">
+                      ${parseFloat(createdBooking.moverTravelFee || "0").toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="h-px bg-border my-2" />
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total Price</span>
+                    <span className="text-primary" data-testid="text-total-price">
+                      ${parseFloat(createdBooking.price).toFixed(2)} CAD
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                <p className="text-sm text-primary font-medium">
+                  ⏱️ Movers have 10 minutes to accept. You'll be notified when one accepts!
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    setShowSuccessDialog(false);
+                    setLocation("/my-bookings");
+                  }}
+                  className="flex-1"
+                  data-testid="button-view-bookings"
+                >
+                  View My Bookings
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <div className="min-h-screen pt-24 pb-12 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
             Request a Move
@@ -280,18 +371,66 @@ export default function RequestMove() {
           </div>
 
           <div className="lg:col-span-1">
-            <PriceCalculator
-              distance={priceData?.distance || mockDistance}
-              loadSize={loadSize}
-              baseRate={priceData?.baseRate || 15}
-              showBreakdown={true}
-              totalCost={priceData?.totalCost}
-              baseCost={priceData?.baseCost}
-              loadSurcharge={priceData?.loadSurcharge}
-            />
+            <Card className="sticky top-24">
+              <CardHeader>
+                <h3 className="text-xl font-bold">What Happens Next?</h3>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      1
+                    </div>
+                    <div>
+                      <p className="font-semibold">Distance Calculated</p>
+                      <p className="text-sm text-muted-foreground">
+                        We'll calculate the exact distance between your locations
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      2
+                    </div>
+                    <div>
+                      <p className="font-semibold">Dynamic Pricing</p>
+                      <p className="text-sm text-muted-foreground">
+                        Transparent pricing based on distance, load size, and mover travel
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      3
+                    </div>
+                    <div>
+                      <p className="font-semibold">Find Nearest Movers</p>
+                      <p className="text-sm text-muted-foreground">
+                        Top 5 nearest movers automatically notified
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
+                      4
+                    </div>
+                    <div>
+                      <p className="font-semibold">10-Minute Response</p>
+                      <p className="text-sm text-muted-foreground">
+                        Movers have 10 minutes to accept
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-primary">Selected Load Size: {loadSize.charAt(0).toUpperCase() + loadSize.slice(1)}</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
     </div>
+    </>
   );
 }

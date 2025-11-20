@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications } from "@shared/schema";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -495,8 +495,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const notifications = await db
         .select()
         .from(jobNotifications)
-        .where(eq(jobNotifications.bookingId, bookingId))
-        .where(eq(jobNotifications.moverId, moverId));
+        .where(and(
+          eq(jobNotifications.bookingId, bookingId),
+          eq(jobNotifications.moverId, moverId)
+        ));
       
       const moverNotification = notifications[0];
       if (!moverNotification) {
@@ -540,8 +542,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'expired',
           respondedAt: new Date(),
         })
-        .where(eq(jobNotifications.bookingId, bookingId))
-        .where(eq(jobNotifications.status, 'pending'));
+        .where(and(
+          eq(jobNotifications.bookingId, bookingId),
+          eq(jobNotifications.status, 'pending')
+        ));
       
       res.json({
         ...updatedBooking,
@@ -564,8 +568,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const notifications = await db
         .select()
         .from(jobNotifications)
-        .where(eq(jobNotifications.bookingId, bookingId))
-        .where(eq(jobNotifications.moverId, moverId));
+        .where(and(
+          eq(jobNotifications.bookingId, bookingId),
+          eq(jobNotifications.moverId, moverId)
+        ));
       
       const moverNotification = notifications[0];
       if (!moverNotification) {
