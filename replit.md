@@ -34,13 +34,24 @@ Preferred communication style: Simple, everyday language.
 *   **Mobile-First Development:** Components designed for mobile first, then adapted for larger screens.
 *   **Type Safety:** End-to-end TypeScript with strict mode, Drizzle Zod integration for runtime validation.
 *   **Development Workflow:** Vite HMR for frontend, TSX for server development, separate build processes.
-*   **Uber-Style Proximity Matching:**
-    *   **Mock Geocoding:** Internal system with Calgary locations, Haversine formula for distance, auto-geocoding, and random coordinate generation for movers.
-    *   **Dynamic Pricing:** Base, distance, load, and mover travel fees, with full breakdown stored.
-    *   **Proximity Matching Algorithm:** Searches movers within an initial 15km radius (expanding to 50km), ranks by distance, and notifies the 5 nearest.
-    *   **Job Notification System:** `jobNotifications` table tracks invitations with 10-minute timeouts and status tracking.
-    *   **API Enhancements:** `/api/bookings` now geocodes, calculates prices, finds and notifies movers. `/api/movers/:id` allows coordinate updates. Auto-creation of mover profiles with default vehicle and location.
-    *   **Database Schema Updates:** `movers` table includes `latitude`/`longitude`. `bookings` table includes pickup/dropoff coordinates, price breakdown fields. New `jobNotifications` table.
+*   **Uber-Style Proximity Matching (✅ Backend Complete):**
+    *   **Mock Geocoding System:** `shared/geocoding.ts` with Calgary location database, Haversine formula for accurate distance calculations, auto-geocoding on booking creation, and random coordinate generation for mover signup.
+    *   **Dynamic Pricing Engine:** `shared/pricing.ts` calculates 4-component breakdown:
+        *   Base Fee: $25.00 (flat rate)
+        *   Distance Fee: $1.50/km (pickup → dropoff)
+        *   Load Fee: $10 (small), $25 (medium), $40 (large)
+        *   Mover Travel Fee: $0.75/km for distances >5km to pickup location
+    *   **Proximity Matching Algorithm:** `shared/matching.ts` searches within initial 15km radius (expanding to 50km), ranks by distance, and selects top 5 nearest available movers.
+    *   **Job Notification System:** `jobNotifications` table tracks mover invitations with `distanceToPickup`, `estimatedEarnings`, `status` (pending/accepted/declined/expired), and 10-minute `expiresAt` timestamps.
+    *   **Type-Safe Decimal Handling:** `shared/utils.ts` provides `toDecimalString()` utility to convert JavaScript numbers to properly formatted decimal strings, preventing floating-point precision issues.
+    *   **API Enhancements:** 
+        *   POST `/api/bookings`: Geocodes addresses → Calculates distance → Computes price breakdown → Finds nearest movers → Creates job notifications → Returns booking with `notifiedMovers` count
+        *   PATCH `/api/movers/:id`: Allows movers to update their latitude/longitude coordinates
+        *   Mover auto-creation: New mover accounts automatically receive random Calgary coordinates (lat: 50.9-51.2, lng: -114.3 to -113.9)
+    *   **Database Schema Updates:**
+        *   `movers`: Added `latitude`/`longitude` (doublePrecision, nullable)
+        *   `bookings`: Added `pickupLatitude`, `pickupLongitude`, `dropoffLatitude`, `dropoffLongitude` (doublePrecision), `distance` (decimal), `baseFee`, `distanceFee`, `loadFee`, `moverTravelFee` (decimal, notNull), `notifiedAt` (timestamp)
+        *   `jobNotifications`: New table with composite index on (bookingId, moverId, status) for efficient queries
 *   **Image Upload for Bookings:**
     *   **Frontend:** `ImageUpload.tsx` with drag-and-drop, previews, client-side validation (max 10 images, 5MB each, JPG/PNG/GIF/WebP).
     *   **API:** `POST /api/upload/images` uses Multer for secure handling, unique filenames, server-side validation. Returns image URLs.
