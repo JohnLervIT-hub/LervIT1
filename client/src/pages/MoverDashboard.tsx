@@ -39,6 +39,7 @@ type Booking = {
   dropoffDifficultyFee: string | null;
   heavyItemFee: string | null;
   moverTravelFee: string | null;
+  subtotal: string | null;
   urgencyFee: string | null;
   customer: {
     id: string;
@@ -259,7 +260,7 @@ export default function MoverDashboard() {
           </div>
         </div>
 
-        {booking.price && booking.baseFee && (
+        {booking.price != null && booking.price !== '' && booking.baseFee != null && booking.baseFee !== '' && (
           <>
             <Separator />
             <Collapsible>
@@ -323,12 +324,24 @@ export default function MoverDashboard() {
                       </span>
                     </div>
                   )}
-                  {booking.numberOfMovers === 2 && (
-                    <div className="flex justify-between text-primary">
-                      <span className="font-medium">2-Movers Multiplier (×1.75)</span>
-                      <span className="font-medium">Applied</span>
-                    </div>
-                  )}
+                  {booking.numberOfMovers === 2 && booking.subtotal != null && (() => {
+                    const subtotalValue = Number(booking.subtotal);
+                    if (!Number.isNaN(subtotalValue)) {
+                      const postMultiplierSubtotal = subtotalValue * 1.75;
+                      return (
+                        <>
+                          <div className="h-px bg-border my-2" />
+                          <div className="flex justify-between text-primary">
+                            <span className="font-medium">Subtotal after 2-Movers Multiplier (×1.75)</span>
+                            <span className="font-medium" data-testid={`text-breakdown-subtotal-multiplied-${booking.id}`}>
+                              ${postMultiplierSubtotal.toFixed(2)}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    }
+                    return null;
+                  })()}
                   {parseFloat(booking.urgencyFee || "0") > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Urgency Fee</span>
@@ -340,9 +353,15 @@ export default function MoverDashboard() {
                   <div className="h-px bg-border my-2" />
                   <div className="flex justify-between font-bold">
                     <span>Total Earnings</span>
-                    <span className="text-primary">
-                      ${parseFloat(booking.price).toFixed(2)} CAD
-                    </span>
+                    {booking.price != null ? (
+                      <span className="text-primary" data-testid={`text-breakdown-total-${booking.id}`}>
+                        ${Number(booking.price).toFixed(2)} CAD
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground" data-testid={`text-breakdown-total-${booking.id}`}>
+                        Quote pending
+                      </span>
+                    )}
                   </div>
                 </div>
               </CollapsibleContent>
