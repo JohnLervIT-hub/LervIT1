@@ -1,8 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema } from "@shared/schema";
+import { db } from "./db";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications } from "@shared/schema";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -467,11 +469,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mover accepts a job (with race condition protection)
+  app.post("/api/bookings/:id/accept", async (req: Request, res: Response) => {
+    try {
+      const bookingId = req.params.id;
+      const { moverId } = validateBody(z.object({
+        moverId: z.string(),
+      }), req.body);
+      
+      // Get the booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Check if already accepted by someone (race condition check)
+      if (booking.moverId) {
+        return res.status(409).json({ 
+          error: "Job already accepted by another mover",
+          acceptedBy: booking.moverId 
+        });
+      }
+      
+      // Check if mover was actually notified
+      const notifications = await db
+        .select()
+        .from(jobNotifications)
+        .where(eq(jobNotifications.bookingId, bookingId))
+        .where(eq(jobNotifications.moverId, moverId));
+      
+      const moverNotification = notifications[0];
+      if (!moverNotification) {
+        return res.status(403).json({ error: "You were not notified about this job" });
+      }
+      
+      // Check if notification expired
+      if (new Date() > moverNotification.expiresAt) {
+        return res.status(410).json({ error: "Job notification has expired" });
+      }
+      
+      // Check if mover already declined
+      if (moverNotification.status === 'declined') {
+        return res.status(400).json({ error: "You already declined this job" });
+      }
+      
+      // ATOMIC OPERATION: Update booking and notifications
+      // 1. Update the booking with moverId
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        moverId,
+        status: 'confirmed',
+      });
+      
+      if (!updatedBooking) {
+        return res.status(500).json({ error: "Failed to accept booking" });
+      }
+      
+      // 2. Mark this mover's notification as accepted
+      await db
+        .update(jobNotifications)
+        .set({ 
+          status: 'accepted',
+          respondedAt: new Date(),
+        })
+        .where(eq(jobNotifications.id, moverNotification.id));
+      
+      // 3. Expire all other pending notifications for this booking
+      await db
+        .update(jobNotifications)
+        .set({ 
+          status: 'expired',
+          respondedAt: new Date(),
+        })
+        .where(eq(jobNotifications.bookingId, bookingId))
+        .where(eq(jobNotifications.status, 'pending'));
+      
+      res.json({
+        ...updatedBooking,
+        message: "Job accepted successfully"
+      });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+  
+  // Mover declines a job
+  app.post("/api/bookings/:id/decline", async (req: Request, res: Response) => {
+    try {
+      const bookingId = req.params.id;
+      const { moverId } = validateBody(z.object({
+        moverId: z.string(),
+      }), req.body);
+      
+      // Find the notification
+      const notifications = await db
+        .select()
+        .from(jobNotifications)
+        .where(eq(jobNotifications.bookingId, bookingId))
+        .where(eq(jobNotifications.moverId, moverId));
+      
+      const moverNotification = notifications[0];
+      if (!moverNotification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      
+      // Update notification status to declined
+      await db
+        .update(jobNotifications)
+        .set({ 
+          status: 'declined',
+          respondedAt: new Date(),
+        })
+        .where(eq(jobNotifications.id, moverNotification.id));
+      
+      res.json({ message: "Job declined successfully" });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
   app.patch("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
-      // Validate allowed update fields
+      // Validate allowed update fields (removed moverId - must use /accept endpoint)
       const updateSchema = insertBookingSchema.partial().pick({
-        moverId: true,
         status: true,
         preferredDate: true,
         distance: true,

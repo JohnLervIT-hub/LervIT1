@@ -46,6 +46,8 @@ Preferred communication style: Simple, everyday language.
     *   **Type-Safe Decimal Handling:** `shared/utils.ts` provides `toDecimalString()` utility to convert JavaScript numbers to properly formatted decimal strings, preventing floating-point precision issues.
     *   **API Enhancements:** 
         *   POST `/api/bookings`: Geocodes addresses → Calculates distance → Computes price breakdown → Finds nearest movers → Creates job notifications → Returns booking with `notifiedMovers` count
+        *   POST `/api/bookings/:id/accept`: **Race-condition-protected job acceptance** with 5-layer validation (booking availability, mover notification, expiration check, decline check, atomic update). First mover wins, others receive HTTP 409 Conflict. Automatically expires all other pending notifications.
+        *   POST `/api/bookings/:id/decline`: Allows movers to decline job offers without penalty. Updates notification status to 'declined'.
         *   PATCH `/api/movers/:id`: Allows movers to update their latitude/longitude coordinates
         *   Mover auto-creation: New mover accounts automatically receive random Calgary coordinates (lat: 50.9-51.2, lng: -114.3 to -113.9)
     *   **Database Schema Updates:**
