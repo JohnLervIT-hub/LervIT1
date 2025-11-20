@@ -142,20 +142,19 @@ export function geocodeAddress(address: string): GeocodedAddress {
   const latHash = hashString(normalized + "_lat");
   const lngHash = hashString(normalized + "_lng");
   
-  const deterministicCoords: Coordinates = {
-    lat: 50.84 + latHash * 0.34, // Range: 50.84 - 51.18
-    lng: -114.27 + lngHash * 0.40, // Range: -114.27 to -113.87
-  };
-  
   return {
     address,
-    coordinates: deterministicCoords,
+    coordinates: {
+      lat: 50.84 + latHash * 0.34, // Range: 50.84 - 51.18
+      lng: -114.27 + lngHash * 0.40, // Range: -114.27 to -113.87
+    },
     formattedAddress: `${address}, Calgary, AB`,
   };
 }
 
 /**
- * Generate random coordinates within Calgary for testing
+ * Generate random coordinates within Calgary for mover signup/testing
+ * Note: This is only used for initial mover profile creation, NOT for address geocoding
  */
 export function generateRandomCalgaryCoordinates(): Coordinates {
   return {
