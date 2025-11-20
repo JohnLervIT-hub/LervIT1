@@ -733,6 +733,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI photo analysis endpoint
+  app.post("/api/ai/analyze-photo", upload.single('photo'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No photo uploaded" });
+      }
+      
+      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+      if (!OPENAI_API_KEY) {
+        return res.status(500).json({ error: "OpenAI API key not configured" });
+      }
+      
+      const imagePath = `/uploads/${req.file.filename}`;
+      const fullImageUrl = `${req.protocol}://${req.get('host')}${imagePath}`;
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analyze this furniture/item photo for a moving service. Determine:
+1. Load size (small/medium/large)
+2. Is it a heavy item? (true/false)
+3. Recommended number of movers (1 or 2)
+4. Item type/category
+5. Estimated weight category (light/medium/heavy)
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "loadSize": "small" | "medium" | "large",
+  "heavyItem": true | false,
+  "recommendedMovers": 1 | 2,
+  "itemType": "string",
+  "estimatedWeight": "light" | "medium" | "heavy",
+  "confidence": 0-100,
+  "explanation": "brief explanation"
+}`
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: fullImageUrl
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 500
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('OpenAI API error:', errorData);
+        return res.status(500).json({ error: "Failed to analyze photo" });
+      }
+      
+      const data = await response.json();
+      const content = data.choices[0]?.message?.content;
+      
+      if (!content) {
+        return res.status(500).json({ error: "No analysis result" });
+      }
+      
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return res.status(500).json({ error: "Invalid response format" });
+      }
+      
+      const analysis = JSON.parse(jsonMatch[0]);
+      
+      res.json({
+        ...analysis,
+        imageUrl: imagePath
+      });
+    } catch (error) {
+      console.error('Photo analysis error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Analysis failed" });
+    }
+  });
+
   // ===== UTILITY ROUTES =====
   app.post("/api/calculate-price", async (req: Request, res: Response) => {
     try {

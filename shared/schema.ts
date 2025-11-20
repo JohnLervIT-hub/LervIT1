@@ -65,6 +65,11 @@ export const bookings = pgTable("bookings", {
   heavyItemFee: decimal("heavy_item_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   
+  // AI-powered features
+  aiEstimate: text("ai_estimate"),
+  aiExplanation: text("ai_explanation"),
+  aiPhotoAnalysis: text("ai_photo_analysis"),
+  
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   notifiedAt: timestamp("notified_at"),
