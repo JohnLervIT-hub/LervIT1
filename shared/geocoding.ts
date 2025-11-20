@@ -104,9 +104,24 @@ function toRadians(degrees: number): number {
 }
 
 /**
+ * Simple deterministic hash function for strings
+ * Returns a number between 0 and 1 based on string input
+ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  // Normalize to 0-1 range
+  return Math.abs(hash) / 2147483647;
+}
+
+/**
  * Mock geocoding function
  * Attempts to match the address to known Calgary locations
- * Falls back to generating random Calgary coordinates if no match found
+ * Falls back to generating DETERMINISTIC coordinates based on address hash
  */
 export function geocodeAddress(address: string): GeocodedAddress {
   const normalized = address.toLowerCase().trim();
@@ -122,16 +137,19 @@ export function geocodeAddress(address: string): GeocodedAddress {
     }
   }
   
-  // If no match, generate random coordinates within Calgary bounds
+  // If no match, generate DETERMINISTIC coordinates based on address hash
   // Calgary bounds: roughly 50.84 to 51.18 lat, -114.27 to -113.87 lng
-  const randomCoords: Coordinates = {
-    lat: 50.84 + Math.random() * 0.34, // Range: 50.84 - 51.18
-    lng: -114.27 + Math.random() * 0.40, // Range: -114.27 to -113.87
+  const latHash = hashString(normalized + "_lat");
+  const lngHash = hashString(normalized + "_lng");
+  
+  const deterministicCoords: Coordinates = {
+    lat: 50.84 + latHash * 0.34, // Range: 50.84 - 51.18
+    lng: -114.27 + lngHash * 0.40, // Range: -114.27 to -113.87
   };
   
   return {
     address,
-    coordinates: randomCoords,
+    coordinates: deterministicCoords,
     formattedAddress: `${address}, Calgary, AB`,
   };
 }
