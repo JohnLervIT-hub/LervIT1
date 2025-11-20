@@ -25,6 +25,41 @@ function validateBody<T>(schema: z.ZodSchema<T>, data: unknown): T {
   return schema.parse(data);
 }
 
+// Auth middleware to attach user to req
+async function authMiddleware(req: Request, res: Response, next: Function) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const userId = authHeader.substring(7);
+    try {
+      const user = await storage.getUser(userId);
+      if (user) {
+        (req as any).user = user;
+      }
+    } catch (error) {
+      // User not found, continue without auth
+    }
+  }
+  next();
+}
+
+// Auth guards
+function requireUser(req: Request, res: Response): boolean {
+  if (!(req as any).user) {
+    res.status(401).json({ error: "Authentication required" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdmin(req: Request, res: Response): boolean {
+  const user = (req as any).user;
+  if (!user || user.role !== 'admin') {
+    res.status(403).json({ error: "Admin access required" });
+    return false;
+  }
+  return true;
+}
+
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), "public", "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -60,6 +95,9 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  
+  // Register auth middleware globally
+  app.use(authMiddleware);
   
   // Serve uploaded files statically with express.static (secure against path traversal)
   const express = await import('express');
@@ -919,15 +957,14 @@ Respond ONLY with valid JSON in this exact format:
   // Create a new support ticket
   app.post("/api/support/tickets", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
+      if (!requireUser(req, res)) return;
       
+      const user = (req as any).user;
       const ticketData = validateBody(insertSupportTicketSchema, req.body);
       
       const ticket = await db.insert(supportTickets).values({
         ...ticketData,
-        userId: req.user!.id,
+        userId: user.id,
       }).returning();
       
       res.status(201).json(ticket[0]);
@@ -939,13 +976,12 @@ Respond ONLY with valid JSON in this exact format:
   // Get all support tickets for the authenticated user
   app.get("/api/support/tickets", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
+      if (!requireUser(req, res)) return;
       
+      const user = (req as any).user;
       const tickets = await db.select()
         .from(supportTickets)
-        .where(eq(supportTickets.userId, req.user!.id))
+        .where(eq(supportTickets.userId, user.id))
         .orderBy(supportTickets.createdAt);
       
       res.json(tickets);
@@ -957,9 +993,7 @@ Respond ONLY with valid JSON in this exact format:
   // Get all support tickets (admin only)
   app.get("/api/support/tickets/all", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated() || req.user!.role !== "admin") {
-        return res.status(403).json({ error: "Admin access required" });
-      }
+      if (!requireAdmin(req, res)) return;
       
       const tickets = await db.select()
         .from(supportTickets)
@@ -974,10 +1008,9 @@ Respond ONLY with valid JSON in this exact format:
   // Get a specific ticket with replies
   app.get("/api/support/tickets/:id", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
+      if (!requireUser(req, res)) return;
       
+      const user = (req as any).user;
       const ticket = await db.select()
         .from(supportTickets)
         .where(eq(supportTickets.id, req.params.id))
@@ -988,7 +1021,7 @@ Respond ONLY with valid JSON in this exact format:
       }
       
       // Check if user owns the ticket or is admin
-      if (ticket[0].userId !== req.user!.id && req.user!.role !== "admin") {
+      if (ticket[0].userId !== user.id && user.role !== "admin") {
         return res.status(403).json({ error: "Access denied" });
       }
       
@@ -1006,10 +1039,9 @@ Respond ONLY with valid JSON in this exact format:
   // Add a reply to a ticket
   app.post("/api/support/tickets/:id/replies", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
+      if (!requireUser(req, res)) return;
       
+      const user = (req as any).user;
       const replySchema = z.object({
         message: z.string().min(1),
       });
@@ -1026,15 +1058,15 @@ Respond ONLY with valid JSON in this exact format:
         return res.status(404).json({ error: "Ticket not found" });
       }
       
-      if (ticket[0].userId !== req.user!.id && req.user!.role !== "admin") {
+      if (ticket[0].userId !== user.id && user.role !== "admin") {
         return res.status(403).json({ error: "Access denied" });
       }
       
       const reply = await db.insert(supportTicketReplies).values({
         ticketId: req.params.id,
-        userId: req.user!.id,
+        userId: user.id,
         message,
-        isStaff: req.user!.role === "admin",
+        isStaff: user.role === "admin",
       }).returning();
       
       // Update ticket's updatedAt
@@ -1051,9 +1083,7 @@ Respond ONLY with valid JSON in this exact format:
   // Update ticket status (admin only)
   app.patch("/api/support/tickets/:id/status", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated() || req.user!.role !== "admin") {
-        return res.status(403).json({ error: "Admin access required" });
-      }
+      if (!requireAdmin(req, res)) return;
       
       const statusSchema = z.object({
         status: z.enum(['open', 'in_progress', 'resolved', 'closed']),

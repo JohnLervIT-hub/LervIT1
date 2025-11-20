@@ -1,5 +1,21 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Helper to get auth headers
+function getAuthHeaders(): Record<string, string> {
+  const storedUser = localStorage.getItem("moveit_user");
+  if (storedUser) {
+    try {
+      const user = JSON.parse(storedUser);
+      if (user.id) {
+        return { "Authorization": `Bearer ${user.id}` };
+      }
+    } catch {
+      // Invalid stored user, continue without auth
+    }
+  }
+  return {};
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -12,9 +28,14 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers = {
+    ...(data ? { "Content-Type": "application/json" } : {}),
+    ...getAuthHeaders(),
+  };
+  
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -30,6 +51,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
+      headers: getAuthHeaders(),
       credentials: "include",
     });
 

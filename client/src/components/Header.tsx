@@ -69,6 +69,11 @@ export default function Header() {
                     Become a Mover
                   </Button>
                 </Link>
+                <Link href="/support" data-testid="link-support">
+                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                    Support
+                  </Button>
+                </Link>
               </nav>
             )}
           </div>

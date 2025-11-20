@@ -42,10 +42,14 @@ export default function AdminSupportDashboard() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ ticketId, status }: { ticketId: string; status: string }) => {
-      return await apiRequest(`/api/support/tickets/${ticketId}/status`, {
+      const res = await fetch(`/api/support/tickets/${ticketId}/status`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ status }),
       });
+      if (!res.ok) throw new Error("Failed to update status");
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/tickets/all"] });
@@ -59,10 +63,14 @@ export default function AdminSupportDashboard() {
 
   const replyMutation = useMutation({
     mutationFn: async ({ ticketId, message }: { ticketId: string; message: string }) => {
-      return await apiRequest(`/api/support/tickets/${ticketId}/replies`, {
+      const res = await fetch(`/api/support/tickets/${ticketId}/replies`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ message }),
       });
+      if (!res.ok) throw new Error("Failed to send reply");
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/support/tickets", selectedTicket?.id] });

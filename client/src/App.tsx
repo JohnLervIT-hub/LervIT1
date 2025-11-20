@@ -21,6 +21,7 @@ import MoverLifecycleDemo from "@/pages/MoverLifecycleDemo";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Support from "@/pages/Support";
+import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -64,6 +65,11 @@ function Router() {
       <Route path="/admin">
         <ProtectedRoute allowedRoles={["admin"]}>
           <AdminDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/support">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminSupportDashboard />
         </ProtectedRoute>
       </Route>
 
