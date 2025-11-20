@@ -15,6 +15,7 @@ import Messages from "@/pages/Messages";
 import Review from "@/pages/Review";
 import AdminDashboard from "@/pages/AdminDashboard";
 import ProximityDemo from "@/pages/ProximityDemo";
+import LifecycleDemo from "@/pages/LifecycleDemo";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
@@ -24,6 +25,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/demo" component={ProximityDemo} />
+      <Route path="/lifecycle" component={LifecycleDemo} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/browse-movers" component={BrowseMovers} />
