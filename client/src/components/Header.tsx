@@ -48,7 +48,14 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-2">
             {user ? (
               <>
-                <Link href="/dashboard" data-testid="link-dashboard">
+                <Link 
+                  href={
+                    user.role === "mover" ? "/mover-dashboard" : 
+                    user.role === "admin" ? "/admin" : 
+                    "/dashboard"
+                  } 
+                  data-testid="link-dashboard"
+                >
                   <Button variant="ghost" className="hover-elevate active-elevate-2">
                     Dashboard
                   </Button>

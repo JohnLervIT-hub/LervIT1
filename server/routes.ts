@@ -84,6 +84,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = hashPassword(userData.password);
       const user = await storage.createUser({ ...userData, password: hashedPassword });
       
+      // If user signed up as a mover, automatically create a mover profile
+      if (user.role === "mover") {
+        await storage.createMover({
+          userId: user.id,
+          vehicleType: "van", // Default vehicle type
+          isAvailable: true,
+          location: "Calgary, AB", // Default location
+        });
+      }
+      
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -181,6 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/movers", async (req: Request, res: Response) => {
     try {
+      const userId = req.query.userId as string | undefined;
       let location = req.query.location as string | undefined;
       const isAvailable = req.query.isAvailable === 'true' ? true : req.query.isAvailable === 'false' ? false : undefined;
       const userLat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
@@ -192,6 +203,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       let movers = await storage.getMovers({ isAvailable });
+      
+      // Filter by userId if provided
+      if (userId) {
+        movers = movers.filter(m => m.userId === userId);
+      }
       
       // Apply location filter with case-insensitive matching
       if (location) {

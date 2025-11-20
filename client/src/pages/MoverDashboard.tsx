@@ -137,7 +137,7 @@ export default function MoverDashboard() {
               <MapPin className="w-4 h-4 text-muted-foreground mt-1 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium">Pickup</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground" data-testid={`text-pickup-${booking.id}`}>
                   {booking.pickupAddress}
                 </p>
               </div>
@@ -146,7 +146,7 @@ export default function MoverDashboard() {
               <MapPin className="w-4 h-4 text-muted-foreground mt-1 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium">Dropoff</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground" data-testid={`text-dropoff-${booking.id}`}>
                   {booking.dropoffAddress}
                 </p>
               </div>
