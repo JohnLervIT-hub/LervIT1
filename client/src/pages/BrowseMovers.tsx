@@ -17,7 +17,7 @@ export default function BrowseMovers() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: movers, isLoading } = useQuery({
-    queryKey: ["/api/movers", { isAvailable: true }],
+    queryKey: ["/api/movers?isAvailable=true"],
   });
 
   const filteredMovers = useMemo(() => {
