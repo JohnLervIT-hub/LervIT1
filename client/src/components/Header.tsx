@@ -28,6 +28,11 @@ export default function Header() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
+            <Link href="/demo" data-testid="link-demo">
+              <Button variant="default" size="sm" className="bg-gradient-to-r from-primary to-green-500">
+                🎬 Live Demo
+              </Button>
+            </Link>
             <Link href="/browse-movers" data-testid="link-browse-movers">
               <Button variant="ghost" className="hover-elevate active-elevate-2">
                 Find Movers
