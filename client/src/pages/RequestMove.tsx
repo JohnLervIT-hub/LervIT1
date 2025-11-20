@@ -568,16 +568,36 @@ export default function RequestMove() {
                       
                       <div className="space-y-3">
                         <input
+                          ref={(el) => {
+                            if (el) {
+                              (window as any).__photoFileInput = el;
+                            }
+                          }}
                           type="file"
                           accept="image/*"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) handlePhotoAnalysis(file);
                           }}
-                          className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                          className="hidden"
                           disabled={isAnalyzingPhoto}
                           data-testid="input-photo-upload"
                         />
+                        
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="default"
+                          className="w-full"
+                          onClick={() => {
+                            ((window as any).__photoFileInput as HTMLInputElement)?.click();
+                          }}
+                          disabled={isAnalyzingPhoto}
+                          data-testid="button-choose-photo"
+                        >
+                          <Camera className="w-4 h-4 mr-2" />
+                          {analyzedPhotoUrl ? "Change Photo" : "Choose Photo"}
+                        </Button>
                         
                         {isAnalyzingPhoto && (
                           <div className="flex items-center gap-2 text-sm text-primary">
