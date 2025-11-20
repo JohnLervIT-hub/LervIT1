@@ -16,7 +16,20 @@ import type { Booking } from "@shared/schema";
 if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
   throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
 }
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+
+// Initialize Stripe with configured key
+const stripeKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+
+// Validate Stripe key type (warning only to not block testing)
+if (stripeKey.startsWith('sk_')) {
+  console.error('[Payment] ERROR: VITE_STRIPE_PUBLIC_KEY contains a secret key (sk_). This will fail in production. Please update to use a publishable key (pk_).');
+} else if (!stripeKey.startsWith('pk_')) {
+  console.warn('[Payment] Warning: Stripe key does not start with pk_ - this may not be a valid publishable key');
+} else {
+  console.log('[Payment] Stripe configured with publishable key');
+}
+
+const stripePromise = loadStripe(stripeKey);
 
 const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
   const stripe = useStripe();
