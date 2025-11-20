@@ -37,7 +37,7 @@ const PRICING_CONFIG = {
     elevator: 8.00,
   },
   HEAVY_ITEM_FEE: 15.00,
-  TWO_MOVERS_MULTIPLIER: 1.75,
+  TWO_MOVERS_MULTIPLIER: 1.30, // 1 mover gets full fee (1x) + 2nd mover gets 30%
 };
 
 export type PickupDifficultyType = keyof typeof PRICING_CONFIG.PICKUP_DIFFICULTY_FEES;
@@ -127,7 +127,7 @@ export function formatPriceBreakdown(breakdown: PriceBreakdown): string {
     breakdown.dropoffDifficultyFee > 0 ? `Dropoff Difficulty: $${breakdown.dropoffDifficultyFee.toFixed(2)}` : null,
     breakdown.heavyItemFee > 0 ? `Heavy Item: $${breakdown.heavyItemFee.toFixed(2)}` : null,
     breakdown.moverTravelFee > 0 ? `Mover Travel: $${breakdown.moverTravelFee.toFixed(2)}` : null,
-    breakdown.numberOfMoversMultiplier > 1 ? `2-Movers Multiplier (×${breakdown.numberOfMoversMultiplier}): Applied` : null,
+    breakdown.numberOfMoversMultiplier > 1 ? `2-Movers Fee (×${breakdown.numberOfMoversMultiplier}): 1st mover full fee + 2nd mover 30%` : null,
     `Total: $${breakdown.totalCost.toFixed(2)}`,
   ];
   

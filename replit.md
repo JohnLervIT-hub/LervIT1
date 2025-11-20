@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
         *   Dropoff Difficulty Fee: $0 (ground), $10 (basement), $5 (stairs), $8 (elevator)
         *   Heavy Item Fee: $15 (if applicable)
         *   Mover Travel Fee: $0.75/km for distances >5km to pickup location
-        *   2-Movers Multiplier: 1.75x applied to subtotal (before final total)
+        *   2-Movers Fee: 1.30x applied to subtotal (1st mover gets full fee, 2nd mover gets 30%)
     *   **Proximity Matching Algorithm:** `shared/matching.ts` searches within initial 15km radius (expanding to 50km), ranks by distance, and selects top 5 nearest available movers.
     *   **Job Notification System:** `jobNotifications` table tracks mover invitations with `distanceToPickup`, `estimatedEarnings`, `status` (pending/accepted/declined/expired), and 10-minute `expiresAt` timestamps.
     *   **Type-Safe Decimal Handling:** `shared/utils.ts` provides `toDecimalString()` utility to convert JavaScript numbers to properly formatted decimal strings, preventing floating-point precision issues.

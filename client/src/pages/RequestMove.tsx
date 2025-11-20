@@ -330,7 +330,7 @@ export default function RequestMove() {
                   )}
                   {createdBooking.numberOfMovers === 2 && (
                     <div className="flex justify-between text-primary">
-                      <span className="font-medium">2-Movers Multiplier (×1.75)</span>
+                      <span className="font-medium">2-Movers Fee (×1.30)</span>
                       <span className="font-medium">Applied</span>
                     </div>
                   )}
@@ -702,7 +702,7 @@ export default function RequestMove() {
                             <p className="text-sm text-muted-foreground mt-1">
                               Movers handle everything
                             </p>
-                            <p className="text-sm font-semibold mt-2 text-primary">×1.75 Price</p>
+                            <p className="text-sm font-semibold mt-2 text-primary">×1.30 Price</p>
                           </div>
                         </button>
                       </div>

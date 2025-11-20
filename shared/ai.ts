@@ -115,11 +115,11 @@ export function aiPredictPrice(input: AIEstimateInput): AIEstimateResult {
     maxPrice += travelFee;
   }
   
-  // Number of movers multiplier
+  // Number of movers multiplier (1st mover full fee + 2nd mover 30%)
   const movers = numberOfMovers || 1;
   if (movers === 2) {
-    minPrice *= 1.75;
-    maxPrice *= 1.75;
+    minPrice *= 1.30;
+    maxPrice *= 1.30;
   }
   
   // Calculate confidence based on how many fields are filled
@@ -212,11 +212,11 @@ export function generatePriceExplanation(breakdown: PriceBreakdown): string {
   parts.push("");
   parts.push(`**Subtotal**: $${breakdown.subtotal.toFixed(2)}`);
   
-  // Two movers multiplier
+  // Two movers fee structure
   if (breakdown.numberOfMovers === 2) {
     parts.push("");
-    parts.push(`• **2-Movers Multiplier**: 1.75× (doubles efficiency and safety)`);
-    parts.push(`• **Final Total**: $${breakdown.subtotal.toFixed(2)} × 1.75 = $${breakdown.finalTotal.toFixed(2)}`);
+    parts.push(`• **2-Movers Fee**: 1.30× (1st mover gets full fee, 2nd mover gets 30%)`);
+    parts.push(`• **Final Total**: $${breakdown.subtotal.toFixed(2)} × 1.30 = $${breakdown.finalTotal.toFixed(2)}`);
   } else {
     parts.push("");
     parts.push(`**Final Total**: $${breakdown.finalTotal.toFixed(2)}`);

@@ -315,12 +315,12 @@ export default function MoverDashboard() {
                   {booking.numberOfMovers === 2 && booking.subtotal != null && (() => {
                     const subtotalValue = Number(booking.subtotal);
                     if (!Number.isNaN(subtotalValue)) {
-                      const postMultiplierSubtotal = subtotalValue * 1.75;
+                      const postMultiplierSubtotal = subtotalValue * 1.30;
                       return (
                         <>
                           <div className="h-px bg-border my-2" />
                           <div className="flex justify-between text-primary">
-                            <span className="font-medium">Subtotal after 2-Movers Multiplier (×1.75)</span>
+                            <span className="font-medium">2-Movers Fee (×1.30): 1st mover + 30% for 2nd</span>
                             <span className="font-medium" data-testid={`text-breakdown-subtotal-multiplied-${booking.id}`}>
                               ${postMultiplierSubtotal.toFixed(2)}
                             </span>
