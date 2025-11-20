@@ -20,6 +20,7 @@ import LifecycleDemo from "@/pages/LifecycleDemo";
 import MoverLifecycleDemo from "@/pages/MoverLifecycleDemo";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
+import Support from "@/pages/Support";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/browse-movers" component={BrowseMovers} />
+      <Route path="/support" component={Support} />
 
       {/* Customer-Only Routes */}
       <Route path="/request-move">

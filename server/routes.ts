@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -911,6 +911,182 @@ Respond ONLY with valid JSON in this exact format:
       res.json({ distance });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // ===== SUPPORT TICKET ROUTES =====
+  
+  // Create a new support ticket
+  app.post("/api/support/tickets", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const ticketData = validateBody(insertSupportTicketSchema, req.body);
+      
+      const ticket = await db.insert(supportTickets).values({
+        ...ticketData,
+        userId: req.user!.id,
+      }).returning();
+      
+      res.status(201).json(ticket[0]);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create ticket" });
+    }
+  });
+  
+  // Get all support tickets for the authenticated user
+  app.get("/api/support/tickets", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const tickets = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.userId, req.user!.id))
+        .orderBy(supportTickets.createdAt);
+      
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tickets" });
+    }
+  });
+  
+  // Get all support tickets (admin only)
+  app.get("/api/support/tickets/all", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated() || req.user!.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const tickets = await db.select()
+        .from(supportTickets)
+        .orderBy(supportTickets.createdAt);
+      
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tickets" });
+    }
+  });
+  
+  // Get a specific ticket with replies
+  app.get("/api/support/tickets/:id", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const ticket = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.id, req.params.id))
+        .limit(1);
+      
+      if (!ticket.length) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+      
+      // Check if user owns the ticket or is admin
+      if (ticket[0].userId !== req.user!.id && req.user!.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const replies = await db.select()
+        .from(supportTicketReplies)
+        .where(eq(supportTicketReplies.ticketId, req.params.id))
+        .orderBy(supportTicketReplies.createdAt);
+      
+      res.json({ ticket: ticket[0], replies });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ticket" });
+    }
+  });
+  
+  // Add a reply to a ticket
+  app.post("/api/support/tickets/:id/replies", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const replySchema = z.object({
+        message: z.string().min(1),
+      });
+      
+      const { message } = validateBody(replySchema, req.body);
+      
+      // Check if ticket exists and user has access
+      const ticket = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.id, req.params.id))
+        .limit(1);
+      
+      if (!ticket.length) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+      
+      if (ticket[0].userId !== req.user!.id && req.user!.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const reply = await db.insert(supportTicketReplies).values({
+        ticketId: req.params.id,
+        userId: req.user!.id,
+        message,
+        isStaff: req.user!.role === "admin",
+      }).returning();
+      
+      // Update ticket's updatedAt
+      await db.update(supportTickets)
+        .set({ updatedAt: new Date() })
+        .where(eq(supportTickets.id, req.params.id));
+      
+      res.status(201).json(reply[0]);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to add reply" });
+    }
+  });
+  
+  // Update ticket status (admin only)
+  app.patch("/api/support/tickets/:id/status", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated() || req.user!.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const statusSchema = z.object({
+        status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
+        assignedTo: z.string().optional(),
+      });
+      
+      const { status, assignedTo } = validateBody(statusSchema, req.body);
+      
+      const updateData: any = { 
+        status,
+        updatedAt: new Date(),
+      };
+      
+      if (status === 'resolved' || status === 'closed') {
+        updateData.resolvedAt = new Date();
+      }
+      
+      if (assignedTo) {
+        updateData.assignedTo = assignedTo;
+      }
+      
+      const ticket = await db.update(supportTickets)
+        .set(updateData)
+        .where(eq(supportTickets.id, req.params.id))
+        .returning();
+      
+      if (!ticket.length) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+      
+      res.json(ticket[0]);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update ticket" });
     }
   });
 
