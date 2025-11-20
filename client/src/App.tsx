@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Header from "@/components/Header";
 import Home from "@/pages/Home";
 import BrowseMovers from "@/pages/BrowseMovers";
@@ -24,6 +25,7 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
+      {/* Public Routes */}
       <Route path="/" component={Home} />
       <Route path="/demo" component={ProximityDemo} />
       <Route path="/lifecycle" component={LifecycleDemo} />
@@ -31,13 +33,51 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/browse-movers" component={BrowseMovers} />
-      <Route path="/request-move" component={RequestMove} />
-      <Route path="/dashboard" component={CustomerDashboard} />
-      <Route path="/my-bookings" component={MyBookings} />
-      <Route path="/mover-dashboard" component={MoverDashboard} />
-      <Route path="/messages/:bookingId" component={Messages} />
-      <Route path="/review/:bookingId" component={Review} />
-      <Route path="/admin" component={AdminDashboard} />
+
+      {/* Customer-Only Routes */}
+      <Route path="/request-move">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <RequestMove />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <CustomerDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/my-bookings">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <MyBookings />
+        </ProtectedRoute>
+      </Route>
+
+      {/* Mover-Only Routes */}
+      <Route path="/mover-dashboard">
+        <ProtectedRoute allowedRoles={["mover"]}>
+          <MoverDashboard />
+        </ProtectedRoute>
+      </Route>
+
+      {/* Admin-Only Routes */}
+      <Route path="/admin">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminDashboard />
+        </ProtectedRoute>
+      </Route>
+
+      {/* Shared Routes (Customer & Mover) */}
+      <Route path="/messages/:bookingId">
+        <ProtectedRoute allowedRoles={["customer", "mover"]}>
+          <Messages />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/review/:bookingId">
+        <ProtectedRoute allowedRoles={["customer", "mover"]}>
+          <Review />
+        </ProtectedRoute>
+      </Route>
+
+      {/* 404 */}
       <Route component={NotFound} />
     </Switch>
   );

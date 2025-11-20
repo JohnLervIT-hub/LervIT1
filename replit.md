@@ -65,6 +65,13 @@ Preferred communication style: Simple, everyday language.
     *   **MyBookings.tsx:** Added distance display to each booking card. Collapsible "View Price Breakdown" section shows the same 4 components with test IDs for verification. Price breakdown persists for customer reference.
     *   **Drizzle ORM Fixes:** Fixed all `.where()` chaining issues in job acceptance endpoints using `and()` from `drizzle-orm`. Applied to POST `/api/bookings/:id/accept` and POST `/api/bookings/:id/decline`.
     *   **E2E Verified:** Tested complete flow from booking creation through job acceptance with race-condition protection. Confirmed real distance calculation, accurate price breakdown display, database storage of all components, and proper notification expiration.
+*   **Role-Specific User Experience (✅ Complete):**
+    *   **ProtectedRoute Component:** Enforces role-based access control at URL level. Redirects unauthorized users with toast notifications to their role-specific dashboards.
+    *   **Role-Specific Navigation:** Separate navigation components (CustomerNav, MoverNav, AdminNav) display only relevant pages for each role. Marketing/demo links hidden for authenticated users.
+    *   **Header Updates:** Desktop and mobile navigation show role-tailored menus. User dropdown displays role information.
+    *   **Login/Signup Flow:** Post-authentication redirects use AuthContext state with useEffect to ensure proper role-based landing (customer→/dashboard, mover→/mover-dashboard, admin→/admin).
+    *   **Route Protection:** Customer-only routes (/request-move, /dashboard, /my-bookings), Mover-only routes (/mover-dashboard), Admin-only routes (/admin), and shared routes (/messages, /review) with role validation.
+    *   **Marketing Page Guards:** Home and demo pages redirect authenticated users to role-specific dashboards, preventing access to marketing content post-login.
 
 ## External Dependencies
 

@@ -1,8 +1,28 @@
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Truck, Shield, Clock, DollarSign } from "lucide-react";
 
 export default function Home() {
+  const { user, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Redirect authenticated users to their role-specific dashboard
+  useEffect(() => {
+    // Wait for auth to finish loading before redirecting
+    if (!isLoading && user) {
+      if (user.role === "customer") {
+        setLocation("/dashboard");
+      } else if (user.role === "mover") {
+        setLocation("/mover-dashboard");
+      } else if (user.role === "admin") {
+        setLocation("/admin");
+      }
+    }
+  }, [user, isLoading, setLocation]);
+
   const features = [
     {
       icon: <Truck className="w-8 h-8" />,

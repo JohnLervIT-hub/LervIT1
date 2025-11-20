@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Truck } from "lucide-react";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
-  const { signup } = useAuth();
+  const { user, signup } = useAuth();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -26,24 +26,37 @@ export default function Signup() {
   const [role, setRole] = useState("customer");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Redirect after successful signup when user state updates
+  useEffect(() => {
+    if (user && !isLoading) {
+      if (user.role === "customer") {
+        setLocation("/dashboard");
+      } else if (user.role === "mover") {
+        setLocation("/mover-dashboard");
+      } else if (user.role === "admin") {
+        setLocation("/admin");
+      }
+    }
+  }, [user, isLoading, setLocation]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
       await signup(name, email, password, role, phone);
+      setIsLoading(false);
       toast({
         title: "Account created!",
         description: "Welcome to MoveIt!",
       });
-      setLocation("/");
+      // Redirect handled by useEffect
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Signup failed",
         description: error instanceof Error ? error.message : "Please try again.",
       });
-    } finally {
       setIsLoading(false);
     }
   };

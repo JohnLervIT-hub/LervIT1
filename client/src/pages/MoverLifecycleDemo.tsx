@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +76,23 @@ const JOB_DATA = {
 };
 
 export default function MoverLifecycleDemo() {
+  const { user, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Redirect authenticated users to their role-specific dashboard
+  useEffect(() => {
+    // Wait for auth to finish loading before redirecting
+    if (!isLoading && user) {
+      if (user.role === "customer") {
+        setLocation("/dashboard");
+      } else if (user.role === "mover") {
+        setLocation("/mover-dashboard");
+      } else if (user.role === "admin") {
+        setLocation("/admin");
+      }
+    }
+  }, [user, isLoading, setLocation]);
+
   const [currentStep, setCurrentStep] = useState<MoverStep>("idle");
   const [timer, setTimer] = useState(600);
   const [showNotification, setShowNotification] = useState(false);

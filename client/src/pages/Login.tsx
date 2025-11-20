@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,24 @@ import { Truck } from "lucide-react";
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect after successful login when user state updates
+  useEffect(() => {
+    if (user && !isLoading) {
+      if (user.role === "customer") {
+        setLocation("/dashboard");
+      } else if (user.role === "mover") {
+        setLocation("/mover-dashboard");
+      } else if (user.role === "admin") {
+        setLocation("/admin");
+      }
+    }
+  }, [user, isLoading, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,18 +35,18 @@ export default function Login() {
 
     try {
       await login(email, password);
+      setIsLoading(false);
       toast({
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
-      setLocation("/");
+      // Redirect handled by useEffect
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Login failed",
         description: error instanceof Error ? error.message : "Please try again.",
       });
-    } finally {
       setIsLoading(false);
     }
   };
