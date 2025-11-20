@@ -58,7 +58,7 @@ export default function BrowseMovers() {
 
   const handleSelectMover = (id: string) => {
     console.log("Selected mover:", id);
-    setLocation("/booking-confirmation");
+    setLocation(`/request-move?moverId=${id}`);
   };
 
   return (
