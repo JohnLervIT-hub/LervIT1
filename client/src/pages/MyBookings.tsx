@@ -33,7 +33,6 @@ type Booking = {
   dropoffDifficultyFee: string | null;
   heavyItemFee: string | null;
   subtotal: string | null;
-  urgencyFee: string | null;
   numberOfMovers: number | null;
   paymentStatus: string | null;
   createdAt: string;
@@ -282,14 +281,6 @@ export default function MyBookings() {
                               }
                               return null;
                             })()}
-                            {parseFloat(booking.urgencyFee || "0") > 0 && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Urgency Fee</span>
-                                <span className="font-medium" data-testid={`text-breakdown-urgency-${booking.id}`}>
-                                  ${parseFloat(booking.urgencyFee || "0").toFixed(2)}
-                                </span>
-                              </div>
-                            )}
                             <div className="h-px bg-border my-2" />
                             <div className="flex justify-between font-bold">
                               <span>Total</span>

@@ -31,7 +31,6 @@ type Booking = {
   dropoffDifficulty: string | null;
   heavyItem: boolean | null;
   numberOfMovers: number | null;
-  urgency: string | null;
   baseFee: string | null;
   distanceFee: string | null;
   loadFee: string | null;
@@ -40,7 +39,6 @@ type Booking = {
   heavyItemFee: string | null;
   moverTravelFee: string | null;
   subtotal: string | null;
-  urgencyFee: string | null;
   customer: {
     id: string;
     name: string;
@@ -235,17 +233,6 @@ export default function MoverDashboard() {
                 </div>
               </div>
             )}
-            {booking.urgency && booking.urgency !== 'standard' && (
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Urgency</p>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {booking.urgency.replace(/_/g, ' ')}
-                  </p>
-                </div>
-              </div>
-            )}
             {booking.price && (
               <div className="flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
@@ -342,14 +329,6 @@ export default function MoverDashboard() {
                     }
                     return null;
                   })()}
-                  {parseFloat(booking.urgencyFee || "0") > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Urgency Fee</span>
-                      <span className="font-medium">
-                        ${parseFloat(booking.urgencyFee || "0").toFixed(2)}
-                      </span>
-                    </div>
-                  )}
                   <div className="h-px bg-border my-2" />
                   <div className="flex justify-between font-bold">
                     <span>Total Earnings</span>
