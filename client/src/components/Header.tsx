@@ -1,10 +1,20 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, Truck } from "lucide-react";
+import { Menu, Truck, User, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b">
@@ -36,16 +46,51 @@ export default function Header() {
           </nav>
 
           <div className="hidden md:flex items-center gap-2">
-            <Link href="/login" data-testid="link-login">
-              <Button variant="ghost" className="hover-elevate active-elevate-2">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/request-move" data-testid="link-request-move">
-              <Button data-testid="button-book-move">
-                Book a Move
-              </Button>
-            </Link>
+            {user ? (
+              <>
+                <Link href="/dashboard" data-testid="link-dashboard">
+                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                    Dashboard
+                  </Button>
+                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="button-user-menu">
+                      <User className="w-5 h-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      {user.email}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={logout} data-testid="button-logout">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Log Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Link href="/request-move" data-testid="link-request-move">
+                  <Button data-testid="button-book-move">
+                    Book a Move
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/login" data-testid="link-login">
+                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/request-move" data-testid="link-request-move">
+                  <Button data-testid="button-book-move">
+                    Book a Move
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           <Button

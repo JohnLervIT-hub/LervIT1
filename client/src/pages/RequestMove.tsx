@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import { MapPin, Calendar, FileText } from "lucide-react";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function RequestMove() {
   const [, setLocation] = useLocation();
@@ -17,6 +19,23 @@ export default function RequestMove() {
   const [loadSize, setLoadSize] = useState("medium");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
+  const [priceData, setPriceData] = useState<any>(null);
+
+  const mockDistance = 5.2;
+
+  const priceMutation = useMutation({
+    mutationFn: async (data: { distance: number; loadSize: string }) => {
+      const res = await apiRequest("POST", "/api/calculate-price", data);
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      setPriceData(data);
+    },
+  });
+
+  useEffect(() => {
+    priceMutation.mutate({ distance: mockDistance, loadSize });
+  }, [loadSize]);
 
   const handleNext = () => {
     if (step < 3) {
@@ -32,9 +51,6 @@ export default function RequestMove() {
       setStep(step - 1);
     }
   };
-
-  const mockDistance = 5.2;
-  const baseRate = 15;
 
   return (
     <div className="min-h-screen pt-24 pb-12 bg-muted/30">
@@ -207,10 +223,13 @@ export default function RequestMove() {
 
           <div className="lg:col-span-1">
             <PriceCalculator
-              distance={mockDistance}
+              distance={priceData?.distance || mockDistance}
               loadSize={loadSize}
-              baseRate={baseRate}
+              baseRate={priceData?.baseRate || 15}
               showBreakdown={true}
+              totalCost={priceData?.totalCost}
+              baseCost={priceData?.baseCost}
+              loadSurcharge={priceData?.loadSurcharge}
             />
           </div>
         </div>

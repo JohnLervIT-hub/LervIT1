@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   firebaseUid: text("firebase_uid").unique(),
   email: text("email").notNull().unique(),
+  password: text("password"),
   name: text("name").notNull(),
   phone: text("phone"),
   role: text("role").notNull().default("customer"),
@@ -67,6 +68,7 @@ export const reviews = pgTable("reviews", {
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  firebaseUid: true,
 });
 
 export const insertMoverSchema = createInsertSchema(movers).omit({

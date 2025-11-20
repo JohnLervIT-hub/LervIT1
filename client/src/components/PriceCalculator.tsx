@@ -7,6 +7,9 @@ interface PriceCalculatorProps {
   loadSize: string;
   baseRate: number;
   showBreakdown?: boolean;
+  totalCost?: number;
+  baseCost?: number;
+  loadSurcharge?: number;
 }
 
 const loadMultipliers: Record<string, number> = {
@@ -21,11 +24,18 @@ export default function PriceCalculator({
   loadSize,
   baseRate,
   showBreakdown = true,
+  totalCost: providedTotalCost,
+  baseCost: providedBaseCost,
+  loadSurcharge: providedLoadSurcharge,
 }: PriceCalculatorProps) {
   const multiplier = loadMultipliers[loadSize] || 1;
-  const distanceCost = Math.round(distance * baseRate);
-  const loadCost = Math.round(distanceCost * (multiplier - 1));
-  const totalCost = distanceCost + loadCost;
+  const calculatedDistanceCost = Math.round(distance * baseRate);
+  const calculatedLoadCost = Math.round(calculatedDistanceCost * (multiplier - 1));
+  const calculatedTotalCost = calculatedDistanceCost + calculatedLoadCost;
+  
+  const distanceCost = providedBaseCost ?? calculatedDistanceCost;
+  const loadCost = providedLoadSurcharge ?? calculatedLoadCost;
+  const totalCost = providedTotalCost ?? calculatedTotalCost;
 
   return (
     <Card className="sticky top-20">

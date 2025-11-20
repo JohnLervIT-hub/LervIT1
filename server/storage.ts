@@ -71,7 +71,8 @@ export class MemStorage implements IStorage {
     const user: User = { 
       ...insertUser, 
       id,
-      firebaseUid: insertUser.firebaseUid || null,
+      firebaseUid: null,
+      password: insertUser.password || null,
       phone: insertUser.phone || null,
       role: insertUser.role || "customer",
       createdAt: new Date()

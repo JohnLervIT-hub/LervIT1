@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema } from "@shared/schema";
 import { z } from "zod";
+import { hashPassword, verifyPassword } from "./auth";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -20,12 +21,62 @@ function validateBody<T>(schema: z.ZodSchema<T>, data: unknown): T {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // ===== AUTH ROUTES =====
+  app.post("/api/auth/signup", async (req: Request, res: Response) => {
+    try {
+      const signupSchema = insertUserSchema.extend({
+        password: z.string().min(6, "Password must be at least 6 characters"),
+      });
+      const userData = validateBody(signupSchema, req.body);
+      
+      const existingUser = await storage.getUserByEmail(userData.email);
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already registered" });
+      }
+      
+      const hashedPassword = hashPassword(userData.password);
+      const user = await storage.createUser({ ...userData, password: hashedPassword });
+      
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const loginSchema = z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+      });
+      const { email, password } = validateBody(loginSchema, req.body);
+      
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.password) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      const isValid = verifyPassword(password, user.password);
+      if (!isValid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+  
   // ===== USER ROUTES =====
   app.post("/api/users", async (req: Request, res: Response) => {
     try {
       const userData = validateBody(insertUserSchema, req.body);
-      const user = await storage.createUser(userData);
-      res.json(user);
+      const hashedPassword = userData.password ? hashPassword(userData.password) : null;
+      const user = await storage.createUser({ ...userData, password: hashedPassword });
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
@@ -37,7 +88,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(user);
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Internal server error" });
     }
@@ -49,7 +101,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(user);
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Internal server error" });
     }
@@ -374,9 +427,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Seed some initial data for testing
   app.post("/api/seed", async (req: Request, res: Response) => {
     try {
-      // Create test users
+      // Create test users with passwords
       const customer1 = await storage.createUser({
         email: "john.doe@example.com",
+        password: hashPassword("password123"),
         name: "John Doe",
         phone: "+1-403-555-0100",
         role: "customer"
@@ -384,6 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const moverUser1 = await storage.createUser({
         email: "mike.johnson@moveit.com",
+        password: hashPassword("password123"),
         name: "Mike Johnson",
         phone: "+1-403-555-0101",
         role: "mover"
@@ -391,6 +446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const moverUser2 = await storage.createUser({
         email: "sarah.chen@moveit.com",
+        password: hashPassword("password123"),
         name: "Sarah Chen",
         phone: "+1-403-555-0102",
         role: "mover"
