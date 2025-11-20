@@ -60,6 +60,11 @@ Preferred communication style: Simple, everyday language.
     *   **File Serving:** Express.static serves uploaded files with CORS and cache headers.
     *   **Database:** `bookings.images` column as a PostgreSQL text array storing URLs.
 *   **Mover Dashboard Enhancements:** Auto-profile creation for movers, optional phone field in signup. Role-based routing. Improved UI with highlighted customer info, enhanced CTAs, empty states, tab badges, better layout, loading states, and status colors. Fixed API endpoint filtering for movers and role-based routing logic.
+*   **Customer Price Transparency (✅ Complete):**
+    *   **RequestMove.tsx:** Removed mockDistance and mock pricing. Frontend now sends only addresses and loadSize; backend calculates real distance using geocoding and Haversine formula. Success dialog displays complete 4-component price breakdown (baseFee, distanceFee, loadFee, moverTravelFee) with formula explanations before redirecting to MyBookings.
+    *   **MyBookings.tsx:** Added distance display to each booking card. Collapsible "View Price Breakdown" section shows the same 4 components with test IDs for verification. Price breakdown persists for customer reference.
+    *   **Drizzle ORM Fixes:** Fixed all `.where()` chaining issues in job acceptance endpoints using `and()` from `drizzle-orm`. Applied to POST `/api/bookings/:id/accept` and POST `/api/bookings/:id/decline`.
+    *   **E2E Verified:** Tested complete flow from booking creation through job acceptance with race-condition protection. Confirmed real distance calculation, accurate price breakdown display, database storage of all components, and proper notification expiration.
 
 ## External Dependencies
 
