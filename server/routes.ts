@@ -344,10 +344,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         baseFee: toDecimalString(priceBreakdown.baseFee),
         distanceFee: toDecimalString(priceBreakdown.distanceFee),
         loadFee: toDecimalString(priceBreakdown.loadFee),
-        moverTravelFee: toDecimalString(0),
+        moverTravelFee: toDecimalString(priceBreakdown.moverTravelFee),
         pickupDifficultyFee: toDecimalString(priceBreakdown.pickupDifficultyFee),
         dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
         heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
+        subtotal: toDecimalString(priceBreakdown.subtotal),
         urgencyFee: toDecimalString(priceBreakdown.urgencyFee),
         notifiedAt: new Date(),
       });

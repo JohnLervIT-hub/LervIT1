@@ -28,22 +28,14 @@ const PRICING_CONFIG = {
   PICKUP_DIFFICULTY_FEES: {
     ground: 0.00,
     basement: 10.00,
-    elevator: 0.00,
-    stairs_1: 10.00,
-    stairs_2: 20.00,
-    stairs_3: 30.00,
-    stairs_4: 40.00,
-    stairs_5: 50.00,
+    stairs: 5.00,
+    elevator: 8.00,
   },
   DROPOFF_DIFFICULTY_FEES: {
     ground: 0.00,
     basement: 10.00,
-    elevator: 0.00,
-    stairs_1: 10.00,
-    stairs_2: 20.00,
-    stairs_3: 30.00,
-    stairs_4: 40.00,
-    stairs_5: 50.00,
+    stairs: 5.00,
+    elevator: 8.00,
   },
   HEAVY_ITEM_FEE: 15.00,
   TWO_MOVERS_MULTIPLIER: 1.75,
@@ -99,20 +91,18 @@ export function calculatePrice(
   }
   
   // Calculate subtotal (before number of movers multiplier)
-  let subtotal = baseFee + distanceFee + loadFee + pickupDifficultyFee + 
-                 dropoffDifficultyFee + heavyItemFee + moverTravelFee;
+  const subtotal = baseFee + distanceFee + loadFee + pickupDifficultyFee + 
+                   dropoffDifficultyFee + heavyItemFee + moverTravelFee;
   
   // Apply number of movers multiplier
   const numberOfMoversMultiplier = numberOfMovers === 2 ? PRICING_CONFIG.TWO_MOVERS_MULTIPLIER : 1;
-  if (numberOfMovers === 2) {
-    subtotal = subtotal * numberOfMoversMultiplier;
-  }
+  const subtotalAfterMultiplier = subtotal * numberOfMoversMultiplier;
   
   // Urgency fee (added after multiplier)
   const urgencyFee = PRICING_CONFIG.URGENCY_FEES[urgency] || 0;
   
   // Total cost
-  const totalCost = subtotal + urgencyFee;
+  const totalCost = subtotalAfterMultiplier + urgencyFee;
   
   return {
     baseFee: Math.round(baseFee * 100) / 100,
@@ -163,12 +153,8 @@ export function getPickupDifficultyLabel(difficulty: PickupDifficultyType): stri
   const labels: Record<PickupDifficultyType, string> = {
     ground: 'Ground Floor',
     basement: 'Basement',
-    elevator: 'Elevator Available',
-    stairs_1: 'Stairs (1 Floor)',
-    stairs_2: 'Stairs (2 Floors)',
-    stairs_3: 'Stairs (3 Floors)',
-    stairs_4: 'Stairs (4 Floors)',
-    stairs_5: 'Stairs (5 Floors)',
+    stairs: 'Stairs',
+    elevator: 'Elevator',
   };
   return labels[difficulty] || difficulty;
 }
@@ -177,12 +163,8 @@ export function getDropoffDifficultyLabel(difficulty: DropoffDifficultyType): st
   const labels: Record<DropoffDifficultyType, string> = {
     ground: 'Ground Floor',
     basement: 'Basement',
-    elevator: 'Elevator Available',
-    stairs_1: 'Stairs (1 Floor)',
-    stairs_2: 'Stairs (2 Floors)',
-    stairs_3: 'Stairs (3 Floors)',
-    stairs_4: 'Stairs (4 Floors)',
-    stairs_5: 'Stairs (5 Floors)',
+    stairs: 'Stairs',
+    elevator: 'Elevator',
   };
   return labels[difficulty] || difficulty;
 }
