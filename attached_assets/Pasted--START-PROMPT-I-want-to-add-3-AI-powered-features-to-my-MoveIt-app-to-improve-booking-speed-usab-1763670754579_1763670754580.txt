@@ -1,0 +1,124 @@
+<START PROMPT>
+
+I want to add 3 AI-powered features to my MoveIt app to improve booking speed, 
+usability, and customer understanding. Implement each feature using lightweight 
+AI models or mock AI logic so the prototype remains fast and functional. 
+Follow the exact instructions below and ask questions if needed before coding.
+
+------------------------------------------------------------
+FEATURE 1: AI AUTO-QUOTE PREDICTOR (INSTANT PRICE ESTIMATE)
+------------------------------------------------------------
+
+Goal: When a customer enters pickup and dropoff locations, the system should 
+automatically generate a prediction of the final price BEFORE the customer 
+fills in load size, stairs, heavy item, urgency, or movers count.
+
+Requirements:
+- Create a prediction function: aiPredictPrice()
+- Use simple heuristics for now: 
+    - Base = $30
+    - Distance-based estimate = $1/km
+    - Add average difficulty markup (default +$15)
+    - Add average heavy-load probability (+$10)
+- Display a real-time estimate range:
+    - “Estimated total: $50–$80”
+- This estimate updates dynamically as user enters more form details.
+- Add UI section under address fields titled:
+    "AI Estimated Cost (Early Prediction)"
+
+Data to use for prediction:
+    - pickup location
+    - dropoff location
+    - calculated distance
+    - historical averages (mock values)
+    - probability weights for stairs/heavy items
+
+This feature must not override the final calculation. It is only early guidance.
+
+------------------------------------------------------------
+FEATURE 2: AI PRICE BREAKDOWN EXPLAINER
+------------------------------------------------------------
+
+Goal: After the system calculates total price, add a button titled:
+“AI Explain My Price”
+
+When tapped, the AI should generate a natural language breakdown of the 
+entire pricing formula. Example:
+
+“Your move costs $72 because distance is 18 km ($18), basement pickup (+$10), 
+3rd-floor drop-off (+$30), and one heavy item (+$15). Base fee is $30, 
+so your total is $72.”
+
+Requirements:
+- Create generatePriceExplanation(bookingData)
+- Use clean natural language.
+- Show breakdown for each:
+    - Base fee
+    - Distance fee
+    - Stairs/basement fees
+    - Elevator usage
+    - Load size fee
+    - Heavy item fee
+    - Urgency fee
+    - 1 vs 2 movers multiplier
+- Display in a modal window or expandable card.
+- Add this to customer confirmation screen + mover job detail screen.
+
+------------------------------------------------------------
+FEATURE 3: AI ITEM DETECTION FROM PHOTO (LIGHTWEIGHT MOCK MODEL)
+------------------------------------------------------------
+
+Goal: Allow customer to upload a photo of their item. The AI should analyze 
+the image and automatically detect:
+
+- Load size category (small / medium / large)
+- Whether the item is heavy
+- Whether 1 or 2 movers are recommended
+- Estimated weight level
+- Whether stairs may be difficult (rough prediction)
+
+Implementation Instructions:
+- Add “Upload Item Photo (optional)” to booking page.
+- When user uploads, run analyzeItemPhoto(image):
+    - Use mock AI classification for now.
+    - Detect object class (couch, sofa, bed, dresser, table, appliance).
+    - Estimate size class:
+        * couch = large
+        * sectionals = large
+        * dressers = medium
+        * chairs = small
+    - Estimate weight:
+        * appliances/treadmills = heavy
+        * sectionals = heavy
+        * small chairs = light
+- Autofill booking fields:
+        loadSizeField = result.loadSize
+        heavyItem = result.heavy
+        recommendedMovers = result.recommendedMovers
+- Allow user to override detected values.
+
+UI:
+- After analysis, show:
+  “AI analysis suggests: Large load, heavy item, 2 movers recommended.”
+
+------------------------------------------------------------
+INTEGRATION REQUIREMENTS
+------------------------------------------------------------
+
+1. Add all 3 features without breaking the existing booking flow.
+2. Ensure new fields are stored in Firestore as:
+   ai_estimate, ai_explanation, ai_item_data
+3. Ensure both customer and mover can see AI-generated details.
+4. Add fallback logic if AI returns nothing.
+5. Document new functions clearly in code.
+6. Run automated tests after implementation:
+   - test AI prediction logic
+   - test AI explanation on sample bookings
+   - test item photo analysis with mock images
+
+After implementation:
+- Provide updated file list
+- Show new UI screenshots
+- Provide example AI outputs using mock booking data
+
+<END PROMPT>
