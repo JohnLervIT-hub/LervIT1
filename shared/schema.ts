@@ -52,7 +52,6 @@ export const bookings = pgTable("bookings", {
   dropoffDifficulty: text("dropoff_difficulty").notNull().default("ground"),
   heavyItem: boolean("heavy_item").notNull().default(false),
   numberOfMovers: integer("number_of_movers").notNull().default(1),
-  urgency: text("urgency").notNull().default("standard"),
   
   // Distance and pricing
   distance: decimal("distance", { precision: 8, scale: 2 }).notNull().default("0"),
@@ -65,7 +64,6 @@ export const bookings = pgTable("bookings", {
   dropoffDifficultyFee: decimal("dropoff_difficulty_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   heavyItemFee: decimal("heavy_item_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
-  urgencyFee: decimal("urgency_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
@@ -143,14 +141,12 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   dropoffDifficultyFee: true,
   heavyItemFee: true,
   subtotal: true,
-  urgencyFee: true,
 }).extend({
   // Override preferredDate to accept ISO date strings from the frontend
   preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),
   // Add enum validation for pricing-related fields
   pickupDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
   dropoffDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
-  urgency: z.enum(['standard', 'within_2_hours', 'within_1_hour', 'within_30_minutes']),
   loadSize: z.enum(['small', 'medium', 'large']),
   numberOfMovers: z.number().int().min(1).max(2),
 });
