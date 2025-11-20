@@ -36,11 +36,15 @@ Preferred communication style: Simple, everyday language.
 *   **Development Workflow:** Vite HMR for frontend, TSX for server development, separate build processes.
 *   **Uber-Style Proximity Matching (✅ Backend Complete):**
     *   **Mock Geocoding System:** `shared/geocoding.ts` with Calgary location database, Haversine formula for accurate distance calculations, auto-geocoding on booking creation, and random coordinate generation for mover signup.
-    *   **Dynamic Pricing Engine:** `shared/pricing.ts` calculates 4-component breakdown:
-        *   Base Fee: $25.00 (flat rate)
-        *   Distance Fee: $1.50/km (pickup → dropoff)
-        *   Load Fee: $10 (small), $25 (medium), $40 (large)
+    *   **Dynamic Pricing Engine:** `shared/pricing.ts` calculates 7-component breakdown:
+        *   Base Fee: $30.00 (flat rate)
+        *   Distance Fee: $1.00/km (pickup → dropoff)
+        *   Load Fee: $0 (small), $15 (medium), $30 (large)
+        *   Pickup Difficulty Fee: $0 (ground), $10 (basement), $5 (stairs), $8 (elevator)
+        *   Dropoff Difficulty Fee: $0 (ground), $10 (basement), $5 (stairs), $8 (elevator)
+        *   Heavy Item Fee: $15 (if applicable)
         *   Mover Travel Fee: $0.75/km for distances >5km to pickup location
+        *   2-Movers Multiplier: 1.75x applied to subtotal (before final total)
     *   **Proximity Matching Algorithm:** `shared/matching.ts` searches within initial 15km radius (expanding to 50km), ranks by distance, and selects top 5 nearest available movers.
     *   **Job Notification System:** `jobNotifications` table tracks mover invitations with `distanceToPickup`, `estimatedEarnings`, `status` (pending/accepted/declined/expired), and 10-minute `expiresAt` timestamps.
     *   **Type-Safe Decimal Handling:** `shared/utils.ts` provides `toDecimalString()` utility to convert JavaScript numbers to properly formatted decimal strings, preventing floating-point precision issues.
@@ -52,7 +56,7 @@ Preferred communication style: Simple, everyday language.
         *   Mover auto-creation: New mover accounts automatically receive random Calgary coordinates (lat: 50.9-51.2, lng: -114.3 to -113.9)
     *   **Database Schema Updates:**
         *   `movers`: Added `latitude`/`longitude` (doublePrecision, nullable)
-        *   `bookings`: Added `pickupLatitude`, `pickupLongitude`, `dropoffLatitude`, `dropoffLongitude` (doublePrecision), `distance` (decimal), `baseFee`, `distanceFee`, `loadFee`, `moverTravelFee` (decimal, notNull), `notifiedAt` (timestamp)
+        *   `bookings`: Added `pickupLatitude`, `pickupLongitude`, `dropoffLatitude`, `dropoffLongitude` (doublePrecision), `distance` (decimal), `baseFee`, `distanceFee`, `loadFee`, `moverTravelFee`, `pickupDifficultyFee`, `dropoffDifficultyFee`, `heavyItemFee`, `subtotal` (decimal, notNull), `pickupDifficulty`, `dropoffDifficulty`, `heavyItem`, `numberOfMovers`, `notifiedAt` (timestamp). **Removed** `urgency` and `urgencyFee` fields to simplify MVP and avoid surge pricing perception.
         *   `jobNotifications`: New table with composite index on (bookingId, moverId, status) for efficient queries
 *   **Image Upload for Bookings:**
     *   **Frontend:** `ImageUpload.tsx` with drag-and-drop, previews, client-side validation (max 10 images, 5MB each, JPG/PNG/GIF/WebP).
@@ -61,8 +65,9 @@ Preferred communication style: Simple, everyday language.
     *   **Database:** `bookings.images` column as a PostgreSQL text array storing URLs.
 *   **Mover Dashboard Enhancements:** Auto-profile creation for movers, optional phone field in signup. Role-based routing. Improved UI with highlighted customer info, enhanced CTAs, empty states, tab badges, better layout, loading states, and status colors. Fixed API endpoint filtering for movers and role-based routing logic.
 *   **Customer Price Transparency (✅ Complete):**
-    *   **RequestMove.tsx:** Removed mockDistance and mock pricing. Frontend now sends only addresses and loadSize; backend calculates real distance using geocoding and Haversine formula. Success dialog displays complete 4-component price breakdown (baseFee, distanceFee, loadFee, moverTravelFee) with formula explanations before redirecting to MyBookings.
-    *   **MyBookings.tsx:** Added distance display to each booking card. Collapsible "View Price Breakdown" section shows the same 4 components with test IDs for verification. Price breakdown persists for customer reference.
+    *   **RequestMove.tsx:** Frontend sends addresses, loadSize, pickup/dropoff difficulty, heavy item flag, and number of movers; backend calculates real distance using geocoding and Haversine formula. Success dialog displays complete 7-component price breakdown (baseFee, distanceFee, loadFee, pickupDifficultyFee, dropoffDifficultyFee, heavyItemFee, moverTravelFee, 2-movers multiplier if applicable) with formula explanations before redirecting to MyBookings. **Removed urgency selector and urgency fee** to simplify MVP and focus on proximity-based matching.
+    *   **MyBookings.tsx:** Added distance display to each booking card. Collapsible "View Price Breakdown" section shows all 7 components with test IDs for verification. Price breakdown persists for customer reference.
+    *   **MoverDashboard.tsx:** Displays same 7-component breakdown for movers to see detailed earnings calculation. Shows total earnings after all fees and multipliers applied.
     *   **Drizzle ORM Fixes:** Fixed all `.where()` chaining issues in job acceptance endpoints using `and()` from `drizzle-orm`. Applied to POST `/api/bookings/:id/accept` and POST `/api/bookings/:id/decline`.
     *   **E2E Verified:** Tested complete flow from booking creation through job acceptance with race-condition protection. Confirmed real distance calculation, accurate price breakdown display, database storage of all components, and proper notification expiration.
 *   **Role-Specific User Experience (✅ E2E Tested):**
