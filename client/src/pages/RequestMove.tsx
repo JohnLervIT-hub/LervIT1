@@ -8,14 +8,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 
 export default function RequestMove() {
   const [, setLocation] = useLocation();
@@ -34,6 +37,19 @@ export default function RequestMove() {
   const [images, setImages] = useState<string[]>([]);
   const [createdBooking, setCreatedBooking] = useState<any>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  
+  // AI Feature 1: Auto-Quote Predictor state
+  const [aiEstimate, setAiEstimate] = useState<AIEstimateResult | null>(null);
+  const [estimateDistance, setEstimateDistance] = useState(0);
+  
+  // AI Feature 2: Price Explainer state
+  const [showPriceExplanation, setShowPriceExplanation] = useState(false);
+  const [priceExplanation, setPriceExplanation] = useState("");
+  
+  // AI Feature 3: Photo Analysis state
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
+  const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysisResult | null>(null);
+  const [analyzedPhotoUrl, setAnalyzedPhotoUrl] = useState<string | null>(null);
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
@@ -52,6 +68,97 @@ export default function RequestMove() {
       });
     },
   });
+
+  // AI Feature 1: Auto-Quote Predictor - Update estimate when form fields change
+  useEffect(() => {
+    if (pickupAddress && dropoffAddress && estimateDistance > 0) {
+      const estimate = aiPredictPrice({
+        pickupAddress,
+        dropoffAddress,
+        distance: estimateDistance,
+        loadSize,
+        pickupDifficulty,
+        dropoffDifficulty,
+        heavyItem,
+        numberOfMovers
+      });
+      setAiEstimate(estimate);
+    } else {
+      setAiEstimate(null);
+    }
+  }, [pickupAddress, dropoffAddress, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers]);
+
+  // Calculate distance estimate when addresses change (mock calculation for now)
+  useEffect(() => {
+    if (pickupAddress && dropoffAddress) {
+      const randomDistance = Math.random() * 20 + 5;
+      setEstimateDistance(randomDistance);
+    }
+  }, [pickupAddress, dropoffAddress]);
+
+  // AI Feature 2: Generate price explanation when booking is created
+  useEffect(() => {
+    if (createdBooking) {
+      const explanation = generatePriceExplanation({
+        baseFee: parseFloat(createdBooking.baseFee),
+        distanceFee: parseFloat(createdBooking.distanceFee),
+        loadFee: parseFloat(createdBooking.loadFee || "0"),
+        pickupDifficultyFee: parseFloat(createdBooking.pickupDifficultyFee || "0"),
+        dropoffDifficultyFee: parseFloat(createdBooking.dropoffDifficultyFee || "0"),
+        heavyItemFee: parseFloat(createdBooking.heavyItemFee || "0"),
+        moverTravelFee: parseFloat(createdBooking.moverTravelFee || "0"),
+        subtotal: parseFloat(createdBooking.subtotal),
+        numberOfMovers: createdBooking.numberOfMovers,
+        finalTotal: parseFloat(createdBooking.price),
+        distance: parseFloat(createdBooking.distance),
+        loadSize: createdBooking.loadSize,
+        pickupDifficulty: createdBooking.pickupDifficulty,
+        dropoffDifficulty: createdBooking.dropoffDifficulty,
+        heavyItem: createdBooking.heavyItem
+      });
+      setPriceExplanation(explanation);
+    }
+  }, [createdBooking]);
+
+  // AI Feature 3: Photo Analysis Handler
+  const handlePhotoAnalysis = async (file: File) => {
+    setIsAnalyzingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+
+      const response = await fetch('/api/ai/analyze-photo', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Analysis failed');
+      }
+
+      const result: PhotoAnalysisResult & { imageUrl: string } = await response.json();
+      setPhotoAnalysis(result);
+      setAnalyzedPhotoUrl(result.imageUrl);
+
+      // Auto-fill form fields based on AI analysis
+      setLoadSize(result.loadSize);
+      setHeavyItem(result.heavyItem);
+      setNumberOfMovers(result.recommendedMovers);
+
+      toast({
+        title: "AI Analysis Complete!",
+        description: `Detected: ${result.itemType} - ${result.loadSize} load, ${result.heavyItem ? 'heavy item' : 'standard weight'}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Analysis Failed",
+        description: "Could not analyze photo. Please fill in details manually.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAnalyzingPhoto(false);
+    }
+  };
 
   const handleNext = () => {
     if (step < 3) {
@@ -211,6 +318,29 @@ export default function RequestMove() {
                     </span>
                   </div>
                 </div>
+                
+                {/* AI Feature 2: Price Explanation Button */}
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPriceExplanation(!showPriceExplanation)}
+                  className="w-full mt-3"
+                  data-testid="button-ai-explain-price"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {showPriceExplanation ? "Hide" : "AI Explain My Price"}
+                </Button>
+                
+                {showPriceExplanation && priceExplanation && (
+                  <div className="mt-3 p-4 bg-accent/10 border border-accent/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4 text-accent-foreground" />
+                      <h4 className="font-semibold text-sm">AI Price Explanation</h4>
+                    </div>
+                    <div className="text-sm whitespace-pre-line text-muted-foreground">
+                      {priceExplanation}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
@@ -364,11 +494,91 @@ export default function RequestMove() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {/* AI Feature 1: Auto-Quote Predictor */}
+                    {aiEstimate && (
+                      <div className="bg-gradient-to-r from-accent/10 to-primary/10 border border-accent/30 rounded-lg p-5 mt-6">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
+                            <Sparkles className="w-5 h-5 text-accent-foreground" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">AI Estimated Cost</h3>
+                            <p className="text-xs text-muted-foreground">Early prediction based on your inputs</p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-2xl font-bold text-accent-foreground">
+                              ${aiEstimate.minPrice.toFixed(2)} - ${aiEstimate.maxPrice.toFixed(2)}
+                            </span>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Info className="w-3 h-3" />
+                              {aiEstimate.confidence}% confidence
+                            </div>
+                          </div>
+                          <Progress value={aiEstimate.confidence} className="h-1" />
+                          <p className="text-xs text-muted-foreground">{aiEstimate.explanation}</p>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 
                 {step === 2 && (
                   <>
+                    {/* AI Feature 3: Photo Analysis */}
+                    <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                          <Sparkles className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg">AI Item Detection</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Upload a photo and let AI auto-fill load details
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoAnalysis(file);
+                          }}
+                          className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                          disabled={isAnalyzingPhoto}
+                          data-testid="input-photo-upload"
+                        />
+                        
+                        {isAnalyzingPhoto && (
+                          <div className="flex items-center gap-2 text-sm text-primary">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>AI analyzing your item...</span>
+                          </div>
+                        )}
+                        
+                        {photoAnalysis && (
+                          <Alert className="bg-primary/10 border-primary/30">
+                            <Sparkles className="w-4 h-4" />
+                            <AlertDescription>
+                              <strong>AI detected:</strong> {photoAnalysis.itemType} •{" "}
+                              {photoAnalysis.loadSize} load •{" "}
+                              {photoAnalysis.heavyItem ? "Heavy" : "Standard"} •{" "}
+                              {photoAnalysis.recommendedMovers} mover{photoAnalysis.recommendedMovers > 1 ? "s" : ""} recommended
+                              <div className="text-xs mt-1 text-muted-foreground">
+                                {photoAnalysis.explanation}
+                              </div>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
+                    </div>
+
                     <div>
                       <Label className="text-base font-semibold mb-4 block">
                         Select Load Size
