@@ -18,6 +18,7 @@ type Booking = {
   dropoffAddress: string;
   loadSize: string;
   description: string | null;
+  images: string[] | null;
   preferredDate: string;
   status: string;
   distance: string | null;
@@ -175,6 +176,27 @@ export default function MyBookings() {
                       )}
                     </div>
                   </div>
+
+                  {booking.images && booking.images.length > 0 && (
+                    <>
+                      <Separator />
+                      <div>
+                        <p className="text-sm font-medium mb-3">Item Photos ({booking.images.length})</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {booking.images.map((imageUrl, index) => (
+                            <div key={index} className="relative aspect-square rounded-md overflow-hidden border">
+                              <img
+                                src={imageUrl}
+                                alt={`Item ${index + 1}`}
+                                className="w-full h-full object-cover"
+                                data-testid={`image-item-${booking.id}-${index}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {booking.mover && (
                     <>
