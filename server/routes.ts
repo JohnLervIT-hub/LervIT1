@@ -59,18 +59,14 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
-  // Serve uploaded files statically
-  app.use('/uploads', (req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    next();
-  }, (req, res) => {
-    const filePath = path.join(uploadDir, req.path);
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).send('File not found');
-    }
-  });
+  // Serve uploaded files statically with express.static (secure against path traversal)
+  const express = await import('express');
+  app.use('/uploads', express.default.static(uploadDir, {
+    setHeaders: (res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+    },
+  }));
   
   // ===== AUTH ROUTES =====
   app.post("/api/auth/signup", async (req: Request, res: Response) => {

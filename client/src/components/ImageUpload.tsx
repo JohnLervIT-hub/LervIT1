@@ -12,13 +12,13 @@ interface ImageUploadProps {
 export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUploadProps) {
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    if (images.length + files.length > maxImages) {
+  const uploadFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    
+    if (images.length + fileArray.length > maxImages) {
       toast({
         title: "Too many images",
         description: `You can upload a maximum of ${maxImages} images.`,
@@ -27,11 +27,26 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
       return;
     }
 
+    // Validate file types
+    const validFiles = fileArray.filter(file => {
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      return allowedTypes.includes(file.type);
+    });
+
+    if (validFiles.length !== fileArray.length) {
+      toast({
+        title: "Invalid files",
+        description: "Only image files (JPG, PNG, GIF, WebP) are allowed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploading(true);
     const formData = new FormData();
     
-    for (let i = 0; i < files.length; i++) {
-      formData.append('images', files[i]);
+    for (let i = 0; i < validFiles.length; i++) {
+      formData.append('images', validFiles[i]);
     }
 
     try {
@@ -51,7 +66,7 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
       
       toast({
         title: "Success",
-        description: `${files.length} image(s) uploaded successfully.`,
+        description: `${validFiles.length} image(s) uploaded successfully.`,
       });
     } catch (error) {
       toast({
@@ -61,7 +76,45 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
       });
     } finally {
       setUploading(false);
-      e.target.value = '';
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    await uploadFiles(files);
+    e.target.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only clear isDragging if we're actually leaving the drop zone
+    // (not just entering a child element)
+    const relatedTarget = e.relatedTarget as Node;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (uploading || images.length >= maxImages) return;
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      await uploadFiles(files);
     }
   };
 
@@ -73,30 +126,40 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
 
   return (
     <div className="space-y-4">
-      <div>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <label htmlFor="image-upload">
           <div className="cursor-pointer">
-            <Card className="border-2 border-dashed hover-elevate active-elevate-2 p-8 text-center">
+            <Card className={`border-2 border-dashed hover-elevate active-elevate-2 p-8 text-center transition-colors ${
+              isDragging ? 'border-primary bg-primary/5' : ''
+            }`}>
               <div className="flex flex-col items-center gap-2">
-                <Upload className="w-8 h-8 text-muted-foreground" />
+                <Upload className={`w-8 h-8 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
                 <div>
-                  <p className="font-medium">Upload Images</p>
+                  <p className="font-medium">
+                    {isDragging ? 'Drop images here' : 'Upload Images'}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Click to select images of items to be moved
+                    {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={uploading || images.length >= maxImages}
-                  data-testid="button-select-images"
-                >
-                  <ImageIcon className="w-4 h-4 mr-2" />
-                  {uploading ? "Uploading..." : "Select Images"}
-                </Button>
+                {!isDragging && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={uploading || images.length >= maxImages}
+                    data-testid="button-select-images"
+                  >
+                    <ImageIcon className="w-4 h-4 mr-2" />
+                    {uploading ? "Uploading..." : "Select Images"}
+                  </Button>
+                )}
               </div>
             </Card>
           </div>

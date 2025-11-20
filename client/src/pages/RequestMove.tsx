@@ -11,9 +11,13 @@ import ImageUpload from "@/components/ImageUpload";
 import { MapPin, Calendar, FileText } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function RequestMove() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
@@ -35,6 +39,26 @@ export default function RequestMove() {
     },
   });
 
+  const createBookingMutation = useMutation({
+    mutationFn: async (bookingData: any) => {
+      return apiRequest("POST", "/api/bookings", bookingData);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Booking created",
+        description: "Your move request has been created successfully.",
+      });
+      setLocation("/my-bookings");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
     priceMutation.mutate({ distance: mockDistance, loadSize });
   }, [loadSize]);
@@ -43,8 +67,20 @@ export default function RequestMove() {
     if (step < 3) {
       setStep(step + 1);
     } else {
-      console.log("Form submitted", { pickupAddress, dropoffAddress, loadSize, description, date });
-      setLocation("/browse-movers");
+      // Create the booking with all form data including images
+      const bookingData = {
+        customerId: user?.id,
+        pickupAddress,
+        dropoffAddress,
+        loadSize,
+        description: description || null,
+        images: images.length > 0 ? images : null,
+        preferredDate: new Date(date).toISOString(),
+        status: "pending",
+        distance: mockDistance.toString(),
+        price: priceData?.totalCost?.toString() || "0",
+      };
+      createBookingMutation.mutate(bookingData);
     }
   };
 

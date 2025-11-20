@@ -87,6 +87,9 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   updatedAt: true,
   paymentStatus: true,
   stripePaymentIntentId: true,
+}).extend({
+  // Override preferredDate to accept ISO date strings from the frontend
+  preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),
 });
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
