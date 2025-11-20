@@ -335,12 +335,8 @@ export default function RequestMove() {
                         <SelectContent>
                           <SelectItem value="ground">Ground Floor - $0</SelectItem>
                           <SelectItem value="basement">Basement - +$10</SelectItem>
-                          <SelectItem value="elevator">Elevator Available - $0</SelectItem>
-                          <SelectItem value="stairs_1">Stairs (1 Floor) - +$10</SelectItem>
-                          <SelectItem value="stairs_2">Stairs (2 Floors) - +$20</SelectItem>
-                          <SelectItem value="stairs_3">Stairs (3 Floors) - +$30</SelectItem>
-                          <SelectItem value="stairs_4">Stairs (4 Floors) - +$40</SelectItem>
-                          <SelectItem value="stairs_5">Stairs (5 Floors) - +$50</SelectItem>
+                          <SelectItem value="stairs">Stairs - +$5</SelectItem>
+                          <SelectItem value="elevator">Elevator Available - +$8</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -373,12 +369,8 @@ export default function RequestMove() {
                         <SelectContent>
                           <SelectItem value="ground">Ground Floor - $0</SelectItem>
                           <SelectItem value="basement">Basement - +$10</SelectItem>
-                          <SelectItem value="elevator">Elevator Available - $0</SelectItem>
-                          <SelectItem value="stairs_1">Stairs (1 Floor) - +$10</SelectItem>
-                          <SelectItem value="stairs_2">Stairs (2 Floors) - +$20</SelectItem>
-                          <SelectItem value="stairs_3">Stairs (3 Floors) - +$30</SelectItem>
-                          <SelectItem value="stairs_4">Stairs (4 Floors) - +$40</SelectItem>
-                          <SelectItem value="stairs_5">Stairs (5 Floors) - +$50</SelectItem>
+                          <SelectItem value="stairs">Stairs - +$5</SelectItem>
+                          <SelectItem value="elevator">Elevator Available - +$8</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -480,16 +472,35 @@ export default function RequestMove() {
                       <Label htmlFor="date" className="text-base font-semibold mb-2 block">
                         Preferred Date & Time
                       </Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="date"
-                          type="datetime-local"
-                          className="pl-10 h-12"
-                          value={date}
-                          onChange={(e) => setDate(e.target.value)}
-                          data-testid="input-move-date"
-                        />
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <Input
+                            id="date"
+                            type="datetime-local"
+                            className="pl-10 h-12"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            data-testid="input-move-date"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const tomorrow = new Date();
+                            tomorrow.setDate(tomorrow.getDate() + 1);
+                            tomorrow.setHours(9, 0, 0, 0);
+                            const localDateTime = tomorrow.toISOString().slice(0, 16);
+                            setDate(localDateTime);
+                          }}
+                          data-testid="button-quick-schedule"
+                          className="w-full"
+                        >
+                          <Clock className="w-4 h-4 mr-2" />
+                          Quick Schedule: Tomorrow at 9:00 AM
+                        </Button>
                       </div>
                     </div>
 
