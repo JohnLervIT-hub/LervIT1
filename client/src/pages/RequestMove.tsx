@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
+import ImageUpload from "@/components/ImageUpload";
 import { MapPin, Calendar, FileText } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -19,6 +20,7 @@ export default function RequestMove() {
   const [loadSize, setLoadSize] = useState("medium");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
+  const [images, setImages] = useState<string[]>([]);
   const [priceData, setPriceData] = useState<any>(null);
 
   const mockDistance = 5.2;
@@ -183,7 +185,7 @@ export default function RequestMove() {
 
                     <div>
                       <Label htmlFor="description" className="text-base font-semibold mb-2 block">
-                        Item Description
+                        Item Description (Optional)
                       </Label>
                       <div className="relative">
                         <FileText className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
@@ -196,6 +198,16 @@ export default function RequestMove() {
                           data-testid="input-description"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-base font-semibold mb-2 block">
+                        Upload Photos of Items
+                      </Label>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Help movers provide accurate quotes by showing what needs to be moved
+                      </p>
+                      <ImageUpload onImagesChange={setImages} maxImages={10} />
                     </div>
                   </>
                 )}
