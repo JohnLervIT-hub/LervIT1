@@ -86,11 +86,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If user signed up as a mover, automatically create a mover profile
       if (user.role === "mover") {
+        const { generateRandomCalgaryCoordinates } = await import("@shared/geocoding");
+        const coords = generateRandomCalgaryCoordinates();
         await storage.createMover({
           userId: user.id,
           vehicleType: "van", // Default vehicle type
           isAvailable: true,
           location: "Calgary, AB", // Default location
+          latitude: coords.lat,
+          longitude: coords.lng,
         });
       }
       
@@ -284,6 +288,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isVerified: true,
         bio: true,
         location: true,
+        latitude: true,
+        longitude: true,
         isAvailable: true,
       });
       const updates = validateBody(updateSchema, req.body);
@@ -301,8 +307,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/bookings", async (req: Request, res: Response) => {
     try {
       const bookingData = validateBody(insertBookingSchema, req.body);
-      const booking = await storage.createBooking(bookingData);
-      res.json(booking);
+      
+      // Geocode addresses to get coordinates
+      const { geocodeAddress } = await import("@shared/geocoding");
+      const { calculateDistance } = await import("@shared/geocoding");
+      const { calculatePrice } = await import("@shared/pricing");
+      const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+      const { toDecimalString } = await import("@shared/utils");
+      
+      const pickupGeo = geocodeAddress(bookingData.pickupAddress);
+      const dropoffGeo = geocodeAddress(bookingData.dropoffAddress);
+      
+      // Calculate distance and price
+      const distance = calculateDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
+      const priceBreakdown = calculatePrice(
+        distance,
+        bookingData.loadSize as 'small' | 'medium' | 'large'
+      );
+      
+      // Create booking with geocoded data and price breakdown
+      const booking = await storage.createBooking({
+        ...bookingData,
+        pickupLatitude: pickupGeo.coordinates.lat,
+        pickupLongitude: pickupGeo.coordinates.lng,
+        dropoffLatitude: dropoffGeo.coordinates.lat,
+        dropoffLongitude: dropoffGeo.coordinates.lng,
+        distance: toDecimalString(distance),
+        price: toDecimalString(priceBreakdown.totalCost),
+        baseFee: toDecimalString(priceBreakdown.baseFee),
+        distanceFee: toDecimalString(priceBreakdown.distanceFee),
+        loadFee: toDecimalString(priceBreakdown.loadFee),
+        moverTravelFee: toDecimalString(0),
+        notifiedAt: new Date(),
+      });
+      
+      // Find nearest available movers
+      const allMovers = await storage.getAvailableMoversWithCoordinates();
+      const moversWithUserData = await Promise.all(
+        allMovers.map(async (m) => {
+          const user = await storage.getUser(m.userId);
+          if (!user || m.latitude === null || m.longitude === null) {
+            return null;
+          }
+          return {
+            moverId: m.id,
+            userId: m.userId,
+            name: user.name,
+            vehicleType: m.vehicleType,
+            rating: m.rating || '0',
+            totalMoves: m.totalMoves,
+            isAvailable: m.isAvailable,
+            latitude: m.latitude as number,
+            longitude: m.longitude as number,
+          };
+        })
+      ).then(results => results.filter((m): m is NonNullable<typeof m> => m !== null));
+      
+      const nearestMovers = findNearestMovers(
+        pickupGeo.coordinates,
+        dropoffGeo.coordinates,
+        bookingData.loadSize as 'small' | 'medium' | 'large',
+        moversWithUserData
+      );
+      
+      // Create job notifications for top movers
+      const expiresAt = calculateExpiryTime(10); // 10 minutes
+      await Promise.all(
+        nearestMovers.map(mover =>
+          storage.createJobNotification({
+            bookingId: booking.id,
+            moverId: mover.moverId,
+            distanceToPickup: toDecimalString(mover.distanceToPickup),
+            estimatedEarnings: toDecimalString(mover.estimatedEarnings),
+            status: 'pending',
+            expiresAt,
+          })
+        )
+      );
+      
+      res.json({
+        ...booking,
+        notifiedMovers: nearestMovers.length,
+        nearestMovers: nearestMovers.map(m => ({
+          id: m.moverId,
+          name: m.name,
+          distanceToPickup: m.distanceToPickup,
+          estimatedEarnings: m.estimatedEarnings,
+        })),
+      });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
