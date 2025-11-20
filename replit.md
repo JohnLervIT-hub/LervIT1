@@ -69,7 +69,7 @@ Preferred communication style: Simple, everyday language.
 **Schema Design:**
 - `users` table: Core user accounts with email, password, name, phone, role (customer/mover/admin)
 - `movers` table: Extended profile for movers including vehicle info, verification status, ratings, location
-- `bookings` table: Move requests/bookings with pickup/dropoff addresses, load size, pricing, status tracking
+- `bookings` table: Move requests/bookings with pickup/dropoff addresses, load size, pricing, status tracking, **images array for uploaded photos**
 - `messages` table: Chat messages between customers and movers
 - `reviews` table: Customer reviews and ratings for movers
 
@@ -114,6 +114,12 @@ Preferred communication style: Simple, everyday language.
 **Session Management:**
 - connect-pg-simple for PostgreSQL session store (configured but implementation details not fully visible)
 
+**File Upload:**
+- Multer middleware for handling multipart/form-data image uploads
+- Secure file storage in `/public/uploads` directory
+- Express.static serving uploaded files via `/uploads` route with CORS and cache headers
+- File validation: max 5MB per image, supports JPG, PNG, GIF, WebP formats
+
 **Utility Libraries:**
 - clsx and tailwind-merge (via cn utility) for conditional class handling
 - nanoid for unique ID generation
@@ -140,3 +146,36 @@ Preferred communication style: Simple, everyday language.
 - Vite HMR for fast frontend development
 - TSX for running TypeScript server in development
 - Separate build processes for client (Vite) and server (ESBuild)
+
+## Feature Highlights
+
+### Image Upload for Bookings (November 2025)
+**Purpose:** Allow customers to upload photos of items to be moved, helping movers provide more accurate quotes and better assess job scope.
+
+**Implementation Details:**
+- **Frontend Component:** `ImageUpload.tsx` with drag-and-drop and click-to-select functionality
+  - Visual feedback during drag operations (border highlight, background tint)
+  - Preview thumbnails with remove capability
+  - Maximum 10 images per booking, 5MB per image
+  - Client-side file type validation (JPG, PNG, GIF, WebP)
+  
+- **API Endpoint:** `POST /api/upload/images`
+  - Multer middleware for secure file handling
+  - Unique filename generation (timestamp + random suffix)
+  - Server-side validation matching client restrictions
+  - Returns array of image URLs for storage
+  
+- **File Serving:** Express.static middleware
+  - Secure path handling (no directory traversal vulnerabilities)
+  - CORS headers for cross-origin access
+  - Long-term cache headers for performance
+  
+- **Database Schema:** `bookings.images` column
+  - PostgreSQL text array storing image URLs
+  - Schema validation accepts ISO date strings for `preferredDate` field
+  
+- **User Experience:**
+  - Step 3 of RequestMove form includes optional image upload
+  - Images displayed in both MyBookings (customer view) and MoverDashboard (mover view)
+  - Grid layout: 2 columns on mobile, 4 columns on desktop
+  - Aspect-square containers with rounded borders for consistent display
