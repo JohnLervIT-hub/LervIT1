@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +24,12 @@ export default function RequestMove() {
   const [step, setStep] = useState(1);
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
+  const [pickupDifficulty, setPickupDifficulty] = useState("ground");
+  const [dropoffDifficulty, setDropoffDifficulty] = useState("ground");
   const [loadSize, setLoadSize] = useState("medium");
+  const [heavyItem, setHeavyItem] = useState(false);
+  const [numberOfMovers, setNumberOfMovers] = useState(1);
+  const [urgency, setUrgency] = useState("standard");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -66,7 +73,12 @@ export default function RequestMove() {
         customerId: user?.id,
         pickupAddress,
         dropoffAddress,
+        pickupDifficulty,
+        dropoffDifficulty,
         loadSize,
+        heavyItem,
+        numberOfMovers,
+        urgency,
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
@@ -141,24 +153,66 @@ export default function RequestMove() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      Distance Fee ({parseFloat(createdBooking.distance).toFixed(2)} km × $1.50/km)
+                      Distance Fee ({parseFloat(createdBooking.distance).toFixed(2)} km × $1.00/km)
                     </span>
                     <span className="font-medium" data-testid="text-distance-fee">
                       ${parseFloat(createdBooking.distanceFee).toFixed(2)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Load Size Fee ({createdBooking.loadSize})</span>
-                    <span className="font-medium" data-testid="text-load-fee">
-                      ${parseFloat(createdBooking.loadFee).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Mover Travel Fee</span>
-                    <span className="font-medium" data-testid="text-mover-travel-fee">
-                      ${parseFloat(createdBooking.moverTravelFee || "0").toFixed(2)}
-                    </span>
-                  </div>
+                  {parseFloat(createdBooking.loadFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Load Size Fee ({createdBooking.loadSize})</span>
+                      <span className="font-medium" data-testid="text-load-fee">
+                        ${parseFloat(createdBooking.loadFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(createdBooking.pickupDifficultyFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Pickup Difficulty Fee</span>
+                      <span className="font-medium" data-testid="text-pickup-difficulty-fee">
+                        ${parseFloat(createdBooking.pickupDifficultyFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(createdBooking.dropoffDifficultyFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Dropoff Difficulty Fee</span>
+                      <span className="font-medium" data-testid="text-dropoff-difficulty-fee">
+                        ${parseFloat(createdBooking.dropoffDifficultyFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(createdBooking.heavyItemFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Heavy Item Fee</span>
+                      <span className="font-medium" data-testid="text-heavy-item-fee">
+                        ${parseFloat(createdBooking.heavyItemFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {parseFloat(createdBooking.moverTravelFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Mover Travel Fee</span>
+                      <span className="font-medium" data-testid="text-mover-travel-fee">
+                        ${parseFloat(createdBooking.moverTravelFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {createdBooking.numberOfMovers === 2 && (
+                    <div className="flex justify-between text-primary">
+                      <span className="font-medium">2-Movers Multiplier (×1.75)</span>
+                      <span className="font-medium">Applied</span>
+                    </div>
+                  )}
+                  {parseFloat(createdBooking.urgencyFee || "0") > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Urgency Fee</span>
+                      <span className="font-medium" data-testid="text-urgency-fee">
+                        ${parseFloat(createdBooking.urgencyFee).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                   <div className="h-px bg-border my-2" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Total Price</span>
@@ -271,6 +325,27 @@ export default function RequestMove() {
                     </div>
 
                     <div>
+                      <Label htmlFor="pickup-difficulty" className="text-base font-semibold mb-2 block">
+                        Pickup Difficulty
+                      </Label>
+                      <Select value={pickupDifficulty} onValueChange={setPickupDifficulty}>
+                        <SelectTrigger id="pickup-difficulty" className="h-12" data-testid="select-pickup-difficulty">
+                          <SelectValue placeholder="Select pickup difficulty" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ground">Ground Floor - $0</SelectItem>
+                          <SelectItem value="basement">Basement - +$10</SelectItem>
+                          <SelectItem value="elevator">Elevator Available - $0</SelectItem>
+                          <SelectItem value="stairs_1">Stairs (1 Floor) - +$10</SelectItem>
+                          <SelectItem value="stairs_2">Stairs (2 Floors) - +$20</SelectItem>
+                          <SelectItem value="stairs_3">Stairs (3 Floors) - +$30</SelectItem>
+                          <SelectItem value="stairs_4">Stairs (4 Floors) - +$40</SelectItem>
+                          <SelectItem value="stairs_5">Stairs (5 Floors) - +$50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
                       <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
                         Dropoff Address
                       </Label>
@@ -286,19 +361,117 @@ export default function RequestMove() {
                         />
                       </div>
                     </div>
+
+                    <div>
+                      <Label htmlFor="dropoff-difficulty" className="text-base font-semibold mb-2 block">
+                        Dropoff Difficulty
+                      </Label>
+                      <Select value={dropoffDifficulty} onValueChange={setDropoffDifficulty}>
+                        <SelectTrigger id="dropoff-difficulty" className="h-12" data-testid="select-dropoff-difficulty">
+                          <SelectValue placeholder="Select dropoff difficulty" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ground">Ground Floor - $0</SelectItem>
+                          <SelectItem value="basement">Basement - +$10</SelectItem>
+                          <SelectItem value="elevator">Elevator Available - $0</SelectItem>
+                          <SelectItem value="stairs_1">Stairs (1 Floor) - +$10</SelectItem>
+                          <SelectItem value="stairs_2">Stairs (2 Floors) - +$20</SelectItem>
+                          <SelectItem value="stairs_3">Stairs (3 Floors) - +$30</SelectItem>
+                          <SelectItem value="stairs_4">Stairs (4 Floors) - +$40</SelectItem>
+                          <SelectItem value="stairs_5">Stairs (5 Floors) - +$50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </>
                 )}
 
                 {step === 2 && (
-                  <div>
-                    <Label className="text-base font-semibold mb-4 block">
-                      Select Load Size
-                    </Label>
-                    <LoadSizeSelector
-                      selectedSize={loadSize}
-                      onSelectSize={setLoadSize}
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <Label className="text-base font-semibold mb-4 block">
+                        Select Load Size
+                      </Label>
+                      <LoadSizeSelector
+                        selectedSize={loadSize}
+                        onSelectSize={setLoadSize}
+                      />
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Small: $0 | Medium: +$15 | Large: +$30
+                      </p>
+                    </div>
+
+                    <div className="border-t pt-6">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <Weight className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <Label htmlFor="heavy-item" className="text-base font-semibold">
+                              Heavy Items
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              Includes: sofa beds, appliances, marble/glass, treadmills, sectionals
+                            </p>
+                          </div>
+                        </div>
+                        <Switch
+                          id="heavy-item"
+                          checked={heavyItem}
+                          onCheckedChange={setHeavyItem}
+                          data-testid="switch-heavy-item"
+                        />
+                      </div>
+                      {heavyItem && (
+                        <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                          <p className="text-sm font-semibold text-primary">+$15 Heavy Item Fee</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t pt-6">
+                      <Label className="text-base font-semibold mb-4 block flex items-center gap-2">
+                        <Users className="w-5 h-5" />
+                        Number of Movers
+                      </Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setNumberOfMovers(1)}
+                          className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                            numberOfMovers === 1
+                              ? "border-primary bg-primary/10"
+                              : "border-border bg-card"
+                          }`}
+                          data-testid="button-1-mover"
+                        >
+                          <div className="text-center">
+                            <p className="font-bold text-lg">1 Mover</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Customer helps with carry
+                            </p>
+                            <p className="text-sm font-semibold mt-2">Standard Price</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNumberOfMovers(2)}
+                          className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                            numberOfMovers === 2
+                              ? "border-primary bg-primary/10"
+                              : "border-border bg-card"
+                          }`}
+                          data-testid="button-2-movers"
+                        >
+                          <div className="text-center">
+                            <p className="font-bold text-lg">2 Movers</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Movers handle everything
+                            </p>
+                            <p className="text-sm font-semibold mt-2 text-primary">×1.75 Price</p>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {step === 3 && (
@@ -318,6 +491,24 @@ export default function RequestMove() {
                           data-testid="input-move-date"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="urgency" className="text-base font-semibold mb-2 block flex items-center gap-2">
+                        <Clock className="w-5 h-5" />
+                        Urgency Level
+                      </Label>
+                      <Select value={urgency} onValueChange={setUrgency}>
+                        <SelectTrigger id="urgency" className="h-12" data-testid="select-urgency">
+                          <SelectValue placeholder="Select urgency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="standard">Standard (2+ hours) - $0</SelectItem>
+                          <SelectItem value="within_2_hours">Within 2 Hours - +$20</SelectItem>
+                          <SelectItem value="within_1_hour">Within 1 Hour - +$30</SelectItem>
+                          <SelectItem value="within_30_minutes">Within 30 Minutes - +$40</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div>

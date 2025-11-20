@@ -324,7 +324,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const distance = calculateDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
       const priceBreakdown = calculatePrice(
         distance,
-        bookingData.loadSize as 'small' | 'medium' | 'large'
+        bookingData.loadSize as 'small' | 'medium' | 'large',
+        bookingData.pickupDifficulty as any,
+        bookingData.dropoffDifficulty as any,
+        bookingData.heavyItem,
+        bookingData.numberOfMovers as 1 | 2,
+        bookingData.urgency as any
       );
       
       // Create booking with geocoded data and price breakdown
@@ -340,6 +345,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         distanceFee: toDecimalString(priceBreakdown.distanceFee),
         loadFee: toDecimalString(priceBreakdown.loadFee),
         moverTravelFee: toDecimalString(0),
+        pickupDifficultyFee: toDecimalString(priceBreakdown.pickupDifficultyFee),
+        dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
+        heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
+        urgencyFee: toDecimalString(priceBreakdown.urgencyFee),
         notifiedAt: new Date(),
       });
       
