@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -25,8 +25,8 @@ export const movers = pgTable("movers", {
   totalMoves: integer("total_moves").default(0).notNull(),
   bio: text("bio"),
   location: text("location"),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
   isAvailable: boolean("is_available").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -37,15 +37,25 @@ export const bookings = pgTable("bookings", {
   moverId: varchar("mover_id").references(() => movers.id),
   pickupAddress: text("pickup_address").notNull(),
   dropoffAddress: text("dropoff_address").notNull(),
+  pickupLatitude: doublePrecision("pickup_latitude").notNull().default(0),
+  pickupLongitude: doublePrecision("pickup_longitude").notNull().default(0),
+  dropoffLatitude: doublePrecision("dropoff_latitude").notNull().default(0),
+  dropoffLongitude: doublePrecision("dropoff_longitude").notNull().default(0),
   loadSize: text("load_size").notNull(),
   description: text("description"),
   images: text("images").array(),
   preferredDate: timestamp("preferred_date").notNull(),
   status: text("status").notNull().default("pending"),
-  distance: decimal("distance", { precision: 8, scale: 2 }),
-  price: decimal("price", { precision: 10, scale: 2 }),
+  distance: decimal("distance", { precision: 8, scale: 2 }).notNull().default("0"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull().default("0"),
+  baseFee: decimal("base_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  distanceFee: decimal("distance_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  loadFee: decimal("load_fee", { precision: 10, scale: 2 }).notNull().default("0"),
+  moverTravelFee: decimal("mover_travel_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
+  notifiedAt: timestamp("notified_at"),
+  acceptedAt: timestamp("accepted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -68,6 +78,21 @@ export const reviews = pgTable("reviews", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const jobNotifications = pgTable("job_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  distanceToPickup: decimal("distance_to_pickup", { precision: 8, scale: 2 }).notNull(),
+  estimatedEarnings: decimal("estimated_earnings", { precision: 10, scale: 2 }).notNull(),
+  status: text("status").notNull().default("pending"),
+  notifiedAt: timestamp("notified_at").defaultNow().notNull(),
+  respondedAt: timestamp("responded_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+}, (table) => ({
+  uniqueBookingMover: unique().on(table.bookingId, table.moverId),
+  moverStatusIdx: index("mover_status_idx").on(table.moverId, table.status),
+}));
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -87,6 +112,18 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   updatedAt: true,
   paymentStatus: true,
   stripePaymentIntentId: true,
+  notifiedAt: true,
+  acceptedAt: true,
+  pickupLatitude: true,
+  pickupLongitude: true,
+  dropoffLatitude: true,
+  dropoffLongitude: true,
+  distance: true,
+  price: true,
+  baseFee: true,
+  distanceFee: true,
+  loadFee: true,
+  moverTravelFee: true,
 }).extend({
   // Override preferredDate to accept ISO date strings from the frontend
   preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),
@@ -102,6 +139,14 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({
   createdAt: true,
 });
 
+export const insertJobNotificationSchema = createInsertSchema(jobNotifications).omit({
+  id: true,
+  notifiedAt: true,
+  distanceToPickup: true,
+  estimatedEarnings: true,
+  expiresAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertMover = z.infer<typeof insertMoverSchema>;
@@ -112,3 +157,5 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 export type Review = typeof reviews.$inferSelect;
+export type InsertJobNotification = z.infer<typeof insertJobNotificationSchema>;
+export type JobNotification = typeof jobNotifications.$inferSelect;
