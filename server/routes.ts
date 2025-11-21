@@ -900,7 +900,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               );
             }
             
-            console.log(`Payment succeeded for booking ${booking.id}`);
           }
           break;
           
@@ -922,12 +921,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentStatus: 'failed',
             });
             
-            console.log(`Payment failed for booking ${booking.id}`);
           }
           break;
           
         default:
-          console.log(`Unhandled event type ${event.type}`);
       }
       
       res.json({ received: true });
@@ -1262,7 +1259,6 @@ Respond ONLY with valid JSON in this exact format:
       }
       
       // Fallback to mock analysis
-      console.log('Using mock AI analysis for photo');
       const mockResult = mockPhotoAnalysis(req.file.size, req.file.originalname);
       
       res.json({
@@ -1506,9 +1502,17 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
-  // Seed some initial data for testing
+  // Seed endpoint - ADMIN ONLY (for demo/development)
   app.post("/api/seed", async (req: Request, res: Response) => {
     try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // SECURITY: Only admins can seed data
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
       // Create test users with passwords
       const customer1 = await storage.createUser({
         email: "john.doe@example.com",
@@ -1620,7 +1624,6 @@ Respond ONLY with valid JSON in this exact format:
         }
       });
     } catch (error) {
-      console.log(`Error updating location: ${error}`);
       res.status(500).json({ error: "Failed to update location" });
     }
   });
@@ -1667,7 +1670,6 @@ Respond ONLY with valid JSON in this exact format:
         } : null
       });
     } catch (error) {
-      console.log(`Error fetching location: ${error}`);
       res.status(500).json({ error: "Failed to fetch location" });
     }
   });
