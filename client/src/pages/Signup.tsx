@@ -48,7 +48,7 @@ export default function Signup() {
       setIsLoading(false);
       toast({
         title: "Account created!",
-        description: "Welcome to MoveIt!",
+        description: "Welcome to LervIT!",
       });
       // Redirect handled by useEffect
     } catch (error) {
@@ -70,7 +70,7 @@ export default function Signup() {
               <Truck className="w-8 h-8 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Join MoveIt</h1>
+          <h1 className="text-2xl font-bold">Join LervIT</h1>
           <p className="text-muted-foreground">
             Create an account to get started
           </p>

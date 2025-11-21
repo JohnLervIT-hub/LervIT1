@@ -140,7 +140,7 @@ export default function ProximityDemo() {
             Uber-Style Proximity Matching
           </h1>
           <p className="text-muted-foreground text-lg">
-            Watch how MoveIt finds and notifies the nearest movers in real-time
+            Watch how LervIT finds and notifies the nearest movers in real-time
           </p>
         </div>
 

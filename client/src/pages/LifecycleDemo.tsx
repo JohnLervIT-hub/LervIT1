@@ -675,7 +675,7 @@ export default function LifecycleDemo() {
                   </div>
                   <h3 className="text-2xl font-bold mb-2">Journey Complete!</h3>
                   <p className="text-muted-foreground mb-4">
-                    You've witnessed the complete MoveIt booking lifecycle
+                    You've witnessed the complete LervIT booking lifecycle
                   </p>
                   <div className="flex justify-center gap-2">
                     {[1, 2, 3, 4, 5].map(star => (

@@ -115,7 +115,7 @@ export default function Support() {
         },
         {
           q: "How does the pricing work?",
-          a: "MoveIt uses a transparent 7-component pricing system: Base Fee ($30), Distance Fee ($1/km for pickup→dropoff), Load Fee (based on size), Pickup Difficulty Fee, Dropoff Difficulty Fee, Heavy Item Fee ($15 if applicable), and Mover Travel Fee ($0.75/km for distances >5km to pickup location). If you need 2 movers, we apply a 1.30x multiplier."
+          a: "LervIT uses a transparent 7-component pricing system: Base Fee ($30), Distance Fee ($1/km for pickup→dropoff), Load Fee (based on size), Pickup Difficulty Fee, Dropoff Difficulty Fee, Heavy Item Fee ($15 if applicable), and Mover Travel Fee ($0.75/km for distances >5km to pickup location). If you need 2 movers, we apply a 1.30x multiplier."
         },
         {
           q: "Can I see the price before booking?",
@@ -150,7 +150,7 @@ export default function Support() {
       icon: MapPin,
       questions: [
         {
-          q: "How does MoveIt find movers near me?",
+          q: "How does LervIT find movers near me?",
           a: "Our proximity matching algorithm searches for available movers within a 15km radius of your pickup location. If none are found, we expand the search to 50km and rank movers by distance to ensure you get the fastest response."
         },
         {
@@ -159,7 +159,7 @@ export default function Support() {
         },
         {
           q: "Can I choose my own mover?",
-          a: "Currently, MoveIt automatically matches you with the nearest available movers for the fastest service. You can view mover profiles, ratings, and total moves completed."
+          a: "Currently, LervIT automatically matches you with the nearest available movers for the fastest service. You can view mover profiles, ratings, and total moves completed."
         },
       ]
     },

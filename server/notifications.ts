@@ -22,7 +22,7 @@ class NotificationService {
     
     // TODO: Integrate with Resend/SendGrid for actual email delivery
     // await resend.emails.send({
-    //   from: 'MoveIt <notifications@moveit.com>',
+    //   from: 'LervIT <notifications@lervit.com>',
     //   to: notification.to,
     //   subject: notification.subject,
     //   html: notification.body,
@@ -47,7 +47,7 @@ class NotificationService {
       
       <p>You'll receive another email once a mover accepts your job.</p>
       
-      <p>Thanks for choosing MoveIt!</p>
+      <p>Thanks for choosing LervIT!</p>
     `;
 
     await this.sendEmail({
@@ -75,7 +75,7 @@ class NotificationService {
         <li><strong>Estimated Earnings:</strong> $${estimatedEarnings} CAD</li>
       </ul>
       
-      <p>Log in to your MoveIt dashboard to accept this job before it expires.</p>
+      <p>Log in to your LervIT dashboard to accept this job before it expires.</p>
       
       <p>Good luck!</p>
     `;
@@ -127,7 +127,7 @@ class NotificationService {
     const statusMessages: Record<string, string> = {
       confirmed: 'Your booking has been confirmed and we are finding a mover for you.',
       in_progress: 'Your move is in progress! The mover is on the way.',
-      completed: 'Your move has been completed. Thank you for using MoveIt!',
+      completed: 'Your move has been completed. Thank you for using LervIT!',
       cancelled: 'Your booking has been cancelled.',
     };
 
@@ -145,7 +145,7 @@ class NotificationService {
         <li><strong>Date:</strong> ${booking.preferredDate}</li>
       </ul>
       
-      <p>Log in to your MoveIt account to view full details.</p>
+      <p>Log in to your LervIT account to view full details.</p>
     `;
 
     await this.sendEmail({
@@ -178,7 +178,7 @@ class NotificationService {
         <li><strong>Price:</strong> $${booking.price} CAD</li>
       </ul>
       
-      <p>You can message your mover through the MoveIt platform.</p>
+      <p>You can message your mover through the LervIT platform.</p>
       
       <p>Looking forward to your move!</p>
     `;

@@ -1,8 +1,8 @@
-# MoveIt - Smart Moving Platform
+# LervIT - Smart Moving Platform
 
 ## Overview
 
-MoveIt is a mobile-first web application functioning as a two-sided marketplace connecting customers with freelance movers in Calgary. It aims to streamline the moving process by offering features such as real-time messaging, booking management, administrative tools, and a comprehensive support system. The platform prioritizes trust, transparent pricing, and intuitive user experiences, with an ambition to evolve into an intelligent, Uber-style location-based service for matching customers with nearby movers using proximity and dynamic pricing.
+LervIT is a mobile-first web application functioning as a two-sided marketplace connecting customers with freelance movers in Calgary. It aims to streamline the moving process by offering features such as real-time messaging, booking management, administrative tools, and a comprehensive support system. The platform prioritizes trust, transparent pricing, and intuitive user experiences, with an ambition to evolve into an intelligent, Uber-style location-based service for matching customers with nearby movers using proximity and dynamic pricing.
 
 ## User Preferences
 

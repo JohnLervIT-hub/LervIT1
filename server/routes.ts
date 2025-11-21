@@ -821,7 +821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               customerId: user.id,
               customerName: user.name,
             },
-            description: `MoveIt booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
+            description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
           });
           
           // Update booking with payment intent ID
@@ -840,7 +840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             customerId: user.id,
             customerName: user.name,
           },
-          description: `MoveIt booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
+          description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
         });
         
         // Update booking with payment intent ID

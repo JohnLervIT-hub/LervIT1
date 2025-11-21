@@ -255,7 +255,7 @@ const bookingsWithRelations = await db
 
 ## Conclusion
 
-The MoveIt MVP is **production-ready** for soft launch with <100 daily bookings. The documented optimizations should be prioritized based on actual user growth and feedback.
+The LervIT MVP is **production-ready** for soft launch with <100 daily bookings. The documented optimizations should be prioritized based on actual user growth and feedback.
 
 **Immediate Post-Launch Priorities**:
 1. Rate limiting

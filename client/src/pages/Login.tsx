@@ -60,7 +60,7 @@ export default function Login() {
               <Truck className="w-8 h-8 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Welcome to MoveIt</h1>
+          <h1 className="text-2xl font-bold">Welcome to LervIT</h1>
           <p className="text-muted-foreground">
             Log in to your account to continue
           </p>

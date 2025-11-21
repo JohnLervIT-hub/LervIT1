@@ -1,4 +1,4 @@
-# MoveIt Design Guidelines
+# LervIT Design Guidelines
 
 ## Design Approach
 

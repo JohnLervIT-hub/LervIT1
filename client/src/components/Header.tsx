@@ -26,7 +26,7 @@ export default function Header() {
           <Link href="/" data-testid="link-home">
             <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md cursor-pointer">
               <Truck className="w-6 h-6 text-primary" />
-              <span className="text-xl font-bold">MoveIt</span>
+              <span className="text-xl font-bold">LervIT</span>
             </div>
           </Link>
 
