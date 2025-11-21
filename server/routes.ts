@@ -22,7 +22,7 @@ if (process.env.STRIPE_SECRET_KEY.startsWith('pk_')) {
   throw new Error('STRIPE_SECRET_KEY must be a secret key (starts with sk_), not a publishable key (starts with pk_). Please update the secret.');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-11-20.acacia",
+  apiVersion: "2024-10-28.acacia" as any,
 });
 
 // Middleware to parse JSON
@@ -280,12 +280,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const user = await storage.getUser(mover.userId);
           
           let distance: number | null = null;
-          if (userLat && userLng && mover.latitude && mover.longitude) {
+          if (userLat && userLng && mover.latitude !== null && mover.longitude !== null) {
             distance = calculateDistance(
               userLat,
               userLng,
-              parseFloat(mover.latitude),
-              parseFloat(mover.longitude)
+              mover.latitude,
+              mover.longitude
             );
           }
           
@@ -379,13 +379,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bookingData.loadSize as 'small' | 'medium' | 'large',
         bookingData.pickupDifficulty as any,
         bookingData.dropoffDifficulty as any,
-        bookingData.heavyItem,
+        bookingData.heavyItem || false,
         bookingData.numberOfMovers as 1 | 2
       );
       
       // Create booking with geocoded data and price breakdown
       const booking = await storage.createBooking({
-        ...bookingData,
+        customerId: bookingData.customerId,
+        pickupAddress: bookingData.pickupAddress,
+        dropoffAddress: bookingData.dropoffAddress,
+        loadSize: bookingData.loadSize,
+        preferredDate: typeof bookingData.preferredDate === 'string' ? new Date(bookingData.preferredDate) : bookingData.preferredDate,
+        pickupDifficulty: bookingData.pickupDifficulty,
+        dropoffDifficulty: bookingData.dropoffDifficulty,
+        heavyItem: bookingData.heavyItem || false,
+        numberOfMovers: bookingData.numberOfMovers,
+        ...(bookingData.additionalDetails && { additionalDetails: bookingData.additionalDetails }),
+        ...(bookingData.images && { images: bookingData.images }),
         pickupLatitude: pickupGeo.coordinates.lat,
         pickupLongitude: pickupGeo.coordinates.lng,
         dropoffLatitude: dropoffGeo.coordinates.lat,
@@ -401,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
         subtotal: toDecimalString(priceBreakdown.subtotal),
         notifiedAt: new Date(),
-      });
+      } as any);
       
       // Find nearest available movers
       const allMovers = await storage.getAvailableMoversWithCoordinates();
@@ -439,11 +449,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           storage.createJobNotification({
             bookingId: booking.id,
             moverId: mover.moverId,
-            distanceToPickup: toDecimalString(mover.distanceToPickup),
-            estimatedEarnings: toDecimalString(mover.estimatedEarnings),
             status: 'pending',
             expiresAt,
-          })
+          } as any)
         )
       );
       
@@ -687,16 +695,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
       // Validate allowed update fields (removed moverId - must use /accept endpoint)
-      const updateSchema = insertBookingSchema.partial().pick({
-        status: true,
-        preferredDate: true,
-        distance: true,
-        price: true,
-      }).extend({
+      const updateSchema = z.object({
+        status: z.string().optional(),
+        preferredDate: z.union([z.string(), z.date()]).optional(),
+        distance: z.string().optional(),
+        price: z.string().optional(),
         paymentStatus: z.string().optional(),
         stripePaymentIntentId: z.string().optional(),
+        currentLatitude: z.number().optional(),
+        currentLongitude: z.number().optional(),
+        locationUpdatedAt: z.date().optional(),
       });
-      const updates = validateBody(updateSchema, req.body);
+      let updates = validateBody(updateSchema, req.body);
+      
+      // Convert preferredDate to Date if it's a string
+      if (updates.preferredDate && typeof updates.preferredDate === 'string') {
+        updates = { ...updates, preferredDate: new Date(updates.preferredDate) };
+      }
       
       // SECURITY: If status is being changed to in_transit, require authentication and verify authorization
       if (updates.status === "in_transit") {
@@ -723,7 +738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const booking = await storage.updateBooking(req.params.id, updates);
+      const booking = await storage.updateBooking(req.params.id, updates as any);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
@@ -1545,8 +1560,8 @@ Respond ONLY with valid JSON in this exact format:
         vehicleCapacity: "3000 lbs",
         isVerified: true,
         location: "Calgary, AB",
-        latitude: "51.0447",
-        longitude: "-114.0719",
+        latitude: 51.0447,
+        longitude: -114.0719,
         bio: "Professional mover with 5+ years experience",
         isAvailable: true
       });
@@ -1557,8 +1572,8 @@ Respond ONLY with valid JSON in this exact format:
         vehicleCapacity: "1500 lbs",
         isVerified: true,
         location: "Calgary, AB",
-        latitude: "51.0786",
-        longitude: "-113.9656",
+        latitude: 51.0786,
+        longitude: -113.9656,
         bio: "Fast and reliable service",
         isAvailable: true
       });
