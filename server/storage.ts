@@ -70,6 +70,11 @@ class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
+    const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    return result[0];
+  }
+
   // Movers
   async getMover(id: string): Promise<Mover | undefined> {
     const result = await db.select().from(movers).where(eq(movers.id, id)).limit(1);

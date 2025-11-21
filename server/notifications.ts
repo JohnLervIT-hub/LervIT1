@@ -190,6 +190,39 @@ class NotificationService {
       type: 'status_update',
     });
   }
+
+  // Password reset email
+  async sendPasswordReset(email: string, name: string, resetToken: string): Promise<void> {
+    const resetUrl = `${process.env.BASE_URL || 'https://lervit.com'}/reset-password?token=${resetToken}`;
+    const subject = 'Reset Your LervIT Password';
+    const body = `
+      <h2>Password Reset Request</h2>
+      <p>Hi ${name},</p>
+      <p>We received a request to reset your password for your LervIT account.</p>
+      
+      <p><strong>Click the link below to reset your password:</strong></p>
+      <p><a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">Reset Password</a></p>
+      
+      <p>Or copy and paste this link into your browser:</p>
+      <p>${resetUrl}</p>
+      
+      <p><strong>This link will expire in 1 hour.</strong></p>
+      
+      <p>If you didn't request a password reset, you can safely ignore this email. Your password will not be changed.</p>
+      
+      <p>Thanks,<br>The LervIT Team</p>
+    `;
+
+    await this.sendEmail({
+      to: email,
+      subject,
+      body,
+      type: 'status_update',
+    });
+  }
 }
 
 export const notificationService = new NotificationService();
+
+export const sendPasswordResetEmail = (email: string, name: string, resetToken: string) => 
+  notificationService.sendPasswordReset(email, name, resetToken);
