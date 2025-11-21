@@ -1,5 +1,16 @@
 # LervIT Uber-Style Matching - Testing Guide
 
+## Admin Access
+
+**Admin Login:**
+- Email: `admin@lervit.com`
+- Password: `admin123`
+- Role: Admin
+
+Use this account to access the admin dashboard and manage the platform.
+
+---
+
 ## Quick Test Instructions
 
 ### 1. Create Test Movers (with automatic Calgary coordinates)
