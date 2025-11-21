@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -1526,6 +1526,27 @@ Respond ONLY with valid JSON in this exact format:
       // SECURITY: Only admins can seed data
       if (user.role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      // Delete existing test users to avoid conflicts
+      const testEmails = [
+        "john.doe@example.com",
+        "mike.johnson@moveit.com",
+        "sarah.chen@moveit.com"
+      ];
+      
+      for (const email of testEmails) {
+        const existingUsers = await db.select().from(usersTable).where(eq(usersTable.email, email));
+        if (existingUsers.length > 0) {
+          const existingUser = existingUsers[0];
+          // Delete user's movers first (foreign key constraint)
+          const movers = await storage.getMovers({ userId: existingUser.id });
+          for (const mover of movers) {
+            await db.delete(moversTable).where(eq(moversTable.id, mover.id));
+          }
+          // Delete user
+          await db.delete(usersTable).where(eq(usersTable.id, existingUser.id));
+        }
       }
       
       // Create test users with passwords
