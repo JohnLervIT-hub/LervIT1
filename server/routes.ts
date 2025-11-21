@@ -195,6 +195,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });
+
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const forgotPasswordSchema = z.object({
+        email: z.string().email(),
+      });
+      const { email } = validateBody(forgotPasswordSchema, req.body);
+      
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json({ message: "If the email exists, a password reset link has been sent." });
+      }
+      
+      const { randomBytes } = await import("crypto");
+      const resetToken = randomBytes(32).toString("hex");
+      const resetTokenExpiry = new Date(Date.now() + 3600000);
+      
+      await storage.updateUser(user.id, {
+        resetToken,
+        resetTokenExpiry,
+      });
+      
+      const { sendPasswordResetEmail } = await import("./notifications");
+      await sendPasswordResetEmail(user.email, user.name, resetToken);
+      
+      res.json({ message: "If the email exists, a password reset link has been sent." });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const resetPasswordSchema = z.object({
+        token: z.string().min(1),
+        password: z.string().min(6),
+      });
+      const { token, password } = validateBody(resetPasswordSchema, req.body);
+      
+      const allUsers = await storage.getAllUsers();
+      const user = allUsers.find(u => u.resetToken === token);
+      
+      if (!user || !user.resetTokenExpiry || new Date() > new Date(user.resetTokenExpiry)) {
+        return res.status(400).json({ error: "Invalid or expired reset token" });
+      }
+      
+      const hashedPassword = hashPassword(password);
+      await storage.updateUser(user.id, {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      });
+      
+      res.json({ message: "Password has been reset successfully" });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
   
   // ===== USER ROUTES =====
   app.post("/api/users", async (req: Request, res: Response) => {
