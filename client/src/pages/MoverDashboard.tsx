@@ -72,6 +72,12 @@ export default function MoverDashboard() {
     select: (data) => data.filter((b: Booking) => b.status === "pending" && !b.moverId),
   });
 
+  // Get earnings data for this mover
+  const { data: earnings } = useQuery<any>({
+    queryKey: [`/api/movers/${mover?.id}/earnings`],
+    enabled: !!mover?.id,
+  });
+
   const acceptBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       return apiRequest("PATCH", `/api/bookings/${bookingId}`, {
@@ -475,7 +481,7 @@ export default function MoverDashboard() {
         </div>
 
         <Tabs defaultValue="available" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="available" data-testid="tab-available" className="gap-2">
               Available Jobs
               {availableBookings && availableBookings.length > 0 && (
@@ -491,6 +497,10 @@ export default function MoverDashboard() {
                   {bookings.length}
                 </Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="earnings" data-testid="tab-earnings">
+              <DollarSign className="w-4 h-4 mr-1" />
+              Earnings
             </TabsTrigger>
           </TabsList>
 
@@ -532,6 +542,165 @@ export default function MoverDashboard() {
               </Card>
             ) : (
               bookings.map((booking) => renderBookingCard(booking))
+            )}
+          </TabsContent>
+
+          <TabsContent value="earnings" className="space-y-6">
+            {!earnings ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <div className="flex justify-center mb-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                  <p className="text-muted-foreground">Loading earnings...</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Earnings Summary Cards */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card data-testid="card-total-earnings">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Total Earnings
+                      </CardTitle>
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold" data-testid="text-total-earnings">
+                        ${earnings.totalEarnings}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        From {earnings.completedJobs} completed {earnings.completedJobs === 1 ? 'job' : 'jobs'}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card data-testid="card-pending-earnings">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Pending Earnings
+                      </CardTitle>
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold" data-testid="text-pending-earnings">
+                        ${earnings.pendingEarnings}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        From {earnings.pendingJobs} active {earnings.pendingJobs === 1 ? 'job' : 'jobs'}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card data-testid="card-completed-jobs">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        Completed Jobs
+                      </CardTitle>
+                      <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold" data-testid="text-completed-jobs-count">
+                        {earnings.completedJobs}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Successfully finished
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Earnings by Month */}
+                {earnings.earningsByMonth && earnings.earningsByMonth.length > 0 && (
+                  <Card data-testid="card-earnings-by-month">
+                    <CardHeader>
+                      <CardTitle>Earnings by Month</CardTitle>
+                      <CardDescription>
+                        Your monthly earnings breakdown
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {earnings.earningsByMonth.map((month: any, index: number) => (
+                          <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                            <div>
+                              <p className="font-medium">{month.month}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {month.jobCount} {month.jobCount === 1 ? 'job' : 'jobs'}
+                              </p>
+                            </div>
+                            <div className="text-lg font-bold text-primary">
+                              ${month.earnings}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Recent Completed Bookings */}
+                {earnings.recentBookings && earnings.recentBookings.length > 0 && (
+                  <Card data-testid="card-recent-earnings">
+                    <CardHeader>
+                      <CardTitle>Recent Completed Jobs</CardTitle>
+                      <CardDescription>
+                        Your latest earnings
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {earnings.recentBookings.map((booking: any) => (
+                          <div
+                            key={booking.id}
+                            className="flex items-start justify-between p-4 rounded-lg bg-muted/50"
+                            data-testid={`earnings-booking-${booking.id}`}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium">{booking.customerName}</p>
+                              <div className="space-y-1 mt-1">
+                                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {booking.pickupAddress}
+                                </p>
+                                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {booking.dropoffAddress}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {booking.date}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right ml-4">
+                              <div className="text-lg font-bold text-primary">
+                                ${booking.earnings}
+                              </div>
+                              <Badge variant="default" className="mt-1">
+                                Paid
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Empty State */}
+                {earnings.completedJobs === 0 && (
+                  <Card>
+                    <CardContent className="py-12 text-center">
+                      <DollarSign className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                      <h3 className="font-semibold text-lg mb-2">No Earnings Yet</h3>
+                      <p className="text-muted-foreground">
+                        Complete jobs to start earning money!
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </TabsContent>
         </Tabs>

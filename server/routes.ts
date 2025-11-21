@@ -11,6 +11,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Stripe from "stripe";
+import { notificationService } from "./notifications";
+import { format } from "date-fns";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -445,6 +447,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
       );
       
+      // Send email notifications
+      const customer = await storage.getUser(bookingData.customerId);
+      if (customer) {
+        // Send booking confirmation to customer
+        await notificationService.sendBookingConfirmation(customer, booking);
+        
+        // Send job assignment emails to movers
+        await Promise.all(
+          nearestMovers.map(async (mover) => {
+            const moverUser = await storage.getUser(mover.userId);
+            if (moverUser) {
+              await notificationService.sendJobAssignment(
+                moverUser,
+                booking,
+                mover.estimatedEarnings.toFixed(2)
+              );
+            }
+          })
+        );
+      }
+      
       res.json({
         ...booking,
         notifiedMovers: nearestMovers.length,
@@ -604,6 +627,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(jobNotifications.bookingId, bookingId),
           eq(jobNotifications.status, 'pending')
         ));
+      
+      // 4. Send email notifications
+      const customer = await storage.getUser(updatedBooking.customerId);
+      const mover = await storage.getMover(moverId);
+      if (customer && mover) {
+        const moverUser = await storage.getUser(mover.userId);
+        if (moverUser) {
+          await notificationService.sendMoverAssigned(customer, moverUser, updatedBooking);
+        }
+      }
       
       res.json({
         ...updatedBooking,
@@ -831,6 +864,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentStatus: 'succeeded',
             });
             
+            // Send payment receipt email
+            const customer = await storage.getUser(booking.customerId);
+            if (customer) {
+              await notificationService.sendPaymentReceipt(
+                customer,
+                booking,
+                booking.price || '0'
+              );
+            }
+            
             console.log(`Payment succeeded for booking ${booking.id}`);
           }
           break;
@@ -907,6 +950,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // ===== EARNINGS ROUTES =====
+  app.get("/api/movers/:moverId/earnings", async (req: Request, res: Response) => {
+    try {
+      const moverId = req.params.moverId;
+      
+      // Verify mover exists
+      const mover = await storage.getMover(moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      // Get all bookings for this mover (returns empty array if none found)
+      const allBookings = await storage.getBookingsByMover(moverId);
+      
+      // Calculate earnings from completed bookings with payment succeeded
+      const completedBookings = allBookings.filter(
+        b => b.status === 'completed' && b.paymentStatus === 'succeeded'
+      );
+      
+      // Calculate earnings from confirmed bookings with payment succeeded (pending payout)
+      const confirmedBookings = allBookings.filter(
+        b => (b.status === 'confirmed' || b.status === 'in_progress') && b.paymentStatus === 'succeeded'
+      );
+      
+      const totalEarnings = completedBookings.reduce(
+        (sum, b) => sum + parseFloat(b.price || '0'),
+        0
+      );
+      
+      const pendingEarnings = confirmedBookings.reduce(
+        (sum, b) => sum + parseFloat(b.price || '0'),
+        0
+      );
+      
+      // Get earnings breakdown by month
+      const earningsByMonth: Record<string, { earnings: number; count: number }> = {};
+      completedBookings.forEach(booking => {
+        const month = format(new Date(booking.createdAt), 'MMM yyyy');
+        if (!earningsByMonth[month]) {
+          earningsByMonth[month] = { earnings: 0, count: 0 };
+        }
+        earningsByMonth[month].earnings += parseFloat(booking.price || '0');
+        earningsByMonth[month].count += 1;
+      });
+      
+      res.json({
+        totalEarnings: totalEarnings.toFixed(2),
+        pendingEarnings: pendingEarnings.toFixed(2),
+        completedJobs: completedBookings.length,
+        pendingJobs: confirmedBookings.length,
+        earningsByMonth: Object.entries(earningsByMonth).map(([month, data]) => ({
+          month,
+          earnings: data.earnings.toFixed(2),
+          jobCount: data.count,
+        })),
+        recentBookings: completedBookings.slice(0, 10).map(b => ({
+          id: b.id,
+          customerName: (b as any).customer?.name || 'Unknown',
+          pickupAddress: b.pickupAddress,
+          dropoffAddress: b.dropoffAddress,
+          date: b.preferredDate,
+          earnings: b.price,
+          status: b.status,
+          paymentStatus: b.paymentStatus,
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch earnings" });
     }
   });
 
