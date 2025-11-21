@@ -29,7 +29,10 @@ export const movers = pgTable("movers", {
   longitude: doublePrecision("longitude"),
   isAvailable: boolean("is_available").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdIdx: index("movers_user_id_idx").on(table.userId),
+  availabilityIdx: index("movers_availability_idx").on(table.isAvailable),
+}));
 
 export const bookings = pgTable("bookings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -82,7 +85,12 @@ export const bookings = pgTable("bookings", {
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  customerIdIdx: index("bookings_customer_id_idx").on(table.customerId),
+  moverIdIdx: index("bookings_mover_id_idx").on(table.moverId),
+  statusIdx: index("bookings_status_idx").on(table.status),
+  paymentStatusIdx: index("bookings_payment_status_idx").on(table.paymentStatus),
+}));
 
 export const messages = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -90,7 +98,9 @@ export const messages = pgTable("messages", {
   senderId: varchar("sender_id").references(() => users.id).notNull(),
   text: text("text").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  bookingIdIdx: index("messages_booking_id_idx").on(table.bookingId),
+}));
 
 export const reviews = pgTable("reviews", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -100,7 +110,10 @@ export const reviews = pgTable("reviews", {
   rating: integer("rating").notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  moverIdIdx: index("reviews_mover_id_idx").on(table.moverId),
+  bookingIdIdx: index("reviews_booking_id_idx").on(table.bookingId),
+}));
 
 export const jobNotifications = pgTable("job_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -192,7 +205,10 @@ export const supportTickets = pgTable("support_tickets", {
   resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdIdx: index("support_tickets_user_id_idx").on(table.userId),
+  statusIdx: index("support_tickets_status_idx").on(table.status),
+}));
 
 export const supportTicketReplies = pgTable("support_ticket_replies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -201,7 +217,9 @@ export const supportTicketReplies = pgTable("support_ticket_replies", {
   message: text("message").notNull(),
   isStaff: boolean("is_staff").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  ticketIdIdx: index("support_ticket_replies_ticket_id_idx").on(table.ticketId),
+}));
 
 export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
   id: true,
