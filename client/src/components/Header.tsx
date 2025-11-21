@@ -59,11 +59,11 @@ export default function Header() {
                     Find Movers
                   </Button>
                 </Link>
-                <Link href="/how-it-works" data-testid="link-how-it-works">
-                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                <Button variant="ghost" className="hover-elevate active-elevate-2" asChild>
+                  <a href="/#how-it-works" data-testid="link-how-it-works">
                     How It Works
-                  </Button>
-                </Link>
+                  </a>
+                </Button>
                 <Link href="/become-mover" data-testid="link-become-mover">
                   <Button variant="ghost" className="hover-elevate active-elevate-2">
                     Become a Mover
@@ -202,11 +202,11 @@ export default function Header() {
                     Find Movers
                   </Button>
                 </Link>
-                <Link href="/how-it-works" data-testid="link-mobile-how">
-                  <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2" asChild>
+                  <a href="/#how-it-works" data-testid="link-mobile-how">
                     How It Works
-                  </Button>
-                </Link>
+                  </a>
+                </Button>
                 <Link href="/become-mover" data-testid="link-mobile-become">
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     Become a Mover
