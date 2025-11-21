@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
-import { Icon } from "leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { Icon, LatLngBounds } from "leaflet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,34 @@ interface LocationData {
     longitude: number;
     updatedAt: string;
   } | null;
+}
+
+// Component to update map bounds when markers change
+function MapBoundsUpdater({ 
+  pickup, 
+  dropoff, 
+  currentLocation 
+}: { 
+  pickup: { latitude: number; longitude: number }; 
+  dropoff: { latitude: number; longitude: number }; 
+  currentLocation: { latitude: number; longitude: number } | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const bounds = new LatLngBounds([
+      [pickup.latitude, pickup.longitude],
+      [dropoff.latitude, dropoff.longitude],
+    ]);
+
+    if (currentLocation) {
+      bounds.extend([currentLocation.latitude, currentLocation.longitude]);
+    }
+
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }, [map, pickup.latitude, pickup.longitude, dropoff.latitude, dropoff.longitude, currentLocation?.latitude, currentLocation?.longitude]);
+
+  return null;
 }
 
 export default function TrackTrip() {
@@ -219,6 +247,7 @@ export default function TrackTrip() {
                 {/* Current location marker */}
                 {currentLocation && (
                   <Marker 
+                    key={`mover-${currentLocation.latitude}-${currentLocation.longitude}`}
                     position={[currentLocation.latitude, currentLocation.longitude]} 
                     icon={moverIcon}
                   >
@@ -236,6 +265,13 @@ export default function TrackTrip() {
                   weight={3} 
                   opacity={0.7}
                   dashArray="10, 10"
+                />
+
+                {/* Update map bounds when location changes */}
+                <MapBoundsUpdater 
+                  pickup={pickup} 
+                  dropoff={dropoff} 
+                  currentLocation={currentLocation} 
                 />
               </MapContainer>
             </div>
