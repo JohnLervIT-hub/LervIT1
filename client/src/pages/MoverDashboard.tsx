@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { generatePriceExplanation } from "@shared/ai";
+import { useEffect, useState } from "react";
 
 type Booking = {
   id: string;
@@ -52,6 +53,7 @@ export default function MoverDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [locationSharing, setLocationSharing] = useState<string | null>(null); // booking ID for active location sharing
 
   // First get the mover profile
   const { data: mover } = useQuery<any>({
@@ -99,14 +101,71 @@ export default function MoverDashboard() {
     mutationFn: async (bookingId: string) => {
       return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
     },
-    onSuccess: () => {
+    onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: [`/api/bookings?moverId=${mover?.id}`] });
+      // Stop location sharing when trip is completed
+      if (locationSharing === bookingId) {
+        setLocationSharing(null);
+      }
       toast({
         title: "Booking completed",
         description: "The move has been marked as completed.",
       });
     },
   });
+
+  const startTripMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "in_transit" });
+    },
+    onSuccess: (_, bookingId) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/bookings?moverId=${mover?.id}`] });
+      setLocationSharing(bookingId);
+      toast({
+        title: "Trip started",
+        description: "Location sharing is now active. Your customer can track your location in real-time.",
+      });
+    },
+  });
+
+  // Location sharing effect - updates location every 5 seconds for in-transit bookings
+  useEffect(() => {
+    if (!locationSharing) return;
+
+    const shareLocation = () => {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              await apiRequest("POST", `/api/bookings/${locationSharing}/location`, {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              });
+            } catch (error) {
+              console.error("Failed to update location:", error);
+            }
+          },
+          (error) => {
+            console.error("Geolocation error:", error);
+            toast({
+              title: "Location access denied",
+              description: "Please enable location services to share your location with customers.",
+              variant: "destructive",
+            });
+            setLocationSharing(null);
+          }
+        );
+      }
+    };
+
+    // Share location immediately
+    shareLocation();
+
+    // Then share every 5 seconds
+    const interval = setInterval(shareLocation, 5000);
+
+    return () => clearInterval(interval);
+  }, [locationSharing, toast]);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -445,14 +504,34 @@ export default function MoverDashboard() {
               {booking.status === "confirmed" && (
                 <Button
                   variant="default"
-                  onClick={() => completeBookingMutation.mutate(booking.id)}
-                  disabled={completeBookingMutation.isPending}
-                  data-testid={`button-complete-${booking.id}`}
+                  onClick={() => startTripMutation.mutate(booking.id)}
+                  disabled={startTripMutation.isPending}
+                  data-testid={`button-start-trip-${booking.id}`}
                   className="flex-1 sm:flex-none"
                 >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  {completeBookingMutation.isPending ? "Completing..." : "Mark Complete"}
+                  <Navigation className="w-4 h-4 mr-2" />
+                  {startTripMutation.isPending ? "Starting..." : "Start Trip"}
                 </Button>
+              )}
+              {booking.status === "in_transit" && (
+                <>
+                  <Button
+                    variant="default"
+                    onClick={() => completeBookingMutation.mutate(booking.id)}
+                    disabled={completeBookingMutation.isPending}
+                    data-testid={`button-complete-${booking.id}`}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {completeBookingMutation.isPending ? "Completing..." : "Mark Complete"}
+                  </Button>
+                  {locationSharing === booking.id && (
+                    <Badge variant="default" className="flex items-center gap-1" data-testid={`badge-sharing-location-${booking.id}`}>
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      Sharing Location
+                    </Badge>
+                  )}
+                </>
               )}
               {booking.status !== "cancelled" && booking.status !== "pending" && (
                 <Button

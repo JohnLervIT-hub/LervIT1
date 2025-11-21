@@ -23,6 +23,7 @@ import Signup from "@/pages/Signup";
 import Support from "@/pages/Support";
 import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
 import Payment from "@/pages/Payment";
+import TrackTrip from "@/pages/TrackTrip";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -57,6 +58,11 @@ function Router() {
       <Route path="/payment/:bookingId">
         <ProtectedRoute allowedRoles={["customer"]}>
           <Payment />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/track-trip/:bookingId">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <TrackTrip />
         </ProtectedRoute>
       </Route>
 

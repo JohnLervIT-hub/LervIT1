@@ -1543,6 +1543,84 @@ Respond ONLY with valid JSON in this exact format:
     }
   });
 
+  // ===== REAL-TIME LOCATION TRACKING =====
+  
+  // Update mover's current location during active trip
+  app.post("/api/bookings/:bookingId/location", async (req: Request, res: Response) => {
+    try {
+      const { bookingId } = req.params;
+      const { latitude, longitude } = req.body;
+      
+      if (!latitude || !longitude) {
+        return res.status(400).json({ error: "Latitude and longitude are required" });
+      }
+      
+      // Verify booking exists and is in transit
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      if (booking.status !== 'in_transit') {
+        return res.status(400).json({ error: "Booking is not in transit" });
+      }
+      
+      // Update location
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        currentLatitude: latitude,
+        currentLongitude: longitude,
+        locationUpdatedAt: new Date()
+      });
+      
+      res.json({
+        success: true,
+        location: {
+          latitude: updatedBooking?.currentLatitude,
+          longitude: updatedBooking?.currentLongitude,
+          updatedAt: updatedBooking?.locationUpdatedAt
+        }
+      });
+    } catch (error) {
+      console.log(`Error updating location: ${error}`);
+      res.status(500).json({ error: "Failed to update location" });
+    }
+  });
+  
+  // Get current location for tracking
+  app.get("/api/bookings/:bookingId/location", async (req: Request, res: Response) => {
+    try {
+      const { bookingId } = req.params;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      res.json({
+        bookingId: booking.id,
+        status: booking.status,
+        pickup: {
+          address: booking.pickupAddress,
+          latitude: booking.pickupLatitude,
+          longitude: booking.pickupLongitude
+        },
+        dropoff: {
+          address: booking.dropoffAddress,
+          latitude: booking.dropoffLatitude,
+          longitude: booking.dropoffLongitude
+        },
+        currentLocation: booking.currentLatitude && booking.currentLongitude ? {
+          latitude: booking.currentLatitude,
+          longitude: booking.currentLongitude,
+          updatedAt: booking.locationUpdatedAt
+        } : null
+      });
+    } catch (error) {
+      console.log(`Error fetching location: ${error}`);
+      res.status(500).json({ error: "Failed to fetch location" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

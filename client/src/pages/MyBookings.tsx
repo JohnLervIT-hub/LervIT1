@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -417,6 +417,17 @@ export default function MyBookings() {
 
                   <Separator />
                   <div className="flex flex-wrap gap-2">
+                    {booking.status === "in_transit" && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setLocation(`/track-trip/${booking.id}`)}
+                        data-testid={`button-track-trip-${booking.id}`}
+                      >
+                        <Navigation className="w-4 h-4 mr-2" />
+                        Track Trip Live
+                      </Button>
+                    )}
                     {booking.status === "confirmed" && booking.paymentStatus !== "succeeded" && booking.price && (
                       <Button
                         variant="default"
