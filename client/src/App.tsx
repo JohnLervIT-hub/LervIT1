@@ -20,6 +20,8 @@ import LifecycleDemo from "@/pages/LifecycleDemo";
 import MoverLifecycleDemo from "@/pages/MoverLifecycleDemo";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Support from "@/pages/Support";
 import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
 import Payment from "@/pages/Payment";
@@ -36,6 +38,8 @@ function Router() {
       <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/browse-movers" component={BrowseMovers} />
       <Route path="/support" component={Support} />
 
