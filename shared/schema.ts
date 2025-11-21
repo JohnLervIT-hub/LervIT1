@@ -74,6 +74,12 @@ export const bookings = pgTable("bookings", {
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   notifiedAt: timestamp("notified_at"),
   acceptedAt: timestamp("accepted_at"),
+  
+  // Real-time location tracking for active trips
+  currentLatitude: doublePrecision("current_latitude"),
+  currentLongitude: doublePrecision("current_longitude"),
+  locationUpdatedAt: timestamp("location_updated_at"),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
