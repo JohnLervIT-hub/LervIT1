@@ -167,19 +167,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const { email, password } = validateBody(loginSchema, req.body);
       
+      console.log("[LOGIN DEBUG] Email received:", email);
+      console.log("[LOGIN DEBUG] Password length:", password.length);
+      
       const user = await storage.getUserByEmail(email);
+      console.log("[LOGIN DEBUG] User found:", user ? "YES" : "NO");
+      console.log("[LOGIN DEBUG] User has password:", user?.password ? "YES" : "NO");
+      
       if (!user || !user.password) {
+        console.log("[LOGIN DEBUG] Failed: User not found or no password");
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
       const isValid = verifyPassword(password, user.password);
+      console.log("[LOGIN DEBUG] Password valid:", isValid);
+      
       if (!isValid) {
+        console.log("[LOGIN DEBUG] Failed: Invalid password");
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
+      console.log("[LOGIN DEBUG] Login successful for:", email);
       const { password: _, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
+      console.log("[LOGIN DEBUG] Error:", error);
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });
