@@ -53,6 +53,21 @@ Preferred communication style: Simple, everyday language.
     *   **Schema:** `supportTickets` and `supportTicketReplies` tables.
     *   **Authentication:** Lightweight Bearer token for user and admin authentication.
     *   **Frontend:** `Support.tsx` for customers (FAQ, contact form, my tickets) and `AdminSupportDashboard.tsx` for admins.
+*   **Payment Processing:**
+    *   **Integration:** Stripe payment processing with full frontend/backend implementation.
+    *   **Features:** Payment intent creation, status tracking, webhook handling, CAD currency support.
+    *   **Frontend:** Payment page with Stripe Elements, payment status badges, "Pay Now" buttons on My Bookings.
+    *   **Security:** Payment verification, user authorization, prevents double payment.
+*   **Email Notification System:**
+    *   **Service:** `server/notifications.ts` with comprehensive email templates.
+    *   **Triggers:** Booking confirmation, job assignment, mover assignment, payment receipt, status updates.
+    *   **Implementation:** Console-logged for MVP demo (ready for SendGrid/Resend integration).
+    *   **Templates:** HTML email templates for all booking lifecycle events.
+*   **Mover Earnings Dashboard:**
+    *   **Endpoint:** `GET /api/movers/:moverId/earnings` for earnings calculation.
+    *   **Features:** Total earnings, pending earnings, completed jobs, monthly breakdown, recent bookings.
+    *   **Frontend:** "Earnings" tab in Mover Dashboard with 3 summary cards and detailed views.
+    *   **Calculation:** Earnings from completed bookings with successful payments.
 
 ## External Dependencies
 
