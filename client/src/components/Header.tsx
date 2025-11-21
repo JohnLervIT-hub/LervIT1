@@ -64,7 +64,7 @@ export default function Header() {
                     How It Works
                   </a>
                 </Button>
-                <Link href="/become-mover" data-testid="link-become-mover">
+                <Link href="/signup" data-testid="link-become-mover">
                   <Button variant="ghost" className="hover-elevate active-elevate-2">
                     Become a Mover
                   </Button>
@@ -207,7 +207,7 @@ export default function Header() {
                     How It Works
                   </a>
                 </Button>
-                <Link href="/become-mover" data-testid="link-mobile-become">
+                <Link href="/signup" data-testid="link-mobile-become">
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     Become a Mover
                   </Button>
