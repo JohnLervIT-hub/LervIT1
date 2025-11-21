@@ -697,6 +697,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stripePaymentIntentId: z.string().optional(),
       });
       const updates = validateBody(updateSchema, req.body);
+      
+      // SECURITY: If status is being changed to in_transit, require authentication and verify authorization
+      if (updates.status === "in_transit") {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+        
+        const booking = await storage.getBooking(req.params.id);
+        if (!booking) {
+          return res.status(404).json({ error: "Booking not found" });
+        }
+        
+        if (!booking.moverId) {
+          return res.status(403).json({ error: "No mover assigned to this booking" });
+        }
+        
+        const mover = await storage.getMover(booking.moverId);
+        if (!mover || mover.userId !== user.id) {
+          return res.status(403).json({ error: "You are not authorized to start this trip" });
+        }
+        
+        // Verify booking is in confirmed status before allowing in_transit
+        if (booking.status !== "confirmed") {
+          return res.status(400).json({ error: "Booking must be confirmed before starting trip" });
+        }
+      }
+      
       const booking = await storage.updateBooking(req.params.id, updates);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
@@ -1548,6 +1574,9 @@ Respond ONLY with valid JSON in this exact format:
   // Update mover's current location during active trip
   app.post("/api/bookings/:bookingId/location", async (req: Request, res: Response) => {
     try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
       const { bookingId } = req.params;
       const { latitude, longitude } = req.body;
       
@@ -1559,6 +1588,16 @@ Respond ONLY with valid JSON in this exact format:
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // SECURITY: Verify the user is the assigned mover
+      if (!booking.moverId) {
+        return res.status(403).json({ error: "No mover assigned to this booking" });
+      }
+      
+      const mover = await storage.getMover(booking.moverId);
+      if (!mover || mover.userId !== user.id) {
+        return res.status(403).json({ error: "You are not authorized to update location for this booking" });
       }
       
       if (booking.status !== 'in_transit') {
@@ -1589,11 +1628,23 @@ Respond ONLY with valid JSON in this exact format:
   // Get current location for tracking
   app.get("/api/bookings/:bookingId/location", async (req: Request, res: Response) => {
     try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
       const { bookingId } = req.params;
       
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // SECURITY: Verify the user is either the customer or the mover for this booking
+      const isCustomer = booking.customerId === user.id;
+      const isMover = booking.moverId && (await storage.getMover(booking.moverId))?.userId === user.id;
+      const isAdmin = user?.role === "admin";
+      
+      if (!isCustomer && !isMover && !isAdmin) {
+        return res.status(403).json({ error: "You are not authorized to view this booking's location" });
       }
       
       res.json({

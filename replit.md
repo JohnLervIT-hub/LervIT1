@@ -68,6 +68,13 @@ Preferred communication style: Simple, everyday language.
     *   **Features:** Total earnings, pending earnings, completed jobs, monthly breakdown, recent bookings.
     *   **Frontend:** "Earnings" tab in Mover Dashboard with 3 summary cards and detailed views.
     *   **Calculation:** Earnings from completed bookings with successful payments.
+*   **Real-Time Vehicle Tracking:**
+    *   **Schema:** `bookings.currentLatitude`, `bookings.currentLongitude`, `bookings.locationUpdatedAt` for real-time location.
+    *   **API Endpoints:** `POST /api/bookings/:bookingId/location` (mover updates), `GET /api/bookings/:bookingId/location` (fetch location).
+    *   **Authorization:** Mover-only location updates, customer/mover/admin location viewing.
+    *   **Frontend - Mover:** "Start Trip" button on confirmed bookings, automatic GPS sharing every 5 seconds during transit, "Sharing Location" badge.
+    *   **Frontend - Customer:** "Track Trip Live" button on in-transit bookings, live Leaflet map with pickup (green), dropoff (red), mover (blue) markers.
+    *   **Technical:** Polling approach (5-second intervals), browser Geolocation API, Leaflet with OpenStreetMap (free, no API key).
 
 ## External Dependencies
 
