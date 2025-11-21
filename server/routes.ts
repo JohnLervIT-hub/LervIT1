@@ -237,7 +237,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allUsers = await storage.getAllUsers();
       const user = allUsers.find(u => u.resetToken === token);
       
-      if (!user || !user.resetTokenExpiry || new Date() > new Date(user.resetTokenExpiry)) {
+      if (!user) {
+        return res.status(400).json({ error: "Invalid or expired reset token" });
+      }
+      
+      if (!user.resetTokenExpiry) {
+        return res.status(400).json({ error: "Invalid or expired reset token" });
+      }
+      
+      const expiryDate = new Date(user.resetTokenExpiry);
+      const now = new Date();
+      
+      if (now > expiryDate) {
         return res.status(400).json({ error: "Invalid or expired reset token" });
       }
       
