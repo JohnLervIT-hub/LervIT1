@@ -70,7 +70,16 @@ export function findNearestMovers(
       const distanceToPickup = calculateDistance(moverCoords, pickupCoords);
       
       // Calculate price breakdown including mover travel fee
-      const priceBreakdown = calculatePrice(jobDistance, loadSize, distanceToPickup);
+      // Use default values for difficulty and heavy item since they're booking-specific
+      const priceBreakdown = calculatePrice(
+        jobDistance,
+        loadSize,
+        'ground', // default pickup difficulty
+        'ground', // default dropoff difficulty
+        false,    // default heavy item
+        1,        // default number of movers
+        distanceToPickup // mover to pickup distance
+      );
       
       return {
         ...mover,

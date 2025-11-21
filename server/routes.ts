@@ -360,7 +360,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== BOOKING ROUTES =====
   app.post("/api/bookings", async (req: Request, res: Response) => {
     try {
-      const bookingData = validateBody(insertBookingSchema, req.body);
+      // SECURITY: Require authentication
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // SECURITY: Only customers can create bookings
+      if (user.role !== "customer") {
+        return res.status(403).json({ error: "Only customers can create bookings" });
+      }
+      
+      // Validate booking data - customerId will be added from authenticated user
+      const bookingData = validateBody(
+        insertBookingSchema.extend({
+          customerId: z.string().optional()
+        }),
+        { ...req.body, customerId: user.id }
+      );
       
       // Geocode addresses to get coordinates
       const { geocodeAddress } = await import("@shared/geocoding");
@@ -384,8 +399,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Create booking with geocoded data and price breakdown
+      // SECURITY: Use authenticated user's ID, not from request body
       const booking = await storage.createBooking({
-        customerId: bookingData.customerId,
+        customerId: user.id,
         pickupAddress: bookingData.pickupAddress,
         dropoffAddress: bookingData.dropoffAddress,
         loadSize: bookingData.loadSize,
@@ -449,9 +465,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           storage.createJobNotification({
             bookingId: booking.id,
             moverId: mover.moverId,
+            distanceToPickup: toDecimalString(mover.distanceToPickup),
+            estimatedEarnings: toDecimalString(mover.estimatedEarnings),
             status: 'pending',
             expiresAt,
-          } as any)
+          })
         )
       );
       
