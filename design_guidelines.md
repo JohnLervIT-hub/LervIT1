@@ -17,16 +17,26 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 ## Brand Colors
 
 ### Primary Palette
-- **Orange (Primary):** `#FF6A00` - CTAs, active states, brand accent
-- **Deep Teal (Accent):** `#004C4C` - Headers, trust elements, secondary CTAs
-- **White:** `#FFFFFF` - Card backgrounds, primary surfaces
-- **Light Gray:** `#F5F5F5` - Page backgrounds, subtle dividers
+- **Black (Primary):** `#111111` (HSL 0 0% 7%) - CTAs, headings, primary buttons
+- **Beige (Accent):** `#F5E6D3` (HSL 32 58% 92%) - Highlights, warm accents, secondary elements
+- **Soft Parchment:** `#FAF5ED` (HSL 32 55% 96%) - Page backgrounds, subtle warmth
+- **Light Beige:** `#F2EBE1` (HSL 32 52% 94%) - Card backgrounds on parchment
+
+### Color Philosophy
+The black and beige palette creates a sophisticated, minimalist aesthetic with warm undertones. This color scheme conveys professionalism, trustworthiness, and premium quality—perfect for a service marketplace.
 
 ### Usage
-- **Primary Orange:** Book Now, Confirm, Accept Job, all primary CTAs
-- **Deep Teal:** Navigation headers, verified badges, mover profiles
-- **White Cards:** All content containers on light gray backgrounds
-- **Shadows:** Soft `0 2px 8px rgba(0,0,0,0.08)` on cards
+- **Black Primary:** All CTAs, buttons, headlines, icons for maximum contrast
+- **Beige Accents:** Badges, highlights, warm backgrounds, trust indicators
+- **Parchment Backgrounds:** Main page background with subtle warmth
+- **Light Beige Cards:** Content containers with soft elevation
+- **Shadows:** Soft `0 2px 8px rgba(0,0,0,0.06)` on cards
+
+### Dark Mode
+- **Background:** Deep charcoal `#0F0F0F` (HSL 0 0% 6%)
+- **Cards:** Lighter charcoal `#1A1A1A` (HSL 0 0% 10%)
+- **Primary CTAs:** Warm beige `#E8D4BA` (HSL 32 58% 80%)
+- **Text:** Off-white beige `#EDE4D8` (HSL 34 45% 88%)
 
 ---
 
@@ -138,26 +148,26 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 
 ### Buttons
 
-**Primary CTA (Orange):**
+**Primary CTA (Black):**
 ```
-- Background: #FF6A00
-- Text: White, semibold
+- Background: #111111 (black)
+- Text: #F5E6D3 (beige), semibold
 - Height: min-h-12 (48px) - mobile minimum
 - Height: min-h-14 (56px) - desktop
 - Padding: px-6 py-3
 - Border Radius: rounded-xl (12px)
 - Width: Full-width on mobile, auto on desktop
 - Touch Target: Minimum 44px
-- Hover: Darken to #E55F00
-- Active: Scale 0.98
+- Hover: Built-in elevation (hover-elevate class)
+- Active: Built-in deeper elevation (active-elevate-2 class)
 ```
 
 **Secondary CTA (Outline):**
 ```
-- Border: 2px solid #004C4C
-- Text: #004C4C, semibold
+- Border: 2px solid #111111
+- Text: #111111 (black), semibold
 - Same sizing as primary
-- Hover: Fill with #004C4C, text white
+- Hover: Fill with beige tint, maintains readability
 ```
 
 **Icon Button:**
@@ -176,7 +186,7 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 - Padding: px-4 py-3
 - Border: 1.5px solid #E0E0E0
 - Border Radius: rounded-xl
-- Focus: Border #FF6A00, ring-2 ring-orange-100
+- Focus: Border #111111 (black), subtle ring
 - Icon: Left-aligned with pl-12
 ```
 
@@ -223,7 +233,7 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 - **Pending:** Yellow (#FFA000) background, dark text
 - **Confirmed:** Blue (#2196F3) background, white text
 - **In Progress:** Green (#4CAF50) background, white text
-- **Completed:** Deep Teal (#004C4C) background, white text
+- **Completed:** Black (#111111) background, beige text
 - **Cancelled:** Red (#F44336) background, white text
 
 ### Progress Indicators
@@ -231,8 +241,8 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 **Multi-Step Flow:**
 ```
 - Horizontal dots or stepped line
-- Current step: Orange (#FF6A00)
-- Completed: Deep Teal (#004C4C)
+- Current step: Black (#111111)
+- Completed: Beige (#F5E6D3) highlight
 - Upcoming: Light Gray (#E0E0E0)
 - Step numbers in circles
 ```
@@ -243,16 +253,16 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 - **Library:** Lucide React
 - **Size:** 20px (mobile), 24px (desktop)
 - **Stroke:** 2px
-- **Color:** Current text color or brand colors
+- **Color:** Current text color or black/beige brand colors
 
 **Map Pins:**
 - Pickup: Green (#4CAF50)
 - Dropoff: Red (#F44336)
-- Mover Location: Orange (#FF6A00)
+- Mover Location: Black (#111111)
 
 **Trust Signals:**
-- Verification checkmark (white on deep teal circle)
-- Star ratings (orange stars, 5-star scale)
+- Verification checkmark (white on black circle)
+- Star ratings (black stars, 5-star scale)
 - Review count next to rating
 
 ---
@@ -375,7 +385,7 @@ LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt,
 
 ### Loading States
 - Skeleton screens for content
-- Spinner for actions (20px, orange)
+- Spinner for actions (20px, black/beige)
 - Progress bar for multi-step
 
 ---
@@ -458,13 +468,10 @@ Use Tailwind CSS with these custom extensions:
 theme: {
   extend: {
     colors: {
-      orange: {
-        primary: '#FF6A00',
-        dark: '#E55F00',
-      },
-      teal: {
-        deep: '#004C4C',
-        light: '#006666',
+      brand: {
+        black: '#111111',     // Primary CTAs, headings
+        beige: '#F5E6D3',     // Accents, highlights
+        parchment: '#FAF5ED', // Page backgrounds
       }
     },
     minHeight: {
