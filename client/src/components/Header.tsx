@@ -19,6 +19,13 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, logout } = useAuth();
 
+  const closeMobileMenu = () => setMobileMenuOpen(false);
+
+  const handleLogout = () => {
+    closeMobileMenu();
+    logout();
+  };
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -136,17 +143,17 @@ export default function Header() {
               <>
                 {user.role === "customer" && (
                   <>
-                    <Link href="/request-move" data-testid="link-mobile-request-move">
+                    <Link href="/request-move" data-testid="link-mobile-request-move" onClick={closeMobileMenu}>
                       <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                         Request Move
                       </Button>
                     </Link>
-                    <Link href="/my-bookings" data-testid="link-mobile-my-bookings">
+                    <Link href="/my-bookings" data-testid="link-mobile-my-bookings" onClick={closeMobileMenu}>
                       <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                         My Bookings
                       </Button>
                     </Link>
-                    <Link href="/dashboard" data-testid="link-mobile-dashboard">
+                    <Link href="/dashboard" data-testid="link-mobile-dashboard" onClick={closeMobileMenu}>
                       <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                         Dashboard
                       </Button>
@@ -155,7 +162,7 @@ export default function Header() {
                 )}
                 {user.role === "mover" && (
                   <>
-                    <Link href="/mover-dashboard" data-testid="link-mobile-mover-dashboard">
+                    <Link href="/mover-dashboard" data-testid="link-mobile-mover-dashboard" onClick={closeMobileMenu}>
                       <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                         Mover Dashboard
                       </Button>
@@ -164,7 +171,7 @@ export default function Header() {
                 )}
                 {user.role === "admin" && (
                   <>
-                    <Link href="/admin" data-testid="link-mobile-admin">
+                    <Link href="/admin" data-testid="link-mobile-admin" onClick={closeMobileMenu}>
                       <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                         Admin Dashboard
                       </Button>
@@ -174,7 +181,7 @@ export default function Header() {
                 <Button 
                   variant="outline" 
                   className="w-full hover-elevate active-elevate-2"
-                  onClick={logout}
+                  onClick={handleLogout}
                   data-testid="button-mobile-logout"
                 >
                   Log Out
@@ -182,42 +189,42 @@ export default function Header() {
               </>
             ) : (
               <>
-                <Link href="/demo" data-testid="link-mobile-demo">
+                <Link href="/demo" data-testid="link-mobile-demo" onClick={closeMobileMenu}>
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     🗺️ Map Demo
                   </Button>
                 </Link>
-                <Link href="/lifecycle" data-testid="link-mobile-lifecycle">
+                <Link href="/lifecycle" data-testid="link-mobile-lifecycle" onClick={closeMobileMenu}>
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     🎬 Customer Lifecycle
                   </Button>
                 </Link>
-                <Link href="/mover-lifecycle" data-testid="link-mobile-mover-lifecycle">
+                <Link href="/mover-lifecycle" data-testid="link-mobile-mover-lifecycle" onClick={closeMobileMenu}>
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     🚚 Mover Lifecycle
                   </Button>
                 </Link>
-                <Link href="/browse-movers" data-testid="link-mobile-browse">
+                <Link href="/browse-movers" data-testid="link-mobile-browse" onClick={closeMobileMenu}>
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     Find Movers
                   </Button>
                 </Link>
                 <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2" asChild>
-                  <a href="/#how-it-works" data-testid="link-mobile-how">
+                  <a href="/#how-it-works" data-testid="link-mobile-how" onClick={closeMobileMenu}>
                     How It Works
                   </a>
                 </Button>
-                <Link href="/signup" data-testid="link-mobile-become">
+                <Link href="/signup" data-testid="link-mobile-become" onClick={closeMobileMenu}>
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
                     Become a Mover
                   </Button>
                 </Link>
-                <Link href="/login" data-testid="link-mobile-login">
+                <Link href="/login" data-testid="link-mobile-login" onClick={closeMobileMenu}>
                   <Button variant="outline" className="w-full hover-elevate active-elevate-2">
                     Sign In
                   </Button>
                 </Link>
-                <Link href="/request-move" data-testid="link-mobile-request">
+                <Link href="/request-move" data-testid="link-mobile-request" onClick={closeMobileMenu}>
                   <Button className="w-full">
                     Book a Move
                   </Button>
