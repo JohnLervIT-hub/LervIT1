@@ -17,7 +17,7 @@ export default function HeroSection() {
   };
 
   return (
-    <section className="relative min-h-[calc(100vh-4rem)] md:min-h-[700px] flex items-center overflow-hidden">
+    <section className="relative min-h-screen flex items-center overflow-hidden pt-[100px]">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${heroImage})` }}
@@ -28,8 +28,8 @@ export default function HeroSection() {
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-20 w-full">
         <div className="grid lg:grid-cols-2 gap-6 md:gap-12 items-center">
           <div className="text-white text-center lg:text-left">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 md:mb-6 leading-tight">
-              Calgary's Smartest Way to Move
+            <h1 className="font-bold mb-4 md:mb-6 leading-[1.3] mt-5" style={{ fontSize: 'clamp(24px, 5vw, 40px)' }}>
+              Your Easy Move
             </h1>
             <p className="text-base md:text-lg lg:text-xl mb-6 md:mb-8 text-white/90 max-w-xl mx-auto lg:mx-0">
               Connect with trusted freelance movers in minutes. Get instant quotes, book on-demand, and track your move in real-time.
@@ -37,7 +37,7 @@ export default function HeroSection() {
             <div className="flex items-center justify-center lg:justify-start gap-2 text-white/90 mb-6 md:mb-0">
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <Star key={star} className="w-4 h-4 md:w-5 md:h-5 fill-primary text-primary" />
+                  <Star key={star} className="w-4 h-4 md:w-5 md:h-5 fill-[#FF6A00] text-[#FF6A00]" />
                 ))}
               </div>
               <span className="font-semibold text-sm md:text-base">500+ Movers in Calgary</span>
@@ -97,7 +97,7 @@ export default function HeroSection() {
               </div>
 
               <Button
-                className="w-full h-12 md:h-14 text-base md:text-lg font-semibold rounded-xl touch-target btn-press bg-primary hover:bg-primary/90"
+                className="w-full h-12 md:h-14 text-base md:text-lg font-semibold rounded-xl touch-target btn-press"
                 size="lg"
                 onClick={handleGetPrice}
                 data-testid="button-get-price"
