@@ -18,6 +18,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import ProximityDemo from "@/pages/ProximityDemo";
 import LifecycleDemo from "@/pages/LifecycleDemo";
 import MoverLifecycleDemo from "@/pages/MoverLifecycleDemo";
+import VideoPreview from "@/pages/VideoPreview";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/demo" component={ProximityDemo} />
       <Route path="/lifecycle" component={LifecycleDemo} />
       <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
+      <Route path="/video-preview" component={VideoPreview} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/forgot-password" component={ForgotPassword} />
