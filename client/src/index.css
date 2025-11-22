@@ -9,35 +9,35 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
-  --background: 32 55% 96%;
-  --foreground: 0 0% 7%;
-  --border: 32 25% 80%;
-  --card: 32 52% 94%;
-  --card-foreground: 0 0% 7%;
-  --card-border: 32 30% 85%;
-  --sidebar: 32 50% 94%;
-  --sidebar-foreground: 0 0% 7%;
-  --sidebar-border: 32 30% 85%;
-  --sidebar-primary: 0 0% 7%;
-  --sidebar-primary-foreground: 33 60% 95%;
-  --sidebar-accent: 32 45% 88%;
-  --sidebar-accent-foreground: 0 0% 7%;
-  --sidebar-ring: 0 0% 7%;
-  --popover: 32 52% 94%;
-  --popover-foreground: 0 0% 7%;
-  --popover-border: 32 30% 85%;
-  --primary: 0 0% 7%;
-  --primary-foreground: 33 60% 95%;
-  --secondary: 0 0% 40%;
-  --secondary-foreground: 33 55% 95%;
-  --muted: 32 52% 94%;
-  --muted-foreground: 33 15% 40%;
-  --accent: 32 58% 92%;
-  --accent-foreground: 0 0% 10%;
+  --background: 0 0% 100%;
+  --foreground: 220 15% 15%;
+  --border: 0 0% 89%;
+  --card: 0 0% 98%;
+  --card-foreground: 220 15% 15%;
+  --card-border: 0 0% 94%;
+  --sidebar: 0 0% 96%;
+  --sidebar-foreground: 220 15% 15%;
+  --sidebar-border: 0 0% 92%;
+  --sidebar-primary: 220 85% 45%;
+  --sidebar-primary-foreground: 220 85% 98%;
+  --sidebar-accent: 220 12% 88%;
+  --sidebar-accent-foreground: 220 15% 15%;
+  --sidebar-ring: 220 85% 45%;
+  --popover: 0 0% 95%;
+  --popover-foreground: 220 15% 15%;
+  --popover-border: 0 0% 91%;
+  --primary: 220 85% 35%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 8% 90%;
+  --secondary-foreground: 220 15% 15%;
+  --muted: 220 6% 92%;
+  --muted-foreground: 220 10% 35%;
+  --accent: 85 75% 65%;
+  --accent-foreground: 85 75% 10%;
   --destructive: 0 85% 45%;
   --destructive-foreground: 0 85% 98%;
-  --input: 32 25% 70%;
-  --ring: 0 0% 7%;
+  --input: 220 15% 60%;
+  --ring: 220 85% 45%;
   --chart-1: 220 85% 45%;
   --chart-2: 85 75% 35%;
   --chart-3: 200 70% 40%;
@@ -93,35 +93,35 @@
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
-  --background: 0 0% 6%;
-  --foreground: 34 45% 88%;
-  --border: 0 0% 22%;
-  --card: 0 0% 10%;
-  --card-foreground: 34 45% 88%;
-  --card-border: 0 0% 14%;
-  --sidebar: 0 0% 10%;
-  --sidebar-foreground: 34 45% 88%;
-  --sidebar-border: 0 0% 18%;
-  --sidebar-primary: 32 58% 80%;
-  --sidebar-primary-foreground: 0 0% 7%;
-  --sidebar-accent: 0 0% 18%;
-  --sidebar-accent-foreground: 34 45% 88%;
-  --sidebar-ring: 32 58% 80%;
-  --popover: 0 0% 12%;
-  --popover-foreground: 34 45% 88%;
-  --popover-border: 0 0% 20%;
-  --primary: 32 58% 80%;
-  --primary-foreground: 0 0% 7%;
-  --secondary: 0 0% 30%;
-  --secondary-foreground: 34 40% 85%;
-  --muted: 0 0% 18%;
-  --muted-foreground: 33 20% 60%;
-  --accent: 34 45% 88%;
-  --accent-foreground: 0 0% 10%;
+  --background: 220 15% 8%;
+  --foreground: 220 10% 95%;
+  --border: 220 12% 18%;
+  --card: 220 15% 10%;
+  --card-foreground: 220 10% 95%;
+  --card-border: 220 12% 14%;
+  --sidebar: 220 15% 12%;
+  --sidebar-foreground: 220 10% 95%;
+  --sidebar-border: 220 12% 16%;
+  --sidebar-primary: 220 85% 55%;
+  --sidebar-primary-foreground: 220 85% 98%;
+  --sidebar-accent: 220 12% 18%;
+  --sidebar-accent-foreground: 220 10% 95%;
+  --sidebar-ring: 220 85% 55%;
+  --popover: 220 15% 14%;
+  --popover-foreground: 220 10% 95%;
+  --popover-border: 220 12% 18%;
+  --primary: 220 85% 45%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 8% 20%;
+  --secondary-foreground: 220 10% 95%;
+  --muted: 220 6% 22%;
+  --muted-foreground: 220 10% 70%;
+  --accent: 85 75% 45%;
+  --accent-foreground: 85 75% 98%;
   --destructive: 0 85% 45%;
   --destructive-foreground: 0 85% 98%;
-  --input: 0 0% 30%;
-  --ring: 32 58% 80%;
+  --input: 220 15% 35%;
+  --ring: 220 85% 55%;
   --chart-1: 220 85% 65%;
   --chart-2: 85 75% 65%;
   --chart-3: 200 70% 60%;
@@ -284,125 +284,5 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
-  }
-
-  /* Mobile-First Touch Targets */
-  .touch-target {
-    @apply min-h-12 min-w-12;
-  }
-
-  .touch-target-lg {
-    @apply min-h-14 min-w-14;
-  }
-
-  /* Mobile Card Styling */
-  .mobile-card {
-    @apply rounded-2xl bg-card shadow-md hover:shadow-lg transition-shadow duration-200;
-  }
-
-  /* Fixed Bottom CTA Bar */
-  .fixed-bottom-cta {
-    @apply fixed bottom-0 left-0 right-0 bg-background border-t p-4 shadow-2xl z-50;
-  }
-
-  /* Button Animations */
-  .btn-press {
-    @apply transition-transform duration-100;
-  }
-  
-  .btn-press:active {
-    transform: scale(0.98);
-  }
-
-  /* Smooth Transitions */
-  .smooth-transition {
-    @apply transition-all duration-200 ease-out;
-  }
-}
-
-/* Mobile-Specific Media Queries */
-@media (max-width: 430px) {
-  /* Mobile XL: Slightly reduce padding on very small screens */
-  .mobile-compact {
-    @apply px-3 py-2;
-  }
-
-  /* Full-width buttons on mobile */
-  .mobile-full-button {
-    @apply w-full;
-  }
-
-  /* Reduce font sizes slightly */
-  .mobile-text-sm {
-    font-size: 0.9375rem;
-  }
-}
-
-@media (max-width: 414px) {
-  /* iPhone Pro Max / Large Android */
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  /* Adjust card padding */
-  .mobile-card {
-    padding: 0.875rem;
-  }
-}
-
-@media (max-width: 375px) {
-  /* iPhone Standard / Medium Android */
-  .container {
-    padding-left: 0.875rem;
-    padding-right: 0.875rem;
-  }
-
-  /* Further reduce card padding */
-  .mobile-card {
-    padding: 0.75rem;
-  }
-
-  /* Slightly smaller touch targets if needed */
-  .touch-target-adaptive {
-    min-height: 44px;
-    min-width: 44px;
-  }
-}
-
-/* Desktop Enhancements */
-@media (min-width: 768px) {
-  /* Remove fixed bottom bar on desktop */
-  .fixed-bottom-cta {
-    position: relative;
-    bottom: auto;
-    box-shadow: none;
-  }
-
-  /* Buttons auto-width on desktop */
-  .mobile-full-button {
-    width: auto;
-  }
-
-  /* Larger touch targets on desktop (cursor-based) */
-  .touch-target {
-    @apply min-h-14;
-  }
-}
-
-/* Smooth Scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Prevent Horizontal Scroll */
-body {
-  overflow-x: hidden;
-}
-
-/* iOS Safe Area Support */
-@supports(padding: max(0px)) {
-  .fixed-bottom-cta {
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }

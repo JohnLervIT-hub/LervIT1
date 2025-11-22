@@ -20,12 +20,12 @@ export default function Header() {
   const { user, logout } = useAuth();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-[999] bg-white dark:bg-background border-b shadow-sm">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link href="/" data-testid="link-home">
             <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md cursor-pointer">
-              <Truck className="w-[42px] h-[42px] text-primary" />
+              <Truck className="w-6 h-6 text-primary" />
               <span className="text-xl font-bold">LervIT</span>
             </div>
           </Link>

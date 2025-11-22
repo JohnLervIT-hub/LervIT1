@@ -1,485 +1,149 @@
-# LervIT Mobile-First Design Guidelines
+# LervIT Design Guidelines
 
-## Design Philosophy
+## Design Approach
 
-**Industry Standard Mobile-First Marketplace**
-LervIT follows industry-leading design patterns from Uber, DoorDash, Lyft, Bolt, and TaskRabbit. The interface prioritizes touch-friendly interactions, clear visual hierarchy, and professional polish on all screen sizes.
+**Hybrid Marketplace System**
+Drawing inspiration from successful service marketplaces (Uber, TaskRabbit, Airbnb) while maintaining a bold, friendly, mobile-first foundation. The design prioritizes quick decision-making, trust-building, and effortless booking flows.
 
 **Core Principles:**
-- **Mobile-First:** Designed for 375px-430px screens first, scales up gracefully
-- **Touch-Optimized:** Minimum 44px touch targets, generous spacing, clear tap states
-- **Premium Visual Quality:** Card-based layouts, soft shadows, smooth animations
-- **Zero Friction:** Fixed bottom CTAs, single-column forms, immediate visual feedback
-- **Trust & Clarity:** Verification badges, clear pricing, professional imagery
-
----
-
-## Brand Colors
-
-### Primary Palette
-- **Black (Primary):** `#111111` (HSL 0 0% 7%) - CTAs, headings, primary buttons
-- **Beige (Accent):** `#F5E6D3` (HSL 32 58% 92%) - Highlights, warm accents, secondary elements
-- **Soft Parchment:** `#FAF5ED` (HSL 32 55% 96%) - Page backgrounds, subtle warmth
-- **Light Beige:** `#F2EBE1` (HSL 32 52% 94%) - Card backgrounds on parchment
-
-### Color Philosophy
-The black and beige palette creates a sophisticated, minimalist aesthetic with warm undertones. This color scheme conveys professionalism, trustworthiness, and premium quality—perfect for a service marketplace.
-
-### Usage
-- **Black Primary:** All CTAs, buttons, headlines, icons for maximum contrast
-- **Beige Accents:** Badges, highlights, warm backgrounds, trust indicators
-- **Parchment Backgrounds:** Main page background with subtle warmth
-- **Light Beige Cards:** Content containers with soft elevation
-- **Shadows:** Soft `0 2px 8px rgba(0,0,0,0.06)` on cards
-
-### Dark Mode
-- **Background:** Deep charcoal `#0F0F0F` (HSL 0 0% 6%)
-- **Cards:** Lighter charcoal `#1A1A1A` (HSL 0 0% 10%)
-- **Primary CTAs:** Warm beige `#E8D4BA` (HSL 32 58% 80%)
-- **Text:** Off-white beige `#EDE4D8` (HSL 34 45% 88%)
-
----
+- Mobile-first responsive design (320px → desktop)
+- Bold visual hierarchy for CTAs and critical actions
+- Friendly, approachable interfaces that reduce booking anxiety
+- Trust signals throughout (verified badges, ratings, vehicle info)
+- Clear status indicators for all booking states
 
 ## Typography
 
-### Font Stack
-**Primary:** `Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
-
-### Mobile-First Scale
-- **Hero Headlines:** `2rem` (32px), bold (700)
-- **Page Titles:** `1.5rem` (24px), semibold (600)
-- **Section Headers:** `1.25rem` (20px), semibold (600)
-- **Body Text:** `1rem` (16px), regular (400)
-- **Small/Meta:** `0.875rem` (14px), medium (500)
-- **Button Text:** `1rem` (16px), semibold (600)
-
-### Desktop Scale (768px+)
-- **Hero Headlines:** `3rem` (48px)
-- **Page Titles:** `2rem` (32px)
-- **Section Headers:** `1.5rem` (24px)
-
----
+**Font Stack:** Inter for UI, Open Sans for body text
+- **Hero/Primary Headlines:** 2.5rem (mobile) → 4rem (desktop), bold (700)
+- **Section Headers:** 1.75rem (mobile) → 2.5rem (desktop), semibold (600)
+- **Card Titles:** 1.25rem, semibold (600)
+- **Body Text:** 1rem, regular (400), 1.6 line-height for readability
+- **Small/Meta:** 0.875rem, medium (500)
+- **Buttons/CTAs:** 1rem, semibold (600), uppercase tracking
 
 ## Layout System
 
-### Mobile Spacing (< 768px)
-- **Page Padding:** `px-4` (16px)
-- **Card Padding:** `p-4` (16px)
-- **Element Gaps:** `gap-3` (12px)
-- **Section Spacing:** `py-6` (24px)
-- **Input Padding:** `p-3` (12px)
+**Spacing Primitives:** Use Tailwind units of 2, 4, 6, 8, 12, 16, 20, 24
+- Micro spacing: p-2, gap-2 (8px)
+- Standard spacing: p-4, m-6 (16-24px)
+- Section spacing: py-12 (mobile) → py-20 (desktop)
+- Container spacing: px-4 (mobile) → px-8 (desktop)
 
-### Desktop Spacing (768px+)
-- **Page Padding:** `px-6 md:px-8` (24-32px)
-- **Card Padding:** `p-6` (24px)
-- **Element Gaps:** `gap-4` (16px)
-- **Section Spacing:** `py-12` (48px)
-
-### Container Max Widths
-- **Full Page:** `max-w-7xl` (1280px)
-- **Forms:** `max-w-2xl` (672px)
-- **Cards:** `100%` mobile → `max-w-sm` desktop
-
----
-
-## Responsive Breakpoints
-
-### Standard Mobile Breakpoints
-```css
-/* Mobile Small: 320px - 374px */
-/* Mobile Medium: 375px - 413px */
-/* Mobile Large: 414px - 429px */
-/* Mobile XL: 430px - 767px */
-/* Tablet: 768px - 1023px */
-/* Desktop: 1024px+ */
-```
-
-### Media Queries
-```css
-@media (max-width: 430px) { /* Mobile XL adjustments */ }
-@media (max-width: 414px) { /* iPhone Pro Max / Android Large */ }
-@media (max-width: 375px) { /* iPhone standard / Android Medium */ }
-@media (min-width: 768px) { /* Tablet and above */ }
-@media (min-width: 1024px) { /* Desktop */ }
-```
-
----
+**Grid System:**
+- Max container width: max-w-7xl for main content
+- Form containers: max-w-2xl centered
+- Dashboard: max-w-screen-xl
+- Mobile: Always single column, stack vertically
+- Tablet (md:): 2-column for cards/features
+- Desktop (lg:): 3-column for mover grids, 2-column for forms with preview
 
 ## Component Library
 
-### Header / Navigation
-**Mobile Header (< 768px):**
-- Height: `h-16` (64px)
-- Layout: Back arrow (left) → Logo (center) → Profile/Menu (right)
-- Padding: `px-4`
-- Background: White with bottom border
-- Fixed position with shadow on scroll
+### Navigation
+**Header:** Fixed top navigation with logo (left), main nav (center), user menu/CTA (right)
+- Mobile: Hamburger menu, prominent "Book a Move" CTA
+- Include trust indicator: "500+ Movers in Calgary"
 
-**Desktop Header (768px+):**
-- Height: `h-20` (80px)
-- Layout: Logo (left) → Nav links (center) → User menu + "Book Move" CTA (right)
-- Padding: `px-8`
-- Transparent on home, white on other pages
+### Hero Section (Landing)
+**Layout:** Asymmetric split - 60% booking form, 40% hero image
+- Large headline with subtext
+- Embedded quick booking form (pickup, dropoff, date, "Get Price" CTA)
+- Hero image: Professional mover with truck, Calgary skyline backdrop
+- Desktop: Side-by-side, Mobile: Form first, image below
+
+### Booking Flow Pages
+**Job Request Form:**
+- Multi-step progress indicator (4 steps: Details → Load → Schedule → Review)
+- Each step: Single focus, large inputs, helpful icons
+- Address inputs with mock autocomplete styling
+- Load size: Visual cards with icons (Small Box, Medium Load, Large Furniture, etc.)
+- Date/time: Calendar picker + time slots grid
+- Real-time price display: Sticky bottom bar (mobile) or right sidebar (desktop)
+
+**Mover Selection Grid:**
+- Cards with: Profile photo, name, rating (stars), vehicle type, distance, price
+- 1 column (mobile) → 2 columns (tablet) → 3 columns (desktop)
+- Each card: Large tap target, "Select Mover" CTA, verification badges
+
+### User Profiles
+**Customer Dashboard:**
+- Sidebar navigation (mobile: bottom tabs)
+- Main content area: Active bookings (cards), Past bookings (list), Profile settings
+- Booking cards: Status badge, mover info, pickup/dropoff, date, actions
+
+**Mover Profile:**
+- Hero section: Profile photo, name, rating, vehicle info, availability toggle
+- Stats row: Completed moves, rating, response time (4-column grid)
+- About section, reviews list, vehicle photos gallery
+
+### Messaging Interface
+**Chat View:**
+- Full-screen on mobile, 60% width sidebar on desktop
+- Message list: Left-aligned (received), right-aligned (sent)
+- Input bar: Text field + send button, attachment icon
+- Booking summary card pinned at top (pickup/dropoff, date, price)
+
+### Admin Dashboard
+**Layout:** Sidebar (left) + main content area
+- Sidebar: Collapsible on mobile, fixed on desktop
+- Dashboard widgets: 4-column stat cards (bookings, revenue, active movers, customers)
+- Tables: Responsive, horizontal scroll on mobile, sortable columns
+- Filters: Top bar with dropdowns (date range, status, region)
+
+### Forms & Inputs
+**Style:** Bold borders, generous padding (p-4), rounded corners (rounded-lg)
+- Labels: Above input, semibold, mb-2
+- Inputs: h-12 minimum, clear focus states
+- Helper text: Below input, smaller text
+- Error states: Bold borders, inline error messages
+- Submit buttons: Full width on mobile, auto width on desktop
 
 ### Cards
 **Standard Card:**
-```
-- Background: White
-- Border Radius: rounded-2xl (16px)
-- Shadow: 0 2px 8px rgba(0,0,0,0.08)
-- Padding: p-4 (mobile), p-6 (desktop)
-- Hover: Shadow lifts to 0 4px 12px rgba(0,0,0,0.12)
-```
-
-**Booking Card:**
-- Status badge (top-right)
-- Pickup/Dropoff with map pin icons
-- Mover photo + name
-- Price (large, bold)
-- Action buttons (full-width on mobile)
-
-**Mover Card:**
-- Profile photo (rounded-full, 80px)
-- Name + verification badge
-- Rating (large stars)
-- Vehicle type + distance
-- Price (prominent)
-- "Select Mover" CTA (full-width)
+- Rounded borders (rounded-xl), shadow on hover
+- Padding: p-6 (desktop), p-4 (mobile)
+- Header: Icon + title (semibold)
+- Content: Clear hierarchy, adequate spacing
+- Footer: Actions or metadata (right-aligned)
 
 ### Buttons
+**Primary CTA:** Large (h-12), bold text, full width on mobile
+**Secondary:** Outlined style, same dimensions
+**Icon Buttons:** Square (w-10 h-10), rounded
+When on images: Blurred background (backdrop-blur-sm, bg-white/20)
 
-**Primary CTA (Black):**
-```
-- Background: #111111 (black)
-- Text: #F5E6D3 (beige), semibold
-- Height: min-h-12 (48px) - mobile minimum
-- Height: min-h-14 (56px) - desktop
-- Padding: px-6 py-3
-- Border Radius: rounded-xl (12px)
-- Width: Full-width on mobile, auto on desktop
-- Touch Target: Minimum 44px
-- Hover: Built-in elevation (hover-elevate class)
-- Active: Built-in deeper elevation (active-elevate-2 class)
-```
+### Status Indicators
+**Badges:** Rounded-full, px-3 py-1, semibold text, 0.875rem
+- Different badge styles for: Pending, Active, Completed, Cancelled
+**Verification Icons:** Small badges next to names (checkmark icon)
 
-**Secondary CTA (Outline):**
-```
-- Border: 2px solid #111111
-- Text: #111111 (black), semibold
-- Same sizing as primary
-- Hover: Fill with beige tint, maintains readability
-```
+### Trust Signals
+- Star ratings: Large (1.25rem), prominent placement
+- Verification badges: Next to mover names, vehicle licenses
+- Review count: Always visible with ratings
+- "Verified" text labels on profiles
 
-**Icon Button:**
-```
-- Size: w-12 h-12 (48px)
-- Border Radius: rounded-full
-- Background: White or transparent
-- Icon Size: 24px
-```
+## Images
 
-### Forms & Inputs
+**Hero Image:** Professional mover loading truck, Calgary cityscape background (1200x800px minimum, right-aligned on desktop)
 
-**Text Input:**
-```
-- Height: min-h-12 (48px)
-- Padding: px-4 py-3
-- Border: 1.5px solid #E0E0E0
-- Border Radius: rounded-xl
-- Focus: Border #111111 (black), subtle ring
-- Icon: Left-aligned with pl-12
-```
+**Mover Profile Photos:** Square headshots (400x400px), rounded-full on small displays
 
-**Select Dropdown:**
-```
-- Same styling as text input
-- Chevron icon right-aligned
-- Touch-friendly options (min-h-12)
-```
+**Vehicle Photos:** Landscape orientation (16:9 ratio), showcase truck/van capacity
 
-**Labels:**
-```
-- Above input with mb-2
-- Font: 0.875rem (14px), semibold
-- Color: #333333
-```
+**Feature Icons:** Use Heroicons (outline style) via CDN for consistency
 
-### Fixed Bottom CTA Bar
+**Empty States:** Friendly illustration placeholders for "No bookings yet," "No messages"
 
-**Mobile Pattern (< 768px):**
-```
-- Position: fixed bottom-0 left-0 right-0
-- Height: min-h-20 (80px)
-- Padding: p-4
-- Background: White
-- Shadow: 0 -2px 10px rgba(0,0,0,0.1)
-- Content: Price (left) + CTA Button (right)
-- Safe Area: pb-safe (iOS notch support)
-```
-
-**Desktop:**
-- Sticky sidebar or inline buttons
-
-### Status Badges
-
-**Badge Styling:**
-```
-- Border Radius: rounded-full
-- Padding: px-3 py-1
-- Font: 0.75rem (12px), semibold, uppercase
-```
-
-**Colors:**
-- **Pending:** Yellow (#FFA000) background, dark text
-- **Confirmed:** Blue (#2196F3) background, white text
-- **In Progress:** Green (#4CAF50) background, white text
-- **Completed:** Black (#111111) background, beige text
-- **Cancelled:** Red (#F44336) background, white text
-
-### Progress Indicators
-
-**Multi-Step Flow:**
-```
-- Horizontal dots or stepped line
-- Current step: Black (#111111)
-- Completed: Beige (#F5E6D3) highlight
-- Upcoming: Light Gray (#E0E0E0)
-- Step numbers in circles
-```
-
-### Icons & Visual Elements
-
-**Icon Guidelines:**
-- **Library:** Lucide React
-- **Size:** 20px (mobile), 24px (desktop)
-- **Stroke:** 2px
-- **Color:** Current text color or black/beige brand colors
-
-**Map Pins:**
-- Pickup: Green (#4CAF50)
-- Dropoff: Red (#F44336)
-- Mover Location: Black (#111111)
-
-**Trust Signals:**
-- Verification checkmark (white on black circle)
-- Star ratings (black stars, 5-star scale)
-- Review count next to rating
-
----
-
-## Page-Specific Patterns
-
-### Home Page (Landing)
-
-**Mobile (< 768px):**
-```
-1. Hero Section:
-   - Full-width background gradient
-   - Centered headline (32px)
-   - Subtext (16px)
-   - Quick booking form (white card)
-   - Fixed bottom "Get Estimate" CTA
-
-2. How It Works (3 steps):
-   - Vertical stack of cards
-   - Icon + title + description
-   - Full-width per card
-
-3. Trust Indicators:
-   - Stats row (2 columns)
-   - "500+ Movers" | "Verified Professionals"
-```
-
-**Desktop (768px+):**
-```
-- 60/40 split (form left, hero image right)
-- 3-column "How It Works"
-- 4-column stats grid
-```
-
-### Request Move Page
-
-**Mobile Flow:**
-```
-1. Progress Bar (top)
-2. Step Content:
-   - Single-column form
-   - Large input fields (min-h-12)
-   - Visual selection cards (load size)
-   - Helper text below inputs
-3. Fixed Bottom Bar:
-   - "Next Step" CTA (full-width)
-   - Price preview (if applicable)
-```
-
-**Steps:**
-1. **Addresses:** Pickup + Dropoff with map pin icons
-2. **Load Details:** Visual cards for load size, stairs, movers
-3. **Schedule:** Calendar picker + time slots
-4. **Review:** Summary card + "Confirm Booking" CTA
-
-### My Bookings
-
-**Mobile:**
-```
-- Tab navigation (Active / Past)
-- Vertical stack of booking cards
-- Each card: 
-  - Status badge (top-right)
-  - Pickup → Dropoff
-  - Date + Time
-  - Mover info (if assigned)
-  - Price
-  - Action buttons (full-width)
-```
-
-### Browse Movers
-
-**Mobile:**
-```
-- Filter bar (fixed top)
-- 1-column grid
-- Mover cards:
-  - Large profile photo
-  - Name + verification
-  - Rating + reviews
-  - Vehicle + distance
-  - Price (bold)
-  - "Select" CTA (full-width)
-```
-
-**Desktop:**
-```
-- 3-column grid
-- Filters in left sidebar
-```
-
----
-
-## Animations & Interactions
-
-### Touch Feedback
-```css
-/* Button Press */
-.btn-press {
-  transition: transform 0.1s ease;
-}
-.btn-press:active {
-  transform: scale(0.98);
-}
-
-/* Card Hover */
-.card-hover {
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-.card-hover:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  transform: translateY(-2px);
-}
-```
-
-### Page Transitions
-- Fade in: 200ms
-- Slide up: 300ms ease-out
-- Modal: 200ms with backdrop fade
-
-### Loading States
-- Skeleton screens for content
-- Spinner for actions (20px, black/beige)
-- Progress bar for multi-step
-
----
+## Responsive Breakpoints
+- Mobile: 320px - 767px (base)
+- Tablet: 768px - 1023px (md:)
+- Desktop: 1024px+ (lg:)
 
 ## Accessibility
-
-### Touch Targets
-- **Minimum:** 44px × 44px (iOS/Android guideline)
-- **Preferred:** 48px × 48px for primary actions
-- **Spacing:** Minimum 8px between touch targets
-
-### Contrast
-- **Text:** Minimum 4.5:1 ratio
-- **Large Text:** Minimum 3:1 ratio
-- **Focus Indicators:** Visible 2px ring
-
-### Keyboard Navigation
-- Tab order follows visual flow
-- Focus visible on all interactive elements
-- Escape closes modals/dropdowns
-
-### Screen Readers
-- Semantic HTML (nav, main, section)
+- Minimum 44x44px touch targets on mobile
+- Clear focus indicators (ring-2) on all interactive elements
+- Semantic HTML: nav, main, section, article
 - ARIA labels for icon-only buttons
-- Alt text for all images
-
----
-
-## Performance
-
-### Mobile Optimization
-- Images: WebP format, lazy loading
-- Fonts: Preload Inter, subset for used characters
-- CSS: Inline critical styles
-- JS: Code splitting by route
-
-### Target Metrics
-- First Contentful Paint: < 1.5s
-- Time to Interactive: < 3.5s
-- Largest Contentful Paint: < 2.5s
-- Cumulative Layout Shift: < 0.1
-
----
-
-## Design Checklist
-
-### Every Page Must Have:
-- [ ] Responsive layout (320px → 1920px)
-- [ ] Touch-friendly buttons (min 44px)
-- [ ] No horizontal scrolling on mobile
-- [ ] Clear visual hierarchy
-- [ ] Loading states for async actions
-- [ ] Error states with helpful messages
-- [ ] Empty states with CTAs
-- [ ] Proper spacing (no cramped elements)
-
-### Every Form Must Have:
-- [ ] Clear labels above inputs
-- [ ] Helper text where needed
-- [ ] Validation with inline errors
-- [ ] Touch-friendly inputs (min-h-12)
-- [ ] Progress indicator (multi-step)
-- [ ] Clear CTAs (full-width mobile)
-
-### Every Card Must Have:
-- [ ] White background
-- [ ] Rounded corners (rounded-2xl)
-- [ ] Soft shadow
-- [ ] Adequate padding (p-4 mobile, p-6 desktop)
-- [ ] Clear hierarchy (title → content → actions)
-
----
-
-## Implementation Notes
-
-Use Tailwind CSS with these custom extensions:
-
-```javascript
-// tailwind.config.js
-theme: {
-  extend: {
-    colors: {
-      brand: {
-        black: '#111111',     // Primary CTAs, headings
-        beige: '#F5E6D3',     // Accents, highlights
-        parchment: '#FAF5ED', // Page backgrounds
-      }
-    },
-    minHeight: {
-      '12': '3rem',    // 48px - mobile buttons
-      '14': '3.5rem',  // 56px - desktop buttons
-      '16': '4rem',    // 64px - mobile header
-      '20': '5rem',    // 80px - desktop header
-    }
-  }
-}
-```
+- Keyboard navigation support for all flows

@@ -15,7 +15,7 @@ Preferred communication style: Simple, everyday language.
 *   **Technology Stack:** React 18+ (TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS).
 *   **Component Library:** shadcn/ui (Radix UI-based) with a custom mobile-first design.
 *   **State Management:** AuthContext for authentication, React Query for server state.
-*   **UI/UX:** Industry-standard mobile-first design following minimalist marketplace patterns. Brand colors: Black (#111111) for primary CTAs and headings, Beige (#F5E6D3) for warm accents and highlights, Soft Parchment (#FAF5ED) for page backgrounds. Card-based layouts, 44px+ touch targets, fixed bottom CTAs, smooth animations, and responsive breakpoints (375px, 414px, 430px, 768px+). Role-based navigation, protected routes, customer price transparency with detailed breakdowns, and intuitive booking flow.
+*   **UI/UX:** Mobile-first component design, role-based navigation and protected routes, customer price transparency with detailed breakdowns, and an intuitive booking flow.
 
 ### Backend
 
