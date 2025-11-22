@@ -175,7 +175,7 @@ export default function ProximityDemo() {
                         scale: isMatched ? [1, 1.3, 1.1] : 1,
                         zIndex: isMatched ? 10 : 1,
                       }}
-                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                      transition={{ duration: 0.8, delay: i * 0.2 }}
                     >
                       <div
                         className={`w-4 h-4 rounded-full border-2 border-white shadow-lg ${
@@ -261,7 +261,7 @@ export default function ProximityDemo() {
                         strokeDasharray="5,5"
                         initial={{ pathLength: 0 }}
                         animate={{ pathLength: 1 }}
-                        transition={{ duration: 1 }}
+                        transition={{ duration: 1.5 }}
                       />
                     </motion.svg>
                   )}
@@ -426,7 +426,7 @@ export default function ProximityDemo() {
                         key={mover.id}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.15 }}
+                        transition={{ delay: index * 0.3 }}
                         className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg border"
                         data-testid={`mover-match-${index}`}
                       >

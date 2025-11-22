@@ -121,35 +121,35 @@ export default function MoverLifecycleDemo() {
     setCurrentStep("notification");
     setShowNotification(true);
     setTimer(600);
-    await sleep(3000);
+    await sleep(4500);
 
     setCurrentStep("reviewing");
-    await sleep(3000);
+    await sleep(4500);
 
     setCurrentStep("accepted");
     setShowNotification(false);
-    await sleep(2000);
+    await sleep(3000);
 
     setCurrentStep("heading_to_pickup");
-    await sleep(3000);
+    await sleep(4500);
 
     setCurrentStep("arrived_pickup");
-    await sleep(2000);
+    await sleep(3000);
 
     setCurrentStep("loading");
-    await sleep(3000);
+    await sleep(4500);
 
     setCurrentStep("in_transit");
-    await sleep(3000);
+    await sleep(4500);
 
     setCurrentStep("arrived_dropoff");
-    await sleep(2000);
-
-    setCurrentStep("unloading");
     await sleep(3000);
 
+    setCurrentStep("unloading");
+    await sleep(4500);
+
     setCurrentStep("completed");
-    await sleep(2000);
+    await sleep(3000);
 
     setCurrentStep("paid");
     setEarnings(prev => prev + JOB_DATA.pricing.total);

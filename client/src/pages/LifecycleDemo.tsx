@@ -112,12 +112,12 @@ export default function LifecycleDemo() {
     if (!pickup || !dropoff) return;
 
     setCurrentStep("geocoding");
-    await sleep(1500);
+    await sleep(2500);
 
     const tripDistance = calculateDistance(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
     setDistance(tripDistance);
     setCurrentStep("pricing");
-    await sleep(1500);
+    await sleep(2500);
 
     const loadFees = { small: 10, medium: 25, large: 40 };
     const baseFee = 25;
@@ -133,7 +133,7 @@ export default function LifecycleDemo() {
     });
 
     setCurrentStep("matching");
-    await sleep(2000);
+    await sleep(3000);
 
     const moversWithDistance = DEMO_MOVERS.map(mover => {
       const distanceToPickup = calculateDistance(mover.lat, mover.lng, pickup.lat, pickup.lng);
@@ -153,13 +153,13 @@ export default function LifecycleDemo() {
     setCurrentStep("notifying");
     
     for (let i = 0; i < moversWithDistance.length; i++) {
-      await sleep(800);
+      await sleep(1200);
       setMatchedMovers(prev => prev.map((m, idx) => 
         idx === i ? { ...m, notified: true } : m
       ));
     }
 
-    await sleep(1000);
+    await sleep(1500);
     setCurrentStep("waiting");
     setTimer(600);
     
@@ -173,15 +173,15 @@ export default function LifecycleDemo() {
       });
     }, 100);
 
-    await sleep(3000);
+    await sleep(4500);
     clearInterval(countdown);
     
     setSelectedMover(moversWithDistance[0]);
     setCurrentStep("accepted");
-    await sleep(2000);
+    await sleep(3000);
 
     setCurrentStep("in_progress");
-    await sleep(3000);
+    await sleep(4500);
 
     setCurrentStep("completed");
   };
