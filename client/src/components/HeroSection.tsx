@@ -85,12 +85,12 @@ export default function HeroSection() {
                 <Label htmlFor="date" className="text-sm md:text-base font-semibold mb-2 block">
                   Preferred Date
                 </Label>
-                <div className="relative">
+                <div className="relative w-full">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
                   <Input
                     id="date"
                     type="date"
-                    className="pl-10 h-12 md:h-14 text-base rounded-xl border-2 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    className="pl-10 h-12 md:h-14 text-base rounded-xl border-2 focus:border-primary focus:ring-2 focus:ring-primary/20 w-full"
                     data-testid="input-date"
                   />
                 </div>
