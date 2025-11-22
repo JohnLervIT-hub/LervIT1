@@ -29,7 +29,7 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-6 md:gap-12 items-center">
           <div className="text-white text-center lg:text-left">
             <h1 className="font-bold mb-4 md:mb-6 leading-[1.3] mt-5" style={{ fontSize: 'clamp(24px, 5vw, 40px)' }}>
-              Your Easy Move
+              Calgary's Smartest Way to Move
             </h1>
             <p className="text-base md:text-lg lg:text-xl mb-6 md:mb-8 text-white/90 max-w-xl mx-auto lg:mx-0">
               Connect with trusted freelance movers in minutes. Get instant quotes, book on-demand, and track your move in real-time.
