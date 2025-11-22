@@ -3,7 +3,10 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Truck, Shield, Clock, DollarSign } from "lucide-react";
+import truckIcon from "@assets/generated_images/3d_moving_truck_icon.png";
+import dollarIcon from "@assets/generated_images/3d_dollar_sign_icon.png";
+import clockIcon from "@assets/generated_images/3d_clock_icon.png";
+import shieldIcon from "@assets/generated_images/3d_security_shield_icon.png";
 
 export default function Home() {
   const { user, isLoading } = useAuth();
@@ -25,22 +28,22 @@ export default function Home() {
 
   const features = [
     {
-      icon: <Truck className="w-8 h-8" />,
+      icon: <img src={truckIcon} alt="Moving truck" className="w-10 h-10" />,
       title: "500+ Verified Movers",
       description: "Connect with licensed, insured movers in Calgary instantly",
     },
     {
-      icon: <DollarSign className="w-8 h-8" />,
+      icon: <img src={dollarIcon} alt="Pricing" className="w-10 h-10" />,
       title: "Transparent Pricing",
       description: "Get instant quotes based on distance and load size—no hidden fees",
     },
     {
-      icon: <Clock className="w-8 h-8" />,
+      icon: <img src={clockIcon} alt="Schedule" className="w-10 h-10" />,
       title: "Flexible Scheduling",
       description: "Book on-demand or schedule for later at your convenience",
     },
     {
-      icon: <Shield className="w-8 h-8" />,
+      icon: <img src={shieldIcon} alt="Security" className="w-10 h-10" />,
       title: "Secure Payments",
       description: "Pay securely through Stripe with buyer protection",
     },
