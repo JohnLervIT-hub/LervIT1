@@ -209,7 +209,7 @@ export default function RequestMove() {
   
   // Calculate live pricing whenever form fields change
   useEffect(() => {
-    if (estimateDistance > 0 && pickupAddress && dropoffAddress && date) {
+    if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
       try {
         const breakdown = calculatePrice(
           estimateDistance,
@@ -229,7 +229,7 @@ export default function RequestMove() {
     } else {
       setPriceBreakdown(null);
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, date]);
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress]);
 
   // AI Feature 2: Generate price explanation when booking is created
   useEffect(() => {

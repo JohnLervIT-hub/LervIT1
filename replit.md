@@ -6,6 +6,30 @@ LervIT is a mobile-first web application designed as a two-sided marketplace con
 
 ## Recent Changes
 
+### Live Pricing Calculator for Booking Form (November 24, 2025)
+Implemented real-time pricing calculator that shows customers the exact price BEFORE finding movers:
+
+**Key Features:**
+- **Live Price Updates:** Pricing recalculates automatically as users fill out the booking form (pickup/dropoff addresses, load size, difficulty, heavy items, number of movers)
+- **7-Component Breakdown:** Displays all pricing components (base fee, distance, load size, pickup difficulty, dropoff difficulty, heavy items, mover travel fee) with real-time totals
+- **Responsive Design:** Right sidebar on desktop (sticky), visible below form on mobile
+- **Loading States:** Shows skeleton/loading UI while geocoding distance calculation is in progress
+- **Error Handling:** Gracefully handles geocoding failures with fallback to estimated distance
+- **Transparency:** Clear messaging that final price is confirmed after mover assignment, with note about potential mover travel fee variations
+
+**Implementation:**
+- Created `PricingSummary` component in `client/src/components/PricingSummary.tsx`
+- Added live pricing calculation via useEffect hooks in `RequestMove.tsx` that trigger on form field changes
+- Integrated Google Maps Geocoding API for accurate distance calculation before pricing
+- Uses existing `calculatePrice()` function from `shared/pricing.ts` for consistency
+- Displays subtotal before 2-movers multiplier (×1.30), then final total in CAD
+
+**UX Benefits:**
+- Customers see pricing upfront before committing to find movers
+- Builds trust through transparent, itemized pricing breakdown
+- Reduces surprises and improves booking conversion
+- Educational - helps customers understand how pricing components work
+
 ### Volume-Based Load Size Categorization with Strict AI Rules (November 24, 2025)
 Implemented comprehensive volume-based load size system with AI auto-detection, strict categorization enforcement, and visual examples:
 
