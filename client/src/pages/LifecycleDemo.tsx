@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { 
   MapPin, Navigation, DollarSign, Clock, Zap, TrendingUp, 
   User, CheckCircle, Package, MessageCircle, Star, Truck,
@@ -87,6 +88,8 @@ export default function LifecycleDemo() {
   }, [user, isLoading, setLocation]);
 
   const [currentStep, setCurrentStep] = useState<Step>("setup");
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [dropoffAddress, setDropoffAddress] = useState("");
   const [pickup, setPickup] = useState<Location | null>(null);
   const [dropoff, setDropoff] = useState<Location | null>(null);
   const [loadSize, setLoadSize] = useState<"small" | "medium" | "large">("medium");
@@ -106,6 +109,46 @@ export default function LifecycleDemo() {
       Math.sin(dLng / 2) * Math.sin(dLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  };
+
+  const geocodeAddress = async (address: string): Promise<Location | null> => {
+    try {
+      const geocoder = new google.maps.Geocoder();
+      const result = await geocoder.geocode({ address: address + ", Calgary, AB" });
+      
+      if (result.results[0]) {
+        const location = result.results[0].geometry.location;
+        return {
+          name: result.results[0].formatted_address,
+          lat: location.lat(),
+          lng: location.lng(),
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      return null;
+    }
+  };
+
+  const handlePickupChange = async (address: string) => {
+    setPickupAddress(address);
+    if (address) {
+      const location = await geocodeAddress(address);
+      setPickup(location);
+    } else {
+      setPickup(null);
+    }
+  };
+
+  const handleDropoffChange = async (address: string) => {
+    setDropoffAddress(address);
+    if (address) {
+      const location = await geocodeAddress(address);
+      setDropoff(location);
+    } else {
+      setDropoff(null);
+    }
   };
 
   const startDemo = async () => {
@@ -190,6 +233,8 @@ export default function LifecycleDemo() {
 
   const reset = () => {
     setCurrentStep("setup");
+    setPickupAddress("");
+    setDropoffAddress("");
     setPickup(null);
     setDropoff(null);
     setDistance(0);
@@ -267,46 +312,32 @@ export default function LifecycleDemo() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Pickup Location</label>
-                  <Select
-                    value={pickup?.name || ""}
-                    onValueChange={(name) => {
-                      const loc = CALGARY_LOCATIONS.find(l => l.name === name);
-                      setPickup(loc || null);
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-pickup-lifecycle">
-                      <SelectValue placeholder="Select pickup" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CALGARY_LOCATIONS.map(loc => (
-                        <SelectItem key={loc.name} value={loc.name}>
-                          {loc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CustomAddressInput
+                    value={pickupAddress}
+                    onChange={handlePickupChange}
+                    placeholder="Search and select pickup address..."
+                    data-testid="input-pickup-lifecycle"
+                  />
+                  {pickup && (
+                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> {pickup.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Dropoff Location</label>
-                  <Select
-                    value={dropoff?.name || ""}
-                    onValueChange={(name) => {
-                      const loc = CALGARY_LOCATIONS.find(l => l.name === name);
-                      setDropoff(loc || null);
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-dropoff-lifecycle">
-                      <SelectValue placeholder="Select dropoff" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CALGARY_LOCATIONS.map(loc => (
-                        <SelectItem key={loc.name} value={loc.name}>
-                          {loc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <CustomAddressInput
+                    value={dropoffAddress}
+                    onChange={handleDropoffChange}
+                    placeholder="Search and select dropoff address..."
+                    data-testid="input-dropoff-lifecycle"
+                  />
+                  {dropoff && (
+                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> {dropoff.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
