@@ -77,20 +77,51 @@ export default function AdminVerificationDashboard() {
   const [reviewStatus, setReviewStatus] = useState<string>("");
   const [rejectionReason, setRejectionReason] = useState("");
 
+  // Helper to get auth headers (same logic as queryClient)
+  const getAuthHeaders = (): Record<string, string> => {
+    const storedUser = localStorage.getItem("moveit_user");
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        if (user.id) {
+          return { "Authorization": `Bearer ${user.id}` };
+        }
+      } catch {
+        // Invalid stored user
+      }
+    }
+    return {};
+  };
+
   // Fetch drivers list
-  const { data: driversData, isLoading } = useQuery<any>({
+  const buildDriversUrl = () => {
+    const params = new URLSearchParams();
+    if (search) params.append("search", search);
+    if (statusFilter !== "ALL") params.append("statusFilter", statusFilter);
+    params.append("page", page.toString());
+    params.append("pageSize", "20");
+    return `/api/admin/verification/drivers?${params}`;
+  };
+
+  const { data: driversData, isLoading, error: driversError, isError: isDriversError } = useQuery<any>({
     queryKey: ["/api/admin/verification/drivers", search, statusFilter, page],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search) params.append("search", search);
-      if (statusFilter !== "ALL") params.append("statusFilter", statusFilter);
-      params.append("page", page.toString());
-      params.append("pageSize", "20");
+      const url = buildDriversUrl();
+      const authHeaders = getAuthHeaders();
       
-      const response = await fetch(`/api/admin/verification/drivers?${params}`, {
+      if (!authHeaders["Authorization"]) {
+        throw new Error("Not authenticated. Please log in again.");
+      }
+      
+      const response = await fetch(url, {
         credentials: "include",
+        headers: authHeaders,
       });
-      if (!response.ok) throw new Error("Failed to fetch drivers");
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch drivers: ${errorText}`);
+      }
       return response.json();
     },
   });
@@ -225,6 +256,20 @@ export default function AdminVerificationDashboard() {
           <CardContent>
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">Loading drivers...</div>
+            ) : isDriversError ? (
+              <div className="text-center py-8">
+                <div className="text-destructive font-medium mb-2">Failed to load drivers</div>
+                <p className="text-muted-foreground mb-4">
+                  {driversError instanceof Error ? driversError.message : "An error occurred"}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = "/login"}
+                  data-testid="button-relogin"
+                >
+                  Go to Login
+                </Button>
+              </div>
             ) : driversData?.drivers?.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">No drivers found</div>
             ) : (
