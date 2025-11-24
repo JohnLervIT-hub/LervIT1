@@ -1833,33 +1833,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let estimatedWeightLbs = 8;
     let recommendedVehicle = "SUV";
     
-    // File size analysis (smaller photos often = smaller items)
-    // Most phone photos are 1-3MB even for small items
-    if (sizeMB < 1.5) {
+    // File size analysis - Most modern phone photos are 2-4MB regardless of item size
+    // So we default to LIGHT items and only increase for very large files or filename patterns
+    if (sizeMB < 5) {
+      // Default for most uploads: assume small/light items (bags, shoes, clothes, boxes, small decor)
       loadSize = "small";
       estimatedWeight = "light";
       weightClass = "light";
-      estimatedWeightLbs = 8;
+      estimatedWeightLbs = 10;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
       itemType = "Small personal item";
-    } else if (sizeMB >= 1.5 && sizeMB < 4) {
+    } else if (sizeMB >= 5 && sizeMB < 8) {
+      // Larger file sizes might indicate furniture photos
       loadSize = "medium";
       estimatedWeight = "medium";
       weightClass = "medium";
-      estimatedWeightLbs = 80;
+      estimatedWeightLbs = 120;
       recommendedMovers = 1;
       recommendedVehicle = "Pickup";
-      itemType = "Medium household item";
-    } else if (sizeMB >= 4) {
+      itemType = "Medium furniture item";
+    } else {
+      // Very large files (8MB+) likely heavy furniture or appliances
       loadSize = "large";
       estimatedWeight = "heavy";
       weightClass = "heavy";
-      estimatedWeightLbs = 250;
+      estimatedWeightLbs = 300;
       heavyItem = true;
       recommendedMovers = 2;
       recommendedVehicle = "Cargo Van";
-      itemType = "Large furniture piece";
+      itemType = "Large furniture or appliance";
     }
     
     // Filename pattern detection - Enhanced with more specific descriptions
