@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { 
   Bell, MapPin, Navigation, DollarSign, Clock, CheckCircle, 
   Truck, Package, Star, User, Phone, MessageCircle, 
@@ -14,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type MoverStep = 
+  | "setup"
   | "idle" 
   | "notification" 
   | "reviewing" 
@@ -26,6 +28,12 @@ type MoverStep =
   | "unloading" 
   | "completed" 
   | "paid";
+
+type Location = {
+  name: string;
+  lat: number;
+  lng: number;
+};
 
 const STEP_INFO = {
   idle: { title: "Waiting for Jobs", icon: Clock, color: "bg-gray-500", desc: "Mover is available and waiting" },
@@ -93,7 +101,12 @@ export default function MoverLifecycleDemo() {
     }
   }, [user, isLoading, setLocation]);
 
-  const [currentStep, setCurrentStep] = useState<MoverStep>("idle");
+  const [currentStep, setCurrentStep] = useState<MoverStep>("setup");
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [dropoffAddress, setDropoffAddress] = useState("");
+  const [pickup, setPickup] = useState<Location | null>(null);
+  const [dropoff, setDropoff] = useState<Location | null>(null);
+  const [jobData, setJobData] = useState(JOB_DATA);
   const [timer, setTimer] = useState(600);
   const [showNotification, setShowNotification] = useState(false);
   const [earnings, setEarnings] = useState(285.50);
@@ -116,6 +129,93 @@ export default function MoverLifecycleDemo() {
 
     return () => clearInterval(interval);
   }, [currentStep]);
+
+  const geocodeAddress = async (address: string): Promise<Location | null> => {
+    try {
+      const geocoder = new google.maps.Geocoder();
+      const result = await geocoder.geocode({ address: address + ", Calgary, AB" });
+      
+      if (result.results[0]) {
+        const location = result.results[0].geometry.location;
+        return {
+          name: result.results[0].formatted_address,
+          lat: location.lat(),
+          lng: location.lng(),
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      return null;
+    }
+  };
+
+  const handlePickupChange = async (address: string) => {
+    setPickupAddress(address);
+    if (address) {
+      const location = await geocodeAddress(address);
+      setPickup(location);
+    } else {
+      setPickup(null);
+    }
+  };
+
+  const handleDropoffChange = async (address: string) => {
+    setDropoffAddress(address);
+    if (address) {
+      const location = await geocodeAddress(address);
+      setDropoff(location);
+    } else {
+      setDropoff(null);
+    }
+  };
+
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const configureJob = () => {
+    if (!pickup || !dropoff) return;
+
+    const distance = calculateDistance(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
+    const baseFee = 25;
+    const distanceFee = distance * 1.5;
+    const loadFee = 25;
+    const total = baseFee + distanceFee + loadFee;
+
+    setJobData({
+      ...jobData,
+      pickup: {
+        address: pickup.name,
+        neighborhood: pickup.name.split(',')[0],
+        lat: pickup.lat,
+        lng: pickup.lng,
+      },
+      dropoff: {
+        address: dropoff.name,
+        neighborhood: dropoff.name.split(',')[0],
+        lat: dropoff.lat,
+        lng: dropoff.lng,
+      },
+      distance: parseFloat(distance.toFixed(2)),
+      pricing: {
+        baseFee,
+        distanceFee: parseFloat(distanceFee.toFixed(2)),
+        loadFee,
+        moverTravel: 0,
+        total: parseFloat(total.toFixed(2)),
+      },
+    });
+
+    setCurrentStep("idle");
+  };
 
   const startDemo = async () => {
     setCurrentStep("notification");
@@ -152,20 +252,25 @@ export default function MoverLifecycleDemo() {
     await sleep(3000);
 
     setCurrentStep("paid");
-    setEarnings(prev => prev + JOB_DATA.pricing.total);
+    setEarnings(prev => prev + jobData.pricing.total);
     setCompletedJobs(prev => prev + 1);
   };
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const reset = () => {
-    setCurrentStep("idle");
+    setCurrentStep("setup");
+    setPickupAddress("");
+    setDropoffAddress("");
+    setPickup(null);
+    setDropoff(null);
+    setJobData(jobData);
     setTimer(600);
     setShowNotification(false);
   };
 
-  const stepIndex = Object.keys(STEP_INFO).indexOf(currentStep);
-  const progress = ((stepIndex + 1) / Object.keys(STEP_INFO).length) * 100;
+  const stepIndex = currentStep === "setup" ? -1 : Object.keys(STEP_INFO).indexOf(currentStep);
+  const progress = stepIndex === -1 ? 0 : ((stepIndex + 1) / Object.keys(STEP_INFO).length) * 100;
 
   return (
     <div className="min-h-screen bg-background pt-20 px-4 pb-4 md:pt-24 md:px-8 md:pb-8">
@@ -200,12 +305,25 @@ export default function MoverLifecycleDemo() {
               <CardTitle className="text-sm font-medium">Current Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <Badge className={STEP_INFO[currentStep].color}>
-                {STEP_INFO[currentStep].title}
-              </Badge>
-              <p className="text-xs text-muted-foreground mt-2">
-                {STEP_INFO[currentStep].desc}
-              </p>
+              {currentStep === "setup" ? (
+                <>
+                  <Badge className="bg-blue-500">
+                    Setup Mode
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Configure demo job settings
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Badge className={STEP_INFO[currentStep].color}>
+                    {STEP_INFO[currentStep].title}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {STEP_INFO[currentStep].desc}
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -226,6 +344,113 @@ export default function MoverLifecycleDemo() {
         </div>
 
         <AnimatePresence mode="wait">
+          {currentStep === "setup" && (
+            <motion.div
+              key="setup"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    Configure Demo Job
+                  </CardTitle>
+                  <CardDescription>Set up a realistic job scenario for the mover journey demo</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-semibold mb-3 flex items-center gap-2">
+                          <MapPin className="w-4 h-4" />
+                          Job Locations
+                        </h3>
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Pickup Address</label>
+                            <CustomAddressInput
+                              value={pickupAddress}
+                              onChange={handlePickupChange}
+                              placeholder="Search customer pickup location..."
+                              data-testid="input-pickup-mover-demo"
+                            />
+                            {pickup && (
+                              <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> {pickup.name}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Dropoff Address</label>
+                            <CustomAddressInput
+                              value={dropoffAddress}
+                              onChange={handleDropoffChange}
+                              placeholder="Search customer dropoff location..."
+                              data-testid="input-dropoff-mover-demo"
+                            />
+                            {dropoff && (
+                              <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> {dropoff.name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="p-4 bg-muted rounded-lg">
+                        <h4 className="font-semibold mb-3 flex items-center gap-2">
+                          <DollarSign className="w-4 h-4" />
+                          Demo Customer
+                        </h4>
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+                            SJ
+                          </div>
+                          <div>
+                            <p className="font-semibold">Sarah Johnson</p>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4].map(star => (
+                                <Star key={star} className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                              ))}
+                              <Star className="w-3 h-3 fill-yellow-400/30 text-yellow-400" />
+                              <span className="text-xs text-muted-foreground ml-1">4.8</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Phone className="w-4 h-4" />
+                            <span>403-555-7890</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Package className="w-4 h-4" />
+                            <span>Medium Load Size</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={configureJob}
+                        disabled={!pickup || !dropoff}
+                        className="w-full"
+                        size="lg"
+                        data-testid="button-configure-job"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Start Mover Journey
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
           {currentStep === "idle" && (
             <motion.div
               key="idle"
@@ -304,14 +529,14 @@ export default function MoverLifecycleDemo() {
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <Bell className="w-5 h-5 text-primary animate-pulse" />
-                      Job Offer #{JOB_DATA.id}
+                      Job Offer #{jobData.id}
                     </span>
                     <Badge className="bg-green-500 text-lg px-4 py-2">
-                      ${JOB_DATA.pricing.total.toFixed(2)}
+                      ${jobData.pricing.total.toFixed(2)}
                     </Badge>
                   </CardTitle>
                   <CardDescription>
-                    {JOB_DATA.distanceFromMover.toFixed(1)} km from your location
+                    {jobData.distanceFromMover.toFixed(1)} km from your location
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -321,13 +546,13 @@ export default function MoverLifecycleDemo() {
                         <h4 className="font-semibold text-sm text-muted-foreground mb-2">Customer</h4>
                         <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
                           <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
-                            {JOB_DATA.customer.avatar}
+                            {jobData.customer.avatar}
                           </div>
                           <div>
-                            <p className="font-semibold">{JOB_DATA.customer.name}</p>
+                            <p className="font-semibold">{jobData.customer.name}</p>
                             <div className="flex items-center gap-1 text-xs">
                               <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                              <span>{JOB_DATA.customer.rating}</span>
+                              <span>{jobData.customer.rating}</span>
                             </div>
                           </div>
                         </div>
@@ -339,8 +564,8 @@ export default function MoverLifecycleDemo() {
                           <div className="flex items-start gap-2">
                             <MapPin className="w-4 h-4 text-green-500 mt-0.5" />
                             <div>
-                              <p className="font-semibold text-sm">{JOB_DATA.pickup.neighborhood}</p>
-                              <p className="text-xs text-muted-foreground">{JOB_DATA.pickup.address}</p>
+                              <p className="font-semibold text-sm">{jobData.pickup.neighborhood}</p>
+                              <p className="text-xs text-muted-foreground">{jobData.pickup.address}</p>
                             </div>
                           </div>
                         </div>
@@ -352,8 +577,8 @@ export default function MoverLifecycleDemo() {
                           <div className="flex items-start gap-2">
                             <Navigation className="w-4 h-4 text-red-500 mt-0.5" />
                             <div>
-                              <p className="font-semibold text-sm">{JOB_DATA.dropoff.neighborhood}</p>
-                              <p className="text-xs text-muted-foreground">{JOB_DATA.dropoff.address}</p>
+                              <p className="font-semibold text-sm">{jobData.dropoff.neighborhood}</p>
+                              <p className="text-xs text-muted-foreground">{jobData.dropoff.address}</p>
                             </div>
                           </div>
                         </div>
@@ -366,15 +591,15 @@ export default function MoverLifecycleDemo() {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm p-2 bg-muted rounded">
                             <span className="text-muted-foreground">Load Size</span>
-                            <span className="font-medium">{JOB_DATA.loadSize}</span>
+                            <span className="font-medium">{jobData.loadSize}</span>
                           </div>
                           <div className="flex justify-between text-sm p-2 bg-muted rounded">
                             <span className="text-muted-foreground">Distance</span>
-                            <span className="font-medium">{JOB_DATA.distance.toFixed(2)} km</span>
+                            <span className="font-medium">{jobData.distance.toFixed(2)} km</span>
                           </div>
                           <div className="flex justify-between text-sm p-2 bg-muted rounded">
                             <span className="text-muted-foreground">Travel to Pickup</span>
-                            <span className="font-medium">{JOB_DATA.distanceFromMover.toFixed(1)} km</span>
+                            <span className="font-medium">{jobData.distanceFromMover.toFixed(1)} km</span>
                           </div>
                         </div>
                       </div>
@@ -384,25 +609,25 @@ export default function MoverLifecycleDemo() {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Base Fee</span>
-                            <span>${JOB_DATA.pricing.baseFee.toFixed(2)}</span>
+                            <span>${jobData.pricing.baseFee.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Distance Fee</span>
-                            <span>${JOB_DATA.pricing.distanceFee.toFixed(2)}</span>
+                            <span>${jobData.pricing.distanceFee.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Load Fee</span>
-                            <span>${JOB_DATA.pricing.loadFee.toFixed(2)}</span>
+                            <span>${jobData.pricing.loadFee.toFixed(2)}</span>
                           </div>
-                          {JOB_DATA.pricing.moverTravel > 0 && (
+                          {jobData.pricing.moverTravel > 0 && (
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Travel Bonus</span>
-                              <span className="text-green-500">+${JOB_DATA.pricing.moverTravel.toFixed(2)}</span>
+                              <span className="text-green-500">+${jobData.pricing.moverTravel.toFixed(2)}</span>
                             </div>
                           )}
                           <div className="flex justify-between font-bold text-lg pt-2 border-t">
                             <span>Total</span>
-                            <span className="text-green-500">${JOB_DATA.pricing.total.toFixed(2)}</span>
+                            <span className="text-green-500">${jobData.pricing.total.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
@@ -469,11 +694,11 @@ export default function MoverLifecycleDemo() {
                       <CardContent className="space-y-3">
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
-                            {JOB_DATA.customer.avatar}
+                            {jobData.customer.avatar}
                           </div>
                           <div>
-                            <p className="font-semibold">{JOB_DATA.customer.name}</p>
-                            <p className="text-sm text-muted-foreground">{JOB_DATA.customer.phone}</p>
+                            <p className="font-semibold">{jobData.customer.name}</p>
+                            <p className="text-sm text-muted-foreground">{jobData.customer.phone}</p>
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -498,9 +723,9 @@ export default function MoverLifecycleDemo() {
                           <div className="p-3 bg-primary/10 rounded-lg">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-sm font-medium">Pickup Location</span>
-                              <Badge variant="secondary">{JOB_DATA.distanceFromMover.toFixed(1)} km</Badge>
+                              <Badge variant="secondary">{jobData.distanceFromMover.toFixed(1)} km</Badge>
                             </div>
-                            <p className="text-xs text-muted-foreground">{JOB_DATA.pickup.address}</p>
+                            <p className="text-xs text-muted-foreground">{jobData.pickup.address}</p>
                           </div>
                           <Button className="w-full" size="sm">
                             <Navigation className="w-3 h-3 mr-2" />
@@ -571,8 +796,8 @@ export default function MoverLifecycleDemo() {
                         }`} />
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold">Pickup - {JOB_DATA.pickup.neighborhood}</p>
-                        <p className="text-sm text-muted-foreground">{JOB_DATA.pickup.address}</p>
+                        <p className="font-semibold">Pickup - {jobData.pickup.neighborhood}</p>
+                        <p className="text-sm text-muted-foreground">{jobData.pickup.address}</p>
                       </div>
                       {(currentStep === "loading" || currentStep === "in_transit" || currentStep === "arrived_dropoff" || currentStep === "unloading") && (
                         <CheckCircle className="w-5 h-5 text-green-500" />
@@ -588,7 +813,7 @@ export default function MoverLifecycleDemo() {
                             <span className="font-semibold">In Transit</span>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {JOB_DATA.distance.toFixed(2)} km • ETA 12 minutes
+                            {jobData.distance.toFixed(2)} km • ETA 12 minutes
                           </p>
                           <Progress value={65} className="h-2 mt-2" />
                         </div>
@@ -608,8 +833,8 @@ export default function MoverLifecycleDemo() {
                         }`} />
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold">Dropoff - {JOB_DATA.dropoff.neighborhood}</p>
-                        <p className="text-sm text-muted-foreground">{JOB_DATA.dropoff.address}</p>
+                        <p className="font-semibold">Dropoff - {jobData.dropoff.neighborhood}</p>
+                        <p className="text-sm text-muted-foreground">{jobData.dropoff.address}</p>
                       </div>
                       {currentStep === "unloading" && (
                         <CheckCircle className="w-5 h-5 text-green-500" />
@@ -662,7 +887,7 @@ export default function MoverLifecycleDemo() {
                       <DollarSign className="w-10 h-10" />
                     </div>
                     <h3 className="text-3xl font-bold mb-2 text-green-500">
-                      +${JOB_DATA.pricing.total.toFixed(2)}
+                      +${jobData.pricing.total.toFixed(2)}
                     </h3>
                     <p className="text-muted-foreground mb-4">Payment received</p>
                     <div className="flex justify-center gap-2 mb-4">
@@ -683,11 +908,11 @@ export default function MoverLifecycleDemo() {
                       <CardContent className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Job ID</span>
-                          <span className="font-mono">{JOB_DATA.id}</span>
+                          <span className="font-mono">{jobData.id}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Distance</span>
-                          <span>{JOB_DATA.distance.toFixed(2)} km</span>
+                          <span>{jobData.distance.toFixed(2)} km</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Duration</span>
@@ -695,7 +920,7 @@ export default function MoverLifecycleDemo() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Load Size</span>
-                          <span>{JOB_DATA.loadSize}</span>
+                          <span>{jobData.loadSize}</span>
                         </div>
                       </CardContent>
                     </Card>
