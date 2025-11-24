@@ -17,9 +17,15 @@ type Location = {
 type Mover = {
   id: string;
   name: string;
+  quadrant: string;
   lat: number;
   lng: number;
   color: string;
+  verified: boolean;
+  rating: number;
+  tripCount: number;
+  vehicle: string;
+  vehicleType: string;
 };
 
 const CALGARY_LOCATIONS: Location[] = [
@@ -34,10 +40,71 @@ const CALGARY_LOCATIONS: Location[] = [
 ];
 
 const DEMO_MOVERS: Mover[] = [
-  { id: "1", name: "North Calgary Mover", lat: 50.9805, lng: -113.8919, color: "#3b82f6" },
-  { id: "2", name: "South Calgary Mover", lat: 51.0859, lng: -114.1139, color: "#8b5cf6" },
-  { id: "3", name: "Downtown Mover", lat: 51.1316, lng: -114.1022, color: "#ec4899" },
-  { id: "4", name: "Central Mover", lat: 51.0474, lng: -113.9796, color: "#f59e0b" },
+  { 
+    id: "1", 
+    name: "John Doe", 
+    quadrant: "SW Calgary",
+    lat: 50.9805, 
+    lng: -114.1319, 
+    color: "#3b82f6",
+    verified: true,
+    rating: 4.9,
+    tripCount: 212,
+    vehicle: "Ford Transit",
+    vehicleType: "Large Van"
+  },
+  { 
+    id: "2", 
+    name: "Sarah Chen", 
+    quadrant: "NW Calgary",
+    lat: 51.0859, 
+    lng: -114.1439, 
+    color: "#8b5cf6",
+    verified: true,
+    rating: 4.8,
+    tripCount: 187,
+    vehicle: "RAM ProMaster",
+    vehicleType: "Cargo Van"
+  },
+  { 
+    id: "3", 
+    name: "Mike Johnson", 
+    quadrant: "NE Calgary",
+    lat: 51.1116, 
+    lng: -113.9622, 
+    color: "#ec4899",
+    verified: true,
+    rating: 4.7,
+    tripCount: 156,
+    vehicle: "Chevy Express",
+    vehicleType: "Large Van"
+  },
+  { 
+    id: "4", 
+    name: "David Park", 
+    quadrant: "SE Calgary",
+    lat: 50.9874, 
+    lng: -113.9596, 
+    color: "#f59e0b",
+    verified: false,
+    rating: 4.6,
+    tripCount: 94,
+    vehicle: "Ford F-150",
+    vehicleType: "Pickup Truck"
+  },
+  { 
+    id: "5", 
+    name: "Lisa Wong", 
+    quadrant: "Downtown",
+    lat: 51.0547, 
+    lng: -114.0669, 
+    color: "#10b981",
+    verified: true,
+    rating: 5.0,
+    tripCount: 243,
+    vehicle: "Mercedes Sprinter",
+    vehicleType: "Large Van"
+  },
 ];
 
 export default function ProximityDemo() {
@@ -177,7 +244,7 @@ export default function ProximityDemo() {
       total: baseFee + distanceFee + loadFee,
     });
 
-    setMatchedMovers(moversWithDistance.slice(0, 4));
+    setMatchedMovers(moversWithDistance.slice(0, 5));
     setShowMatching(true);
   };
 
@@ -340,9 +407,11 @@ export default function ProximityDemo() {
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 {DEMO_MOVERS.map(mover => (
-                  <div key={mover.id} className="flex items-center gap-2 text-sm">
+                  <div key={mover.id} className="flex items-center gap-2 text-xs">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: mover.color }} />
-                    <span className="text-muted-foreground">{mover.name.split(' ')[0]}</span>
+                    <span className="text-muted-foreground">
+                      {mover.name} - {mover.quadrant}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -485,51 +554,73 @@ export default function ProximityDemo() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {matchedMovers.map((mover, index) => (
-                      <motion.div
-                        key={mover.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.3 }}
-                        className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg border"
-                        data-testid={`mover-match-${index}`}
-                      >
-                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground font-bold text-xl">
-                          #{index + 1}
-                        </div>
-                        
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: mover.color }}
-                            />
-                            <span className="font-semibold">{mover.name}</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
-                              {mover.distanceToPickup.toFixed(2)} km to pickup
-                            </span>
-                            {mover.travelFee > 0 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +${mover.travelFee.toFixed(2)} travel fee
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
+                    {matchedMovers.map((mover, index) => {
+                      const eta = Math.ceil(mover.distanceToPickup * 2.2); // ~2.2 min per km in Calgary traffic
+                      
+                      return (
+                        <motion.div
+                          key={mover.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.2 }}
+                          className="p-4 bg-card rounded-lg border hover-elevate"
+                          data-testid={`mover-match-${index}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold text-lg shrink-0">
+                              #{index + 1}
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className="font-bold text-lg">{mover.name}</span>
+                                <span className="text-sm text-muted-foreground">{mover.quadrant}</span>
+                                {mover.verified && (
+                                  <Badge variant="default" className="text-xs gap-1">
+                                    🛡️ Verified
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              <div className="flex items-center gap-1 mb-2 text-sm">
+                                <span className="text-amber-500">⭐</span>
+                                <span className="font-medium">{mover.rating.toFixed(1)}</span>
+                                <span className="text-muted-foreground">({mover.tripCount} trips)</span>
+                              </div>
 
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-primary">
-                            ${mover.earnings.toFixed(2)}
+                              <div className="space-y-1 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  🚐 <span className="font-medium">Vehicle:</span> {mover.vehicle} ({mover.vehicleType})
+                                </div>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className="flex items-center gap-1">
+                                    📍 {mover.distanceToPickup.toFixed(2)} km away
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    ⏱️ ETA: {eta} min
+                                  </span>
+                                  {mover.travelFee > 0 && (
+                                    <span className="text-amber-600 dark:text-amber-500 font-medium">
+                                      +${mover.travelFee.toFixed(2)} travel fee
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div className="text-2xl font-bold text-primary mb-1">
+                                ${mover.earnings.toFixed(2)}
+                              </div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
+                                <Clock className="w-3 h-3" />
+                                Expires in 10 min
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            Expires in 10 min
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </div>
 
                   <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-primary/20">
