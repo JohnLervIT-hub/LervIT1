@@ -20,9 +20,10 @@ const PRICING_CONFIG = {
   MOVER_TRAVEL_RATE_PER_KM: 0.75,
   MOVER_TRAVEL_FREE_RADIUS_KM: 5,
   LOAD_FEES: {
-    small: 0.00,
-    medium: 15.00,
-    large: 30.00,
+    boxes: 0.00,      // 1-10 ft³: No fee for smallest items
+    medium: 15.00,    // 11-50 ft³: Small furniture
+    large: 30.00,     // 50-150 ft³: Large furniture
+    apartment: 45.00, // 150+ ft³: Full room furniture
   },
   PICKUP_DIFFICULTY_FEES: {
     ground: 0.00,
@@ -49,7 +50,7 @@ export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICUL
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,
-  loadSize: 'small' | 'medium' | 'large',
+  loadSize: 'boxes' | 'medium' | 'large' | 'apartment',
   pickupDifficulty: PickupDifficultyType,
   dropoffDifficulty: DropoffDifficultyType,
   heavyItem: boolean,
