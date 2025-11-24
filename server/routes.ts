@@ -447,6 +447,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         moverImage: true,
       });
       const updates = validateBody(updateSchema, req.body);
+      
+      // VERIFICATION CHECK: If trying to go online, verify all requirements are met
+      if (updates.isAvailable === true && user.role !== "admin") {
+        const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
+        const items = await db.select().from(verificationItems).where(eq(verificationItems.moverId, req.params.id));
+        
+        const now = new Date();
+        const missingItems: string[] = [];
+        const incompleteItems: { type: string; status: string }[] = [];
+        
+        for (const type of requiredTypes) {
+          const item = items.find(i => i.type === type);
+          
+          if (!item) {
+            missingItems.push(type);
+            incompleteItems.push({ type, status: 'missing' });
+          } else if (item.expiryDate && item.expiryDate < now) {
+            incompleteItems.push({ type, status: 'expired' });
+          } else if (item.status !== 'approved') {
+            incompleteItems.push({ type, status: item.status });
+          }
+        }
+        
+        if (incompleteItems.length > 0) {
+          return res.status(400).json({ 
+            error: "VERIFICATION_INCOMPLETE",
+            message: "You must complete all verification requirements before going online",
+            missingItems,
+            incompleteItems
+          });
+        }
+      }
+      
       const updatedMover = await storage.updateMover(req.params.id, updates);
       res.json(updatedMover);
     } catch (error) {
