@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
@@ -34,6 +35,11 @@ function isLoadSizeSmaller(selected: string, aiRecommended: string): boolean {
 
 function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Helper function to check if items require 2 movers
+function requiresTwoMovers(loadSize: string, heavyItem: boolean): boolean {
+  return loadSize === 'large' || loadSize === 'apartment' || heavyItem;
 }
 
 export default function RequestMove() {
@@ -71,6 +77,10 @@ export default function RequestMove() {
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
+
+  // Single mover warning state
+  const [showSingleMoverWarning, setShowSingleMoverWarning] = useState(false);
+  const [hasSingleMoverAcknowledgment, setHasSingleMoverAcknowledgment] = useState(false);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
@@ -230,6 +240,15 @@ export default function RequestMove() {
       setPriceBreakdown(null);
     }
   }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress]);
+
+  // Show warning when user selects 1 mover for items that require 2 movers
+  useEffect(() => {
+    const needsTwoMovers = requiresTwoMovers(loadSize, heavyItem);
+    
+    if (numberOfMovers === 1 && needsTwoMovers && !hasSingleMoverAcknowledgment) {
+      setShowSingleMoverWarning(true);
+    }
+  }, [numberOfMovers, loadSize, heavyItem, hasSingleMoverAcknowledgment]);
 
   // AI Feature 2: Generate price explanation when booking is created
   useEffect(() => {
@@ -830,10 +849,17 @@ export default function RequestMove() {
                     </div>
 
                     <div className="border-t pt-6">
-                      <Label className="text-base font-semibold mb-4 block flex items-center gap-2">
+                      <Label className="text-base font-semibold mb-2 block flex items-center gap-2">
                         <Users className="w-5 h-5" />
                         Number of Movers
                       </Label>
+                      {requiresTwoMovers(loadSize, heavyItem) && (
+                        <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                          <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
+                            <strong>Recommended: 2 Movers</strong> - Your load size or heavy items typically require assistance from 2 movers for safe handling.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                       <div className="grid grid-cols-2 gap-4">
                         <button
                           type="button"
@@ -990,6 +1016,61 @@ export default function RequestMove() {
         </div>
       </div>
     </div>
+
+    {/* Single Mover Warning Dialog */}
+    <AlertDialog open={showSingleMoverWarning} onOpenChange={setShowSingleMoverWarning}>
+      <AlertDialogContent data-testid="dialog-single-mover-warning">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-amber-500" />
+            Important: Single Mover Selection
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-base space-y-3">
+            <p>
+              Based on your items ({loadSize === 'large' ? 'large furniture' : loadSize === 'apartment' ? 'apartment-sized load' : 'heavy items'}), 
+              we recommend <strong>2 movers</strong> for safe and efficient moving.
+            </p>
+            
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-2">
+              <p className="font-semibold text-amber-900 dark:text-amber-100">
+                By choosing 1 mover, you acknowledge:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm text-amber-900 dark:text-amber-100">
+                <li>You may need to help the mover with loading and unloading</li>
+                <li>The mover can request your assistance for heavy items</li>
+                <li>If you refuse to help and the mover cancels the job, you will forfeit 50% of the payment</li>
+              </ul>
+            </div>
+
+            <p className="text-sm font-medium">
+              This policy protects movers from unsafe working conditions and ensures fair compensation.
+            </p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+          <AlertDialogCancel
+            onClick={() => {
+              setNumberOfMovers(2);
+              setShowSingleMoverWarning(false);
+            }}
+            data-testid="button-choose-two-movers"
+            className="sm:flex-1"
+          >
+            Change to 2 Movers (Recommended)
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setHasSingleMoverAcknowledgment(true);
+              setShowSingleMoverWarning(false);
+            }}
+            data-testid="button-accept-single-mover"
+            className="sm:flex-1 bg-amber-600 hover:bg-amber-700"
+          >
+            I Understand - Continue with 1 Mover
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }
