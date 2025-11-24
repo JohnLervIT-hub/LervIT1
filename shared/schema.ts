@@ -21,10 +21,17 @@ export const movers = pgTable("movers", {
   userId: varchar("user_id").references(() => users.id).notNull(),
   vehicleType: text("vehicle_type").notNull(),
   vehicleCapacity: text("vehicle_capacity"),
+  vehiclePhoto: text("vehicle_photo"),
+  vehicleColor: text("vehicle_color"),
+  licensePlate: text("license_plate"),
   licenseNumber: text("license_number"),
+  moverImage: text("mover_image"),
   isVerified: boolean("is_verified").default(false).notNull(),
+  profileVerified: boolean("profile_verified").default(false).notNull(),
+  documentsVerified: boolean("documents_verified").default(false).notNull(),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
   totalMoves: integer("total_moves").default(0).notNull(),
+  completedTrips: integer("completed_trips").default(0).notNull(),
   bio: text("bio"),
   location: text("location"),
   latitude: doublePrecision("latitude"),
@@ -74,6 +81,9 @@ export const bookings = pgTable("bookings", {
   aiEstimate: text("ai_estimate"),
   aiExplanation: text("ai_explanation"),
   aiPhotoAnalysis: text("ai_photo_analysis"),
+  aiWeightClass: text("ai_weight_class"),
+  aiRecommendedVehicle: text("ai_recommended_vehicle"),
+  aiConfidenceScore: decimal("ai_confidence_score", { precision: 3, scale: 2 }),
   
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
@@ -143,6 +153,7 @@ export const insertMoverSchema = createInsertSchema(movers).omit({
   createdAt: true,
   rating: true,
   totalMoves: true,
+  completedTrips: true,
 });
 
 export const insertBookingSchema = createInsertSchema(bookings).omit({

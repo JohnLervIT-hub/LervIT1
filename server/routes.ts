@@ -592,16 +592,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/bookings", async (req: Request, res: Response) => {
     try {
-      const customerId = req.query.customerId as string | undefined;
-      const moverId = req.query.moverId as string | undefined;
+      // CRITICAL SECURITY: Require authentication
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
       
       let bookings;
-      if (customerId) {
-        bookings = await storage.getBookingsByCustomer(customerId);
-      } else if (moverId) {
-        bookings = await storage.getBookingsByMover(moverId);
+      
+      // SECURITY: Force filtering based on user role - ignore query parameters
+      if (user.role === "customer") {
+        // Customers can ONLY see their own bookings
+        bookings = await storage.getBookingsByCustomer(user.id);
+      } else if (user.role === "mover") {
+        // Movers can see:
+        // 1. Bookings assigned to them
+        // 2. Available/unassigned bookings (pending status, moverId = null)
+        const movers = await storage.getMoversByUserId(user.id);
+        if (movers.length === 0) {
+          return res.json([]); // Mover profile not set up yet
+        }
+        const moverId = movers[0].id;
+        
+        // Get assigned bookings
+        const assignedBookings = await storage.getBookingsByMover(moverId);
+        
+        // Get all pending bookings (available to accept)
+        const allPendingBookings = await storage.getAllBookings();
+        const availableBookings = allPendingBookings.filter(
+          (b) => b.status === "pending" && b.moverId === null
+        );
+        
+        // Combine both sets (remove duplicates)
+        const bookingMap = new Map();
+        [...assignedBookings, ...availableBookings].forEach((b) => bookingMap.set(b.id, b));
+        bookings = Array.from(bookingMap.values());
+      } else if (user.role === "admin") {
+        // Admins can filter by customerId or moverId or see all
+        const customerId = req.query.customerId as string | undefined;
+        const moverId = req.query.moverId as string | undefined;
+        
+        if (customerId) {
+          bookings = await storage.getBookingsByCustomer(customerId);
+        } else if (moverId) {
+          bookings = await storage.getBookingsByMover(moverId);
+        } else {
+          bookings = await storage.getAllBookings();
+        }
       } else {
-        bookings = await storage.getAllBookings();
+        return res.status(403).json({ error: "Access denied" });
       }
       
       // Enrich with customer and mover data
@@ -616,7 +653,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
             mover: mover && moverUser ? {
               id: mover.id,
-              name: moverUser.name,
+              userId: moverUser.id,
+              moverImage: mover.moverImage,
+              user: { id: moverUser.id, name: moverUser.name },
               vehicleType: mover.vehicleType,
               rating: mover.rating
             } : null
@@ -1239,17 +1278,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let recommendedMovers = 1;
     let itemType = "Furniture item";
     let estimatedWeight: "light" | "medium" | "heavy" = "medium";
+    let weightClass: "light" | "medium" | "heavy" = "medium";
+    let estimatedWeightLbs = 200;
+    let recommendedVehicle = "Cargo Van";
     
     // File size analysis (smaller photos often = smaller items)
     if (sizeMB < 1) {
       loadSize = "small";
       estimatedWeight = "light";
+      weightClass = "light";
+      estimatedWeightLbs = 50;
       recommendedMovers = 1;
+      recommendedVehicle = "SUV";
     } else if (sizeMB > 3) {
       loadSize = "large";
       estimatedWeight = "heavy";
+      weightClass = "heavy";
+      estimatedWeightLbs = 600;
       heavyItem = true;
       recommendedMovers = 2;
+      recommendedVehicle = "Cube Truck";
     }
     
     // Filename pattern detection
@@ -1257,25 +1305,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (lowerName.includes('sofa') || lowerName.includes('couch')) {
       itemType = "Sofa/Couch";
       loadSize = "large";
+      weightClass = "medium";
+      estimatedWeightLbs = 300;
       heavyItem = true;
       recommendedMovers = 2;
+      recommendedVehicle = "Cargo Van";
     } else if (lowerName.includes('table') || lowerName.includes('desk')) {
       itemType = "Table/Desk";
       loadSize = "medium";
+      weightClass = "medium";
+      estimatedWeightLbs = 150;
       recommendedMovers = 1;
+      recommendedVehicle = "Pickup";
     } else if (lowerName.includes('bed') || lowerName.includes('mattress')) {
       itemType = "Bed/Mattress";
       loadSize = "large";
+      weightClass = "medium";
+      estimatedWeightLbs = 250;
       recommendedMovers = 2;
+      recommendedVehicle = "Cargo Van";
     } else if (lowerName.includes('chair') || lowerName.includes('stool')) {
       itemType = "Chair";
       loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 40;
       recommendedMovers = 1;
+      recommendedVehicle = "Car";
     } else if (lowerName.includes('appliance') || lowerName.includes('fridge') || lowerName.includes('washer')) {
       itemType = "Appliance";
       loadSize = "large";
+      weightClass = "heavy";
+      estimatedWeightLbs = 550;
       heavyItem = true;
       recommendedMovers = 2;
+      recommendedVehicle = "Cube Truck";
     }
     
     return {
@@ -1284,8 +1347,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedMovers,
       itemType,
       estimatedWeight,
+      weightClass,
+      estimatedWeightLbs,
+      recommendedVehicle,
       confidence: 75,
-      explanation: `Based on image analysis, this appears to be a ${itemType.toLowerCase()} with ${estimatedWeight} weight. We recommend ${recommendedMovers} mover${recommendedMovers > 1 ? 's' : ''} for safe handling.`
+      explanation: `Based on image analysis, this appears to be a ${itemType.toLowerCase()} with ${estimatedWeight} weight (~${estimatedWeightLbs} lbs). We recommend ${recommendedMovers} mover${recommendedMovers > 1 ? 's' : ''} and a ${recommendedVehicle} for safe handling.`,
+      allowManualOverride: true
     };
   }
 
@@ -1320,10 +1387,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       type: 'text',
                       text: `Analyze this furniture/item photo for a moving service. Determine:
 1. Load size (small/medium/large)
-2. Is it a heavy item? (true/false)
+2. Is it a heavy item requiring special care? (true/false)
 3. Recommended number of movers (1 or 2)
 4. Item type/category
 5. Estimated weight category (light/medium/heavy)
+6. Approximate weight in pounds (integer)
+7. Recommended vehicle type (Car, SUV, Pickup, Cargo Van, Cube Truck, Flatbed)
+
+Weight classes:
+- Light: <100 lbs → Car, Small SUV
+- Medium: 100-500 lbs → Pickup or Cargo Van
+- Heavy: >500 lbs → Cube Truck, Flatbed
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -1332,8 +1406,12 @@ Respond ONLY with valid JSON in this exact format:
   "recommendedMovers": 1 | 2,
   "itemType": "string",
   "estimatedWeight": "light" | "medium" | "heavy",
+  "weightClass": "light" | "medium" | "heavy",
+  "estimatedWeightLbs": number,
+  "recommendedVehicle": "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed",
   "confidence": 0-100,
-  "explanation": "brief explanation"
+  "explanation": "brief explanation",
+  "allowManualOverride": true
 }`
                     },
                     {

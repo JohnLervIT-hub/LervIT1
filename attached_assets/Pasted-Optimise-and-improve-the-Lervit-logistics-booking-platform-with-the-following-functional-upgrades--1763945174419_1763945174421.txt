@@ -1,0 +1,60 @@
+Optimise and improve the Lervit logistics booking platform with the following functional upgrades:
+
+1️⃣ Booking Experience Upgrade:
+• Ensure booking cannot proceed without capturing BOTH pickup and drop-off addresses. 
+• Address fields must be mandatory, using real-time geolocation/autocomplete API (Google Maps, Mapbox, etc.).
+• Integrate address validation to avoid incomplete or incorrect data entry.
+
+2️⃣ AI Photo Analyser Optimisation:
+• Enhance the AI photo analyser to accurately detect load size, item dimensions, and approximate weight class.
+• Based on detected weight class, automatically suggest:
+    - Number of movers required (1-man, 2-man, or more)
+    - Preferred vehicle type (Van, Pickup, Cube Truck, Flatbed, etc.)
+• Add confidence scoring for photo analysis and allow manual override by the user.
+
+3️⃣ New User Dashboard Correction:
+• Ensure new customers or movers DO NOT see past or active bookings belonging to others.
+• Only show bookings that are directly linked to the logged-in user account.
+• Fix database filtering: Use account ID and user role to filter dashboard content.
+
+4️⃣ Mover Profile Visibility at Booking Confirmation:
+On booking confirmation, the customer must be able to view detailed mover profile including:
+| Field | Requirement |
+|-------|-------------|
+| Vehicle Type | Mandatory |
+| Vehicle Photo | Mandatory |
+| Vehicle Colour | Mandatory |
+| License Plate Number | Mandatory |
+| Mover Image | Mandatory |
+| Mover Rating | Mandatory |
+| Trips Successfully Completed | Mandatory |
+| Mover Description/Bio | Optional but encouraged |
+
+• Display this in a clean, card-style UI on the confirmation screen and in the customer dashboard.
+• Add “Report a Mover” or “Contact Support” button for safety concerns.
+
+5️⃣ Vehicle Recommendation Logic:
+• Based on item size, weight range, and pickup conditions (stairs, basement, elevator etc.), automatically assign or suggest the best vehicle class.
+• Example mapping:
+    - Light items (<100lbs) → Car, Small SUV
+    - Medium loads (100–500lbs) → Pickup or Cargo Van
+    - Heavy/bulky (>500lbs) → Cube Truck, Flatbed
+
+• Movers without appropriate vehicle types should not receive such requests.
+
+6️⃣ Admin Portal Enhancement:
+• Grant admin full visibility of customer AND mover profiles.
+• Admin should view:
+    - Full contact info
+    - Document uploads (ID, Insurance, License)
+    - Mover vehicle registration and status
+    - Booking history, trip analytics, ratings, disputes, etc.
+• Allow admin to edit, suspend, or verify profiles from the dashboard.
+
+💡 General Requirements:
+• Use role-based access control (admin, mover, customer).
+• Ensure GDPR/PII compliance for sensitive data.
+• Maintain clean UI/UX — critical info should be easily accessible.
+• All mandatory profile fields should be enforced before movers appear as available.
+
+Please optimize all functions above, improving security, user experience, and intelligent automation for a more professional and reliable logistics platform.

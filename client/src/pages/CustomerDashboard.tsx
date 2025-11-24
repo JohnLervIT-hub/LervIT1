@@ -1,64 +1,68 @@
-import { useState } from "react";
-import BookingCard from "@/components/BookingCard";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Plus, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
-import moverPhoto1 from "@assets/generated_images/male_mover_profile_photo.png";
-import moverPhoto2 from "@assets/generated_images/female_mover_profile_photo.png";
+import { format } from "date-fns";
 
-//todo: remove mock functionality
-const mockBookings = [
-  {
-    id: "1",
-    moverName: "Sarah Chen",
-    moverPhoto: moverPhoto2,
-    pickupAddress: "123 Main St SW, Calgary, AB",
-    dropoffAddress: "456 Oak Ave NW, Calgary, AB",
-    date: "Dec 28, 2024",
-    time: "2:00 PM",
-    status: "confirmed" as const,
-    price: 185,
-  },
-  {
-    id: "2",
-    moverName: "Mike Johnson",
-    moverPhoto: moverPhoto1,
-    pickupAddress: "789 Pine Rd SE, Calgary, AB",
-    dropoffAddress: "321 Maple Dr NE, Calgary, AB",
-    date: "Dec 30, 2024",
-    time: "10:00 AM",
-    status: "pending" as const,
-    price: 165,
-  },
-];
-
-const mockPastBookings = [
-  {
-    id: "3",
-    moverName: "David Martinez",
-    moverPhoto: moverPhoto1,
-    pickupAddress: "555 River St, Calgary, AB",
-    dropoffAddress: "888 Park Ave, Calgary, AB",
-    date: "Dec 15, 2024",
-    time: "1:00 PM",
-    status: "completed" as const,
-    price: 145,
-  },
-];
+type Booking = {
+  id: string;
+  customerId: string;
+  moverId: string | null;
+  pickupAddress: string;
+  dropoffAddress: string;
+  loadSize: string;
+  preferredDate: string;
+  status: string;
+  price: string | null;
+  mover?: {
+    id: string;
+    userId: string;
+    moverImage: string | null;
+    user: {
+      id: string;
+      name: string;
+    };
+  };
+};
 
 export default function CustomerDashboard() {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
 
+  // Fetch bookings for this customer ONLY (server enforces filtering by role)
+  const { data: bookings, isLoading } = useQuery<Booking[]>({
+    queryKey: ["/api/bookings"],
+    enabled: !!user?.id,
+  });
+
+  // Filter active bookings (not completed/cancelled)
+  const activeBookings = bookings?.filter((b) => 
+    b.status === "pending" || b.status === "confirmed" || b.status === "in_transit"
+  ) || [];
+
+  // Filter past bookings (completed/cancelled)
+  const pastBookings = bookings?.filter((b) => 
+    b.status === "completed" || b.status === "cancelled"
+  ) || [];
+
   const handleMessage = (id: string) => {
-    console.log("Message booking:", id);
-    setLocation("/messages");
+    setLocation(`/messages/${id}`);
   };
 
   const handleViewDetails = (id: string) => {
-    console.log("View details:", id);
-    setLocation(`/booking/${id}`);
+    setLocation(`/my-bookings`);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-12">
@@ -81,15 +85,15 @@ export default function CustomerDashboard() {
         <Tabs defaultValue="active" className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="active" data-testid="tab-active">
-              Active Bookings
+              Active Bookings ({activeBookings.length})
             </TabsTrigger>
             <TabsTrigger value="past" data-testid="tab-past">
-              Past Bookings
+              Past Bookings ({pastBookings.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="active" className="space-y-4">
-            {mockBookings.length === 0 ? (
+            {activeBookings.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground mb-4">No active bookings</p>
                 <Button onClick={() => setLocation("/request-move")}>
@@ -97,30 +101,91 @@ export default function CustomerDashboard() {
                 </Button>
               </div>
             ) : (
-              mockBookings.map((booking) => (
-                <BookingCard
-                  key={booking.id}
-                  {...booking}
-                  onMessage={handleMessage}
-                  onViewDetails={handleViewDetails}
-                />
+              activeBookings.map((booking) => (
+                <Card key={booking.id} className="p-6" data-testid={`card-booking-${booking.id}`}>
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-lg">
+                          {booking.pickupAddress}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          to {booking.dropoffAddress}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(booking.preferredDate), "MMM dd, yyyy 'at' h:mm a")}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg">
+                          ${parseFloat(booking.price || "0").toFixed(2)}
+                        </p>
+                        <p className="text-sm text-muted-foreground capitalize">
+                          {booking.status}
+                        </p>
+                      </div>
+                    </div>
+                    {booking.mover && (
+                      <div className="text-sm text-muted-foreground">
+                        Mover: {booking.mover.user.name}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking.id)}>
+                        View Details
+                      </Button>
+                      {booking.moverId && (
+                        <Button variant="ghost" size="sm" onClick={() => handleMessage(booking.id)}>
+                          Message
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
               ))
             )}
           </TabsContent>
 
           <TabsContent value="past" className="space-y-4">
-            {mockPastBookings.length === 0 ? (
+            {pastBookings.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">No past bookings</p>
               </div>
             ) : (
-              mockPastBookings.map((booking) => (
-                <BookingCard
-                  key={booking.id}
-                  {...booking}
-                  onMessage={handleMessage}
-                  onViewDetails={handleViewDetails}
-                />
+              pastBookings.map((booking) => (
+                <Card key={booking.id} className="p-6" data-testid={`card-booking-${booking.id}`}>
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-lg">
+                          {booking.pickupAddress}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          to {booking.dropoffAddress}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(booking.preferredDate), "MMM dd, yyyy 'at' h:mm a")}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg">
+                          ${parseFloat(booking.price || "0").toFixed(2)}
+                        </p>
+                        <p className="text-sm text-muted-foreground capitalize">
+                          {booking.status}
+                        </p>
+                      </div>
+                    </div>
+                    {booking.mover && (
+                      <div className="text-sm text-muted-foreground">
+                        Mover: {booking.mover.user.name}
+                      </div>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking.id)}>
+                      View Details
+                    </Button>
+                  </div>
+                </Card>
               ))
             )}
           </TabsContent>

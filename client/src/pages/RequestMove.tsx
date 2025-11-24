@@ -185,6 +185,35 @@ export default function RequestMove() {
   };
 
   const handleNext = () => {
+    // Step 1: Validate addresses (MANDATORY)
+    if (step === 1) {
+      if (!pickupAddress || pickupAddress.trim() === "") {
+        toast({
+          title: "Pickup address required",
+          description: "Please enter a valid pickup address to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!dropoffAddress || dropoffAddress.trim() === "") {
+        toast({
+          title: "Dropoff address required",
+          description: "Please enter a valid dropoff address to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Both addresses must be different
+      if (pickupAddress.trim().toLowerCase() === dropoffAddress.trim().toLowerCase()) {
+        toast({
+          title: "Invalid addresses",
+          description: "Pickup and dropoff addresses must be different.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (step < 3) {
       setStep(step + 1);
     } else {

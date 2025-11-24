@@ -45,8 +45,12 @@ export interface PhotoAnalysisResult {
   recommendedMovers: 1 | 2;
   itemType: string;
   estimatedWeight: string;
+  weightClass: "light" | "medium" | "heavy";
+  estimatedWeightLbs: number;
+  recommendedVehicle: string;
   confidence: number;
   explanation: string;
+  allowManualOverride: boolean;
 }
 
 /**

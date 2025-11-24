@@ -62,17 +62,15 @@ export default function MoverDashboard() {
     select: (data) => Array.isArray(data) ? data[0] : data,
   });
 
-  // Then get bookings for this mover
-  const { data: bookings, isLoading } = useQuery<Booking[]>({
-    queryKey: [`/api/bookings?moverId=${mover?.id}`],
-    enabled: !!mover?.id,
+  // Get all bookings for this mover (server returns assigned + available)
+  const { data: allBookings, isLoading } = useQuery<Booking[]>({
+    queryKey: ["/api/bookings"],
+    enabled: !!user?.id,
   });
 
-  // Get all pending bookings (not assigned to any mover)
-  const { data: availableBookings } = useQuery<Booking[]>({
-    queryKey: ["/api/bookings"],
-    select: (data) => data.filter((b: Booking) => b.status === "pending" && !b.moverId),
-  });
+  // Client-side filtering: separate assigned from available bookings
+  const bookings = allBookings?.filter((b) => b.moverId === mover?.id) || [];
+  const availableBookings = allBookings?.filter((b) => b.status === "pending" && !b.moverId) || [];
 
   // Get earnings data for this mover
   const { data: earnings } = useQuery<any>({
@@ -88,7 +86,6 @@ export default function MoverDashboard() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings?moverId=${mover?.id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       toast({
         title: "Booking accepted",
@@ -102,7 +99,7 @@ export default function MoverDashboard() {
       return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
     },
     onSuccess: (_, bookingId) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings?moverId=${mover?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       // Stop location sharing when trip is completed
       if (locationSharing === bookingId) {
         setLocationSharing(null);
@@ -119,7 +116,7 @@ export default function MoverDashboard() {
       return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "in_transit" });
     },
     onSuccess: (_, bookingId) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings?moverId=${mover?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       setLocationSharing(bookingId);
       toast({
         title: "Trip started",
