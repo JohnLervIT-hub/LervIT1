@@ -6,14 +6,22 @@ LervIT is a mobile-first web application designed as a two-sided marketplace con
 
 ## Recent Changes
 
-### Volume-Based Load Size Categorization with Strict AI Rules (November 24, 2025)
-Implemented comprehensive volume-based load size system with AI auto-detection, strict categorization enforcement, and visual examples:
+### Volume-Based Load Size Categorization with Strict AI Rules & Expert Vehicle Recommendations (November 24, 2025)
+Implemented comprehensive volume-based load size system with AI auto-detection, strict categorization enforcement, expert logistics-based vehicle recommendations, and visual examples:
 
-**Load Size Categories:**
+**Load Size Categories with Expert Vehicle Recommendations:**
 - **Boxes (1-10 ft³):** Small personal items - shoes, bags, boxes, lamps, monitors - No fee
+  - **Vehicle:** Compact Cargo Van (RAM ProMaster City, Nissan NV200)
+  - **Rationale:** Enclosed protection from Calgary winters while maintaining maneuverability
 - **Medium (11-50 ft³):** Small furniture - chairs, small tables, TVs, bookshelves - $15 fee
+  - **Vehicle:** Long-Wheelbase SUV (Ford Expedition, Nissan Armada) or Short-Box Pickup with tonneau
+  - **Rationale:** Best balance of cargo space and maneuverability for medium furniture
 - **Large (50-150 ft³):** Large furniture - sofas, beds, fridges, dressers - $30 fee
+  - **Vehicle:** 3/4-Ton Cargo Van (Mercedes Sprinter 2500, Ford Transit 250 HD) with lift-gate
+  - **Rationale:** Lift-gate equipped for heavy furniture like sofas, beds, and appliances
 - **Apartment (150+ ft³):** Full room furniture or multiple large items - $45 fee
+  - **Vehicle:** 5-Ton Cube Truck (26') with power lift-gate
+  - **Rationale:** 26' truck with power lift-gate for full apartment moves
 
 **Strict AI Categorization Rules:**
 To prevent misclassification (e.g., sofas being categorized as "Medium"), implemented mandatory categorization lists that CANNOT be overridden:
