@@ -187,6 +187,19 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   dropoffDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
   loadSize: z.enum(['small', 'medium', 'large']),
   numberOfMovers: z.number().int().min(1).max(2),
+  // Allow detected items array (optional) - matches DetectedItem interface from shared/ai.ts
+  detectedItems: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    category: z.enum(["furniture", "appliance", "box", "heavy_item", "fragile", "other"]),
+    quantity: z.number(),
+    estimatedWeightLbs: z.number(),
+    estimatedCubicFeet: z.number(),
+    loadSize: z.enum(["small", "medium", "large"]),
+    requiresSpecialCare: z.boolean(),
+    imageUrl: z.string().optional(),
+    confidence: z.number(),
+  })).nullable().optional(),
 });
 
 export const insertMessageSchema = createInsertSchema(messages).omit({

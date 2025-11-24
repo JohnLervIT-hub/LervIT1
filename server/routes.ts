@@ -1040,6 +1040,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
         ...(bookingData.estimatedWeightLbs !== undefined && { estimatedWeightLbs: bookingData.estimatedWeightLbs }),
+        ...(bookingData.detectedItems && { detectedItems: bookingData.detectedItems }),
         pickupLatitude: pickupGeo.coordinates.lat,
         pickupLongitude: pickupGeo.coordinates.lng,
         dropoffLatitude: dropoffGeo.coordinates.lat,
