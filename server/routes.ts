@@ -122,6 +122,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   }));
   
+  // ===== GOOGLE PLACES API PROXY =====
+  // Secure proxy for Google Places Autocomplete API
+  app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
+    try {
+      const { input, sessiontoken } = req.query;
+      
+      // Validate input parameters
+      if (!input || typeof input !== 'string') {
+        return res.status(400).json({ error: "Input parameter is required" });
+      }
+      
+      if (input.length < 3) {
+        return res.json({ predictions: [] });
+      }
+      
+      // Sanitize input (prevent injection attacks)
+      const sanitizedInput = input.trim().slice(0, 200); // Limit length
+      
+      // Get API key from server environment (never expose to client)
+      const apiKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        console.error('[PLACES API] Missing Google Maps API key');
+        return res.status(500).json({ error: "API configuration error" });
+      }
+      
+      // Build Google Places Autocomplete API URL
+      const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
+      url.searchParams.append('input', sanitizedInput);
+      url.searchParams.append('key', apiKey);
+      url.searchParams.append('types', 'address');
+      url.searchParams.append('components', 'country:ca');
+      
+      // Bias to Calgary
+      url.searchParams.append('location', '51.0447,-114.0719');
+      url.searchParams.append('radius', '50000');
+      
+      // Add session token if provided (for billing optimization)
+      if (sessiontoken && typeof sessiontoken === 'string') {
+        url.searchParams.append('sessiontoken', sessiontoken);
+      }
+      
+      // Make request to Google Places API
+      const response = await fetch(url.toString());
+      
+      if (!response.ok) {
+        console.error('[PLACES API] Google API error:', response.status);
+        return res.status(500).json({ error: "Failed to fetch predictions" });
+      }
+      
+      const data = await response.json();
+      
+      // Return predictions to client (without exposing API key)
+      res.json({
+        predictions: data.predictions || [],
+        status: data.status
+      });
+      
+    } catch (error) {
+      console.error('[PLACES API] Error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
   // ===== AUTH ROUTES =====
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {
