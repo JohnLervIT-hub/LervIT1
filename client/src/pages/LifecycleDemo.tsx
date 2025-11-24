@@ -249,33 +249,33 @@ export default function LifecycleDemo() {
   const progress = ((stepIndex + 1) / Object.keys(STEP_INFO).length) * 100;
 
   return (
-    <div className="min-h-screen bg-background pt-20 px-4 pb-4 md:pt-24 md:px-8 md:pb-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold flex items-center justify-center gap-3">
-            <Zap className="w-10 h-10 text-primary" />
-            Full Lifecycle Demo
+    <div className="min-h-screen bg-background pt-20 px-4 pb-8 md:pt-24 md:px-6 lg:px-8 md:pb-12">
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+        <div className="text-center space-y-3 md:space-y-4">
+          <h1 className="flex items-center justify-center gap-2 md:gap-3">
+            <Zap className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 text-primary" />
+            <span>Full Lifecycle Demo</span>
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-muted-foreground max-w-2xl mx-auto px-4">
             Watch a complete booking journey from creation to completion
           </p>
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
+          <CardHeader className="space-y-4">
+            <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <span className="flex items-center gap-2 md:gap-3">
                 {(() => {
                   const StepIcon = STEP_INFO[currentStep].icon;
-                  return <StepIcon className="w-5 h-5" />;
+                  return <StepIcon className="w-5 h-5 md:w-6 md:h-6" />;
                 })()}
-                {STEP_INFO[currentStep].title}
+                <span className="text-lg md:text-xl">{STEP_INFO[currentStep].title}</span>
               </span>
               <Badge className={STEP_INFO[currentStep].color}>
                 Step {stepIndex + 1} of {Object.keys(STEP_INFO).length}
               </Badge>
             </CardTitle>
-            <Progress value={progress} className="h-2" />
+            <Progress value={progress} className="h-2 md:h-2.5" />
           </CardHeader>
         </Card>
 
@@ -283,21 +283,21 @@ export default function LifecycleDemo() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid md:grid-cols-2 gap-6"
+            className="grid md:grid-cols-2 gap-4 md:gap-6"
           >
             <Card>
-              <CardHeader>
-                <CardTitle>Customer Information</CardTitle>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg md:text-xl">Customer Information</CardTitle>
                 <CardDescription>Demo customer creating a booking</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                  <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg">
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-base md:text-lg flex-shrink-0">
                     JD
                   </div>
-                  <div>
-                    <p className="font-semibold">John Doe</p>
-                    <p className="text-sm text-muted-foreground">john.doe@email.com</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-base md:text-lg truncate">John Doe</p>
+                    <p className="text-sm text-muted-foreground truncate">john.doe@email.com</p>
                     <p className="text-sm text-muted-foreground">403-555-1234</p>
                   </div>
                 </div>
@@ -305,13 +305,13 @@ export default function LifecycleDemo() {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Booking Details</CardTitle>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg md:text-xl">Booking Details</CardTitle>
                 <CardDescription>Configure the move</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 md:space-y-5">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Pickup Location</label>
+                  <label className="text-sm font-semibold">Pickup Location</label>
                   <CustomAddressInput
                     value={pickupAddress}
                     onChange={handlePickupChange}
@@ -319,14 +319,15 @@ export default function LifecycleDemo() {
                     data-testid="input-pickup-lifecycle"
                   />
                   {pickup && (
-                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> {pickup.name}
+                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1.5 mt-1.5">
+                      <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{pickup.name}</span>
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Dropoff Location</label>
+                  <label className="text-sm font-semibold">Dropoff Location</label>
                   <CustomAddressInput
                     value={dropoffAddress}
                     onChange={handleDropoffChange}
@@ -334,14 +335,15 @@ export default function LifecycleDemo() {
                     data-testid="input-dropoff-lifecycle"
                   />
                   {dropoff && (
-                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> {dropoff.name}
+                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1.5 mt-1.5">
+                      <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{dropoff.name}</span>
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Load Size</label>
+                  <label className="text-sm font-semibold">Load Size</label>
                   <Select value={loadSize} onValueChange={(val: any) => setLoadSize(val)}>
                     <SelectTrigger data-testid="select-loadsize-lifecycle">
                       <SelectValue />
@@ -357,11 +359,11 @@ export default function LifecycleDemo() {
                 <Button
                   onClick={startDemo}
                   disabled={!pickup || !dropoff}
-                  className="w-full"
+                  className="w-full mt-2"
                   size="lg"
                   data-testid="button-start-lifecycle"
                 >
-                  <Zap className="w-4 h-4 mr-2" />
+                  <Zap className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                   Start Booking Journey
                 </Button>
               </CardContent>
@@ -418,52 +420,52 @@ export default function LifecycleDemo() {
           >
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 animate-pulse" />
-                  Calculating Dynamic Pricing...
+                <CardTitle className="flex items-center gap-2 md:gap-3">
+                  <DollarSign className="w-5 h-5 md:w-6 md:h-6 animate-pulse" />
+                  <span className="text-lg md:text-xl">Calculating Dynamic Pricing...</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-center mb-4">
-                  <p className="text-sm text-muted-foreground">Distance Calculated</p>
-                  <p className="text-3xl font-bold text-primary">{distance.toFixed(2)} km</p>
+              <CardContent className="space-y-5 md:space-y-6">
+                <div className="text-center mb-2">
+                  <p className="text-sm md:text-base text-muted-foreground mb-2">Distance Calculated</p>
+                  <p className="text-3xl md:text-4xl font-bold text-primary">{distance.toFixed(2)} km</p>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3 md:space-y-4">
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="flex justify-between p-3 bg-muted rounded-lg"
+                    className="flex justify-between items-center p-3 md:p-4 bg-muted rounded-lg"
                   >
-                    <span>Base Fee</span>
-                    <span className="font-bold">${priceBreakdown.baseFee.toFixed(2)}</span>
+                    <span className="text-sm md:text-base">Base Fee</span>
+                    <span className="font-bold text-base md:text-lg">${priceBreakdown.baseFee.toFixed(2)}</span>
                   </motion.div>
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="flex justify-between p-3 bg-muted rounded-lg"
+                    className="flex justify-between items-center p-3 md:p-4 bg-muted rounded-lg"
                   >
-                    <span>Distance Fee ({distance.toFixed(2)} km × $1.50)</span>
-                    <span className="font-bold">${priceBreakdown.distanceFee.toFixed(2)}</span>
+                    <span className="text-sm md:text-base">Distance Fee ({distance.toFixed(2)} km × $1.50)</span>
+                    <span className="font-bold text-base md:text-lg">${priceBreakdown.distanceFee.toFixed(2)}</span>
                   </motion.div>
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.6 }}
-                    className="flex justify-between p-3 bg-muted rounded-lg"
+                    className="flex justify-between items-center p-3 md:p-4 bg-muted rounded-lg"
                   >
-                    <span>Load Fee ({loadSize})</span>
-                    <span className="font-bold">${priceBreakdown.loadFee.toFixed(2)}</span>
+                    <span className="text-sm md:text-base">Load Fee ({loadSize})</span>
+                    <span className="font-bold text-base md:text-lg">${priceBreakdown.loadFee.toFixed(2)}</span>
                   </motion.div>
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.8 }}
-                    className="flex justify-between p-4 bg-primary/10 border-2 border-primary rounded-lg"
+                    className="flex justify-between items-center p-4 md:p-5 bg-primary/10 border-2 border-primary rounded-lg"
                   >
-                    <span className="font-bold text-lg">Total Price</span>
-                    <span className="font-bold text-2xl text-primary">${priceBreakdown.total.toFixed(2)}</span>
+                    <span className="font-bold text-base md:text-lg">Total Price</span>
+                    <span className="font-bold text-2xl md:text-3xl text-primary">${priceBreakdown.total.toFixed(2)}</span>
                   </motion.div>
                 </div>
               </CardContent>

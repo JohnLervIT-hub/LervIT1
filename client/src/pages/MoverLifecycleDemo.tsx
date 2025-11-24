@@ -273,53 +273,53 @@ export default function MoverLifecycleDemo() {
   const progress = stepIndex === -1 ? 0 : ((stepIndex + 1) / Object.keys(STEP_INFO).length) * 100;
 
   return (
-    <div className="min-h-screen bg-background pt-20 px-4 pb-4 md:pt-24 md:px-8 md:pb-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold flex items-center justify-center gap-3">
-            <Truck className="w-10 h-10 text-primary" />
-            Mover's Journey
+    <div className="min-h-screen bg-background pt-20 px-4 pb-8 md:pt-24 md:px-6 lg:px-8 md:pb-12">
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+        <div className="text-center space-y-3 md:space-y-4">
+          <h1 className="flex items-center justify-center gap-2 md:gap-3">
+            <Truck className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 text-primary" />
+            <span>Mover's Journey</span>
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-muted-foreground max-w-2xl mx-auto px-4">
             Experience the complete job lifecycle from a mover's perspective
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-4 md:gap-5">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Today's Earnings</CardTitle>
+            <CardHeader className="pb-3 md:pb-4">
+              <CardTitle className="text-sm md:text-base font-semibold">Today's Earnings</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-500">
+              <div className="text-2xl md:text-3xl font-bold text-green-500">
                 ${earnings.toFixed(2)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs md:text-sm text-muted-foreground mt-1.5">
                 {completedJobs} jobs completed
               </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Current Status</CardTitle>
+            <CardHeader className="pb-3 md:pb-4">
+              <CardTitle className="text-sm md:text-base font-semibold">Current Status</CardTitle>
             </CardHeader>
             <CardContent>
               {currentStep === "setup" ? (
                 <>
-                  <Badge className="bg-blue-500">
+                  <Badge className="bg-blue-500 text-xs md:text-sm">
                     Setup Mode
                   </Badge>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs md:text-sm text-muted-foreground mt-2">
                     Configure demo job settings
                   </p>
                 </>
               ) : (
                 <>
-                  <Badge className={STEP_INFO[currentStep].color}>
+                  <Badge className={`${STEP_INFO[currentStep].color} text-xs md:text-sm`}>
                     {STEP_INFO[currentStep].title}
                   </Badge>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs md:text-sm text-muted-foreground mt-2">
                     {STEP_INFO[currentStep].desc}
                   </p>
                 </>
@@ -328,16 +328,16 @@ export default function MoverLifecycleDemo() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Progress</CardTitle>
+            <CardHeader className="pb-3 md:pb-4">
+              <CardTitle className="text-sm md:text-base font-semibold">Progress</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
+              <div className="space-y-2 md:space-y-3">
+                <div className="flex justify-between text-xs md:text-sm font-medium">
                   <span>Step {stepIndex + 1} of {Object.keys(STEP_INFO).length}</span>
                   <span>{progress.toFixed(0)}%</span>
                 </div>
-                <Progress value={progress} className="h-2" />
+                <Progress value={progress} className="h-2 md:h-2.5" />
               </div>
             </CardContent>
           </Card>

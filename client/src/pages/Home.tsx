@@ -53,26 +53,26 @@ export default function Home() {
     <div className="min-h-screen">
       <HeroSection />
 
-      <section className="py-20 bg-muted/30">
+      <section className="py-12 md:py-16 lg:py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
+            <h2 className="mb-3 md:mb-4">
               Why Choose LervIT?
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
               The smartest, safest, and most affordable way to move in Calgary
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 lg:gap-6">
             {features.map((feature, index) => (
               <Card key={index} className="hover-elevate" data-testid={`card-feature-${index}`}>
-                <CardContent className="p-6 text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-4">
+                <CardContent className="p-5 md:p-6 text-center">
+                  <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-primary/10 text-primary mb-3 md:mb-4">
                     {feature.icon}
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  <h3 className="font-semibold text-base md:text-lg mb-2">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
                 </CardContent>
               </Card>
             ))}
@@ -80,15 +80,15 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-20">
+      <section id="how-it-works" className="py-12 md:py-16 lg:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
+            <h2 className="mb-0">
               How It Works
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-6 md:gap-8 lg:gap-10">
             {[
               {
                 step: "1",
@@ -107,11 +107,11 @@ export default function Home() {
               },
             ].map((step, index) => (
               <div key={index} className="text-center" data-testid={`step-${index}`}>
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent text-accent-foreground font-bold text-2xl mb-4">
+                <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-accent text-accent-foreground font-bold text-xl md:text-2xl mb-3 md:mb-4">
                   {step.step}
                 </div>
-                <h3 className="font-semibold text-xl mb-2">{step.title}</h3>
-                <p className="text-muted-foreground">{step.description}</p>
+                <h3 className="font-semibold text-lg md:text-xl mb-2 md:mb-3">{step.title}</h3>
+                <p className="text-sm md:text-base text-muted-foreground leading-relaxed">{step.description}</p>
               </div>
             ))}
           </div>
