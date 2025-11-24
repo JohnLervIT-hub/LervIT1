@@ -53,6 +53,32 @@ export interface PhotoAnalysisResult {
   allowManualOverride: boolean;
 }
 
+// Enhanced Multi-Photo Item Detection Types
+export interface DetectedItem {
+  id: string; // Unique identifier for the detected item
+  name: string; // Specific item description (e.g., "Queen-size bed", "Leather sofa")
+  category: "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other";
+  quantity: number; // How many of this item (editable by user)
+  estimatedWeightLbs: number; // Weight per item
+  estimatedCubicFeet: number; // Volume per item
+  loadSize: "small" | "medium" | "large";
+  requiresSpecialCare: boolean; // Heavy/fragile items
+  imageUrl?: string; // URL of the photo where this was detected
+  confidence: number; // AI confidence score (0-100)
+}
+
+export interface MultiplePhotosAnalysisResult {
+  detectedItems: DetectedItem[]; // Combined list of all detected items with quantities
+  totalCubicFeet: number; // Sum of all items' cubic feet
+  totalWeightLbs: number; // Sum of all items' weight
+  recommendedMovers: 1 | 2; // Based on total weight and items
+  recommendedVehicle: "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed";
+  loadSize: "small" | "medium" | "large"; // Overall load size
+  heavyItemCount: number; // Count of heavy/fragile items
+  confidence: number; // Overall analysis confidence
+  explanation: string; // Natural language summary
+}
+
 /**
  * AI Feature 1: Predict price range based on partial booking information
  * Uses heuristics and historical averages to provide early estimate
@@ -227,4 +253,105 @@ export function generatePriceExplanation(breakdown: PriceBreakdown): string {
   }
   
   return parts.join("\n");
+}
+
+/**
+ * AI Feature 4: Duplicate Detection - Group similar items from multiple photos
+ * Uses fuzzy matching to detect duplicate items across photos
+ */
+export function detectDuplicates(items: DetectedItem[]): DetectedItem[] {
+  if (items.length === 0) return [];
+  
+  const grouped: Map<string, DetectedItem> = new Map();
+  
+  for (const item of items) {
+    // Normalize name for comparison
+    const normalized = item.name.toLowerCase().trim();
+    
+    // Find existing similar item
+    let found = false;
+    for (const [key, existingItem] of grouped.entries()) {
+      const existingNormalized = existingItem.name.toLowerCase().trim();
+      
+      // Check for similarity using simple keyword matching
+      if (
+        normalized === existingNormalized ||
+        normalized.includes(existingNormalized) ||
+        existingNormalized.includes(normalized)
+      ) {
+        // Increment quantity of existing item
+        existingItem.quantity += item.quantity;
+        existingItem.confidence = Math.max(existingItem.confidence, item.confidence);
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      // Add new item to grouped map
+      grouped.set(item.id, { ...item });
+    }
+  }
+  
+  return Array.from(grouped.values());
+}
+
+/**
+ * Calculate total metrics from detected items
+ */
+export function calculateTotals(items: DetectedItem[]): {
+  totalCubicFeet: number;
+  totalWeightLbs: number;
+  recommendedMovers: 1 | 2;
+  recommendedVehicle: string;
+  loadSize: "small" | "medium" | "large";
+  heavyItemCount: number;
+} {
+  const totalCubicFeet = items.reduce((sum, item) => 
+    sum + (item.estimatedCubicFeet * item.quantity), 0
+  );
+  
+  const totalWeightLbs = items.reduce((sum, item) => 
+    sum + (item.estimatedWeightLbs * item.quantity), 0
+  );
+  
+  const heavyItemCount = items.filter(item => item.requiresSpecialCare).length;
+  
+  // Determine recommended movers based on weight and heavy items
+  const recommendedMovers: 1 | 2 = totalWeightLbs > 500 || heavyItemCount > 2 ? 2 : 1;
+  
+  // Determine load size based on cubic feet
+  let loadSize: "small" | "medium" | "large";
+  if (totalCubicFeet < 50) {
+    loadSize = "small";
+  } else if (totalCubicFeet < 200) {
+    loadSize = "medium";
+  } else {
+    loadSize = "large";
+  }
+  
+  // Determine recommended vehicle based on cubic feet and weight
+  let recommendedVehicle: string;
+  if (totalCubicFeet < 30 && totalWeightLbs < 200) {
+    recommendedVehicle = "Car";
+  } else if (totalCubicFeet < 60 && totalWeightLbs < 500) {
+    recommendedVehicle = "SUV";
+  } else if (totalCubicFeet < 100 && totalWeightLbs < 1000) {
+    recommendedVehicle = "Pickup";
+  } else if (totalCubicFeet < 300 && totalWeightLbs < 3000) {
+    recommendedVehicle = "Cargo Van";
+  } else if (totalCubicFeet < 500 && totalWeightLbs < 5000) {
+    recommendedVehicle = "Cube Truck";
+  } else {
+    recommendedVehicle = "Flatbed";
+  }
+  
+  return {
+    totalCubicFeet: Math.round(totalCubicFeet * 10) / 10,
+    totalWeightLbs: Math.round(totalWeightLbs),
+    recommendedMovers,
+    recommendedVehicle,
+    loadSize,
+    heavyItemCount
+  };
 }
