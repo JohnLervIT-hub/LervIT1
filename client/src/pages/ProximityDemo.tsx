@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { GoogleMap, Marker, Polyline, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,11 @@ export default function ProximityDemo() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
+  // Load Google Maps API
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
+
   // Redirect authenticated users to their role-specific dashboard
   useEffect(() => {
     // Wait for auth to finish loading before redirecting
@@ -64,18 +70,38 @@ export default function ProximityDemo() {
   const [showMatching, setShowMatching] = useState(false);
   const [matchedMovers, setMatchedMovers] = useState<any[]>([]);
   const [priceBreakdown, setPriceBreakdown] = useState<any>(null);
+  const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
 
-  const latToY = (lat: number) => {
-    const minLat = 50.95;
-    const maxLat = 51.15;
-    return ((maxLat - lat) / (maxLat - minLat)) * 100;
+  // Map configuration
+  const mapContainerStyle = {
+    width: '100%',
+    height: '500px'
   };
 
-  const lngToX = (lng: number) => {
-    const minLng = -114.15;
-    const maxLng = -113.85;
-    return ((lng - minLng) / (maxLng - minLng)) * 100;
+  const calgaryCenter = {
+    lat: 51.0447,
+    lng: -114.0719
   };
+
+  const mapOptions: google.maps.MapOptions = {
+    disableDefaultUI: false,
+    zoomControl: true,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    styles: [
+      {
+        featureType: "poi",
+        elementType: "labels",
+        stylers: [{ visibility: "off" }]
+      }
+    ]
+  };
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    setMap(map);
+  }, []);
 
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
@@ -154,119 +180,145 @@ export default function ProximityDemo() {
               <CardDescription>Movers and booking locations</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="relative w-full aspect-square bg-muted rounded-lg border-2 border-border overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-green-50/50 dark:from-blue-950/20 dark:to-green-950/20" />
-                
-                {DEMO_MOVERS.map((mover, i) => {
-                  const isMatched = matchedMovers.some(m => m.id === mover.id);
-                  const matchRank = matchedMovers.findIndex(m => m.id === mover.id);
-                  
-                  return (
-                    <motion.div
-                      key={mover.id}
-                      className="absolute flex flex-col items-center gap-1"
-                      style={{
-                        left: `${lngToX(mover.lng)}%`,
-                        top: `${latToY(mover.lat)}%`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                      initial={{ scale: 1 }}
-                      animate={{
-                        scale: isMatched ? [1, 1.3, 1.1] : 1,
-                        zIndex: isMatched ? 10 : 1,
-                      }}
-                      transition={{ duration: 0.8, delay: i * 0.2 }}
-                    >
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 border-white shadow-lg ${
-                          isMatched ? 'ring-4 ring-primary/50' : ''
-                        }`}
-                        style={{ backgroundColor: mover.color }}
-                      />
-                      {isMatched && (
-                        <Badge className="text-xs" data-testid={`badge-rank-${matchRank + 1}`}>
-                          #{matchRank + 1}
-                        </Badge>
-                      )}
-                    </motion.div>
-                  );
-                })}
+              {loadError ? (
+                <div className="flex items-center justify-center h-[500px] bg-muted rounded-lg">
+                  <div className="text-center">
+                    <p className="text-destructive mb-2">Failed to load Google Maps</p>
+                    <p className="text-sm text-muted-foreground">Please check your API key configuration</p>
+                  </div>
+                </div>
+              ) : !isLoaded ? (
+                <div className="flex items-center justify-center h-[500px] bg-muted rounded-lg">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading Google Maps...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg overflow-hidden border-2 border-border">
+                  <GoogleMap
+                    mapContainerStyle={mapContainerStyle}
+                    center={calgaryCenter}
+                    zoom={11}
+                    options={mapOptions}
+                    onLoad={onMapLoad}
+                  >
+                    {/* Mover Markers */}
+                    {DEMO_MOVERS.map((mover, i) => {
+                      const isMatched = matchedMovers.some(m => m.id === mover.id);
+                      const matchRank = matchedMovers.findIndex(m => m.id === mover.id);
+                      
+                      return (
+                        <Marker
+                          key={mover.id}
+                          position={{ lat: mover.lat, lng: mover.lng }}
+                          icon={{
+                            path: google.maps.SymbolPath.CIRCLE,
+                            fillColor: mover.color,
+                            fillOpacity: isMatched ? 1 : 0.8,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 3,
+                            scale: isMatched ? 12 : 8,
+                          }}
+                          onClick={() => setSelectedMarker(`mover-${mover.id}`)}
+                          zIndex={isMatched ? 1000 + i : 1}
+                          data-testid={`marker-mover-${mover.id}`}
+                        />
+                      );
+                    })}
 
-                <AnimatePresence>
-                  {pickup && (
-                    <motion.div
-                      className="absolute"
-                      style={{
-                        left: `${lngToX(pickup.lng)}%`,
-                        top: `${latToY(pickup.lat)}%`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0, opacity: 0 }}
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-6 h-6 bg-green-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-                          <MapPin className="w-4 h-4 text-white" />
-                        </div>
-                        <span className="text-xs font-semibold bg-background px-2 py-0.5 rounded border">
+                    {/* Pickup Marker (Green) */}
+                    {pickup && (
+                      <Marker
+                        position={{ lat: pickup.lat, lng: pickup.lng }}
+                        icon={{
+                          url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                        }}
+                        onClick={() => setSelectedMarker('pickup')}
+                        data-testid="marker-pickup"
+                      />
+                    )}
+
+                    {/* Dropoff Marker (Red) */}
+                    {dropoff && (
+                      <Marker
+                        position={{ lat: dropoff.lat, lng: dropoff.lng }}
+                        icon={{
+                          url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                        }}
+                        onClick={() => setSelectedMarker('dropoff')}
+                        data-testid="marker-dropoff"
+                      />
+                    )}
+
+                    {/* Route Line */}
+                    {pickup && dropoff && (
+                      <Polyline
+                        path={[
+                          { lat: pickup.lat, lng: pickup.lng },
+                          { lat: dropoff.lat, lng: dropoff.lng }
+                        ]}
+                        options={{
+                          strokeColor: "#22c55e",
+                          strokeOpacity: 0.8,
+                          strokeWeight: 4,
+                          geodesic: true,
+                        }}
+                      />
+                    )}
+
+                    {/* Info Windows */}
+                    {selectedMarker === 'pickup' && pickup && (
+                      <InfoWindow
+                        position={{ lat: pickup.lat, lng: pickup.lng }}
+                        onCloseClick={() => setSelectedMarker(null)}
+                      >
+                        <div>
+                          <strong className="text-green-600">Pickup Location</strong><br />
                           {pickup.name}
-                        </span>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {dropoff && (
-                    <motion.div
-                      className="absolute"
-                      style={{
-                        left: `${lngToX(dropoff.lng)}%`,
-                        top: `${latToY(dropoff.lat)}%`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0, opacity: 0 }}
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-                          <Navigation className="w-4 h-4 text-white" />
                         </div>
-                        <span className="text-xs font-semibold bg-background px-2 py-0.5 rounded border">
-                          {dropoff.name}
-                        </span>
-                      </div>
-                    </motion.div>
-                  )}
+                      </InfoWindow>
+                    )}
 
-                  {pickup && dropoff && (
-                    <motion.svg
-                      className="absolute inset-0 w-full h-full pointer-events-none"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <defs>
-                        <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="rgb(34, 197, 94)" />
-                          <stop offset="100%" stopColor="rgb(239, 68, 68)" />
-                        </linearGradient>
-                      </defs>
-                      <motion.line
-                        x1={`${lngToX(pickup.lng)}%`}
-                        y1={`${latToY(pickup.lat)}%`}
-                        x2={`${lngToX(dropoff.lng)}%`}
-                        y2={`${latToY(dropoff.lat)}%`}
-                        stroke="url(#lineGradient)"
-                        strokeWidth="3"
-                        strokeDasharray="5,5"
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ duration: 1.5 }}
-                      />
-                    </motion.svg>
-                  )}
-                </AnimatePresence>
-              </div>
+                    {selectedMarker === 'dropoff' && dropoff && (
+                      <InfoWindow
+                        position={{ lat: dropoff.lat, lng: dropoff.lng }}
+                        onCloseClick={() => setSelectedMarker(null)}
+                      >
+                        <div>
+                          <strong className="text-red-600">Dropoff Location</strong><br />
+                          {dropoff.name}
+                        </div>
+                      </InfoWindow>
+                    )}
+
+                    {DEMO_MOVERS.map((mover) => {
+                      const isMatched = matchedMovers.some(m => m.id === mover.id);
+                      const matchRank = matchedMovers.findIndex(m => m.id === mover.id);
+                      const moverData = matchedMovers.find(m => m.id === mover.id);
+
+                      return selectedMarker === `mover-${mover.id}` && (
+                        <InfoWindow
+                          key={`info-${mover.id}`}
+                          position={{ lat: mover.lat, lng: mover.lng }}
+                          onCloseClick={() => setSelectedMarker(null)}
+                        >
+                          <div>
+                            <strong style={{ color: mover.color }}>{mover.name}</strong><br />
+                            {isMatched && moverData && (
+                              <>
+                                <span className="text-sm">Rank: #{matchRank + 1}</span><br />
+                                <span className="text-sm">Distance to pickup: {moverData.distanceToPickup.toFixed(2)} km</span><br />
+                                <span className="text-sm">Potential earnings: ${moverData.earnings.toFixed(2)}</span>
+                              </>
+                            )}
+                          </div>
+                        </InfoWindow>
+                      );
+                    })}
+                  </GoogleMap>
+                </div>
+              )}
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 {DEMO_MOVERS.map(mover => (
