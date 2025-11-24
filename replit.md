@@ -48,6 +48,11 @@ Preferred communication style: Simple, everyday language.
     *   **AI Price Breakdown Explainer:** Natural language explanations for pricing components.
     *   **AI Item Detection from Photo:** Uses OpenAI Vision API to analyze furniture photos and auto-fill load size, heavy item, and number of movers.
     *   **Technical Architecture:** `shared/geocoding.ts` for deterministic geocoding, `shared/ai.ts` for AI utilities, and OpenAI API integration.
+*   **Google Maps API Integration:**
+    *   **Distance Matrix API:** Replaced Haversine formula with real driving distances for accurate pricing (`server/google-maps.ts`).
+    *   **Places Autocomplete:** Integrated on booking form for fast, accurate address entry with Calgary area bias.
+    *   **Traffic Layer:** Real-time traffic conditions overlay on vehicle tracking maps for better ETAs.
+    *   **Implementation:** Backend service with error handling and automatic fallback to Haversine if API unavailable.
 *   **Customer Support System:**
     *   **Architecture:** Ticketing system with FAQ, contact forms, and an admin dashboard.
     *   **Schema:** `supportTickets` and `supportTicketReplies` tables.
