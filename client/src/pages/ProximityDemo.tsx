@@ -364,14 +364,18 @@ export default function ProximityDemo() {
                   <AddressAutocomplete
                     value={pickupAddress}
                     onChange={handlePickupChange}
-                    placeholder="Enter pickup address in Calgary..."
+                    placeholder="Search and select pickup address..."
                     data-testid="input-pickup"
                   />
-                  {pickup && (
-                    <p className="text-xs text-muted-foreground">
-                      📍 {pickup.name}
+                  {pickup ? (
+                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                      ✓ {pickup.name}
                     </p>
-                  )}
+                  ) : pickupAddress ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-500">
+                      Please select an address from the dropdown
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -379,14 +383,18 @@ export default function ProximityDemo() {
                   <AddressAutocomplete
                     value={dropoffAddress}
                     onChange={handleDropoffChange}
-                    placeholder="Enter dropoff address in Calgary..."
+                    placeholder="Search and select dropoff address..."
                     data-testid="input-dropoff"
                   />
-                  {dropoff && (
-                    <p className="text-xs text-muted-foreground">
-                      📍 {dropoff.name}
+                  {dropoff ? (
+                    <p className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                      ✓ {dropoff.name}
                     </p>
-                  )}
+                  ) : dropoffAddress ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-500">
+                      Please select an address from the dropdown
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
