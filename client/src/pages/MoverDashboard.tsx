@@ -5,8 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -54,13 +57,21 @@ export default function MoverDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [locationSharing, setLocationSharing] = useState<string | null>(null); // booking ID for active location sharing
+  const [locationSharing, setLocationSharing] = useState<string | null>(null);
+  const [showVerificationAlert, setShowVerificationAlert] = useState(false);
+  const [verificationError, setVerificationError] = useState<any>(null);
 
   // First get the mover profile
   const { data: mover } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
     enabled: !!user?.id,
     select: (data) => Array.isArray(data) ? data[0] : data,
+  });
+
+  // Get verification status
+  const { data: verificationStatus } = useQuery<any>({
+    queryKey: [`/api/movers/${mover?.id}/verification-status`],
+    enabled: !!mover?.id,
   });
 
   // Get all bookings for this mover (server returns assigned + available)
@@ -125,6 +136,37 @@ export default function MoverDashboard() {
       });
     },
   });
+
+  const toggleAvailabilityMutation = useMutation({
+    mutationFn: async (isAvailable: boolean) => {
+      return apiRequest("PATCH", `/api/movers/${mover?.id}`, { isAvailable });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      toast({
+        title: mover?.isAvailable ? "You're now offline" : "You're now online",
+        description: mover?.isAvailable 
+          ? "You won't receive new job notifications" 
+          : "You can now receive and accept job requests",
+      });
+    },
+    onError: (error: any) => {
+      if (error?.error === "VERIFICATION_INCOMPLETE") {
+        setVerificationError(error);
+        setShowVerificationAlert(true);
+      } else {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to update availability",
+          variant: "destructive",
+        });
+      }
+    },
+  });
+
+  const handleAvailabilityToggle = (checked: boolean) => {
+    toggleAvailabilityMutation.mutate(checked);
+  };
 
   // Location sharing effect - updates location every 5 seconds for in-transit bookings
   useEffect(() => {
@@ -553,20 +595,103 @@ export default function MoverDashboard() {
     <div className="min-h-screen pt-24 pb-12 bg-muted/30">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl md:text-4xl font-bold mb-2">Mover Dashboard</h1>
             <p className="text-muted-foreground text-lg">Manage your bookings and find new jobs</p>
+            
+            {!verificationStatus?.isComplete && (
+              <Alert className="mt-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Complete verification to go online and accept jobs.{" "}
+                  <Button 
+                    variant="link" 
+                    className="h-auto p-0 text-primary"
+                    onClick={() => {
+                      const tabsElement = document.querySelector('[value="verification"]');
+                      if (tabsElement instanceof HTMLElement) {
+                        tabsElement.click();
+                      }
+                    }}
+                  >
+                    Go to Verification
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setLocation("/mover-profile")}
-            className="gap-2"
-            data-testid="button-edit-profile"
-          >
-            <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">Profile</span>
-          </Button>
+          
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2" data-testid="toggle-availability">
+              <span className="text-sm font-medium hidden sm:inline">
+                {mover?.isAvailable ? 'Online' : 'Offline'}
+              </span>
+              <Switch 
+                checked={mover?.isAvailable || false}
+                onCheckedChange={handleAvailabilityToggle}
+                disabled={toggleAvailabilityMutation.isPending}
+                data-testid="switch-online-status"
+              />
+              {mover?.isAvailable && (
+                <Badge variant="default" className="bg-green-500 hover:bg-green-600 ml-1">
+                  Active
+                </Badge>
+              )}
+            </div>
+            
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/mover-profile")}
+              className="gap-2"
+              data-testid="button-edit-profile"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Profile</span>
+            </Button>
+          </div>
         </div>
+
+        <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                Verification Required
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>{verificationError?.message || "You must complete all verification requirements before going online."}</p>
+                
+                {verificationError?.incompleteItems && verificationError.incompleteItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Missing or Incomplete Items:</p>
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                      {verificationError.incompleteItems.map((item: any, idx: number) => (
+                        <li key={idx}>
+                          {item.type.replace(/_/g, ' ')} - {item.status}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => {
+                  setShowVerificationAlert(false);
+                  const tabsElement = document.querySelector('[value="verification"]');
+                  if (tabsElement instanceof HTMLElement) {
+                    tabsElement.click();
+                  }
+                }}
+                data-testid="button-go-to-verification"
+              >
+                Go to Verification
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Tabs defaultValue="available" className="space-y-6">
           <TabsList className="grid w-full max-w-3xl grid-cols-4">
