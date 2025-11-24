@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Menu, Truck, User, LogOut } from "lucide-react";
 import { useState } from "react";
@@ -18,12 +18,36 @@ import { AdminNav } from "./AdminNav";
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, logout } = useAuth();
+  const [location, setLocation] = useLocation();
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   const handleLogout = () => {
     closeMobileMenu();
     logout();
+  };
+
+  const handleHowItWorks = (e: React.MouseEvent) => {
+    e.preventDefault();
+    closeMobileMenu();
+    
+    if (location === '/') {
+      // Already on home page, just scroll
+      const element = document.getElementById('how-it-works');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      // Navigate to home page first
+      setLocation('/');
+      // Wait for navigation, then scroll
+      setTimeout(() => {
+        const element = document.getElementById('how-it-works');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
   };
 
   return (
@@ -66,10 +90,13 @@ export default function Header() {
                     Find Movers
                   </Button>
                 </Link>
-                <Button variant="ghost" className="hover-elevate active-elevate-2" asChild>
-                  <a href="/#how-it-works" data-testid="link-how-it-works">
-                    How It Works
-                  </a>
+                <Button 
+                  variant="ghost" 
+                  className="hover-elevate active-elevate-2"
+                  onClick={handleHowItWorks}
+                  data-testid="link-how-it-works"
+                >
+                  How It Works
                 </Button>
                 <Link href="/signup" data-testid="link-become-mover">
                   <Button variant="ghost" className="hover-elevate active-elevate-2">
@@ -209,10 +236,13 @@ export default function Header() {
                     Find Movers
                   </Button>
                 </Link>
-                <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2" asChild>
-                  <a href="/#how-it-works" data-testid="link-mobile-how" onClick={closeMobileMenu}>
-                    How It Works
-                  </a>
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-start hover-elevate active-elevate-2"
+                  onClick={handleHowItWorks}
+                  data-testid="link-mobile-how"
+                >
+                  How It Works
                 </Button>
                 <Link href="/signup" data-testid="link-mobile-become" onClick={closeMobileMenu}>
                   <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
