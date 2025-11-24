@@ -50,9 +50,10 @@ Preferred communication style: Simple, everyday language.
     *   **Technical Architecture:** `shared/geocoding.ts` for deterministic geocoding, `shared/ai.ts` for AI utilities, and OpenAI API integration.
 *   **Google Maps API Integration:**
     *   **Distance Matrix API:** Replaced Haversine formula with real driving distances for accurate pricing (`server/google-maps.ts`).
-    *   **Places Autocomplete:** Integrated on booking form for fast, accurate address entry with Calgary area bias.
+    *   **Places Autocomplete:** Integrated on booking form for fast, accurate address entry with Calgary area bias (`client/src/components/AddressAutocomplete.tsx`).
     *   **Traffic Layer:** Real-time traffic conditions overlay on vehicle tracking maps for better ETAs.
     *   **Implementation:** Backend service with error handling and automatic fallback to Haversine if API unavailable.
+    *   **Global API Loading:** Google Maps JavaScript API with Places library loaded globally in App.tsx using `useJsApiLoader` for app-wide availability.
 *   **Customer Support System:**
     *   **Architecture:** Ticketing system with FAQ, contact forms, and an admin dashboard.
     *   **Schema:** `supportTickets` and `supportTicketReplies` tables.
