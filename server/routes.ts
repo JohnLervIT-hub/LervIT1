@@ -415,6 +415,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/movers/:id", async (req: Request, res: Response) => {
     try {
+      // SECURITY: Require authentication
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // SECURITY: Verify the user is updating their own mover profile
+      const mover = await storage.getMover(req.params.id);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      // Only the mover themselves or an admin can update the profile
+      if (mover.userId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "You can only update your own profile" });
+      }
+      
       // Validate allowed update fields
       const updateSchema = insertMoverSchema.partial().pick({
         vehicleType: true,
@@ -426,13 +441,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         latitude: true,
         longitude: true,
         isAvailable: true,
+        vehicleColor: true,
+        licensePlate: true,
+        vehiclePhoto: true,
+        moverImage: true,
       });
       const updates = validateBody(updateSchema, req.body);
-      const mover = await storage.updateMover(req.params.id, updates);
-      if (!mover) {
-        return res.status(404).json({ error: "Mover not found" });
-      }
-      res.json(mover);
+      const updatedMover = await storage.updateMover(req.params.id, updates);
+      res.json(updatedMover);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
@@ -453,7 +469,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate booking data - customerId will be added from authenticated user
       const bookingData = validateBody(
         insertBookingSchema.extend({
-          customerId: z.string().optional()
+          customerId: z.string().optional(),
+          pickupAddress: z.string().min(1, "Pickup address is required"),
+          dropoffAddress: z.string().min(1, "Dropoff address is required")
         }),
         { ...req.body, customerId: user.id }
       );

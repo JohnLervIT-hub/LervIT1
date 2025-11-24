@@ -58,8 +58,8 @@ export default function CustomerDashboard() {
   const reportMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       const booking = bookings?.find(b => b.id === bookingId);
-      if (!booking || !booking.mover) {
-        throw new Error("Booking or mover not found");
+      if (!booking || !booking.mover || !booking.mover.user) {
+        throw new Error("Booking or mover details not found");
       }
 
       return await apiRequest("/api/support-tickets", {
@@ -112,6 +112,15 @@ export default function CustomerDashboard() {
   };
 
   const handleReportMover = (booking: Booking) => {
+    // Validate mover details exist before opening dialog
+    if (!booking.mover || !booking.mover.user) {
+      toast({
+        title: "Cannot Report Mover",
+        description: "Mover details are not available for this booking.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedBooking(booking);
     setReportDialogOpen(true);
   };

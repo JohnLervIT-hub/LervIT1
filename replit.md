@@ -76,6 +76,49 @@ Preferred communication style: Simple, everyday language.
     *   **Frontend - Customer:** "Track Trip Live" button on in-transit bookings, live Leaflet map with pickup (green), dropoff (red), mover (blue) markers.
     *   **Technical:** Polling approach (5-second intervals), browser Geolocation API, Leaflet with OpenStreetMap (free, no API key).
 
+## Recent Enhancements (November 2025)
+
+### Enhanced AI Photo Analysis with Vehicle Recommendations
+*   **Weight Detection:** AI analyzer now detects weight class (light <100lbs, medium 100-500lbs, heavy >500lbs) and estimates pounds
+*   **Vehicle Recommendations:** Automatically suggests appropriate vehicle type (Car/SUV/Pickup/Cargo Van/Cube Truck/Flatbed) based on load weight
+*   **Booking Integration:** Saves AI metadata (`aiWeightClass`, `aiRecommendedVehicle`, `aiConfidenceScore`, `estimatedWeightLbs`) with each booking
+*   **Manual Override:** Users can override AI recommendations if needed
+*   **Mock Implementation:** Free fallback using pattern matching when OpenAI API unavailable
+
+### Mover Profile Management System
+*   **Schema Extensions:** Added `moverImage`, `bio`, `vehicleType`, `vehicleColor`, `licensePlate`, `vehiclePhoto`, `profileVerified`, `documentsVerified` to movers table
+*   **Profile Setup Page:** `/mover-profile` route with comprehensive form for movers to manage:
+    *   Profile photo upload with preview
+    *   Bio (max 500 characters)
+    *   Vehicle type selection (standardized values)
+    *   Vehicle color and license plate
+    *   Vehicle photo upload with preview
+*   **Form State Management:** Uses useEffect to reset form with loaded data, preventing data loss on updates
+*   **Authentication:** PATCH `/api/movers/:id` requires authentication and verifies user owns profile (or is admin)
+*   **Dashboard Integration:** "Profile" button in MoverDashboard header for easy access
+
+### Vehicle Recommendation & Matching System
+*   **Compatibility Mapping:** `shared/matching.ts` defines vehicle type compatibility (e.g., Cargo Van can handle loads suitable for Pickup or smaller)
+*   **Intelligent Filtering:** `findNearestMovers` function filters movers by compatible vehicle types based on AI recommendations
+*   **Standardized Types:** Vehicle types strictly match: "Car", "SUV", "Pickup", "Cargo Van", "Cube Truck", "Flatbed"
+*   **MoverProfileCard Component:** Reusable component displays mover info (image, name, rating, bio, vehicle details) with proper styling and testids
+
+### Security & Validation Enhancements
+*   **Address Validation:** Both frontend (real-time) and backend (server-side min(1) check) enforce non-empty pickup/dropoff addresses
+*   **Dashboard Security:** Role-based filtering enforced server-side:
+    *   Customers: only see their bookings (WHERE customerId = user.id)
+    *   Movers: see assigned bookings + unassigned pending jobs
+    *   Admins: full access to all bookings
+*   **Profile Authorization:** Mover profile updates restricted to authenticated mover or admin
+*   **Null Safety:** Report Mover feature validates mover.user exists before submission
+
+### Report Mover Safety Feature
+*   **UI Integration:** "Report" button (destructive color, AlertTriangle icon) appears on CustomerDashboard for bookings with assigned movers
+*   **Confirmation Dialog:** AlertDialog explains investigation process and emergency services disclaimer
+*   **Support Ticket Creation:** Creates high-priority support ticket with category "mover_concern"
+*   **Error Handling:** Validates mover details exist, shows user-friendly toast messages for errors
+*   **Security:** Only customers can report movers from their own bookings (server validates ticket creation)
+
 ## External Dependencies
 
 *   **Payment Processing:** Stripe (`@stripe/stripe-js`, `@stripe/react-stripe-js`).
@@ -85,4 +128,5 @@ Preferred communication style: Simple, everyday language.
 *   **Date Handling:** date-fns, react-day-picker.
 *   **Session Management:** connect-pg-simple (PostgreSQL session store).
 *   **File Upload:** Multer.
-*   **AI Integration:** OpenAI API.
+*   **AI Integration:** OpenAI API (with free mock fallback).
+*   **Maps:** Leaflet, react-leaflet, OpenStreetMap (free, no API key).
