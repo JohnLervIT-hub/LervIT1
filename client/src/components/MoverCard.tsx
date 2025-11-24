@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { MapPin, Truck, Star, Clock } from "lucide-react";
+import { MapPin, Truck, Star, Clock, ShieldCheck } from "lucide-react";
 
 interface MoverCardProps {
   id: string;
@@ -57,12 +57,13 @@ export default function MoverCard({
               </h3>
               {verified && (
                 <Badge variant="default" className="text-xs gap-1 shrink-0" data-testid={`badge-verified-${id}`}>
-                  🛡️ Verified
+                  <ShieldCheck className="w-3 h-3" />
+                  Verified
                 </Badge>
               )}
             </div>
             <div className="flex items-center gap-1 mb-1">
-              <span className="text-amber-500">⭐</span>
+              <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
               <span className="font-medium text-sm" data-testid={`text-rating-${id}`}>
                 {rating.toFixed(1)}
               </span>
@@ -76,7 +77,7 @@ export default function MoverCard({
         {/* Vehicle and Location Info */}
         <div className="space-y-2 mb-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <span>🚐</span>
+            <Truck className="w-4 h-4" />
             <span className="font-medium">Vehicle:</span>
             <span data-testid={`text-vehicle-${id}`}>{vehicleType}</span>
           </div>
