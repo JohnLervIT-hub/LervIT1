@@ -170,8 +170,8 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
         <input
           id="image-upload"
           type="file"
-          accept="image/*"
-          multiple
+          accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/heic,image/heif"
+          multiple={true}
           onChange={handleFileSelect}
           className="hidden"
           disabled={uploading || images.length >= maxImages}
