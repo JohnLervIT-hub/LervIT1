@@ -21,6 +21,19 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 
+// Helper functions for load size validation
+const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
+
+function isLoadSizeSmaller(selected: string, aiRecommended: string): boolean {
+  const selectedIndex = loadSizeOrder.indexOf(selected);
+  const recommendedIndex = loadSizeOrder.indexOf(aiRecommended);
+  return selectedIndex < recommendedIndex && selectedIndex !== -1 && recommendedIndex !== -1;
+}
+
+function capitalizeFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export default function RequestMove() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -734,10 +747,18 @@ export default function RequestMove() {
                       <LoadSizeSelector
                         selectedSize={loadSize}
                         onSelectSize={setLoadSize}
+                        aiRecommendedSize={photoAnalysis?.loadSize}
                       />
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Small: $0 | Medium: +$15 | Large: +$30
-                      </p>
+                      
+                      {photoAnalysis && isLoadSizeSmaller(loadSize, photoAnalysis.loadSize) && (
+                        <Alert className="mt-4 bg-yellow-500/10 border-yellow-500/30">
+                          <Info className="w-4 h-4" />
+                          <AlertDescription>
+                            <strong>Warning:</strong> You selected "{capitalizeFirst(loadSize)}" but AI detected "{capitalizeFirst(photoAnalysis.loadSize)}". 
+                            Selecting a smaller load size may result in insufficient space or additional charges.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
 
                     <div className="border-t pt-6">
