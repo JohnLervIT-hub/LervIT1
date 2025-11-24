@@ -75,7 +75,7 @@ export interface DetectedItem {
     weightLbs: number;
     cubicFeet: number;
     moversNeeded: number;
-    difficultyLevel: "easy" | "moderate" | "hard";
+    difficultyLevel: "easy" | "moderate" | "difficult" | "very_difficult";
     requiresSpecialCare: boolean;
     confidence: number;
     matchReason: string;
