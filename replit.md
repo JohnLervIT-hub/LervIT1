@@ -126,6 +126,30 @@ Preferred communication style: Simple, everyday language.
 *   **Error Handling:** Validates mover details exist, shows user-friendly toast messages for errors
 *   **Security:** Only customers can report movers from their own bookings (server validates ticket creation)
 
+### Driver Verification & Compliance System
+*   **Database Schema:** `verificationItems` table tracks 7 verification types (Government ID+Selfie, Driver's License, Vehicle Registration, Vehicle Photos, Insurance Proof, Background Check, Payout Setup) with status tracking (Pending, Under Review, Approved, Rejected, Expired) and expiry dates
+*   **API Endpoints:** 
+    *   GET /api/movers/:moverId/verification-items - List all verification items for a mover
+    *   POST /api/movers/:moverId/verification-items - Submit new verification document
+    *   GET /api/movers/:moverId/verification-status - Check verification completion status and incomplete items
+*   **Blocking Logic:** PATCH /api/movers/:moverId validates all 7 verification types are approved before allowing isAvailable=true; returns VERIFICATION_INCOMPLETE error with incomplete items list if not satisfied
+*   **Frontend Components:**
+    *   MoverVerification.tsx: Verification checklist with status badges, document upload dialogs for each type, expiry date tracking, download/view submitted documents
+    *   MoverDashboard.tsx: Online/offline toggle switch with pre-check validation, verification alert banner, AlertDialog showing incomplete items and "Go to Verification" navigation
+*   **User Flow:** 
+    1. Movers see alert banner if verification incomplete
+    2. Attempt to toggle online triggers pre-check (prevents unnecessary API calls)
+    3. If incomplete, AlertDialog shows list of missing items
+    4. "Go to Verification" button navigates to verification tab
+    5. Movers upload documents for each verification type
+    6. Once all approved, toggle online successfully
+*   **Security Features:**
+    *   Switch controlled by server state (reverts on failed mutation)
+    *   Query invalidation on error ensures UI consistency
+    *   Pre-check validation prevents race conditions
+    *   Document URLs stored securely, auth-protected endpoints
+    *   Expiry date tracking for time-sensitive documents (e.g., insurance, background checks)
+
 ## External Dependencies
 
 *   **Payment Processing:** Stripe (`@stripe/stripe-js`, `@stripe/react-stripe-js`).

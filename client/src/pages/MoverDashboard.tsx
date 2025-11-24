@@ -69,7 +69,7 @@ export default function MoverDashboard() {
   });
 
   // Get verification status
-  const { data: verificationStatus } = useQuery<any>({
+  const { data: verificationStatus, isLoading: isVerificationLoading } = useQuery<any>({
     queryKey: [`/api/movers/${mover?.id}/verification-status`],
     enabled: !!mover?.id,
   });
@@ -141,17 +141,25 @@ export default function MoverDashboard() {
     mutationFn: async (isAvailable: boolean) => {
       return apiRequest("PATCH", `/api/movers/${mover?.id}`, { isAvailable });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+    onSuccess: async (data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      await queryClient.refetchQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      
+      const newState = data?.isAvailable !== undefined ? data.isAvailable : variables;
       toast({
-        title: mover?.isAvailable ? "You're now offline" : "You're now online",
-        description: mover?.isAvailable 
-          ? "You won't receive new job notifications" 
-          : "You can now receive and accept job requests",
+        title: newState ? "You're now online" : "You're now offline",
+        description: newState 
+          ? "You can now receive and accept job requests" 
+          : "You won't receive new job notifications",
       });
     },
-    onError: (error: any) => {
+    onError: async (error: any) => {
+      await queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      await queryClient.refetchQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      
       if (error?.error === "VERIFICATION_INCOMPLETE") {
+        await queryClient.invalidateQueries({ queryKey: [`/api/movers/${mover?.id}/verification-status`] });
+        await queryClient.refetchQueries({ queryKey: [`/api/movers/${mover?.id}/verification-status`] });
         setVerificationError(error);
         setShowVerificationAlert(true);
       } else {
@@ -165,6 +173,23 @@ export default function MoverDashboard() {
   });
 
   const handleAvailabilityToggle = (checked: boolean) => {
+    if (isVerificationLoading) {
+      toast({
+        title: "Loading verification status",
+        description: "Please wait while we check your verification status...",
+      });
+      return;
+    }
+    
+    if (checked && !verificationStatus?.isComplete) {
+      setShowVerificationAlert(true);
+      setVerificationError({
+        message: "You must complete all verification requirements before going online.",
+        incompleteItems: verificationStatus?.incompleteItems || [],
+      });
+      return;
+    }
+    
     toggleAvailabilityMutation.mutate(checked);
   };
 
@@ -624,15 +649,15 @@ export default function MoverDashboard() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2" data-testid="toggle-availability">
               <span className="text-sm font-medium hidden sm:inline">
-                {mover?.isAvailable ? 'Online' : 'Offline'}
+                {isVerificationLoading ? 'Loading...' : (mover?.isAvailable ? 'Online' : 'Offline')}
               </span>
               <Switch 
                 checked={mover?.isAvailable || false}
                 onCheckedChange={handleAvailabilityToggle}
-                disabled={toggleAvailabilityMutation.isPending}
+                disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
                 data-testid="switch-online-status"
               />
-              {mover?.isAvailable && (
+              {mover?.isAvailable && !isVerificationLoading && (
                 <Badge variant="default" className="bg-green-500 hover:bg-green-600 ml-1">
                   Active
                 </Badge>
