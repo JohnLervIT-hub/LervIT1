@@ -2122,6 +2122,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Car";
     }
     
+    // ===== APPLY EXPERT VEHICLE RECOMMENDATIONS =====
+    const { getVehicleRecommendation, formatVehicleDisplay } = await import("../shared/vehicles");
+    const vehicleRec = getVehicleRecommendation(loadSize, itemType, estimatedWeightLbs);
+    
+    // Update load size if escalated
+    if (vehicleRec.escalated) {
+      loadSize = vehicleRec.loadSize;
+      heavyItem = true;
+      recommendedMovers = 2;
+    }
+    
+    // Use expert vehicle recommendation
+    recommendedVehicle = formatVehicleDisplay(vehicleRec.vehicle);
+    
+    let explanation = `Based on image analysis, this appears to be a ${itemType.toLowerCase()} with ${estimatedWeight} weight (~${estimatedWeightLbs} lbs). `;
+    explanation += `We recommend ${recommendedMovers} mover${recommendedMovers > 1 ? 's' : ''} and a ${recommendedVehicle}. `;
+    
+    if (vehicleRec.escalated && vehicleRec.escalationReason) {
+      explanation += `Note: ${vehicleRec.escalationReason}`;
+    } else {
+      explanation += vehicleRec.vehicle.rationale;
+    }
+    
     return {
       loadSize,
       heavyItem,
@@ -2132,7 +2155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       estimatedWeightLbs,
       recommendedVehicle,
       confidence: 75,
-      explanation: `Based on image analysis, this appears to be a ${itemType.toLowerCase()} with ${estimatedWeight} weight (~${estimatedWeightLbs} lbs). We recommend ${recommendedMovers} mover${recommendedMovers > 1 ? 's' : ''} and a ${recommendedVehicle} for safe handling.`,
+      explanation,
       allowManualOverride: true
     };
   }
@@ -2201,7 +2224,12 @@ Analyze the image and determine:
 4. Recommended movers: 1 or 2
 5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
 6. Approximate weight in pounds
-7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
+7. Recommended vehicle using EXPERT LOGISTICS GUIDANCE:
+   - Boxes (1-10 ft³): "Compact Cargo Van" or "Hatchback Wagon"
+   - Medium (11-50 ft³): "Long-Wheelbase SUV" or "Short-Box Pickup"
+   - Large (50-150 ft³): "3/4-Ton Cargo Van" or "3/4-Ton Pickup + Trailer"
+   - Apartment (150+ ft³): "5-Ton Cube Truck" or "Large Cargo Van"
+   - For pianos, safes, stone countertops, or exercise equipment: Escalate to next tier vehicle
 
 ⚠️ STRICT MANDATORY CATEGORIZATION RULES (CANNOT BE OVERRIDDEN):
 
@@ -2306,6 +2334,33 @@ Respond with VALID JSON only:
                     }
                     break;
                   }
+                }
+                
+                // ===== APPLY EXPERT VEHICLE RECOMMENDATIONS =====
+                const { getVehicleRecommendation, formatVehicleDisplay } = await import("../shared/vehicles");
+                const vehicleRec = getVehicleRecommendation(
+                  analysis.loadSize, 
+                  analysis.itemType, 
+                  analysis.estimatedWeightLbs
+                );
+                
+                // Update load size if escalated by vehicle recommendation logic
+                if (vehicleRec.escalated) {
+                  console.log(`[Vehicle Escalation] ${analysis.itemType}: ${analysis.loadSize} → ${vehicleRec.loadSize} (${vehicleRec.escalationReason})`);
+                  analysis.loadSize = vehicleRec.loadSize;
+                  analysis.heavyItem = true;
+                  analysis.recommendedMovers = 2;
+                }
+                
+                // Override with expert vehicle recommendation
+                const expertVehicle = formatVehicleDisplay(vehicleRec.vehicle);
+                analysis.recommendedVehicle = expertVehicle;
+                
+                // Enhance explanation with expert insights
+                if (vehicleRec.escalated && vehicleRec.escalationReason) {
+                  analysis.explanation = `${analysis.explanation} ⚠️ ${vehicleRec.escalationReason}`;
+                } else if (!analysis.explanation.includes(vehicleRec.vehicle.rationale)) {
+                  analysis.explanation = `${analysis.explanation} ${vehicleRec.vehicle.rationale}`;
                 }
                 
                 return res.json({
