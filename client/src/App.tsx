@@ -12,6 +12,7 @@ import RequestMove from "@/pages/RequestMove";
 import CustomerDashboard from "@/pages/CustomerDashboard";
 import MyBookings from "@/pages/MyBookings";
 import MoverDashboard from "@/pages/MoverDashboard";
+import MoverProfileSetup from "@/pages/MoverProfileSetup";
 import Messages from "@/pages/Messages";
 import Review from "@/pages/Review";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -76,6 +77,11 @@ function Router() {
       <Route path="/mover-dashboard">
         <ProtectedRoute allowedRoles={["mover"]}>
           <MoverDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/mover-profile">
+        <ProtectedRoute allowedRoles={["mover"]}>
+          <MoverProfileSetup />
         </ProtectedRoute>
       </Route>
 

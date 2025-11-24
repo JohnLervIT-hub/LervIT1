@@ -479,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bookingData.numberOfMovers as 1 | 2
       );
       
-      // Create booking with geocoded data and price breakdown
+      // Create booking with geocoded data, price breakdown, and AI metadata
       // SECURITY: Use authenticated user's ID, not from request body
       const booking = await storage.createBooking({
         customerId: user.id,
@@ -493,6 +493,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         numberOfMovers: bookingData.numberOfMovers,
         ...(bookingData.additionalDetails && { additionalDetails: bookingData.additionalDetails }),
         ...(bookingData.images && { images: bookingData.images }),
+        ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
+        ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
+        ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
+        ...(bookingData.estimatedWeightLbs !== undefined && { estimatedWeightLbs: bookingData.estimatedWeightLbs }),
         pickupLatitude: pickupGeo.coordinates.lat,
         pickupLongitude: pickupGeo.coordinates.lng,
         dropoffLatitude: dropoffGeo.coordinates.lat,
@@ -532,11 +536,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       ).then(results => results.filter((m): m is NonNullable<typeof m> => m !== null));
       
+      // Use AI-recommended vehicle type for intelligent mover filtering
       const nearestMovers = findNearestMovers(
         pickupGeo.coordinates,
         dropoffGeo.coordinates,
         bookingData.loadSize as 'small' | 'medium' | 'large',
-        moversWithUserData
+        moversWithUserData,
+        {},
+        bookingData.aiRecommendedVehicle || null
       );
       
       // Create job notifications for top movers
@@ -1330,7 +1337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       weightClass = "light";
       estimatedWeightLbs = 40;
       recommendedMovers = 1;
-      recommendedVehicle = "Car";
+      recommendedVehicle = "SUV";
     } else if (lowerName.includes('appliance') || lowerName.includes('fridge') || lowerName.includes('washer')) {
       itemType = "Appliance";
       loadSize = "large";

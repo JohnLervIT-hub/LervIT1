@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
@@ -551,9 +551,20 @@ export default function MoverDashboard() {
   return (
     <div className="min-h-screen pt-24 pb-12 bg-muted/30">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">Mover Dashboard</h1>
-          <p className="text-muted-foreground text-lg">Manage your bookings and find new jobs</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">Mover Dashboard</h1>
+            <p className="text-muted-foreground text-lg">Manage your bookings and find new jobs</p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setLocation("/mover-profile")}
+            className="gap-2"
+            data-testid="button-edit-profile"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="hidden sm:inline">Profile</span>
+          </Button>
         </div>
 
         <Tabs defaultValue="available" className="space-y-6">

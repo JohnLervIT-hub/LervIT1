@@ -32,9 +32,20 @@ const DEFAULT_CONFIG: MatchingConfig = {
   maxMoversToNotify: 5,
 };
 
+// Vehicle type recommendations based on weight class
+const VEHICLE_TYPE_COMPATIBILITY: Record<string, string[]> = {
+  'Car': ['Car', 'SUV'],
+  'SUV': ['SUV', 'Car', 'Pickup'],
+  'Pickup': ['Pickup', 'SUV', 'Cargo Van'],
+  'Cargo Van': ['Cargo Van', 'Pickup', 'Cube Truck'],
+  'Cube Truck': ['Cube Truck', 'Cargo Van', 'Flatbed'],
+  'Flatbed': ['Flatbed', 'Cube Truck'],
+};
+
 /**
  * Find nearest available movers to a pickup location
  * Returns movers sorted by distance, limited to top N
+ * Filters by recommended vehicle type if provided
  */
 export function findNearestMovers(
   pickupCoords: Coordinates,
@@ -51,16 +62,34 @@ export function findNearestMovers(
     latitude: number | null;
     longitude: number | null;
   }>,
-  config: Partial<MatchingConfig> = {}
+  config: Partial<MatchingConfig> = {},
+  recommendedVehicle?: string | null
 ): MoverWithDistance[] {
   const matchingConfig = { ...DEFAULT_CONFIG, ...config };
   
   // Calculate pickup to dropoff distance
   const jobDistance = calculateDistance(pickupCoords, dropoffCoords);
   
+  // Get compatible vehicle types if recommendation provided
+  const compatibleVehicles = recommendedVehicle 
+    ? (VEHICLE_TYPE_COMPATIBILITY[recommendedVehicle] || [recommendedVehicle])
+    : null;
+  
   // Calculate distance for each mover and enrich with earnings
   const moversWithDistance: MoverWithDistance[] = availableMovers
-    .filter(m => m.isAvailable && m.latitude !== null && m.longitude !== null)
+    .filter(m => {
+      // Basic availability and location checks
+      if (!m.isAvailable || m.latitude === null || m.longitude === null) {
+        return false;
+      }
+      
+      // Filter by compatible vehicle types if recommendation exists
+      if (compatibleVehicles && m.vehicleType) {
+        return compatibleVehicles.includes(m.vehicleType);
+      }
+      
+      return true;
+    })
     .map(mover => {
       const moverCoords: Coordinates = {
         lat: mover.latitude!,
