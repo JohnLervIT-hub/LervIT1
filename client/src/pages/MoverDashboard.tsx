@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
@@ -13,6 +13,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { generatePriceExplanation } from "@shared/ai";
 import { useEffect, useState } from "react";
+import MoverVerification from "./MoverVerification";
 
 type Booking = {
   id: string;
@@ -568,9 +569,10 @@ export default function MoverDashboard() {
         </div>
 
         <Tabs defaultValue="available" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3">
+          <TabsList className="grid w-full max-w-3xl grid-cols-4">
             <TabsTrigger value="available" data-testid="tab-available" className="gap-2">
-              Available Jobs
+              <span className="hidden sm:inline">Available</span>
+              <span className="sm:hidden">Jobs</span>
               {availableBookings && availableBookings.length > 0 && (
                 <Badge variant="secondary" className="ml-1 no-default-hover-elevate">
                   {availableBookings.length}
@@ -578,16 +580,21 @@ export default function MoverDashboard() {
               )}
             </TabsTrigger>
             <TabsTrigger value="my-bookings" data-testid="tab-my-bookings">
-              My Bookings
+              <span className="hidden sm:inline">My Bookings</span>
+              <span className="sm:hidden">Bookings</span>
               {bookings && bookings.length > 0 && (
                 <Badge variant="secondary" className="ml-1 no-default-hover-elevate">
                   {bookings.length}
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="verification" data-testid="tab-verification">
+              <Shield className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">Verification</span>
+            </TabsTrigger>
             <TabsTrigger value="earnings" data-testid="tab-earnings">
-              <DollarSign className="w-4 h-4 mr-1" />
-              Earnings
+              <DollarSign className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">Earnings</span>
             </TabsTrigger>
           </TabsList>
 
@@ -630,6 +637,10 @@ export default function MoverDashboard() {
             ) : (
               bookings.map((booking) => renderBookingCard(booking))
             )}
+          </TabsContent>
+
+          <TabsContent value="verification" className="space-y-4">
+            <MoverVerification />
           </TabsContent>
 
           <TabsContent value="earnings" className="space-y-6">
