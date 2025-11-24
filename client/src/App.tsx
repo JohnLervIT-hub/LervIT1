@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useJsApiLoader } from "@react-google-maps/api";
 import Header from "@/components/Header";
 import Home from "@/pages/Home";
 import BrowseMovers from "@/pages/BrowseMovers";
@@ -115,7 +116,31 @@ function Router() {
   );
 }
 
+// Load Google Maps libraries once globally
+const googleMapsLibraries = ["places"];
+
 function App() {
+  // Load Google Maps JavaScript API with Places library
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: googleMapsLibraries as any,
+  });
+
+  if (loadError) {
+    console.error("Error loading Google Maps API:", loadError);
+  }
+
+  // Wait for Google Maps to load before rendering
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-lg text-muted-foreground">Loading maps...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
