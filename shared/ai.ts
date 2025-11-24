@@ -59,12 +59,25 @@ export interface DetectedItem {
   name: string; // Specific item description (e.g., "Queen-size bed", "Leather sofa")
   category: "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other";
   quantity: number; // How many of this item (editable by user)
-  estimatedWeightLbs: number; // Weight per item
-  estimatedCubicFeet: number; // Volume per item
+  estimatedWeightLbs: number; // Weight per item (now from Standard Weight Database lookup, not AI estimation)
+  estimatedCubicFeet: number; // Volume per item (now from Standard Weight Database lookup, not AI estimation)
   loadSize: "small" | "medium" | "large";
   requiresSpecialCare: boolean; // Heavy/fragile items
   imageUrl?: string; // URL of the photo where this was detected
   confidence: number; // AI confidence score (0-100)
+  
+  // New fields for Standard Weight Database system
+  sizeClassification?: "small" | "medium" | "large" | "XL"; // Detected size, used for database lookup
+  alternativeSuggestions?: Array<{
+    name: string;
+    category: string;
+    size: string;
+    weightLbs: number;
+    cubicFeet: number;
+    moversNeeded: number;
+  }>; // Alternative item suggestions when AI is uncertain
+  isUncertain?: boolean; // True if AI confidence < 70% and user should confirm
+  databaseMatchedItem?: string | null; // Name of matched database item for reference
 }
 
 export interface MultiplePhotosAnalysisResult {

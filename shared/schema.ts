@@ -199,6 +199,18 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
     requiresSpecialCare: z.boolean(),
     imageUrl: z.string().optional(),
     confidence: z.number(),
+    // New fields for Standard Weight Database system
+    sizeClassification: z.enum(["small", "medium", "large", "XL"]).optional(),
+    alternativeSuggestions: z.array(z.object({
+      name: z.string(),
+      category: z.string(),
+      size: z.string(),
+      weightLbs: z.number(),
+      cubicFeet: z.number(),
+      moversNeeded: z.number(),
+    })).optional(),
+    isUncertain: z.boolean().optional(),
+    databaseMatchedItem: z.string().nullable().optional(),
   })).nullable().optional(),
 });
 

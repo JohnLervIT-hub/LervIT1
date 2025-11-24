@@ -1818,7 +1818,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mock AI photo analysis (fallback when OpenAI is unavailable)
+  // Mock AI photo analysis V2 (uses Standard Weight Database)
+  function mockPhotoAnalysisV2(filename: string): {
+    itemType: string;
+    sizeClassification: "small" | "medium" | "large" | "XL";
+    category: "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other";
+    confidence: number;
+  } {
+    const lowerName = filename.toLowerCase();
+    
+    // Furniture - Seating
+    if (lowerName.includes('sectional')) {
+      return { itemType: "Sectional sofa", sizeClassification: "XL", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('sofa') || lowerName.includes('couch')) {
+      return { itemType: "Sofa (3-seater)", sizeClassification: "large", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('recliner')) {
+      return { itemType: "Recliner", sizeClassification: "medium", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('armchair')) {
+      return { itemType: "Armchair", sizeClassification: "medium", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('office') && lowerName.includes('chair')) {
+      return { itemType: "Office chair", sizeClassification: "small", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('dining') && lowerName.includes('chair')) {
+      return { itemType: "Dining chair", sizeClassification: "small", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('chair')) {
+      return { itemType: "Dining chair", sizeClassification: "small", category: "furniture", confidence: 70 };
+    }
+    
+    // Furniture - Tables
+    else if (lowerName.includes('coffee') && lowerName.includes('table')) {
+      return { itemType: "Coffee table", sizeClassification: "small", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('dining') && lowerName.includes('table')) {
+      return { itemType: "Dining table (6-seater)", sizeClassification: "large", category: "furniture", confidence: 70 };
+    } else if (lowerName.includes('desk')) {
+      return { itemType: "Desk", sizeClassification: "medium", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('table')) {
+      return { itemType: "Coffee table", sizeClassification: "small", category: "furniture", confidence: 65 };
+    }
+    
+    // Furniture - Beds
+    else if (lowerName.includes('king') && lowerName.includes('bed')) {
+      return { itemType: "King bed frame", sizeClassification: "XL", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('queen') && lowerName.includes('bed')) {
+      return { itemType: "Queen bed frame", sizeClassification: "large", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('twin') && lowerName.includes('bed')) {
+      return { itemType: "Twin bed frame", sizeClassification: "medium", category: "furniture", confidence: 75 };
+    } else if (lowerName.includes('bed')) {
+      return { itemType: "Full/Double bed frame", sizeClassification: "medium", category: "furniture", confidence: 70 };
+    } else if (lowerName.includes('mattress')) {
+      return { itemType: "Queen mattress", sizeClassification: "large", category: "furniture", confidence: 70 };
+    }
+    
+    // Appliances
+    else if (lowerName.includes('refrigerator') || lowerName.includes('fridge')) {
+      if (lowerName.includes('mini')) {
+        return { itemType: "Mini fridge", sizeClassification: "small", category: "appliance", confidence: 75 };
+      }
+      return { itemType: "Standard refrigerator", sizeClassification: "XL", category: "appliance", confidence: 75 };
+    } else if (lowerName.includes('washer') || lowerName.includes('washing')) {
+      return { itemType: "Washing machine", sizeClassification: "XL", category: "appliance", confidence: 75 };
+    } else if (lowerName.includes('dryer')) {
+      return { itemType: "Dryer", sizeClassification: "XL", category: "appliance", confidence: 75 };
+    } else if (lowerName.includes('dishwasher')) {
+      return { itemType: "Dishwasher", sizeClassification: "large", category: "appliance", confidence: 75 };
+    } else if (lowerName.includes('microwave')) {
+      return { itemType: "Microwave", sizeClassification: "small", category: "appliance", confidence: 75 };
+    } else if (lowerName.includes('stove') || lowerName.includes('oven')) {
+      return { itemType: "Stove / Range", sizeClassification: "XL", category: "appliance", confidence: 75 };
+    }
+    
+    // Heavy Items / Gym Equipment
+    else if (lowerName.includes('treadmill')) {
+      return { itemType: "Treadmill", sizeClassification: "XL", category: "heavy_item", confidence: 75 };
+    } else if (lowerName.includes('elliptical')) {
+      return { itemType: "Elliptical machine", sizeClassification: "XL", category: "heavy_item", confidence: 75 };
+    } else if (lowerName.includes('piano')) {
+      return { itemType: "Piano (upright)", sizeClassification: "XL", category: "heavy_item", confidence: 75 };
+    } else if (lowerName.includes('safe')) {
+      return { itemType: "Safe", sizeClassification: "medium", category: "heavy_item", confidence: 75 };
+    }
+    
+    // Fragile Items
+    else if (lowerName.includes('tv') || lowerName.includes('television')) {
+      return { itemType: "TV (50-65 inch)", sizeClassification: "large", category: "fragile", confidence: 70 };
+    } else if (lowerName.includes('mirror')) {
+      return { itemType: "Mirror (wall)", sizeClassification: "medium", category: "fragile", confidence: 75 };
+    } else if (lowerName.includes('lamp')) {
+      return { itemType: "Lamp (table)", sizeClassification: "small", category: "fragile", confidence: 75 };
+    }
+    
+    // Boxes
+    else if (lowerName.includes('box')) {
+      return { itemType: "Medium box (3 cu ft)", sizeClassification: "small", category: "box", confidence: 75 };
+    }
+    
+    // Other - Personal Items
+    else if (lowerName.includes('shoe')) {
+      return { itemType: "Shoes (pair)", sizeClassification: "small", category: "other", confidence: 75 };
+    } else if (lowerName.includes('bag') || lowerName.includes('luggage') || lowerName.includes('suitcase')) {
+      return { itemType: "Suitcase / Luggage", sizeClassification: "small", category: "other", confidence: 75 };
+    } else if (lowerName.includes('backpack')) {
+      return { itemType: "Backpack / Bag", sizeClassification: "small", category: "other", confidence: 75 };
+    } else if (lowerName.includes('bike') || lowerName.includes('bicycle')) {
+      return { itemType: "Bicycle", sizeClassification: "medium", category: "other", confidence: 75 };
+    } else if (lowerName.includes('rug') || lowerName.includes('carpet')) {
+      return { itemType: "Mattress topper / Rug", sizeClassification: "medium", category: "other", confidence: 70 };
+    }
+    
+    // Default fallback
+    return { 
+      itemType: "Medium box (3 cu ft)", 
+      sizeClassification: "small", 
+      category: "box", 
+      confidence: 60 
+    };
+  }
+
+  // Legacy mock AI photo analysis (kept for backward compatibility with single photo endpoint)
   function mockPhotoAnalysis(fileSize: number, filename: string) {
     // Analyze file size in MB to estimate load
     const sizeMB = fileSize / (1024 * 1024);
@@ -2254,41 +2369,41 @@ Respond with VALID JSON only:
                     content: [
                       {
                         type: 'text',
-                        text: `You are an expert moving estimator analyzing photos of items that need to be moved. Provide SPECIFIC, DETAILED item descriptions.
+                        text: `You are an expert moving estimator analyzing photos of items. Your job is to IDENTIFY the item type and size ONLY.
 
-CRITICAL: Be very specific about what you see. Don't use generic terms like "furniture" or "item".
+CRITICAL RULES:
+1. DO NOT estimate weight - we have a database for that
+2. DO NOT estimate cubic feet/volume - we have a database for that
+3. ONLY identify: item type, size classification, and category
+
+Be SPECIFIC with item descriptions. Don't use generic terms like "furniture" or "item".
 
 Examples of GOOD descriptions:
 ✅ "Queen-size bed frame"
 ✅ "L-shaped sectional sofa"
 ✅ "Leather office chair"
-✅ "Cardboard moving boxes (3 stacked)"
+✅ "Cardboard moving boxes"
 ✅ "Pair of running shoes"
-✅ "Large suitcase"
+✅ "Washing machine"
+✅ "Dining table (6-seater)"
+✅ "Mini fridge"
+✅ "Treadmill"
 
 Analyze the image and determine:
-1. **Specific item description** - Be detailed!
-2. Load size: small (fits in hand/bag), medium (requires lifting), large (bulky/heavy)
-3. Is it heavy/fragile requiring special care? (true/false)
-4. Recommended movers: 1 or 2
-5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
-6. Approximate weight in pounds
-7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
-8. Estimated cubic feet (volume)
+1. **Item Type** - Be specific! (e.g., "Queen bed frame", "Sectional sofa", "Washing machine")
+2. **Size Classification**: 
+   - "small" = fits in hand, bag-sized items (shoes, lamps, small boxes)
+   - "medium" = requires lifting, chair-sized (chairs, small tables, bicycles)
+   - "large" = bulky, sofa-sized (sofas, beds, large tables, appliances)
+   - "XL" = very large/heavy (sectionals, king beds, fridges, treadmills, pianos)
+3. **Category**: furniture, appliance, box, heavy_item, fragile, or other
 
 Respond with VALID JSON only:
 {
-  "loadSize": "small" | "medium" | "large",
-  "heavyItem": true | false,
-  "recommendedMovers": 1 | 2,
-  "itemType": "SPECIFIC description here",
-  "estimatedWeight": "light" | "medium" | "heavy",
-  "weightClass": "light" | "medium" | "heavy",
-  "estimatedWeightLbs": number,
-  "estimatedCubicFeet": number,
-  "recommendedVehicle": "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed",
-  "confidence": 0-100,
-  "explanation": "brief explanation with specific item details"
+  "itemType": "SPECIFIC item name (e.g., 'Queen bed frame', 'Washing machine')",
+  "sizeClassification": "small" | "medium" | "large" | "XL",
+  "category": "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other",
+  "confidence": 0-100
 }`
                       },
                       {
@@ -2324,26 +2439,22 @@ Respond with VALID JSON only:
         if (!analysisResult) {
           // Extract filename from URL for mock analysis
           const filename = imageUrl.split('/').pop() || 'unknown.jpg';
-          // Estimate file size based on filename/type (mock heuristic)
-          const estimatedSize = 2 * 1024 * 1024; // 2MB estimate
-          analysisResult = mockPhotoAnalysis(estimatedSize, filename);
+          analysisResult = mockPhotoAnalysisV2(filename);
         }
         
-        // Convert PhotoAnalysisResult to DetectedItem
-        const { detectDuplicates, calculateTotals } = await import("../shared/ai");
+        // Convert AI detection to DetectedItem using Standard Weight Database
+        const { aiDetectionToItem } = await import("../shared/aiWeightLookup");
         
-        const detectedItem = {
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name: analysisResult.itemType,
-          category: categorizeItem(analysisResult.itemType),
-          quantity: 1,
-          estimatedWeightLbs: analysisResult.estimatedWeightLbs,
-          estimatedCubicFeet: analysisResult.estimatedCubicFeet || estimateCubicFeet(analysisResult.loadSize),
-          loadSize: analysisResult.loadSize,
-          requiresSpecialCare: analysisResult.heavyItem,
-          imageUrl: imageUrl,
-          confidence: analysisResult.confidence
-        };
+        const detectedItem = aiDetectionToItem(
+          {
+            itemType: analysisResult.itemType,
+            sizeClassification: analysisResult.sizeClassification,
+            category: analysisResult.category,
+            confidence: analysisResult.confidence,
+            imageUrl: imageUrl
+          },
+          () => `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        );
         
         detectedItems.push(detectedItem);
       }
