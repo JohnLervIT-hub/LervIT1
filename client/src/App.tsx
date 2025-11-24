@@ -27,6 +27,7 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Support from "@/pages/Support";
 import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
+import AdminVerificationDashboard from "@/pages/AdminVerificationDashboard";
 import Payment from "@/pages/Payment";
 import TrackTrip from "@/pages/TrackTrip";
 import NotFound from "@/pages/not-found";
@@ -95,6 +96,11 @@ function Router() {
       <Route path="/admin/support">
         <ProtectedRoute allowedRoles={["admin"]}>
           <AdminSupportDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/verification">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminVerificationDashboard />
         </ProtectedRoute>
       </Route>
 

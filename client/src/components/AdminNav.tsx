@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Shield, HelpCircle, MessageSquare } from "lucide-react";
+import { Shield, HelpCircle, MessageSquare, FileCheck } from "lucide-react";
 
 export function AdminNav() {
   return (
@@ -9,6 +9,12 @@ export function AdminNav() {
         <Button variant="ghost" className="hover-elevate active-elevate-2">
           <Shield className="w-4 h-4 mr-2" />
           Admin Dashboard
+        </Button>
+      </Link>
+      <Link href="/admin/verification" data-testid="link-admin-verification">
+        <Button variant="ghost" className="hover-elevate active-elevate-2">
+          <FileCheck className="w-4 h-4 mr-2" />
+          Driver Verification
         </Button>
       </Link>
       <Link href="/admin/support" data-testid="link-admin-support">
