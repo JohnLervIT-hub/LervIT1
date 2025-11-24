@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { Package, Box, Sofa, Home } from "lucide-react";
+import { Package, Box, Sofa, Home, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface LoadSize {
@@ -10,6 +10,8 @@ interface LoadSize {
   examples: string[];
   icon: React.ReactNode;
   fee: number;
+  vehicle: string;
+  vehicleRationale: string;
 }
 
 interface LoadSizeSelectorProps {
@@ -27,6 +29,8 @@ const loadSizes: LoadSize[] = [
     examples: ["Shoes", "Bags", "Boxes", "Lamps", "Monitors"],
     icon: <Package className="w-8 h-8" />,
     fee: 0,
+    vehicle: "Compact Cargo Van",
+    vehicleRationale: "Enclosed protection from Calgary winters while maintaining maneuverability"
   },
   {
     id: "medium",
@@ -36,6 +40,8 @@ const loadSizes: LoadSize[] = [
     examples: ["Chairs", "Small tables", "TVs", "Bookshelves"],
     icon: <Box className="w-8 h-8" />,
     fee: 15,
+    vehicle: "Long-Wheelbase SUV",
+    vehicleRationale: "Best balance of cargo space and maneuverability for medium furniture"
   },
   {
     id: "large",
@@ -45,6 +51,8 @@ const loadSizes: LoadSize[] = [
     examples: ["Sofas", "Beds", "Fridges", "Dressers"],
     icon: <Sofa className="w-8 h-8" />,
     fee: 30,
+    vehicle: "3/4-Ton Cargo Van",
+    vehicleRationale: "Lift-gate equipped for heavy furniture like sofas, beds, and appliances"
   },
   {
     id: "apartment",
@@ -54,6 +62,8 @@ const loadSizes: LoadSize[] = [
     examples: ["1-2 bedroom", "Multiple large items"],
     icon: <Home className="w-8 h-8" />,
     fee: 45,
+    vehicle: "5-Ton Cube Truck",
+    vehicleRationale: "26' truck with power lift-gate for full apartment moves"
   },
 ];
 
@@ -98,13 +108,25 @@ export default function LoadSizeSelector({ selectedSize, onSelectSize, aiRecomme
                   {size.description}
                 </div>
                 
-                <div className="text-xs text-muted-foreground space-y-0.5">
+                <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
                   {size.examples.map((example, idx) => (
                     <div key={idx}>• {example}</div>
                   ))}
                 </div>
                 
-                <div className="text-sm font-semibold mt-3 text-primary">
+                <div className="flex items-start gap-2 mb-2 pt-2 border-t">
+                  <Truck className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-xs font-medium">
+                      {size.vehicle}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {size.vehicleRationale}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-sm font-semibold text-primary">
                   {size.fee === 0 ? "No fee" : `+$${size.fee}`}
                 </div>
               </div>

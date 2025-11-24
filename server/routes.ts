@@ -1841,7 +1841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ];
 
   // Mock AI photo analysis (fallback when OpenAI is unavailable)
-  function mockPhotoAnalysis(fileSize: number, filename: string) {
+  async function mockPhotoAnalysis(fileSize: number, filename: string) {
     // Analyze file size in MB to estimate load
     const sizeMB = fileSize / (1024 * 1024);
     
@@ -2379,7 +2379,7 @@ Respond with VALID JSON only:
       }
       
       // Fallback to mock analysis
-      const mockResult = mockPhotoAnalysis(req.file.size, req.file.originalname);
+      const mockResult = await mockPhotoAnalysis(req.file.size, req.file.originalname);
       
       res.json({
         ...mockResult,
