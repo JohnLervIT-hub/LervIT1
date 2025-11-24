@@ -1824,32 +1824,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const sizeMB = fileSize / (1024 * 1024);
     
     // Simple heuristics based on file size and name
-    let loadSize: "small" | "medium" | "large" = "medium";
+    let loadSize: "small" | "medium" | "large" = "small";
     let heavyItem = false;
     let recommendedMovers = 1;
-    let itemType = "Household item";
-    let estimatedWeight: "light" | "medium" | "heavy" = "medium";
-    let weightClass: "light" | "medium" | "heavy" = "medium";
-    let estimatedWeightLbs = 200;
-    let recommendedVehicle = "Cargo Van";
+    let itemType = "Personal item";
+    let estimatedWeight: "light" | "medium" | "heavy" = "light";
+    let weightClass: "light" | "medium" | "heavy" = "light";
+    let estimatedWeightLbs = 8;
+    let recommendedVehicle = "SUV";
     
     // File size analysis (smaller photos often = smaller items)
-    if (sizeMB < 1) {
+    // Most phone photos are 1-3MB even for small items
+    if (sizeMB < 1.5) {
       loadSize = "small";
       estimatedWeight = "light";
       weightClass = "light";
-      estimatedWeightLbs = 30;
+      estimatedWeightLbs = 8;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
-      itemType = "Small item or personal belonging";
-    } else if (sizeMB > 3) {
+      itemType = "Small personal item";
+    } else if (sizeMB >= 1.5 && sizeMB < 4) {
+      loadSize = "medium";
+      estimatedWeight = "medium";
+      weightClass = "medium";
+      estimatedWeightLbs = 80;
+      recommendedMovers = 1;
+      recommendedVehicle = "Pickup";
+      itemType = "Medium household item";
+    } else if (sizeMB >= 4) {
       loadSize = "large";
       estimatedWeight = "heavy";
       weightClass = "heavy";
-      estimatedWeightLbs = 600;
+      estimatedWeightLbs = 250;
       heavyItem = true;
       recommendedMovers = 2;
-      recommendedVehicle = "Cube Truck";
+      recommendedVehicle = "Cargo Van";
       itemType = "Large furniture piece";
     }
     
