@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index, json } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -84,7 +84,6 @@ export const bookings = pgTable("bookings", {
   aiWeightClass: text("ai_weight_class"),
   aiRecommendedVehicle: text("ai_recommended_vehicle"),
   aiConfidenceScore: decimal("ai_confidence_score", { precision: 3, scale: 2 }),
-  detectedItems: json("detected_items"),
   
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
@@ -187,31 +186,6 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   dropoffDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
   loadSize: z.enum(['small', 'medium', 'large']),
   numberOfMovers: z.number().int().min(1).max(2),
-  // Allow detected items array (optional) - matches DetectedItem interface from shared/ai.ts
-  detectedItems: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    category: z.enum(["furniture", "appliance", "box", "heavy_item", "fragile", "other"]),
-    quantity: z.number(),
-    estimatedWeightLbs: z.number(),
-    estimatedCubicFeet: z.number(),
-    loadSize: z.enum(["small", "medium", "large"]),
-    requiresSpecialCare: z.boolean(),
-    imageUrl: z.string().optional(),
-    confidence: z.number(),
-    // New fields for Standard Weight Database system
-    sizeClassification: z.enum(["small", "medium", "large", "XL"]).optional(),
-    alternativeSuggestions: z.array(z.object({
-      name: z.string(),
-      category: z.string(),
-      size: z.string(),
-      weightLbs: z.number(),
-      cubicFeet: z.number(),
-      moversNeeded: z.number(),
-    })).optional(),
-    isUncertain: z.boolean().optional(),
-    databaseMatchedItem: z.string().nullable().optional(),
-  })).nullable().optional(),
 });
 
 export const insertMessageSchema = createInsertSchema(messages).omit({

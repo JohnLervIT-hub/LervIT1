@@ -4,6 +4,35 @@
 
 LervIT is a mobile-first web application designed as a two-sided marketplace connecting customers with freelance movers in Calgary. Its primary goal is to simplify the moving process through features like real-time messaging, booking management, administrative tools, and comprehensive support. The platform emphasizes trust, transparent pricing, and intuitive user experiences, with an ambitious vision to evolve into an intelligent, Uber-style location-based service that matches customers with nearby movers using proximity and dynamic pricing algorithms.
 
+## Recent Changes
+
+### Typography & Layout Optimizations (November 24, 2025)
+Implemented comprehensive typography system and responsive layout improvements across the platform:
+
+**Typography System (index.css):**
+- Established proper heading hierarchy matching design guidelines: h1 (2.5rem mobile → 4rem desktop), h2 (1.75rem mobile → 2.5rem desktop), h3-h6 with proper scaling
+- Created bespoke helper classes for special tracking needs: `.tracking-tight-headings`, `.tracking-tight`, `.tracking-normal-text`
+- Removed problematic utility class overrides (e.g., `.text-lg`, `.text-xl`) to prevent shadcn component conflicts
+- Used proper responsive media queries for typography scaling
+
+**Optimized Pages:**
+- **LifecycleDemo.tsx (Customer Demo):** Enhanced mobile responsiveness with improved padding (pt-20 px-4 pb-8 md:pt-24 md:px-6 lg:px-8 md:pb-12), better visual hierarchy for header and stats cards, optimized pricing breakdown section
+- **MoverLifecycleDemo.tsx (Mover Demo):** Improved stats cards with responsive sizing, enhanced header with scalable icon (w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12), better progress indicators
+- **Home.tsx:** Better section spacing (py-12 md:py-16 lg:py-20), enhanced feature cards and "How It Works" section with proper responsive breakpoints
+
+**Responsive Design Patterns:**
+- Mobile-first approach with three key breakpoints: default (320px+), md (768px+), lg (1024px+)
+- Consistent gap spacing that scales with viewport: gap-4 md:gap-5 lg:gap-6
+- Cards use responsive padding: p-5 md:p-6
+- Icons scale appropriately across breakpoints
+
+### Technical Debt & Future Improvements
+- **Google Maps API Deprecation:** Console warnings indicate deprecated APIs in use. Future work should migrate to new APIs:
+  - Replace `google.maps.places.PlacesService` with `google.maps.places.Place`
+  - Replace `google.maps.Marker` with `google.maps.marker.AdvancedMarkerElement`
+  - Migration guide: https://developers.google.com/maps/documentation/javascript/places-migration-overview
+- **Additional Pages for Optimization:** Apply same typography/layout patterns to BrowseMovers, RequestMove, MyBookings, and MoverDashboard for consistency
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -11,7 +40,7 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-The platform features a mobile-first design using shadcn/ui (Radix UI-based) components, ensuring a consistent and responsive user experience. It includes role-based navigation, protected routes, transparent pricing breakdowns for customers, and an intuitive booking flow. Typography system and responsive layout improvements are applied across the platform, including proper heading hierarchy, custom tracking classes, and consistent spacing across breakpoints.
+The platform features a mobile-first design using shadcn/ui (Radix UI-based) components, ensuring a consistent and responsive user experience. It includes role-based navigation, protected routes, transparent pricing breakdowns for customers, and an intuitive booking flow.
 
 ### Technical Implementations
 *   **Frontend:** Built with React 18+ (TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS) for a modern and performant user interface. Authentication state is managed via AuthContext, and server state with React Query.
@@ -20,23 +49,23 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **Monorepo Structure:** A `/shared` directory centralizes schema and types, ensuring end-to-end TypeScript type safety with Drizzle Zod integration.
 
 ### Feature Specifications
-*   **Uber-Style Proximity Matching:** Employs a geocoding system (Google Maps Distance Matrix API integration with Haversine fallback), a 7-component dynamic pricing model, and a matching algorithm that ranks the top 5 nearest available movers within a 15-50km radius. A `jobNotifications` system handles invitations with a 10-minute expiration, protected by atomic updates and 5-layer validation for job acceptance. The ProximityDemo page visualizes mover locations and matching results with interactive Google Maps. The booking form uses Google Maps Autocomplete for precise location capture.
-*   **Enhanced Mover Display:** The MoverCard component provides comprehensive mover information including name, verified badge, star ratings, trip counts, vehicle information, distance, ETA calculations, and estimated pricing, consistent with the ProximityDemo design.
+*   **Uber-Style Proximity Matching:** Employs a geocoding system (with Google Maps Distance Matrix API integration and Haversine fallback), a 7-component dynamic pricing model, and a matching algorithm that ranks the top 5 nearest available movers within a 15-50km radius. A `jobNotifications` system handles invitations with a 10-minute expiration, protected by atomic updates and 5-layer validation for job acceptance. The ProximityDemo page demonstrates this with real Google Maps integration using interactive markers, polylines, and InfoWindows to visualize mover locations and matching results. The booking form uses Google Maps Autocomplete for pickup/dropoff locations, with auto-centering map functionality that extracts precise lat/lng coordinates from place details for accurate marker placement. Demo movers feature realistic Calgary quadrant locations (NE, NW, SE, SW, Downtown) with comprehensive profiles including verification status, ratings (out of 5), trip counts, vehicle details (make/model and type), distance calculations, ETA estimates (~2.2 min per km), travel fees, and total earnings with 10-minute expiration timers.
+*   **Enhanced Mover Display:** The MoverCard component provides comprehensive mover information across the platform (Browse Movers page, search results, and booking flow). Each card displays: mover name with prominent 🛡️ Verified badge for verified movers, star ratings with trip counts, vehicle information (🚐 Vehicle: type/make/model), location distance (📍 km away), ETA calculations based on Calgary traffic patterns (~2.2 min per km), and estimated pricing. The layout matches the ProximityDemo design for consistency, with clear visual hierarchy and responsive mobile-first design.
 *   **AI-Powered Features:**
     *   **AI Auto-Quote Predictor:** Provides instant price estimate ranges with confidence levels and natural language explanations.
     *   **AI Price Breakdown Explainer:** Offers natural language explanations for pricing components.
-    *   **AI Multi-Photo Item Detection (Enhanced):** Analyzes up to 10 photos simultaneously using OpenAI Vision API with intelligent duplicate detection to combine quantities of similar items. DetectedItemsList component allows real-time editable quantities, live calculation updates (cubic feet, weight, movers needed, vehicle type), and auto-fills booking form fields. A comprehensive `Standard Weight Database` provides accurate weight, volume, and difficulty for items, used for lookup and interactive suggestions when AI confidence is low. Booking records persist complete item inventory. A mock fallback system is in place for when the OpenAI API is unavailable.
+    *   **AI Item Detection from Photo (Optimized):** Uses OpenAI Vision API with enhanced prompts to provide specific, detailed item descriptions (e.g., "Queen-size bed", "Leather sofa", "Running shoes", "Suitcase") instead of generic classifications. Auto-fills load size, heavy item estimates, number of movers, weight detection, and vehicle recommendations. Mock fallback includes 30+ item types with intelligent classification based on file size and filename patterns.
 *   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling for secure storage.
 *   **Role-Specific User Experience:** Implements `ProtectedRoute` for access control, dynamic navigation, and protected login/signup redirects based on user roles.
-*   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard.
+*   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard, utilizing `supportTickets` and `supportTicketReplies` tables.
 *   **Payment Processing:** Integrated with Stripe for secure payment intent creation, status tracking, webhook handling, and CAD currency support.
-*   **Email Notification System:** Comprehensive email templates for booking confirmations, job assignments, payment receipts, and status updates.
-*   **Mover Earnings Dashboard:** Provides movers with a detailed overview of their earnings.
-*   **Real-Time Vehicle Tracking:** Allows movers to share their location for customer tracking on Google Maps.
-*   **Mover Profile Management:** Movers can manage their profile, including photos, bio, and vehicle details.
-*   **Driver Verification & Compliance System:** A `verificationItems` table tracks 7 types of verification with blocking logic to prevent unverified movers from going online.
-*   **Admin Verification Review Dashboard:** An admin interface for reviewing and managing driver verification documents.
-*   **Report Mover Safety Feature:** Customers can report movers for issues, generating high-priority support tickets.
+*   **Email Notification System:** Comprehensive email templates for booking confirmations, job assignments, payment receipts, and status updates, designed for integration with services like SendGrid/Resend.
+*   **Mover Earnings Dashboard:** Provides movers with a detailed overview of their earnings, including total, pending, and completed jobs, with monthly breakdowns.
+*   **Real-Time Vehicle Tracking:** Allows movers to share their location, which customers can track live on Google Maps with markers for pickup, dropoff, and the mover's current position.
+*   **Mover Profile Management:** Movers can manage their profile, including photos, bio, vehicle details (type, color, license plate), with robust validation and authentication.
+*   **Driver Verification & Compliance System:** A `verificationItems` table tracks 7 types of verification (e.g., Government ID, Driver's License, Vehicle Registration) with statuses and expiry dates. A blocking logic prevents movers from going online until all required verifications are approved.
+*   **Admin Verification Review Dashboard:** An admin interface for reviewing and managing driver verification documents, with features for searching, filtering, approving/rejecting items, and providing rejection comments.
+*   **Report Mover Safety Feature:** Customers can report movers for issues, generating high-priority support tickets, with confirmation dialogs and security validations.
 
 ## External Dependencies
 

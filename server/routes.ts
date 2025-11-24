@@ -93,17 +93,17 @@ const storage_multer = multer.diskStorage({
 const upload = multer({
   storage: storage_multer,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit (HEIC files can be larger)
+    fileSize: 5 * 1024 * 1024, // 5MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp|heic|heif/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = file.mimetype === 'image/heic' || file.mimetype === 'image/heif' || /image\/(jpeg|jpg|png|gif|webp)/.test(file.mimetype);
+    const mimetype = allowedTypes.test(file.mimetype);
     
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb(new Error('Only image files (JPG, PNG, GIF, WebP, HEIC) are allowed!'));
+      cb(new Error('Only image files are allowed!'));
     }
   }
 });
@@ -1040,7 +1040,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
         ...(bookingData.estimatedWeightLbs !== undefined && { estimatedWeightLbs: bookingData.estimatedWeightLbs }),
-        ...(bookingData.detectedItems && { detectedItems: bookingData.detectedItems }),
         pickupLatitude: pickupGeo.coordinates.lat,
         pickupLongitude: pickupGeo.coordinates.lng,
         dropoffLatitude: dropoffGeo.coordinates.lat,
@@ -1818,166 +1817,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mock AI photo analysis V2 (uses Standard Weight Database)
-  function mockPhotoAnalysisV2(filename: string): {
-    itemType: string;
-    sizeClassification: "small" | "medium" | "large" | "XL";
-    category: "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other";
-    confidence: number;
-  } {
-    const lowerName = filename.toLowerCase();
-    
-    // Furniture - Seating
-    if (lowerName.includes('sectional')) {
-      return { itemType: "Sectional sofa", sizeClassification: "XL", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('sofa') || lowerName.includes('couch')) {
-      return { itemType: "Sofa (3-seater)", sizeClassification: "large", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('recliner')) {
-      return { itemType: "Recliner", sizeClassification: "medium", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('armchair')) {
-      return { itemType: "Armchair", sizeClassification: "medium", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('office') && lowerName.includes('chair')) {
-      return { itemType: "Office chair", sizeClassification: "small", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('dining') && lowerName.includes('chair')) {
-      return { itemType: "Dining chair", sizeClassification: "small", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('chair')) {
-      return { itemType: "Dining chair", sizeClassification: "small", category: "furniture", confidence: 70 };
-    }
-    
-    // Furniture - Tables
-    else if (lowerName.includes('coffee') && lowerName.includes('table')) {
-      return { itemType: "Coffee table", sizeClassification: "small", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('dining') && lowerName.includes('table')) {
-      return { itemType: "Dining table (6-seater)", sizeClassification: "large", category: "furniture", confidence: 70 };
-    } else if (lowerName.includes('desk')) {
-      return { itemType: "Desk", sizeClassification: "medium", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('table')) {
-      return { itemType: "Coffee table", sizeClassification: "small", category: "furniture", confidence: 65 };
-    }
-    
-    // Furniture - Beds
-    else if (lowerName.includes('king') && lowerName.includes('bed')) {
-      return { itemType: "King bed frame", sizeClassification: "XL", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('queen') && lowerName.includes('bed')) {
-      return { itemType: "Queen bed frame", sizeClassification: "large", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('twin') && lowerName.includes('bed')) {
-      return { itemType: "Twin bed frame", sizeClassification: "medium", category: "furniture", confidence: 75 };
-    } else if (lowerName.includes('bed')) {
-      return { itemType: "Full/Double bed frame", sizeClassification: "medium", category: "furniture", confidence: 70 };
-    } else if (lowerName.includes('mattress')) {
-      return { itemType: "Queen mattress", sizeClassification: "large", category: "furniture", confidence: 70 };
-    }
-    
-    // Appliances
-    else if (lowerName.includes('refrigerator') || lowerName.includes('fridge')) {
-      if (lowerName.includes('mini')) {
-        return { itemType: "Mini fridge", sizeClassification: "small", category: "appliance", confidence: 75 };
-      }
-      return { itemType: "Standard refrigerator", sizeClassification: "XL", category: "appliance", confidence: 75 };
-    } else if (lowerName.includes('washer') || lowerName.includes('washing')) {
-      return { itemType: "Washing machine", sizeClassification: "XL", category: "appliance", confidence: 75 };
-    } else if (lowerName.includes('dryer')) {
-      return { itemType: "Dryer", sizeClassification: "XL", category: "appliance", confidence: 75 };
-    } else if (lowerName.includes('dishwasher')) {
-      return { itemType: "Dishwasher", sizeClassification: "large", category: "appliance", confidence: 75 };
-    } else if (lowerName.includes('microwave')) {
-      return { itemType: "Microwave", sizeClassification: "small", category: "appliance", confidence: 75 };
-    } else if (lowerName.includes('stove') || lowerName.includes('oven')) {
-      return { itemType: "Stove / Range", sizeClassification: "XL", category: "appliance", confidence: 75 };
-    }
-    
-    // Heavy Items / Gym Equipment
-    else if (lowerName.includes('treadmill')) {
-      return { itemType: "Treadmill", sizeClassification: "XL", category: "heavy_item", confidence: 75 };
-    } else if (lowerName.includes('elliptical')) {
-      return { itemType: "Elliptical machine", sizeClassification: "XL", category: "heavy_item", confidence: 75 };
-    } else if (lowerName.includes('piano')) {
-      return { itemType: "Piano (upright)", sizeClassification: "XL", category: "heavy_item", confidence: 75 };
-    } else if (lowerName.includes('safe')) {
-      return { itemType: "Safe", sizeClassification: "medium", category: "heavy_item", confidence: 75 };
-    }
-    
-    // Fragile Items
-    else if (lowerName.includes('tv') || lowerName.includes('television')) {
-      return { itemType: "TV (50-65 inch)", sizeClassification: "large", category: "fragile", confidence: 70 };
-    } else if (lowerName.includes('mirror')) {
-      return { itemType: "Mirror (wall)", sizeClassification: "medium", category: "fragile", confidence: 75 };
-    } else if (lowerName.includes('lamp')) {
-      return { itemType: "Lamp (table)", sizeClassification: "small", category: "fragile", confidence: 75 };
-    }
-    
-    // Boxes
-    else if (lowerName.includes('box')) {
-      return { itemType: "Medium box (3 cu ft)", sizeClassification: "small", category: "box", confidence: 75 };
-    }
-    
-    // Other - Personal Items
-    else if (lowerName.includes('shoe')) {
-      return { itemType: "Shoes (pair)", sizeClassification: "small", category: "other", confidence: 75 };
-    } else if (lowerName.includes('bag') || lowerName.includes('luggage') || lowerName.includes('suitcase')) {
-      return { itemType: "Suitcase / Luggage", sizeClassification: "small", category: "other", confidence: 75 };
-    } else if (lowerName.includes('backpack')) {
-      return { itemType: "Backpack / Bag", sizeClassification: "small", category: "other", confidence: 75 };
-    } else if (lowerName.includes('bike') || lowerName.includes('bicycle')) {
-      return { itemType: "Bicycle", sizeClassification: "medium", category: "other", confidence: 75 };
-    } else if (lowerName.includes('rug') || lowerName.includes('carpet')) {
-      return { itemType: "Mattress topper / Rug", sizeClassification: "medium", category: "other", confidence: 70 };
-    }
-    
-    // Default fallback
-    return { 
-      itemType: "Medium box (3 cu ft)", 
-      sizeClassification: "small", 
-      category: "box", 
-      confidence: 60 
-    };
-  }
-
-  // Legacy mock AI photo analysis (kept for backward compatibility with single photo endpoint)
+  // Mock AI photo analysis (fallback when OpenAI is unavailable)
   function mockPhotoAnalysis(fileSize: number, filename: string) {
     // Analyze file size in MB to estimate load
     const sizeMB = fileSize / (1024 * 1024);
     
     // Simple heuristics based on file size and name
-    let loadSize: "small" | "medium" | "large" = "small";
+    let loadSize: "small" | "medium" | "large" = "medium";
     let heavyItem = false;
     let recommendedMovers = 1;
-    let itemType = "Personal item";
-    let estimatedWeight: "light" | "medium" | "heavy" = "light";
-    let weightClass: "light" | "medium" | "heavy" = "light";
-    let estimatedWeightLbs = 8;
-    let recommendedVehicle = "SUV";
+    let itemType = "Household item";
+    let estimatedWeight: "light" | "medium" | "heavy" = "medium";
+    let weightClass: "light" | "medium" | "heavy" = "medium";
+    let estimatedWeightLbs = 200;
+    let recommendedVehicle = "Cargo Van";
     
-    // File size analysis - Most modern phone photos are 2-4MB regardless of item size
-    // So we default to LIGHT items and only increase for very large files or filename patterns
-    if (sizeMB < 5) {
-      // Default for most uploads: assume small/light items (bags, shoes, clothes, boxes, small decor)
+    // File size analysis (smaller photos often = smaller items)
+    if (sizeMB < 1) {
       loadSize = "small";
       estimatedWeight = "light";
       weightClass = "light";
-      estimatedWeightLbs = 10;
+      estimatedWeightLbs = 30;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
-      itemType = "Small personal item";
-    } else if (sizeMB >= 5 && sizeMB < 8) {
-      // Larger file sizes might indicate furniture photos
-      loadSize = "medium";
-      estimatedWeight = "medium";
-      weightClass = "medium";
-      estimatedWeightLbs = 120;
-      recommendedMovers = 1;
-      recommendedVehicle = "Pickup";
-      itemType = "Medium furniture item";
-    } else {
-      // Very large files (8MB+) likely heavy furniture or appliances
+      itemType = "Small item or personal belonging";
+    } else if (sizeMB > 3) {
       loadSize = "large";
       estimatedWeight = "heavy";
       weightClass = "heavy";
-      estimatedWeightLbs = 300;
+      estimatedWeightLbs = 600;
       heavyItem = true;
       recommendedMovers = 2;
-      recommendedVehicle = "Cargo Van";
-      itemType = "Large furniture or appliance";
+      recommendedVehicle = "Cube Truck";
+      itemType = "Large furniture piece";
     }
     
     // Filename pattern detection - Enhanced with more specific descriptions
@@ -2329,187 +2201,6 @@ Respond with VALID JSON only:
       res.status(500).json({ error: error instanceof Error ? error.message : "Analysis failed" });
     }
   });
-
-  // Batch AI photo analysis endpoint - processes multiple photos with duplicate detection
-  app.post("/api/ai/analyze-multiple-photos", async (req: Request, res: Response) => {
-    try {
-      const { imageUrls } = req.body;
-      
-      if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-        return res.status(400).json({ error: "No image URLs provided" });
-      }
-      
-      if (imageUrls.length > 10) {
-        return res.status(400).json({ error: "Maximum 10 photos allowed" });
-      }
-      
-      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-      const detectedItems: any[] = [];
-      
-      // Process each photo independently
-      for (const imageUrl of imageUrls) {
-        let analysisResult: any;
-        
-        // Try OpenAI Vision API first if key is available
-        if (OPENAI_API_KEY) {
-          try {
-            const fullImageUrl = `${req.protocol}://${req.get('host')}${imageUrl}`;
-            
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${OPENAI_API_KEY}`
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                messages: [
-                  {
-                    role: 'user',
-                    content: [
-                      {
-                        type: 'text',
-                        text: `You are an expert moving estimator analyzing photos of items. Your job is to IDENTIFY the item type and size ONLY.
-
-CRITICAL RULES:
-1. DO NOT estimate weight - we have a database for that
-2. DO NOT estimate cubic feet/volume - we have a database for that
-3. ONLY identify: item type, size classification, and category
-
-Be SPECIFIC with item descriptions. Don't use generic terms like "furniture" or "item".
-
-Examples of GOOD descriptions:
-✅ "Queen-size bed frame"
-✅ "L-shaped sectional sofa"
-✅ "Leather office chair"
-✅ "Cardboard moving boxes"
-✅ "Pair of running shoes"
-✅ "Washing machine"
-✅ "Dining table (6-seater)"
-✅ "Mini fridge"
-✅ "Treadmill"
-
-Analyze the image and determine:
-1. **Item Type** - Be specific! (e.g., "Queen bed frame", "Sectional sofa", "Washing machine")
-2. **Size Classification**: 
-   - "small" = fits in hand, bag-sized items (shoes, lamps, small boxes)
-   - "medium" = requires lifting, chair-sized (chairs, small tables, bicycles)
-   - "large" = bulky, sofa-sized (sofas, beds, large tables, appliances)
-   - "XL" = very large/heavy (sectionals, king beds, fridges, treadmills, pianos)
-3. **Category**: furniture, appliance, box, heavy_item, fragile, or other
-
-Respond with VALID JSON only:
-{
-  "itemType": "SPECIFIC item name (e.g., 'Queen bed frame', 'Washing machine')",
-  "sizeClassification": "small" | "medium" | "large" | "XL",
-  "category": "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other",
-  "confidence": 0-100
-}`
-                      },
-                      {
-                        type: 'image_url',
-                        image_url: {
-                          url: fullImageUrl
-                        }
-                      }
-                    ]
-                  }
-                ],
-                max_tokens: 500
-              })
-            });
-            
-            if (response.ok) {
-              const data = await response.json();
-              const content = data.choices[0]?.message?.content;
-              
-              if (content) {
-                const jsonMatch = content.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                  analysisResult = JSON.parse(jsonMatch[0]);
-                }
-              }
-            }
-          } catch (openaiError) {
-            console.log('OpenAI Vision failed for image, using mock analysis');
-          }
-        }
-        
-        // Fallback to mock analysis if OpenAI failed or unavailable
-        if (!analysisResult) {
-          // Extract filename from URL for mock analysis
-          const filename = imageUrl.split('/').pop() || 'unknown.jpg';
-          analysisResult = mockPhotoAnalysisV2(filename);
-        }
-        
-        // Convert AI detection to DetectedItem using Standard Weight Database
-        const { aiDetectionToItem } = await import("../shared/aiWeightLookup");
-        
-        const detectedItem = aiDetectionToItem(
-          {
-            itemType: analysisResult.itemType,
-            sizeClassification: analysisResult.sizeClassification,
-            category: analysisResult.category,
-            confidence: analysisResult.confidence,
-            imageUrl: imageUrl
-          },
-          () => `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        );
-        
-        detectedItems.push(detectedItem);
-      }
-      
-      // Apply duplicate detection
-      const { detectDuplicates, calculateTotals } = await import("../shared/ai");
-      const uniqueItems = detectDuplicates(detectedItems);
-      
-      // Calculate totals
-      const totals = calculateTotals(uniqueItems);
-      
-      const result = {
-        detectedItems: uniqueItems,
-        ...totals,
-        confidence: Math.round(uniqueItems.reduce((sum, item) => sum + item.confidence, 0) / uniqueItems.length),
-        explanation: `Detected ${uniqueItems.length} unique item${uniqueItems.length > 1 ? 's' : ''} across ${imageUrls.length} photo${imageUrls.length > 1 ? 's' : ''}. Total: ${totals.totalCubicFeet} cu ft, ${totals.totalWeightLbs} lbs. Recommended: ${totals.recommendedMovers} mover${totals.recommendedMovers > 1 ? 's' : ''} with a ${totals.recommendedVehicle}.`
-      };
-      
-      res.json(result);
-    } catch (error) {
-      console.error('Batch photo analysis error:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Analysis failed" });
-    }
-  });
-  
-  // Helper function to categorize items
-  function categorizeItem(itemType: string): "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other" {
-    const lower = itemType.toLowerCase();
-    if (lower.includes('sofa') || lower.includes('chair') || lower.includes('table') || lower.includes('bed') || lower.includes('desk')) {
-      return 'furniture';
-    }
-    if (lower.includes('fridge') || lower.includes('washer') || lower.includes('dryer') || lower.includes('dishwasher') || lower.includes('microwave')) {
-      return 'appliance';
-    }
-    if (lower.includes('box') || lower.includes('container') || lower.includes('crate')) {
-      return 'box';
-    }
-    if (lower.includes('piano') || lower.includes('safe') || lower.includes('heavy')) {
-      return 'heavy_item';
-    }
-    if (lower.includes('glass') || lower.includes('mirror') || lower.includes('artwork') || lower.includes('fragile')) {
-      return 'fragile';
-    }
-    return 'other';
-  }
-  
-  // Helper function to estimate cubic feet based on load size
-  function estimateCubicFeet(loadSize: string): number {
-    switch (loadSize) {
-      case 'small': return 5;
-      case 'medium': return 20;
-      case 'large': return 50;
-      default: return 20;
-    }
-  }
 
   // Geocoding distance endpoint for AI auto-quote predictor
   app.post("/api/geocode/distance", async (req: Request, res: Response) => {

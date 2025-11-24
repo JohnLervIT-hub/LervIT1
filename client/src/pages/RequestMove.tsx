@@ -13,14 +13,13 @@ import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
-import DetectedItemsList from "@/components/DetectedItemsList";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult, type DetectedItem, type MultiplePhotosAnalysisResult } from "@shared/ai";
+import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 
 export default function RequestMove() {
   const [, setLocation] = useLocation();
@@ -52,11 +51,6 @@ export default function RequestMove() {
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysisResult | null>(null);
   const [analyzedPhotoUrl, setAnalyzedPhotoUrl] = useState<string | null>(null);
-  
-  // AI Feature 4: Multi-Photo Item Detection state
-  const [detectedItems, setDetectedItems] = useState<DetectedItem[]>([]);
-  const [isAnalyzingMultiplePhotos, setIsAnalyzingMultiplePhotos] = useState(false);
-  const [multiPhotoAnalysis, setMultiPhotoAnalysis] = useState<MultiplePhotosAnalysisResult | null>(null);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
@@ -248,68 +242,6 @@ export default function RequestMove() {
     }
   };
 
-  // AI Feature 4: Multi-Photo Item Detection
-  const analyzeMultiplePhotos = async () => {
-    if (images.length === 0) {
-      toast({
-        title: "No photos to analyze",
-        description: "Please upload at least one photo first.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsAnalyzingMultiplePhotos(true);
-    
-    try {
-      const response = await fetch('/api/ai/analyze-multiple-photos', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ imageUrls: images })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Analysis failed');
-      }
-      
-      const result: MultiplePhotosAnalysisResult = await response.json();
-      setMultiPhotoAnalysis(result);
-      setDetectedItems(result.detectedItems);
-      
-      // Auto-fill form fields based on AI analysis
-      setLoadSize(result.loadSize);
-      setHeavyItem(result.heavyItemCount > 0);
-      setNumberOfMovers(result.recommendedMovers);
-      
-      toast({
-        title: "AI Analysis Complete!",
-        description: `Detected ${result.detectedItems.length} unique item${result.detectedItems.length > 1 ? 's' : ''} from ${images.length} photo${images.length > 1 ? 's' : ''}!`,
-      });
-    } catch (error) {
-      toast({
-        title: "Analysis Failed",
-        description: "Could not analyze photos. Please fill in details manually.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsAnalyzingMultiplePhotos(false);
-    }
-  };
-  
-  // Handle detected items changes
-  const handleDetectedItemsChange = (items: DetectedItem[]) => {
-    setDetectedItems(items);
-  };
-  
-  // Handle totals update from detected items
-  const handleTotalsChange = (totals: any) => {
-    setLoadSize(totals.loadSize);
-    setHeavyItem(totals.heavyItemCount > 0);
-    setNumberOfMovers(totals.recommendedMovers);
-  };
-
   const handleNext = () => {
     // Step 1: Validate addresses (MANDATORY)
     if (step === 1) {
@@ -391,7 +323,6 @@ export default function RequestMove() {
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
-        detectedItems: detectedItems.length > 0 ? detectedItems : null,
       };
       createBookingMutation.mutate(bookingData);
     }
@@ -946,40 +877,6 @@ export default function RequestMove() {
                         Help movers provide accurate quotes by showing what needs to be moved
                       </p>
                       <ImageUpload onImagesChange={setImages} maxImages={10} />
-                      
-                      {images.length > 0 && (
-                        <div className="mt-4">
-                          <Button
-                            type="button"
-                            onClick={analyzeMultiplePhotos}
-                            disabled={isAnalyzingMultiplePhotos}
-                            className="w-full"
-                            data-testid="button-analyze-photos"
-                          >
-                            {isAnalyzingMultiplePhotos ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Analyzing {images.length} photo{images.length > 1 ? 's' : ''}...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="w-4 h-4 mr-2" />
-                                AI Detect Items ({images.length} photo{images.length > 1 ? 's' : ''})
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {detectedItems.length > 0 && (
-                        <div className="mt-6">
-                          <DetectedItemsList
-                            items={detectedItems}
-                            onItemsChange={handleDetectedItemsChange}
-                            onTotalsChange={handleTotalsChange}
-                          />
-                        </div>
-                      )}
                     </div>
                   </>
                 )}

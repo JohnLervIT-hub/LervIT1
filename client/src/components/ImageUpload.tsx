@@ -27,19 +27,16 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
       return;
     }
 
-    // Validate file types (including HEIC)
+    // Validate file types
     const validFiles = fileArray.filter(file => {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
-      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif'];
-      const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-      
-      return allowedTypes.includes(file.type) || allowedExtensions.includes(fileExtension);
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      return allowedTypes.includes(file.type);
     });
 
     if (validFiles.length !== fileArray.length) {
       toast({
         title: "Invalid files",
-        description: "Only image files (JPG, PNG, GIF, WebP, HEIC) are allowed.",
+        description: "Only image files (JPG, PNG, GIF, WebP) are allowed.",
         variant: "destructive",
       });
       return;
@@ -149,7 +146,7 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
                     {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Max {maxImages} images, 10MB each (JPG, PNG, GIF, WebP, HEIC)
+                    Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
                   </p>
                 </div>
                 {!isDragging && (
@@ -170,8 +167,8 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
         <input
           id="image-upload"
           type="file"
-          accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/heic,image/heif"
-          multiple={true}
+          accept="image/*"
+          multiple
           onChange={handleFileSelect}
           className="hidden"
           disabled={uploading || images.length >= maxImages}
