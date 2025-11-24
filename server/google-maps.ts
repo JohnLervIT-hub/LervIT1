@@ -11,6 +11,12 @@ export interface DrivingDistance {
   success: boolean;
 }
 
+export interface GeocodingResult {
+  coordinates: Coordinates;
+  formattedAddress: string;
+  success: boolean;
+}
+
 /**
  * Get driving distance and duration between two coordinates using Google Distance Matrix API
  * Falls back to straight-line calculation if API fails
@@ -99,4 +105,65 @@ function fallbackDistance(origin: Coordinates, destination: Coordinates): Drivin
 
 function toRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
+}
+
+/**
+ * Geocode an address to get coordinates using Google Geocoding API
+ * Falls back to mock geocoding if API fails
+ */
+export async function geocodeAddress(address: string): Promise<GeocodingResult> {
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn("[Google Maps] API key not configured, using mock geocoding");
+    const { geocodeAddress: mockGeocode } = await import("@shared/geocoding");
+    const result = mockGeocode(address);
+    return {
+      coordinates: result.coordinates,
+      formattedAddress: result.formattedAddress,
+      success: false,
+    };
+  }
+
+  try {
+    const response = await client.geocode({
+      params: {
+        address: `${address}, Calgary, AB, Canada`,
+        key: GOOGLE_MAPS_API_KEY,
+      },
+      timeout: 5000,
+    });
+
+    if (response.data.status !== "OK" || !response.data.results[0]) {
+      console.warn(`[Google Maps] Geocoding failed with status: ${response.data.status}, falling back to mock`);
+      const { geocodeAddress: mockGeocode } = await import("@shared/geocoding");
+      const result = mockGeocode(address);
+      return {
+        coordinates: result.coordinates,
+        formattedAddress: result.formattedAddress,
+        success: false,
+      };
+    }
+
+    const result = response.data.results[0];
+    const location = result.geometry.location;
+
+    console.log(`[Google Maps] ✓ Geocoded "${address}" to ${location.lat}, ${location.lng}`);
+
+    return {
+      coordinates: {
+        lat: location.lat,
+        lng: location.lng,
+      },
+      formattedAddress: result.formatted_address,
+      success: true,
+    };
+  } catch (error) {
+    console.error("[Google Maps] Geocoding error, falling back to mock:", error instanceof Error ? error.message : String(error));
+    const { geocodeAddress: mockGeocode } = await import("@shared/geocoding");
+    const result = mockGeocode(address);
+    return {
+      coordinates: result.coordinates,
+      formattedAddress: result.formattedAddress,
+      success: false,
+    };
+  }
 }

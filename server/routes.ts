@@ -2212,14 +2212,23 @@ Respond with VALID JSON only:
       
       const { pickupAddress, dropoffAddress } = validateBody(distanceSchema, req.body);
       
-      const { geocodeAddress, calculateDistance } = await import("@shared/geocoding");
+      // Use Google Maps Geocoding API and Distance Matrix API for accurate results
+      const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
       
-      const pickupGeo = geocodeAddress(pickupAddress);
-      const dropoffGeo = geocodeAddress(dropoffAddress);
+      // Geocode both addresses
+      const pickupGeo = await geocodeAddress(pickupAddress);
+      const dropoffGeo = await geocodeAddress(dropoffAddress);
       
-      const distance = calculateDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
+      // Calculate actual driving distance using Google Distance Matrix API
+      const result = await getDrivingDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
       
-      res.json({ distance });
+      console.log(`[Distance API] ${pickupAddress} → ${dropoffAddress}: ${result.distanceKm}km (${result.success ? 'Google Maps' : 'Haversine fallback'})`);
+      
+      res.json({ 
+        distance: result.distanceKm,
+        durationMinutes: result.durationMinutes,
+        success: result.success 
+      });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
