@@ -1,9 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { GoogleMap, Marker, Polyline, InfoWindow } from "@react-google-maps/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { MapPin, Navigation, DollarSign, Clock, Zap, TrendingUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -42,6 +43,8 @@ const DEMO_MOVERS: Mover[] = [
 export default function ProximityDemo() {
   const [pickup, setPickup] = useState<Location | null>(null);
   const [dropoff, setDropoff] = useState<Location | null>(null);
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [dropoffAddress, setDropoffAddress] = useState("");
   const [loadSize, setLoadSize] = useState<"small" | "medium" | "large">("medium");
   const [showMatching, setShowMatching] = useState(false);
   const [matchedMovers, setMatchedMovers] = useState<any[]>([]);
@@ -78,6 +81,59 @@ export default function ProximityDemo() {
   const onMapLoad = useCallback((map: google.maps.Map) => {
     setMap(map);
   }, []);
+
+  // Auto-center map when locations change
+  useEffect(() => {
+    if (!map || (!pickup && !dropoff)) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    
+    if (pickup) bounds.extend({ lat: pickup.lat, lng: pickup.lng });
+    if (dropoff) bounds.extend({ lat: dropoff.lat, lng: dropoff.lng });
+    
+    // Add some padding to the bounds
+    if (pickup || dropoff) {
+      map.fitBounds(bounds);
+      
+      // Set a maximum zoom level
+      const listener = google.maps.event.addListenerOnce(map, 'bounds_changed', () => {
+        const currentZoom = map.getZoom();
+        if (currentZoom && currentZoom > 13) {
+          map.setZoom(13);
+        }
+      });
+    }
+  }, [map, pickup, dropoff]);
+
+  // Handle pickup address selection
+  const handlePickupChange = (address: string, placeDetails?: google.maps.places.PlaceResult) => {
+    setPickupAddress(address);
+    
+    if (placeDetails?.geometry?.location) {
+      const lat = placeDetails.geometry.location.lat();
+      const lng = placeDetails.geometry.location.lng();
+      setPickup({
+        name: placeDetails.formatted_address || address,
+        lat,
+        lng
+      });
+    }
+  };
+
+  // Handle dropoff address selection
+  const handleDropoffChange = (address: string, placeDetails?: google.maps.places.PlaceResult) => {
+    setDropoffAddress(address);
+    
+    if (placeDetails?.geometry?.location) {
+      const lat = placeDetails.geometry.location.lat();
+      const lng = placeDetails.geometry.location.lng();
+      setDropoff({
+        name: placeDetails.formatted_address || address,
+        lat,
+        lng
+      });
+    }
+  };
 
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
@@ -128,6 +184,8 @@ export default function ProximityDemo() {
   const reset = () => {
     setPickup(null);
     setDropoff(null);
+    setPickupAddress("");
+    setDropoffAddress("");
     setShowMatching(false);
     setMatchedMovers([]);
     setPriceBreakdown(null);
@@ -303,46 +361,32 @@ export default function ProximityDemo() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Pickup Location</label>
-                  <Select
-                    value={pickup?.name || ""}
-                    onValueChange={(name) => {
-                      const loc = CALGARY_LOCATIONS.find(l => l.name === name);
-                      setPickup(loc || null);
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-pickup">
-                      <SelectValue placeholder="Select pickup location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CALGARY_LOCATIONS.map(loc => (
-                        <SelectItem key={loc.name} value={loc.name}>
-                          {loc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <AddressAutocomplete
+                    value={pickupAddress}
+                    onChange={handlePickupChange}
+                    placeholder="Enter pickup address in Calgary..."
+                    data-testid="input-pickup"
+                  />
+                  {pickup && (
+                    <p className="text-xs text-muted-foreground">
+                      📍 {pickup.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Dropoff Location</label>
-                  <Select
-                    value={dropoff?.name || ""}
-                    onValueChange={(name) => {
-                      const loc = CALGARY_LOCATIONS.find(l => l.name === name);
-                      setDropoff(loc || null);
-                    }}
-                  >
-                    <SelectTrigger data-testid="select-dropoff">
-                      <SelectValue placeholder="Select dropoff location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CALGARY_LOCATIONS.map(loc => (
-                        <SelectItem key={loc.name} value={loc.name}>
-                          {loc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <AddressAutocomplete
+                    value={dropoffAddress}
+                    onChange={handleDropoffChange}
+                    placeholder="Enter dropoff address in Calgary..."
+                    data-testid="input-dropoff"
+                  />
+                  {dropoff && (
+                    <p className="text-xs text-muted-foreground">
+                      📍 {dropoff.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
