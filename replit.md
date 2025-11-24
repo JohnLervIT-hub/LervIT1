@@ -73,8 +73,9 @@ Preferred communication style: Simple, everyday language.
     *   **API Endpoints:** `POST /api/bookings/:bookingId/location` (mover updates), `GET /api/bookings/:bookingId/location` (fetch location).
     *   **Authorization:** Mover-only location updates, customer/mover/admin location viewing.
     *   **Frontend - Mover:** "Start Trip" button on confirmed bookings, automatic GPS sharing every 5 seconds during transit, "Sharing Location" badge.
-    *   **Frontend - Customer:** "Track Trip Live" button on in-transit bookings, live Leaflet map with pickup (green), dropoff (red), mover (blue) markers.
-    *   **Technical:** Polling approach (5-second intervals), browser Geolocation API, Leaflet with OpenStreetMap (free, no API key).
+    *   **Frontend - Customer:** "Track Trip Live" button on in-transit bookings, live Google Maps with pickup (green), dropoff (red), mover (blue) markers.
+    *   **Technical:** Polling approach (5-second intervals), browser Geolocation API, Google Maps JavaScript API via @react-google-maps/api.
+    *   **Maps Implementation:** Google Maps with HTTPS marker icons, auto-fit bounds, InfoWindow popups, dashed polyline route visualization.
 
 ## Recent Enhancements (November 2025)
 
@@ -129,4 +130,4 @@ Preferred communication style: Simple, everyday language.
 *   **Session Management:** connect-pg-simple (PostgreSQL session store).
 *   **File Upload:** Multer.
 *   **AI Integration:** OpenAI API (with free mock fallback).
-*   **Maps:** Leaflet, react-leaflet, OpenStreetMap (free, no API key).
+*   **Maps:** Google Maps JavaScript API via @react-google-maps/api library.
