@@ -1763,7 +1763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let loadSize: "small" | "medium" | "large" = "medium";
     let heavyItem = false;
     let recommendedMovers = 1;
-    let itemType = "Furniture item";
+    let itemType = "Household item";
     let estimatedWeight: "light" | "medium" | "heavy" = "medium";
     let weightClass: "light" | "medium" | "heavy" = "medium";
     let estimatedWeightLbs = 200;
@@ -1774,9 +1774,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       loadSize = "small";
       estimatedWeight = "light";
       weightClass = "light";
-      estimatedWeightLbs = 50;
+      estimatedWeightLbs = 30;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
+      itemType = "Small item or personal belonging";
     } else if (sizeMB > 3) {
       loadSize = "large";
       estimatedWeight = "heavy";
@@ -1785,47 +1786,211 @@ export async function registerRoutes(app: Express): Promise<Server> {
       heavyItem = true;
       recommendedMovers = 2;
       recommendedVehicle = "Cube Truck";
+      itemType = "Large furniture piece";
     }
     
-    // Filename pattern detection
+    // Filename pattern detection - Enhanced with more specific descriptions
     const lowerName = filename.toLowerCase();
-    if (lowerName.includes('sofa') || lowerName.includes('couch')) {
-      itemType = "Sofa/Couch";
+    
+    // Furniture - Seating
+    if (lowerName.includes('sofa') || lowerName.includes('couch') || lowerName.includes('sectional')) {
+      itemType = lowerName.includes('sectional') ? "Sectional sofa" : "Sofa";
       loadSize = "large";
       weightClass = "medium";
       estimatedWeightLbs = 300;
       heavyItem = true;
       recommendedMovers = 2;
       recommendedVehicle = "Cargo Van";
-    } else if (lowerName.includes('table') || lowerName.includes('desk')) {
-      itemType = "Table/Desk";
-      loadSize = "medium";
-      weightClass = "medium";
-      estimatedWeightLbs = 150;
-      recommendedMovers = 1;
-      recommendedVehicle = "Pickup";
-    } else if (lowerName.includes('bed') || lowerName.includes('mattress')) {
-      itemType = "Bed/Mattress";
-      loadSize = "large";
-      weightClass = "medium";
-      estimatedWeightLbs = 250;
-      recommendedMovers = 2;
-      recommendedVehicle = "Cargo Van";
-    } else if (lowerName.includes('chair') || lowerName.includes('stool')) {
-      itemType = "Chair";
+    } else if (lowerName.includes('chair')) {
+      if (lowerName.includes('office') || lowerName.includes('desk')) {
+        itemType = "Office chair";
+      } else if (lowerName.includes('dining')) {
+        itemType = "Dining chair";
+      } else if (lowerName.includes('arm')) {
+        itemType = "Armchair";
+      } else {
+        itemType = "Chair";
+      }
       loadSize = "small";
       weightClass = "light";
       estimatedWeightLbs = 40;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
-    } else if (lowerName.includes('appliance') || lowerName.includes('fridge') || lowerName.includes('washer')) {
-      itemType = "Appliance";
+    } else if (lowerName.includes('stool')) {
+      itemType = "Stool";
+      loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 25;
+      recommendedMovers = 1;
+      recommendedVehicle = "SUV";
+    }
+    
+    // Furniture - Tables
+    else if (lowerName.includes('table')) {
+      if (lowerName.includes('coffee')) {
+        itemType = "Coffee table";
+        loadSize = "medium";
+        estimatedWeightLbs = 80;
+      } else if (lowerName.includes('dining')) {
+        itemType = "Dining table";
+        loadSize = "large";
+        estimatedWeightLbs = 200;
+        recommendedMovers = 2;
+      } else if (lowerName.includes('side') || lowerName.includes('end')) {
+        itemType = "Side table";
+        loadSize = "small";
+        estimatedWeightLbs = 40;
+      } else {
+        itemType = "Table";
+        loadSize = "medium";
+        estimatedWeightLbs = 120;
+      }
+      weightClass = "medium";
+      recommendedVehicle = "Pickup";
+    } else if (lowerName.includes('desk')) {
+      itemType = lowerName.includes('standing') ? "Standing desk" : "Desk";
+      loadSize = "medium";
+      weightClass = "medium";
+      estimatedWeightLbs = 150;
+      recommendedMovers = 1;
+      recommendedVehicle = "Pickup";
+    }
+    
+    // Furniture - Beds
+    else if (lowerName.includes('bed')) {
+      if (lowerName.includes('king')) {
+        itemType = "King-size bed";
+        estimatedWeightLbs = 350;
+      } else if (lowerName.includes('queen')) {
+        itemType = "Queen-size bed";
+        estimatedWeightLbs = 280;
+      } else if (lowerName.includes('twin') || lowerName.includes('single')) {
+        itemType = "Twin bed";
+        estimatedWeightLbs = 180;
+      } else {
+        itemType = "Bed frame";
+        estimatedWeightLbs = 250;
+      }
+      loadSize = "large";
+      weightClass = "medium";
+      heavyItem = true;
+      recommendedMovers = 2;
+      recommendedVehicle = "Cargo Van";
+    } else if (lowerName.includes('mattress')) {
+      if (lowerName.includes('king')) {
+        itemType = "King-size mattress";
+        estimatedWeightLbs = 150;
+      } else if (lowerName.includes('queen')) {
+        itemType = "Queen-size mattress";
+        estimatedWeightLbs = 120;
+      } else {
+        itemType = "Mattress";
+        estimatedWeightLbs = 100;
+      }
+      loadSize = "large";
+      weightClass = "medium";
+      recommendedMovers = 2;
+      recommendedVehicle = "Cargo Van";
+    }
+    
+    // Appliances
+    else if (lowerName.includes('fridge') || lowerName.includes('refrigerator')) {
+      itemType = lowerName.includes('mini') ? "Mini fridge" : "Refrigerator";
       loadSize = "large";
       weightClass = "heavy";
-      estimatedWeightLbs = 550;
+      estimatedWeightLbs = lowerName.includes('mini') ? 100 : 550;
       heavyItem = true;
       recommendedMovers = 2;
       recommendedVehicle = "Cube Truck";
+    } else if (lowerName.includes('washer') || lowerName.includes('dryer')) {
+      itemType = lowerName.includes('washer') ? "Washing machine" : "Dryer";
+      loadSize = "large";
+      weightClass = "heavy";
+      estimatedWeightLbs = 500;
+      heavyItem = true;
+      recommendedMovers = 2;
+      recommendedVehicle = "Cube Truck";
+    } else if (lowerName.includes('appliance') || lowerName.includes('stove') || lowerName.includes('oven')) {
+      itemType = "Kitchen appliance";
+      loadSize = "large";
+      weightClass = "heavy";
+      estimatedWeightLbs = 400;
+      heavyItem = true;
+      recommendedMovers = 2;
+      recommendedVehicle = "Cube Truck";
+    }
+    
+    // Storage & Shelving
+    else if (lowerName.includes('dresser') || lowerName.includes('drawer')) {
+      itemType = "Dresser";
+      loadSize = "large";
+      weightClass = "medium";
+      estimatedWeightLbs = 250;
+      heavyItem = true;
+      recommendedMovers = 2;
+      recommendedVehicle = "Cargo Van";
+    } else if (lowerName.includes('bookshelf') || lowerName.includes('bookcase')) {
+      itemType = "Bookshelf";
+      loadSize = "medium";
+      weightClass = "medium";
+      estimatedWeightLbs = 120;
+      recommendedMovers = 1;
+      recommendedVehicle = "Pickup";
+    } else if (lowerName.includes('cabinet') || lowerName.includes('cupboard')) {
+      itemType = "Cabinet";
+      loadSize = "medium";
+      weightClass = "medium";
+      estimatedWeightLbs = 180;
+      recommendedMovers = 2;
+      recommendedVehicle = "Pickup";
+    }
+    
+    // Small items & Personal belongings
+    else if (lowerName.includes('box') || lowerName.includes('boxes')) {
+      itemType = "Moving boxes";
+      loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 40;
+      recommendedMovers = 1;
+      recommendedVehicle = "SUV";
+    } else if (lowerName.includes('shoe') || lowerName.includes('sneaker') || lowerName.includes('boot')) {
+      itemType = "Shoes";
+      loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 5;
+      recommendedMovers = 1;
+      recommendedVehicle = "Car";
+    } else if (lowerName.includes('bag') || lowerName.includes('luggage') || lowerName.includes('suitcase')) {
+      itemType = lowerName.includes('suitcase') ? "Suitcase" : (lowerName.includes('backpack') ? "Backpack" : "Bag");
+      loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 15;
+      recommendedMovers = 1;
+      recommendedVehicle = "Car";
+    } else if (lowerName.includes('lamp') || lowerName.includes('light')) {
+      itemType = lowerName.includes('floor') || lowerName.includes('standing') ? "Standing lamp" : "Lamp";
+      loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 20;
+      recommendedMovers = 1;
+      recommendedVehicle = "SUV";
+    }
+    
+    // Electronics
+    else if (lowerName.includes('tv') || lowerName.includes('television')) {
+      itemType = "Television";
+      loadSize = "medium";
+      weightClass = "medium";
+      estimatedWeightLbs = 60;
+      recommendedMovers = 1;
+      recommendedVehicle = "SUV";
+    } else if (lowerName.includes('monitor') || lowerName.includes('screen')) {
+      itemType = "Monitor";
+      loadSize = "small";
+      weightClass = "light";
+      estimatedWeightLbs = 25;
+      recommendedMovers = 1;
+      recommendedVehicle = "Car";
     }
     
     return {
@@ -1872,32 +2037,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   content: [
                     {
                       type: 'text',
-                      text: `Analyze this furniture/item photo for a moving service. Determine:
-1. Load size (small/medium/large)
-2. Is it a heavy item requiring special care? (true/false)
-3. Recommended number of movers (1 or 2)
-4. Item type/category
-5. Estimated weight category (light/medium/heavy)
-6. Approximate weight in pounds (integer)
-7. Recommended vehicle type (Car, SUV, Pickup, Cargo Van, Cube Truck, Flatbed)
+                      text: `You are an expert moving estimator analyzing photos of items that need to be moved. Provide SPECIFIC, DETAILED item descriptions.
 
-Weight classes:
-- Light: <100 lbs → Car, Small SUV
-- Medium: 100-500 lbs → Pickup or Cargo Van
-- Heavy: >500 lbs → Cube Truck, Flatbed
+CRITICAL: Be very specific about what you see. Don't use generic terms like "furniture" or "item".
 
-Respond ONLY with valid JSON in this exact format:
+Examples of GOOD descriptions:
+✅ "Queen-size bed frame"
+✅ "L-shaped sectional sofa"
+✅ "Leather office chair"
+✅ "Cardboard moving boxes (3 stacked)"
+✅ "Pair of running shoes"
+✅ "Large suitcase"
+✅ "King-size mattress"
+✅ "Wooden dining table (6-seater)"
+✅ "Mini fridge"
+✅ "Standing lamp"
+✅ "Backpack"
+✅ "Coffee table (glass top)"
+
+Examples of BAD descriptions (too generic):
+❌ "Furniture"
+❌ "Item"
+❌ "Object"
+❌ "Thing"
+
+Analyze the image and determine:
+1. **Specific item description** - Be detailed! (e.g., "Sectional sofa", "Queen bed", "Running shoes", "Luggage bag")
+2. Load size: small (fits in hand/bag), medium (requires lifting), large (bulky/heavy)
+3. Is it heavy/fragile requiring special care? (true/false)
+4. Recommended movers: 1 or 2
+5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
+6. Approximate weight in pounds
+7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
+
+Weight/Vehicle Guidelines:
+- Shoes, bags, small items → Light (<100 lbs) → Car/SUV
+- Chairs, small tables, medium boxes → Medium (100-500 lbs) → Pickup/Cargo Van
+- Sofas, beds, appliances → Heavy (>500 lbs) → Cube Truck/Flatbed
+
+Respond with VALID JSON only:
 {
   "loadSize": "small" | "medium" | "large",
   "heavyItem": true | false,
   "recommendedMovers": 1 | 2,
-  "itemType": "string",
+  "itemType": "SPECIFIC description here (e.g., 'Queen-size bed', 'Leather sofa', 'Running shoes')",
   "estimatedWeight": "light" | "medium" | "heavy",
   "weightClass": "light" | "medium" | "heavy",
   "estimatedWeightLbs": number,
   "recommendedVehicle": "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed",
   "confidence": 0-100,
-  "explanation": "brief explanation",
+  "explanation": "brief explanation with specific item details",
   "allowManualOverride": true
 }`
                     },

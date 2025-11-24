@@ -24,7 +24,7 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **AI-Powered Features:**
     *   **AI Auto-Quote Predictor:** Provides instant price estimate ranges with confidence levels and natural language explanations.
     *   **AI Price Breakdown Explainer:** Offers natural language explanations for pricing components.
-    *   **AI Item Detection from Photo:** Uses OpenAI Vision API to analyze furniture photos, auto-filling load size, heavy item estimates, and number of movers, including weight detection and vehicle recommendations.
+    *   **AI Item Detection from Photo (Optimized):** Uses OpenAI Vision API with enhanced prompts to provide specific, detailed item descriptions (e.g., "Queen-size bed", "Leather sofa", "Running shoes", "Suitcase") instead of generic classifications. Auto-fills load size, heavy item estimates, number of movers, weight detection, and vehicle recommendations. Mock fallback includes 30+ item types with intelligent classification based on file size and filename patterns.
 *   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling for secure storage.
 *   **Role-Specific User Experience:** Implements `ProtectedRoute` for access control, dynamic navigation, and protected login/signup redirects based on user roles.
 *   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard, utilizing `supportTickets` and `supportTicketReplies` tables.
