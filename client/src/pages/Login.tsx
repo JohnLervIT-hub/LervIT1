@@ -20,12 +20,22 @@ export default function Login() {
   // Redirect after successful login when user state updates
   useEffect(() => {
     if (user && !isLoading) {
-      if (user.role === "customer") {
-        setLocation("/dashboard");
-      } else if (user.role === "mover") {
-        setLocation("/mover-dashboard");
-      } else if (user.role === "admin") {
-        setLocation("/admin");
+      // Check for redirect parameter first
+      const params = new URLSearchParams(window.location.search);
+      const redirectPath = params.get('redirect');
+      
+      if (redirectPath) {
+        // Redirect to the specified path
+        setLocation(redirectPath);
+      } else {
+        // Default role-based redirect
+        if (user.role === "customer") {
+          setLocation("/dashboard");
+        } else if (user.role === "mover") {
+          setLocation("/mover-dashboard");
+        } else if (user.role === "admin") {
+          setLocation("/admin");
+        }
       }
     }
   }, [user, isLoading, setLocation]);
