@@ -116,18 +116,26 @@ function Router() {
   );
 }
 
-// Load Google Maps libraries once globally
-const googleMapsLibraries = ["places"];
+// CRITICAL: Libraries array MUST be defined outside component to prevent reloads
+const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "visualization")[] = ["places"];
 
 function App() {
   // Load Google Maps JavaScript API with Places library
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: googleMapsLibraries as any,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   if (loadError) {
-    console.error("Error loading Google Maps API:", loadError);
+    console.error("Google Maps API Error:", loadError);
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-lg text-destructive">Failed to load Google Maps</div>
+          <div className="text-sm text-muted-foreground mt-2">Please check your API key configuration</div>
+        </div>
+      </div>
+    );
   }
 
   // Wait for Google Maps to load before rendering
