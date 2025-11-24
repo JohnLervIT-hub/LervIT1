@@ -64,6 +64,7 @@ export const bookings = pgTable("bookings", {
   dropoffDifficulty: text("dropoff_difficulty").notNull().default("ground"),
   heavyItem: boolean("heavy_item").notNull().default(false),
   numberOfMovers: integer("number_of_movers").notNull().default(1),
+  acknowledgedSingleMoverPolicy: boolean("acknowledged_single_mover_policy").notNull().default(false),
   
   // Distance and pricing
   distance: decimal("distance", { precision: 8, scale: 2 }).notNull().default("0"),

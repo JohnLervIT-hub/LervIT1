@@ -245,6 +245,12 @@ export default function RequestMove() {
   useEffect(() => {
     const needsTwoMovers = requiresTwoMovers(loadSize, heavyItem);
     
+    // Reset acknowledgment if customer switches to 2 movers or conditions change
+    if (numberOfMovers === 2 || !needsTwoMovers) {
+      setHasSingleMoverAcknowledgment(false);
+    }
+    
+    // Show warning when selecting 1 mover for heavy loads without prior acknowledgment
     if (numberOfMovers === 1 && needsTwoMovers && !hasSingleMoverAcknowledgment) {
       setShowSingleMoverWarning(true);
     }
@@ -382,6 +388,20 @@ export default function RequestMove() {
         return;
       }
 
+      // Check if acknowledgment is required for current booking state
+      const needsAcknowledgment = numberOfMovers === 1 && requiresTwoMovers(loadSize, heavyItem);
+      
+      // Block submission if acknowledgment is required but not provided
+      if (needsAcknowledgment && !hasSingleMoverAcknowledgment) {
+        toast({
+          variant: "destructive",
+          title: "Acknowledgment Required",
+          description: "Please acknowledge the single mover policy for heavy items before proceeding."
+        });
+        // Warning dialog should already be visible via useEffect
+        return;
+      }
+      
       // Create the booking - backend will calculate distance and price
       const bookingData = {
         customerId: user.id,
@@ -392,6 +412,7 @@ export default function RequestMove() {
         loadSize,
         heavyItem,
         numberOfMovers,
+        acknowledgedSingleMoverPolicy: needsAcknowledgment && hasSingleMoverAcknowledgment,
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
@@ -1017,8 +1038,8 @@ export default function RequestMove() {
       </div>
     </div>
 
-    {/* Single Mover Warning Dialog */}
-    <AlertDialog open={showSingleMoverWarning} onOpenChange={setShowSingleMoverWarning}>
+    {/* Single Mover Warning Dialog - Cannot be dismissed without action */}
+    <AlertDialog open={showSingleMoverWarning}>
       <AlertDialogContent data-testid="dialog-single-mover-warning">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
