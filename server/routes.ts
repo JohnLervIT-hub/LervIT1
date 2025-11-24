@@ -2202,6 +2202,191 @@ Respond with VALID JSON only:
     }
   });
 
+  // Batch AI photo analysis endpoint - processes multiple photos with duplicate detection
+  app.post("/api/ai/analyze-multiple-photos", async (req: Request, res: Response) => {
+    try {
+      const { imageUrls } = req.body;
+      
+      if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+        return res.status(400).json({ error: "No image URLs provided" });
+      }
+      
+      if (imageUrls.length > 10) {
+        return res.status(400).json({ error: "Maximum 10 photos allowed" });
+      }
+      
+      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+      const detectedItems: any[] = [];
+      
+      // Process each photo independently
+      for (const imageUrl of imageUrls) {
+        let analysisResult: any;
+        
+        // Try OpenAI Vision API first if key is available
+        if (OPENAI_API_KEY) {
+          try {
+            const fullImageUrl = `${req.protocol}://${req.get('host')}${imageUrl}`;
+            
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${OPENAI_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      {
+                        type: 'text',
+                        text: `You are an expert moving estimator analyzing photos of items that need to be moved. Provide SPECIFIC, DETAILED item descriptions.
+
+CRITICAL: Be very specific about what you see. Don't use generic terms like "furniture" or "item".
+
+Examples of GOOD descriptions:
+✅ "Queen-size bed frame"
+✅ "L-shaped sectional sofa"
+✅ "Leather office chair"
+✅ "Cardboard moving boxes (3 stacked)"
+✅ "Pair of running shoes"
+✅ "Large suitcase"
+
+Analyze the image and determine:
+1. **Specific item description** - Be detailed!
+2. Load size: small (fits in hand/bag), medium (requires lifting), large (bulky/heavy)
+3. Is it heavy/fragile requiring special care? (true/false)
+4. Recommended movers: 1 or 2
+5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
+6. Approximate weight in pounds
+7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
+8. Estimated cubic feet (volume)
+
+Respond with VALID JSON only:
+{
+  "loadSize": "small" | "medium" | "large",
+  "heavyItem": true | false,
+  "recommendedMovers": 1 | 2,
+  "itemType": "SPECIFIC description here",
+  "estimatedWeight": "light" | "medium" | "heavy",
+  "weightClass": "light" | "medium" | "heavy",
+  "estimatedWeightLbs": number,
+  "estimatedCubicFeet": number,
+  "recommendedVehicle": "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed",
+  "confidence": 0-100,
+  "explanation": "brief explanation with specific item details"
+}`
+                      },
+                      {
+                        type: 'image_url',
+                        image_url: {
+                          url: fullImageUrl
+                        }
+                      }
+                    ]
+                  }
+                ],
+                max_tokens: 500
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const content = data.choices[0]?.message?.content;
+              
+              if (content) {
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  analysisResult = JSON.parse(jsonMatch[0]);
+                }
+              }
+            }
+          } catch (openaiError) {
+            console.log('OpenAI Vision failed for image, using mock analysis');
+          }
+        }
+        
+        // Fallback to mock analysis if OpenAI failed or unavailable
+        if (!analysisResult) {
+          // Extract filename from URL for mock analysis
+          const filename = imageUrl.split('/').pop() || 'unknown.jpg';
+          // Estimate file size based on filename/type (mock heuristic)
+          const estimatedSize = 2 * 1024 * 1024; // 2MB estimate
+          analysisResult = mockPhotoAnalysis(estimatedSize, filename);
+        }
+        
+        // Convert PhotoAnalysisResult to DetectedItem
+        const { detectDuplicates, calculateTotals } = await import("../shared/ai");
+        
+        const detectedItem = {
+          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          name: analysisResult.itemType,
+          category: categorizeItem(analysisResult.itemType),
+          quantity: 1,
+          estimatedWeightLbs: analysisResult.estimatedWeightLbs,
+          estimatedCubicFeet: analysisResult.estimatedCubicFeet || estimateCubicFeet(analysisResult.loadSize),
+          loadSize: analysisResult.loadSize,
+          requiresSpecialCare: analysisResult.heavyItem,
+          imageUrl: imageUrl,
+          confidence: analysisResult.confidence
+        };
+        
+        detectedItems.push(detectedItem);
+      }
+      
+      // Apply duplicate detection
+      const { detectDuplicates, calculateTotals } = await import("../shared/ai");
+      const uniqueItems = detectDuplicates(detectedItems);
+      
+      // Calculate totals
+      const totals = calculateTotals(uniqueItems);
+      
+      const result = {
+        detectedItems: uniqueItems,
+        ...totals,
+        confidence: Math.round(uniqueItems.reduce((sum, item) => sum + item.confidence, 0) / uniqueItems.length),
+        explanation: `Detected ${uniqueItems.length} unique item${uniqueItems.length > 1 ? 's' : ''} across ${imageUrls.length} photo${imageUrls.length > 1 ? 's' : ''}. Total: ${totals.totalCubicFeet} cu ft, ${totals.totalWeightLbs} lbs. Recommended: ${totals.recommendedMovers} mover${totals.recommendedMovers > 1 ? 's' : ''} with a ${totals.recommendedVehicle}.`
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Batch photo analysis error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Analysis failed" });
+    }
+  });
+  
+  // Helper function to categorize items
+  function categorizeItem(itemType: string): "furniture" | "appliance" | "box" | "heavy_item" | "fragile" | "other" {
+    const lower = itemType.toLowerCase();
+    if (lower.includes('sofa') || lower.includes('chair') || lower.includes('table') || lower.includes('bed') || lower.includes('desk')) {
+      return 'furniture';
+    }
+    if (lower.includes('fridge') || lower.includes('washer') || lower.includes('dryer') || lower.includes('dishwasher') || lower.includes('microwave')) {
+      return 'appliance';
+    }
+    if (lower.includes('box') || lower.includes('container') || lower.includes('crate')) {
+      return 'box';
+    }
+    if (lower.includes('piano') || lower.includes('safe') || lower.includes('heavy')) {
+      return 'heavy_item';
+    }
+    if (lower.includes('glass') || lower.includes('mirror') || lower.includes('artwork') || lower.includes('fragile')) {
+      return 'fragile';
+    }
+    return 'other';
+  }
+  
+  // Helper function to estimate cubic feet based on load size
+  function estimateCubicFeet(loadSize: string): number {
+    switch (loadSize) {
+      case 'small': return 5;
+      case 'medium': return 20;
+      case 'large': return 50;
+      default: return 20;
+    }
+  }
+
   // Geocoding distance endpoint for AI auto-quote predictor
   app.post("/api/geocode/distance", async (req: Request, res: Response) => {
     try {
