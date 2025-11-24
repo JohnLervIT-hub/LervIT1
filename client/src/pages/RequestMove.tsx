@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
-import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -567,7 +567,7 @@ export default function RequestMove() {
                       <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
                         Pickup Address
                       </Label>
-                      <AddressAutocomplete
+                      <CustomAddressInput
                         id="pickup"
                         placeholder="123 Main St SW, Calgary, AB"
                         value={pickupAddress}
@@ -597,7 +597,7 @@ export default function RequestMove() {
                       <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
                         Dropoff Address
                       </Label>
-                      <AddressAutocomplete
+                      <CustomAddressInput
                         id="dropoff"
                         placeholder="456 Oak Ave NW, Calgary, AB"
                         value={dropoffAddress}

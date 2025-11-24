@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { MapPin, Navigation, DollarSign, Clock, Zap, TrendingUp, ShieldCheck, Star, Truck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -430,7 +430,7 @@ export default function ProximityDemo() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Pickup Location</label>
-                  <AddressAutocomplete
+                  <CustomAddressInput
                     value={pickupAddress}
                     onChange={handlePickupChange}
                     placeholder="Search and select pickup address..."
@@ -449,7 +449,7 @@ export default function ProximityDemo() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Dropoff Location</label>
-                  <AddressAutocomplete
+                  <CustomAddressInput
                     value={dropoffAddress}
                     onChange={handleDropoffChange}
                     placeholder="Search and select dropoff address..."

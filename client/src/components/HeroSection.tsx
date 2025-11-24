@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { useToast } from "@/hooks/use-toast";
 import heroImage from "@assets/generated_images/moving_truck_calgary_hero.png";
 
@@ -79,7 +79,7 @@ export default function HeroSection() {
                 <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
                   Pickup Location
                 </Label>
-                <AddressAutocomplete
+                <CustomAddressInput
                   id="pickup"
                   value={pickupAddress}
                   onChange={(address) => setPickupAddress(address)}
@@ -92,7 +92,7 @@ export default function HeroSection() {
                 <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
                   Dropoff Location
                 </Label>
-                <AddressAutocomplete
+                <CustomAddressInput
                   id="dropoff"
                   value={dropoffAddress}
                   onChange={(address) => setDropoffAddress(address)}
