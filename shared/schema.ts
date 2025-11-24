@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -84,6 +84,7 @@ export const bookings = pgTable("bookings", {
   aiWeightClass: text("ai_weight_class"),
   aiRecommendedVehicle: text("ai_recommended_vehicle"),
   aiConfidenceScore: decimal("ai_confidence_score", { precision: 3, scale: 2 }),
+  detectedItems: json("detected_items"),
   
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),

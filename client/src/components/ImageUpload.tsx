@@ -27,16 +27,19 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
       return;
     }
 
-    // Validate file types
+    // Validate file types (including HEIC)
     const validFiles = fileArray.filter(file => {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      return allowedTypes.includes(file.type);
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif'];
+      const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+      
+      return allowedTypes.includes(file.type) || allowedExtensions.includes(fileExtension);
     });
 
     if (validFiles.length !== fileArray.length) {
       toast({
         title: "Invalid files",
-        description: "Only image files (JPG, PNG, GIF, WebP) are allowed.",
+        description: "Only image files (JPG, PNG, GIF, WebP, HEIC) are allowed.",
         variant: "destructive",
       });
       return;
@@ -146,7 +149,7 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
                     {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
+                    Max {maxImages} images, 10MB each (JPG, PNG, GIF, WebP, HEIC)
                   </p>
                 </div>
                 {!isDragging && (
