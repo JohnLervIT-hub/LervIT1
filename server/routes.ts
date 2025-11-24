@@ -478,16 +478,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Geocode addresses to get coordinates
       const { geocodeAddress } = await import("@shared/geocoding");
-      const { calculateDistance } = await import("@shared/geocoding");
       const { calculatePrice } = await import("@shared/pricing");
       const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
       const { toDecimalString } = await import("@shared/utils");
+      const { getDrivingDistance } = await import("./google-maps");
       
       const pickupGeo = geocodeAddress(bookingData.pickupAddress);
       const dropoffGeo = geocodeAddress(bookingData.dropoffAddress);
       
-      // Calculate distance and price
-      const distance = calculateDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
+      // Calculate driving distance and duration using Google Distance Matrix API
+      const drivingDistanceResult = await getDrivingDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
+      const distance = drivingDistanceResult.distanceKm;
       const priceBreakdown = calculatePrice(
         distance,
         bookingData.loadSize as 'small' | 'medium' | 'large',
