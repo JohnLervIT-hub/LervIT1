@@ -6,8 +6,8 @@ LervIT is a mobile-first web application designed as a two-sided marketplace con
 
 ## Recent Changes
 
-### Volume-Based Load Size Categorization (November 24, 2025)
-Implemented comprehensive volume-based load size system with AI auto-detection and visual examples:
+### Volume-Based Load Size Categorization with Strict AI Rules (November 24, 2025)
+Implemented comprehensive volume-based load size system with AI auto-detection, strict categorization enforcement, and visual examples:
 
 **Load Size Categories:**
 - **Boxes (1-10 ft³):** Small personal items - shoes, bags, boxes, lamps, monitors - No fee
@@ -15,13 +15,26 @@ Implemented comprehensive volume-based load size system with AI auto-detection a
 - **Large (50-150 ft³):** Large furniture - sofas, beds, fridges, dressers - $30 fee
 - **Apartment (150+ ft³):** Full room furniture or multiple large items - $45 fee
 
+**Strict AI Categorization Rules:**
+To prevent misclassification (e.g., sofas being categorized as "Medium"), implemented mandatory categorization lists that CANNOT be overridden:
+- **MUST be "large":** All sofas, couches, sectionals, loveseats, futons, beds, mattresses, bed frames, refrigerators, freezers, washers, dryers, dishwashers, dressers, wardrobes, armoires, bookcases, bookshelves, treadmills, ellipticals, exercise equipment
+- **MUST be "apartment":** Bedroom sets, living room sets, dining room sets, full room furniture
+- **MUST be "boxes":** Shoes, bags, backpacks, suitcases, luggage, boxes, lamps, monitors, keyboards, books, toys, pillows, cushions
+
 **Implementation Details:**
 - Updated Zod schema in `shared/schema.ts` to validate new load size categories
-- Enhanced AI photo analysis (both OpenAI Vision and mock fallback) to auto-assign load sizes based on detected item volume
+- Created strict item categorization lists in `server/routes.ts` with 3-tier priority system
+- Enhanced AI photo analysis (both OpenAI Vision and mock fallback) with mandatory categorization enforcement
+- Added validation layer after OpenAI response to auto-correct any misclassifications (logs corrections to console)
 - Updated pricing logic in `shared/pricing.ts` with new tiered load fees
 - Redesigned `LoadSizeSelector` component with visual examples, volume ranges, and fee displays
 - Added AI recommendation badges and validation warnings when user selects smaller size than detected
 - Implemented load size comparison logic to alert users about potential mismatches
+
+**AI Validation System:**
+- Mock fallback: Priority-based strict matching (apartment → large → boxes → file size analysis)
+- OpenAI Vision: Enhanced prompt with explicit "STRICT MANDATORY CATEGORIZATION RULES" section
+- Post-processing: Validates OpenAI response against strict lists and auto-corrects violations with console logging
 
 **UI Enhancements:**
 - Each load size card displays: volume range, description, 5 specific examples, and pricing

@@ -1817,6 +1817,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== STRICT LOAD SIZE CATEGORIZATION RULES =====
+  // These mappings are MANDATORY and cannot be overridden
+  const STRICT_LARGE_ITEMS = [
+    'sofa', 'couch', 'sectional', 'loveseat', 'futon',
+    'bed', 'mattress', 'bedframe',
+    'fridge', 'refrigerator', 'freezer',
+    'washer', 'dryer', 'dishwasher',
+    'dresser', 'wardrobe', 'armoire',
+    'bookcase', 'bookshelf',
+    'treadmill', 'elliptical', 'exercise equipment'
+  ];
+
+  const STRICT_APARTMENT_ITEMS = [
+    'bedroom set', 'living room set', 'dining room set',
+    'apartment', 'studio', 'room furniture'
+  ];
+
+  const STRICT_BOXES_ITEMS = [
+    'shoe', 'shoes', 'bag', 'backpack', 'suitcase', 'luggage',
+    'box', 'boxes', 'lamp', 'monitor', 'keyboard',
+    'book', 'books', 'toy', 'toys', 'pillow', 'cushion'
+  ];
+
   // Mock AI photo analysis (fallback when OpenAI is unavailable)
   function mockPhotoAnalysis(fileSize: number, filename: string) {
     // Analyze file size in MB to estimate load
@@ -1836,28 +1859,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let estimatedWeightLbs = 200;
     let recommendedVehicle = "Cargo Van";
     
-    // File size analysis (smaller photos often = smaller items)
-    if (sizeMB < 1) {
-      loadSize = "boxes";
-      estimatedWeight = "light";
-      weightClass = "light";
-      estimatedWeightLbs = 30;
-      recommendedMovers = 1;
-      recommendedVehicle = "SUV";
-      itemType = "Small item or personal belonging";
-    } else if (sizeMB > 3) {
-      loadSize = "large";
-      estimatedWeight = "heavy";
-      weightClass = "heavy";
-      estimatedWeightLbs = 600;
-      heavyItem = true;
-      recommendedMovers = 2;
-      recommendedVehicle = "Cube Truck";
-      itemType = "Large furniture piece";
-    }
-    
     // Filename pattern detection - Enhanced with more specific descriptions
     const lowerName = filename.toLowerCase();
+    
+    // ===== STRICT ENFORCEMENT: Check against mandatory categorization lists =====
+    // PRIORITY 1: Apartment-sized items (MUST be "apartment")
+    for (const item of STRICT_APARTMENT_ITEMS) {
+      if (lowerName.includes(item)) {
+        loadSize = "apartment";
+        break;
+      }
+    }
+    
+    // PRIORITY 2: Large items (MUST be "large") - SOFAS, BEDS, FRIDGES, etc.
+    if (loadSize !== "apartment") {
+      for (const item of STRICT_LARGE_ITEMS) {
+        if (lowerName.includes(item)) {
+          loadSize = "large";
+          break;
+        }
+      }
+    }
+    
+    // PRIORITY 3: Small items (MUST be "boxes")
+    if (loadSize !== "apartment" && loadSize !== "large") {
+      for (const item of STRICT_BOXES_ITEMS) {
+        if (lowerName.includes(item)) {
+          loadSize = "boxes";
+          break;
+        }
+      }
+    }
+    
+    // File size analysis ONLY if no strict match was found
+    if (loadSize === "medium") {
+      if (sizeMB < 1) {
+        loadSize = "boxes";
+        estimatedWeight = "light";
+        weightClass = "light";
+        estimatedWeightLbs = 30;
+        recommendedMovers = 1;
+        recommendedVehicle = "SUV";
+        itemType = "Small item or personal belonging";
+      } else if (sizeMB > 3) {
+        loadSize = "large";
+        estimatedWeight = "heavy";
+        weightClass = "heavy";
+        estimatedWeightLbs = 600;
+        heavyItem = true;
+        recommendedMovers = 2;
+        recommendedVehicle = "Cube Truck";
+        itemType = "Large furniture piece";
+      }
+    }
     
     // Furniture - Seating
     if (lowerName.includes('sofa') || lowerName.includes('couch') || lowerName.includes('sectional')) {
@@ -2149,10 +2203,30 @@ Analyze the image and determine:
 6. Approximate weight in pounds
 7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
 
+⚠️ STRICT MANDATORY CATEGORIZATION RULES (CANNOT BE OVERRIDDEN):
+
+MUST classify as "large" (50-150 ft³):
+- ALL sofas, couches, sectionals, loveseats, futons
+- ALL beds, mattresses, bed frames (twin, full, queen, king)
+- ALL refrigerators, freezers, fridges
+- ALL washers, dryers, dishwashers
+- ALL dressers, wardrobes, armoires
+- ALL bookcases, bookshelves
+- ALL treadmills, ellipticals, exercise equipment
+
+MUST classify as "apartment" (150+ ft³):
+- Bedroom sets, living room sets, dining room sets
+- Full room furniture or multiple large items
+
+MUST classify as "boxes" (1-10 ft³):
+- Shoes, bags, backpacks, suitcases, luggage
+- Boxes, lamps, monitors, keyboards
+- Books, toys, pillows, cushions
+
 Load Size Classification Guidelines:
+- If you see a SOFA, COUCH, SECTIONAL, BED, FRIDGE, DRESSER, or BOOKSHELF → MUST be "large"
 - Shoes, bags, boxes, lamps, monitors → "boxes" (1-10 ft³)
-- Chairs, small tables, TVs, bookshelves → "medium" (11-50 ft³)
-- Sofas, beds, fridges, treadmills, dressers → "large" (50-150 ft³)
+- Chairs, small tables, TVs → "medium" (11-50 ft³)
 - Full room furniture sets → "apartment" (150+ ft³)
 
 Respond with VALID JSON only:
@@ -2190,7 +2264,50 @@ Respond with VALID JSON only:
             if (content) {
               const jsonMatch = content.match(/\{[\s\S]*\}/);
               if (jsonMatch) {
-                const analysis = JSON.parse(jsonMatch[0]);
+                let analysis = JSON.parse(jsonMatch[0]);
+                
+                // ===== STRICT VALIDATION: Enforce mandatory categorization rules =====
+                const itemTypeLower = (analysis.itemType || '').toLowerCase();
+                
+                // Force "large" for specific items (SOFAS, BEDS, FRIDGES, etc.)
+                for (const item of STRICT_LARGE_ITEMS) {
+                  if (itemTypeLower.includes(item)) {
+                    if (analysis.loadSize !== "large" && analysis.loadSize !== "apartment") {
+                      console.log(`[AI Validation] Correcting ${analysis.itemType} from "${analysis.loadSize}" to "large" (strict rule)`);
+                      analysis.loadSize = "large";
+                      analysis.heavyItem = true;
+                      analysis.recommendedMovers = 2;
+                    }
+                    break;
+                  }
+                }
+                
+                // Force "apartment" for furniture sets
+                for (const item of STRICT_APARTMENT_ITEMS) {
+                  if (itemTypeLower.includes(item)) {
+                    if (analysis.loadSize !== "apartment") {
+                      console.log(`[AI Validation] Correcting ${analysis.itemType} from "${analysis.loadSize}" to "apartment" (strict rule)`);
+                      analysis.loadSize = "apartment";
+                      analysis.heavyItem = true;
+                      analysis.recommendedMovers = 2;
+                    }
+                    break;
+                  }
+                }
+                
+                // Force "boxes" for small items
+                for (const item of STRICT_BOXES_ITEMS) {
+                  if (itemTypeLower.includes(item)) {
+                    if (analysis.loadSize !== "boxes") {
+                      console.log(`[AI Validation] Correcting ${analysis.itemType} from "${analysis.loadSize}" to "boxes" (strict rule)`);
+                      analysis.loadSize = "boxes";
+                      analysis.heavyItem = false;
+                      analysis.recommendedMovers = 1;
+                    }
+                    break;
+                  }
+                }
+                
                 return res.json({
                   ...analysis,
                   imageUrl: imagePath
