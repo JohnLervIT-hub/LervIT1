@@ -3,8 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Package, Weight, Ruler, Truck, Users } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Trash2, Package, Weight, Ruler, Truck, Users, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { DetectedItem } from "@shared/ai";
+import { ItemSuggestionList } from "./ItemSuggestionList";
+import { updateItemWithSelection } from "@shared/aiWeightLookup";
 
 interface DetectedItemsListProps {
   items: DetectedItem[];
@@ -20,9 +23,16 @@ interface DetectedItemsListProps {
 
 export default function DetectedItemsList({ items, onItemsChange, onTotalsChange }: DetectedItemsListProps) {
   const [localItems, setLocalItems] = useState<DetectedItem[]>(items);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setLocalItems(items);
+    // Auto-expand uncertain items on initial load
+    const uncertainItemIds = items
+      .filter(item => item.isUncertain)
+      .map(item => item.id);
+    setExpandedItems(new Set(uncertainItemIds));
   }, [items]);
 
   // Calculate totals whenever items change
@@ -93,6 +103,74 @@ export default function DetectedItemsList({ items, onItemsChange, onTotalsChange
     onItemsChange(updatedItems);
   };
 
+  const handleToggleExpand = (itemId: string) => {
+    setExpandedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectSuggestion = (itemId: string, suggestion: NonNullable<DetectedItem["alternativeSuggestions"]>[0]) => {
+    const item = localItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Convert suggestion to StandardItem format for updateItemWithSelection
+    // Use actual database values for difficultyLevel and requiresSpecialCare
+    const standardItem = {
+      name: suggestion.name,
+      category: suggestion.category as any, // Type assertion needed for category string
+      size: suggestion.size as any,
+      weightLbs: suggestion.weightLbs,
+      cubicFeet: suggestion.cubicFeet,
+      moversNeeded: (suggestion.moversNeeded > 1 ? 2 : 1) as 1 | 2,
+      difficultyLevel: suggestion.difficultyLevel,
+      requiresSpecialCare: suggestion.requiresSpecialCare,
+      keywords: []
+    };
+
+    const updatedItem = updateItemWithSelection(item, standardItem);
+    
+    const updatedItems = localItems.map(i => i.id === itemId ? updatedItem : i);
+    setLocalItems(updatedItems);
+    onItemsChange(updatedItems);
+    
+    // Show success confirmation
+    setRecentlyUpdated(prev => new Set(prev).add(itemId));
+    setTimeout(() => {
+      setRecentlyUpdated(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+    }, 3000);
+  };
+
+  const handleConfirmOriginal = (itemId: string) => {
+    const updatedItems = localItems.map(item => 
+      item.id === itemId 
+        ? { ...item, isUncertain: false, confidence: 100, alternativeSuggestions: [] }
+        : item
+    );
+    
+    setLocalItems(updatedItems);
+    onItemsChange(updatedItems);
+    
+    // Show success confirmation
+    setRecentlyUpdated(prev => new Set(prev).add(itemId));
+    setTimeout(() => {
+      setRecentlyUpdated(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+    }, 3000);
+  };
+
   const getCategoryBadgeColor = (category: string) => {
     switch (category) {
       case 'furniture': return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20';
@@ -131,6 +209,9 @@ export default function DetectedItemsList({ items, onItemsChange, onTotalsChange
     recommendedVehicle = "Flatbed";
   }
 
+  // Count uncertain items needing review
+  const uncertainItemsCount = localItems.filter(item => item.isUncertain).length;
+
   if (localItems.length === 0) {
     return (
       <Card>
@@ -144,6 +225,17 @@ export default function DetectedItemsList({ items, onItemsChange, onTotalsChange
 
   return (
     <div className="space-y-4">
+      {/* Summary Banner for Uncertain Items */}
+      {uncertainItemsCount > 0 && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700">
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500" />
+          <AlertDescription className="text-amber-900 dark:text-amber-100">
+            <strong>{uncertainItemsCount} item{uncertainItemsCount > 1 ? 's' : ''} need{uncertainItemsCount === 1 ? 's' : ''} review</strong> – 
+            Please confirm or select the correct item type for accurate weight and volume calculations.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -155,90 +247,115 @@ export default function DetectedItemsList({ items, onItemsChange, onTotalsChange
           {localItems.map((item) => (
             <div 
               key={item.id}
-              className="flex items-center gap-3 p-3 rounded-lg border bg-card hover-elevate"
               data-testid={`item-${item.id}`}
             >
-              {item.imageUrl && (
-                <img 
-                  src={item.imageUrl} 
-                  alt={item.name}
-                  className="w-16 h-16 object-cover rounded border"
-                />
-              )}
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="font-semibold truncate" data-testid={`text-item-name-${item.id}`}>
-                    {item.name}
-                  </h4>
-                  <Badge 
-                    variant="outline" 
-                    className={getCategoryBadgeColor(item.category)}
-                  >
-                    {item.category.replace('_', ' ')}
-                  </Badge>
-                  {item.requiresSpecialCare && (
-                    <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/20">
-                      Special Care
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Weight className="w-3 h-3" />
-                    {item.estimatedWeightLbs} lbs
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Ruler className="w-3 h-3" />
-                    {item.estimatedCubicFeet} cu ft
-                  </span>
-                  <span>
-                    {item.confidence}% confidence
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                    disabled={item.quantity <= 1}
-                    data-testid={`button-decrease-${item.id}`}
-                  >
-                    -
-                  </Button>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={item.quantity}
-                    onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
-                    className="w-16 text-center"
-                    data-testid={`input-quantity-${item.id}`}
+              <div className="flex items-center gap-3 p-3 rounded-lg border bg-card hover-elevate">
+                {item.imageUrl && (
+                  <img 
+                    src={item.imageUrl} 
+                    alt={item.name}
+                    className="w-16 h-16 object-cover rounded border"
                   />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                    data-testid={`button-increase-${item.id}`}
-                  >
-                    +
-                  </Button>
+                )}
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 className="font-semibold truncate" data-testid={`text-item-name-${item.id}`}>
+                      {item.name}
+                    </h4>
+                    <Badge 
+                      variant="outline" 
+                      className={getCategoryBadgeColor(item.category)}
+                    >
+                      {item.category.replace('_', ' ')}
+                    </Badge>
+                    {item.requiresSpecialCare && (
+                      <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/20">
+                        Special Care
+                      </Badge>
+                    )}
+                    {item.isUncertain && (
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20">
+                        Needs Review
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Weight className="w-3 h-3" />
+                      {item.estimatedWeightLbs} lbs
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Ruler className="w-3 h-3" />
+                      {item.estimatedCubicFeet} cu ft
+                    </span>
+                    <span>
+                      {item.confidence}% confidence
+                    </span>
+                  </div>
                 </div>
                 
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => handleRemoveItem(item.id)}
-                  data-testid={`button-remove-${item.id}`}
-                >
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                      disabled={item.quantity <= 1}
+                      data-testid={`button-decrease-${item.id}`}
+                    >
+                      -
+                    </Button>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
+                      className="w-16 text-center"
+                      data-testid={`input-quantity-${item.id}`}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                      data-testid={`button-increase-${item.id}`}
+                    >
+                      +
+                    </Button>
+                  </div>
+                  
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => handleRemoveItem(item.id)}
+                    data-testid={`button-remove-${item.id}`}
+                  >
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
               </div>
+
+              {/* Success Confirmation */}
+              {recentlyUpdated.has(item.id) && (
+                <Alert className="mt-2 border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-500" />
+                  <AlertDescription className="text-green-900 dark:text-green-100">
+                    <strong>Updated!</strong> Item details have been confirmed and saved.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Item Suggestion List */}
+              <ItemSuggestionList
+                item={item}
+                isExpanded={expandedItems.has(item.id)}
+                onToggleExpand={handleToggleExpand}
+                onSelectSuggestion={handleSelectSuggestion}
+                onConfirmOriginal={handleConfirmOriginal}
+              />
             </div>
           ))}
         </CardContent>

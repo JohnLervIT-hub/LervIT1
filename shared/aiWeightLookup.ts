@@ -49,7 +49,11 @@ export function aiDetectionToItem(
       size: s.size,
       weightLbs: s.weightLbs,
       cubicFeet: s.cubicFeet,
-      moversNeeded: s.moversNeeded
+      moversNeeded: s.moversNeeded,
+      difficultyLevel: s.difficultyLevel,
+      requiresSpecialCare: s.requiresSpecialCare,
+      confidence: 90, // High confidence for database-matched suggestions
+      matchReason: `Suggested ${s.category} item`
     })),
     isUncertain: isUncertain,
     databaseMatchedItem: matchedItem ? matchedItem.name : null

@@ -75,6 +75,10 @@ export interface DetectedItem {
     weightLbs: number;
     cubicFeet: number;
     moversNeeded: number;
+    difficultyLevel: "easy" | "moderate" | "hard";
+    requiresSpecialCare: boolean;
+    confidence: number;
+    matchReason: string;
   }>; // Alternative item suggestions when AI is uncertain
   isUncertain?: boolean; // True if AI confidence < 70% and user should confirm
   databaseMatchedItem?: string | null; // Name of matched database item for reference
@@ -283,7 +287,7 @@ export function detectDuplicates(items: DetectedItem[]): DetectedItem[] {
     
     // Find existing similar item
     let found = false;
-    for (const [key, existingItem] of grouped.entries()) {
+    for (const [key, existingItem] of Array.from(grouped.entries())) {
       const existingNormalized = existingItem.name.toLowerCase().trim();
       
       // Check for similarity using simple keyword matching
