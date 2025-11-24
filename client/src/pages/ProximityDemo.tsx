@@ -1,7 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
-import { useAuth } from "@/contexts/AuthContext";
-import { GoogleMap, Marker, Polyline, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
+import { useState, useCallback } from "react";
+import { GoogleMap, Marker, Polyline, InfoWindow } from "@react-google-maps/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,28 +40,6 @@ const DEMO_MOVERS: Mover[] = [
 ];
 
 export default function ProximityDemo() {
-  const { user, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
-
-  // Load Google Maps API
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  });
-
-  // Redirect authenticated users to their role-specific dashboard
-  useEffect(() => {
-    // Wait for auth to finish loading before redirecting
-    if (!isLoading && user) {
-      if (user.role === "customer") {
-        setLocation("/dashboard");
-      } else if (user.role === "mover") {
-        setLocation("/mover-dashboard");
-      } else if (user.role === "admin") {
-        setLocation("/admin");
-      }
-    }
-  }, [user, isLoading, setLocation]);
-
   const [pickup, setPickup] = useState<Location | null>(null);
   const [dropoff, setDropoff] = useState<Location | null>(null);
   const [loadSize, setLoadSize] = useState<"small" | "medium" | "large">("medium");
@@ -180,23 +156,8 @@ export default function ProximityDemo() {
               <CardDescription>Movers and booking locations</CardDescription>
             </CardHeader>
             <CardContent>
-              {loadError ? (
-                <div className="flex items-center justify-center h-[500px] bg-muted rounded-lg">
-                  <div className="text-center">
-                    <p className="text-destructive mb-2">Failed to load Google Maps</p>
-                    <p className="text-sm text-muted-foreground">Please check your API key configuration</p>
-                  </div>
-                </div>
-              ) : !isLoaded ? (
-                <div className="flex items-center justify-center h-[500px] bg-muted rounded-lg">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Loading Google Maps...</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg overflow-hidden border-2 border-border">
-                  <GoogleMap
+              <div className="rounded-lg overflow-hidden border-2 border-border">
+                <GoogleMap
                     mapContainerStyle={mapContainerStyle}
                     center={calgaryCenter}
                     zoom={11}
@@ -318,7 +279,6 @@ export default function ProximityDemo() {
                     })}
                   </GoogleMap>
                 </div>
-              )}
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 {DEMO_MOVERS.map(mover => (
