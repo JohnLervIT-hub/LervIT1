@@ -6,6 +6,35 @@ LervIT is a mobile-first web application designed as a two-sided marketplace con
 
 ## Recent Changes
 
+### Multi-Photo AI Item Detection with Duplicate Detection (November 24, 2025)
+Implemented comprehensive multi-photo analysis system for intelligent item detection and automatic booking estimates:
+
+**Core Features:**
+- **Multi-Photo Upload:** Customers can upload up to 10 photos (JPG, PNG, HEIC formats) of items they need to move
+- **Batch AI Analysis:** `/api/ai/analyze-multiple-photos` endpoint processes all photos independently through OpenAI Vision API
+- **Intelligent Duplicate Detection:** Groups similar items using category and name matching to combine quantities
+- **Real-Time Editable Quantities:** DetectedItemsList component allows customers to adjust quantities with instant recalculation
+- **Auto-Fill Booking Form:** Detected items automatically populate load size, heavy item status, number of movers, and vehicle recommendations
+- **Database Persistence:** Booking records now include `detectedItems` JSON field storing complete item inventory
+
+**Technical Implementation:**
+- **Schema Updates:** Added `detectedItems: json("detected_items")` to bookings table with proper Drizzle ORM integration
+- **Type Safety:** Extended `insertBookingSchema` with Zod validation matching `DetectedItem` interface (id, name, category, quantity, estimatedWeightLbs, estimatedCubicFeet, loadSize, requiresSpecialCare, imageUrl, confidence)
+- **DetectedItem Interface:** Comprehensive type definition in shared/ai.ts with 6 category enums (furniture, appliance, box, heavy_item, fragile, other)
+- **Calculation Utilities:** Helper functions for total cubic feet, weight, recommended movers (1-2), and vehicle type selection
+- **Backend Integration:** booking creation endpoint in server/routes.ts properly spreads detectedItems through validation → storage → database persistence
+
+**User Experience:**
+1. Customer uploads multiple photos in RequestMove form (step 3)
+2. "AI Detect Items" button appears with photo count
+3. Click triggers batch analysis with loading state
+4. DetectedItemsList displays results with +/- quantity controls
+5. Totals update live: cubic feet, weight, movers needed, vehicle type
+6. Form auto-fills based on AI analysis
+7. Booking saves with full item inventory for mover reference
+
+**Mock Fallback:** Works without OpenAI API key using intelligent classification based on file size and filename patterns (30+ item types)
+
 ### Typography & Layout Optimizations (November 24, 2025)
 Implemented comprehensive typography system and responsive layout improvements across the platform:
 
@@ -54,7 +83,7 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **AI-Powered Features:**
     *   **AI Auto-Quote Predictor:** Provides instant price estimate ranges with confidence levels and natural language explanations.
     *   **AI Price Breakdown Explainer:** Offers natural language explanations for pricing components.
-    *   **AI Item Detection from Photo (Optimized):** Uses OpenAI Vision API with enhanced prompts to provide specific, detailed item descriptions (e.g., "Queen-size bed", "Leather sofa", "Running shoes", "Suitcase") instead of generic classifications. Auto-fills load size, heavy item estimates, number of movers, weight detection, and vehicle recommendations. Mock fallback includes 30+ item types with intelligent classification based on file size and filename patterns.
+    *   **AI Multi-Photo Item Detection (Enhanced):** Analyzes up to 10 photos simultaneously using OpenAI Vision API with intelligent duplicate detection. Processes each photo independently, combines results, and groups similar items (matching category + name) to consolidate quantities. DetectedItemsList component displays results with real-time editable quantities (+/- controls), live calculation updates (cubic feet, weight, movers needed, vehicle type), and auto-fills booking form fields. Each detected item includes: specific name (e.g., "Queen-size bed", "Leather sofa"), category (furniture/appliance/box/heavy_item/fragile/other), quantity, estimated weight, cubic feet, special care requirements, and AI confidence score. Booking records persist complete item inventory in `detectedItems` JSON field for mover reference. Mock fallback works without OpenAI API key using intelligent classification based on file size and filename patterns (30+ item types with realistic weight/volume estimates).
 *   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling for secure storage.
 *   **Role-Specific User Experience:** Implements `ProtectedRoute` for access control, dynamic navigation, and protected login/signup redirects based on user roles.
 *   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard, utilizing `supportTickets` and `supportTicketReplies` tables.
