@@ -1,0 +1,229 @@
+You are still working in my existing Lervit web app on Replit.
+
+Goal: Build an ADMIN-SIDE “Verification Review Dashboard” that allows internal staff to:
+1. See all drivers and their verification status at a glance.
+2. Filter by status (Pending, Under Review, Approved, Rejected, Expired).
+3. Open a driver’s detail view showing each verification item and documents.
+4. Approve or reject verification items with comments.
+5. Trigger status updates that feed back into the driver view and “Go Online” blocking logic created earlier.
+
+Use the same stack, admin layout, and permission model already in the Lervit project.
+
+--------------------------------
+ADMIN ROLE & ACCESS
+--------------------------------
+
+- Restrict the dashboard to admin/staff roles only.
+- Add a new entry in the admin navigation: “Driver Verification” or “Compliance Center”.
+
+If the project already has role-based middleware:
+- Reuse existing `isAdmin` / `requireAdmin` guard for the new routes and API endpoints.
+
+--------------------------------
+ADMIN DASHBOARD – LIST VIEW
+--------------------------------
+
+Create an admin page, e.g. at `/admin/verification` that shows:
+
+Header:
+- Title: “Driver Verification & Compliance”
+- Search bar to filter by:
+  - Driver name
+  - Email
+  - Phone
+  - Driver ID (internal)
+- Filters:
+  - Status chips or dropdown:
+    - ALL
+    - MISSING REQUIRED
+    - PENDING
+    - UNDER REVIEW
+    - APPROVED
+    - REJECTED
+    - EXPIRED
+  - Optional filter: show only drivers who are “trying to go online but blocked”.
+
+Main table columns:
+- Driver Name
+- Email / Phone
+- Overall Verification Status (computed)
+- # of Approved items / Total required items (e.g., “5 / 7”)
+- Flags: e.g., “Expired docs”, “Rejected items”
+- Last Updated (latest verification activity)
+- Action → “View Details”
+
+Overall Verification Status (computed on backend or frontend):
+- APPROVED → All REQUIRED items Approved and none Expired.
+- INCOMPLETE → Any required item Pending/Under Review/Rejected/Expired.
+- ATTENTION → E.g., has at least one Rejected or Expired item.
+
+Provide pagination and sorting (by name, status, last updated).
+
+--------------------------------
+ADMIN DRIVER DETAIL PAGE / PANEL
+--------------------------------
+
+When admin clicks “View Details”, open a screen or side panel that shows full information for that driver:
+
+Sections:
+
+1. Driver Overview
+   - Name, photo (if available)
+   - Contact: email, phone
+   - Driver ID
+   - Current online/offline status
+   - Overall Verification Status (with color badge)
+   - Quick summary like: “5 of 7 required verification items approved.”
+
+2. Vehicles
+   - For each vehicle associated:
+     - Year, make, model, plate, type
+     - Thumbnails of vehicle photos (clickable to view larger)
+     - Basic info from registration data.
+
+3. Verification Items List
+   Show a list or table of all VerificationItems for that driver, e.g.:
+
+   Columns:
+   - Item Type (ID, License, Registration, Insurance, etc.)
+   - Status badge
+   - Expiry date (if applicable)
+   - Last updated date
+   - Action buttons: “Review” / “Approve” / “Reject”
+
+   Clicking “Review” or a row opens a detail panel for that item.
+
+4. Verification Item Detail Panel
+   For each item:
+   - Display metadata:
+     - E.g. for License: license number, province, expiryDate.
+     - For Insurance: insurer name, policy number, liability limit, policy dates.
+   - Show file(s) uploaded: images / PDFs (open in a viewer or a new tab).
+   - Current status.
+   - Any existing rejectionReason.
+
+   Admin controls:
+   - Radio buttons or buttons:
+     - “Mark as Approved”
+     - “Mark as Rejected”
+     - “Return to Under Review” (optional)
+   - If rejecting:
+     - Textarea: “Rejection reason” (required when setting status = Rejected).
+   - Save button:
+     - Updates the VerificationItem record.
+     - Sets `status` and `rejectionReason`.
+     - Updates `updatedAt`.
+
+   After saving:
+   - Show a success toast: “Verification item updated.”
+   - Optionally send a notification to the driver (you can stub a function if notifications system already exists).
+
+--------------------------------
+BACK-END ENDPOINTS FOR ADMIN
+--------------------------------
+
+Add admin-only API routes, following existing style, e.g.:
+
+- GET /api/admin/verification/drivers
+  - Query params:
+    - search (string)
+    - statusFilter (e.g. PENDING, UNDER_REVIEW, APPROVED, etc.)
+    - page, pageSize
+  - Returns:
+    - Paginated list of drivers with computed verification summary for each:
+      - driverId
+      - name, email, phone
+      - overallStatus
+      - approvedCount, requiredCount
+      - hasExpired
+      - hasRejected
+      - lastUpdated
+
+- GET /api/admin/verification/driver/:driverId
+  - Returns:
+    - driver basic profile
+    - vehicles (id, make, model, plate, photos)
+    - verificationItems:
+      - id, type, status, data, rejectionReason, expiryDate, createdAt, updatedAt
+      - file URLs if stored separately
+
+- PATCH /api/admin/verification/item/:id
+  - Body:
+    - status: “APPROVED” | “REJECTED” | “UNDER_REVIEW”
+    - rejectionReason (string, optional but required if status = REJECTED)
+  - Effect:
+    - Persist changes to the verificationItems table.
+    - Optionally trigger driver notifications (hook this into any existing event/notification system).
+
+Add middleware to ensure only admins can call these endpoints.
+
+--------------------------------
+COMPUTED OVERALL VERIFICATION STATUS
+--------------------------------
+
+Implement a helper (backend utility) such as:
+
+`getDriverVerificationSummary(driverId)` that returns:
+- approvedRequiredCount
+- totalRequiredCount
+- hasExpiredRequiredItem
+- hasRejectedRequiredItem
+- overallStatus
+
+Rules:
+- If totalRequiredCount == 0 → status = INCOMPLETE (or treat as edge case).
+- If any required item has status = REJECTED or EXPIRED → overallStatus = ATTENTION.
+- Else if all required items are APPROVED → overallStatus = APPROVED.
+- Else → overallStatus = INCOMPLETE.
+
+Use this helper both in:
+- Admin listing (so we don't re-implement logic on the frontend).
+- Driver “Go Online” check (can call a lower-level helper or share logic).
+
+--------------------------------
+NOTIFICATION HOOKS (STUB OK)
+--------------------------------
+
+When admin approves or rejects an item:
+- Add a simple server-side hook (function) that:
+  - Logs the change.
+  - Optionally sends a notification/event:
+    - e.g., email, in-app notification, or push.
+- It’s okay if the initial implementation just logs to console or uses an existing notification function.
+
+Text suggestions:
+- For Approvals:
+  - “Your driver’s license has been approved.”
+  - “Your insurance proof has been approved. You’re one step closer to going online.”
+
+- For Rejections:
+  - “Your insurance document was rejected: [rejectionReason]. Please upload a corrected version in the Verification section.”
+
+--------------------------------
+UI/UX EXPECTATIONS
+--------------------------------
+
+- Use the existing admin page layout, typography, and color system.
+- Status badges should be visually distinct:
+  - Under Review (yellow)
+  - Approved (green)
+  - Rejected (red)
+  - Expired (orange)
+  - Pending (grey)
+- Admin should be able to quickly:
+  - Find drivers needing attention (e.g., filter “Under Review” or “Attention”).
+  - Open a driver, review one or more items, approve/reject them, and see the UI update live.
+
+--------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------
+
+1. There is a new admin page “Driver Verification” accessible only to admin users.
+2. Admin list view shows all drivers with overall verification summaries and filters by status.
+3. Clicking a driver opens a detailed view with all verification items and uploaded docs.
+4. Admin can approve or reject individual verification items, with notes for rejections.
+5. Changes in admin dashboard immediately reflect in the driver’s checklist (status updates).
+6. Drivers blocked from going Online due to verification will be unblocked once all required items show as Approved.
+7. Code is consistent with the rest of the project (routing, components, and back-end architecture).
+
+Implement this admin dashboard now and wire it to the existing driver verification data model created in the previous prompt.

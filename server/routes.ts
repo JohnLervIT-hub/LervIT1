@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -449,6 +449,197 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates = validateBody(updateSchema, req.body);
       const updatedMover = await storage.updateMover(req.params.id, updates);
       res.json(updatedMover);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // ===== VERIFICATION ROUTES =====
+  
+  app.get("/api/movers/:moverId/verification", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const mover = await storage.getMover(req.params.moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      if (mover.userId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const items = await db.select().from(verificationItems).where(eq(verificationItems.moverId, req.params.moverId));
+      
+      const now = new Date();
+      const itemsWithExpiry = items.map(item => {
+        if (item.expiryDate && item.expiryDate < now && item.status === 'approved') {
+          return { ...item, status: 'expired' };
+        }
+        return item;
+      });
+      
+      res.json(itemsWithExpiry);
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  const uploadDocs = multer({
+    storage: storage_multer,
+    limits: {
+      fileSize: 10 * 1024 * 1024,
+    },
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = /jpeg|jpg|png|gif|webp|pdf/;
+      const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+      const mimetype = allowedTypes.test(file.mimetype) || file.mimetype === 'application/pdf';
+      
+      if (mimetype && extname) {
+        return cb(null, true);
+      } else {
+        cb(new Error("Only images and PDF files are allowed"));
+      }
+    }
+  });
+
+  app.post("/api/movers/:moverId/verification/:type", uploadDocs.array('files', 10), async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const mover = await storage.getMover(req.params.moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      if (mover.userId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const fileUrls = (req.files as Express.Multer.File[] || []).map(file => `/uploads/${file.filename}`);
+      
+      const itemData = {
+        moverId: req.params.moverId,
+        type: req.params.type.toUpperCase(),
+        data: req.body.data || null,
+        fileUrls: fileUrls.length > 0 ? fileUrls : null,
+        status: 'under_review',
+        submittedAt: new Date(),
+        expiryDate: req.body.expiryDate || null,
+      };
+      
+      const validatedData = validateBody(insertVerificationItemSchema, itemData);
+      
+      const existing = await db.select().from(verificationItems)
+        .where(and(
+          eq(verificationItems.moverId, req.params.moverId),
+          eq(verificationItems.type, req.params.type.toUpperCase())
+        ))
+        .limit(1);
+      
+      let result;
+      if (existing.length > 0) {
+        result = await db.update(verificationItems)
+          .set({
+            ...validatedData,
+            updatedAt: new Date()
+          })
+          .where(eq(verificationItems.id, existing[0].id))
+          .returning();
+      } else {
+        result = await db.insert(verificationItems)
+          .values(validatedData)
+          .returning();
+      }
+      
+      res.json(result[0]);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.get("/api/movers/:moverId/verification-status", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const mover = await storage.getMover(req.params.moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      if (mover.userId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
+      
+      const items = await db.select().from(verificationItems).where(eq(verificationItems.moverId, req.params.moverId));
+      
+      const now = new Date();
+      const missingItems: string[] = [];
+      const incompleteItems: { type: string; status: string; reason?: string }[] = [];
+      
+      for (const type of requiredTypes) {
+        const item = items.find(i => i.type === type);
+        
+        if (!item) {
+          missingItems.push(type);
+          incompleteItems.push({ type, status: 'missing' });
+        } else if (item.expiryDate && item.expiryDate < now) {
+          incompleteItems.push({ type, status: 'expired', reason: 'Document has expired' });
+        } else if (item.status !== 'approved') {
+          incompleteItems.push({ 
+            type, 
+            status: item.status, 
+            reason: item.rejectionReason || undefined 
+          });
+        }
+      }
+      
+      const isComplete = incompleteItems.length === 0;
+      
+      res.json({
+        isComplete,
+        requiredItems: requiredTypes,
+        missingItems,
+        incompleteItems,
+        canGoOnline: isComplete
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/movers/:moverId/verification/:id/review", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const user = (req as any).user;
+      
+      const { status, rejectionReason } = req.body;
+      
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'approved' or 'rejected'" });
+      }
+      
+      const result = await db.update(verificationItems)
+        .set({
+          status,
+          rejectionReason: status === 'rejected' ? rejectionReason : null,
+          reviewedAt: new Date(),
+          reviewedBy: user.id,
+          updatedAt: new Date()
+        })
+        .where(eq(verificationItems.id, req.params.id))
+        .returning();
+      
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Verification item not found" });
+      }
+      
+      res.json(result[0]);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }

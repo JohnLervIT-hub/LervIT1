@@ -1,0 +1,217 @@
+You are an expert full-stack engineer working inside my existing Lervit web app project on Replit.
+
+Goal: Implement a “Verification & Compliance” system for drivers (movers) that:
+1. Shows a clear checklist of all required verification items.
+2. Tracks status per item (Pending, Under Review, Approved, Rejected, Expired).
+3. Blocks drivers from going “Online” to accept jobs until all REQUIRED items are approved and valid.
+4. Integrates cleanly with the existing authentication and UI.
+
+Use the existing tech stack, routing, styling, and auth patterns already in the Lervit project. Do not break existing booking flows.
+
+--------------------------------
+HIGH-LEVEL FEATURE DESCRIPTION
+--------------------------------
+
+I want a dedicated "Verification & Compliance" feature for drivers with:
+
+1. A persistent “Verification” entry in the driver navigation:
+   - If I have a sidebar: add “Verification & Compliance”.
+   - If I have a bottom nav on mobile: add an icon and label like “Verification”.
+   - Clicking this opens a full page or main panel.
+
+2. A driver-facing checklist table with items like:
+   REQUIRED ITEMS
+   - Government ID + Selfie
+   - Driver’s License
+   - Vehicle Registration
+   - Vehicle Photos (exterior + cargo area)
+   - Insurance Proof (including commercial / delivery / moving coverage)
+   - Background / Police Check (basic Criminal Record Check)
+   - Bank / Payout Setup (via Stripe or whatever we already use)
+
+   OPTIONAL/ADVANCED (can be added but not required to go online)
+   - Business Registration / Company Name
+   - Safety Fitness Certificate (for heavy vehicles if we ever implement)
+
+Each checklist row should have:
+- Name (e.g., “Driver’s License”)
+- Status badge: Pending | Under Review | Approved | Rejected | Expired
+- Last updated date
+- Action button: “Upload”, “Re-upload”, or “View”
+- If status = Rejected, show a short message such as “Reason: photo is blurry or missing expiry date”.
+
+3. Upload + form flow per checklist item:
+   - When the driver clicks an item (e.g., “Driver’s License”), open either:
+     - a side panel, OR
+     - a modal, OR
+     - a dedicated sub-page
+   - Fields to collect for documents (you can adapt to the existing design):
+
+   Example for Driver’s License:
+   - File upload (image or PDF)
+   - Input fields for:
+     - Full name
+     - License number
+     - Province
+     - Expiry date
+   - Submit button → sets status to “Under Review”.
+   - Show current status and previously uploaded data if any exist.
+
+   Example for Insurance:
+   - File upload (image or PDF of insurance pink card)
+   - Vehicle plate number
+   - Insurer name
+   - Policy number
+   - Liability limit
+   - Effective date
+   - Expiry date
+
+   Example for Vehicle:
+   - Vehicle type (dropdown: Car / SUV / Van / Pickup / Cube Van etc.)
+   - Year / Make / Model
+   - Plate number
+   - Photos: front, back, side, cargo / trunk
+   - (Use existing upload component in the project if one exists.)
+
+4. Status logic:
+   - When a driver first signs up, create checklist entries with status = "Pending".
+   - When they submit documents or info, mark the item status = "Under Review".
+   - Only an admin can change status to Approved / Rejected (we will implement admin side in another prompt).
+   - If a document has an expiry date in the past, automatically mark it as "Expired".
+   - For now, do a simple “expiry date < today → Expired” check on page load or via a small cron-like job if we already have background jobs.
+
+--------------------------------
+DATA MODEL & API DESIGN
+--------------------------------
+
+Implement or extend back-end models (adjust naming to match existing conventions):
+
+Entities (you can adapt to SQL/Prisma/ORM or the current persistence layer):
+
+1. Driver (existing)
+   - id
+   - userId
+   - basic info (name, email, phone, etc.)
+
+2. Vehicle (likely already exists; otherwise create)
+   - id
+   - driverId
+   - type
+   - year
+   - make
+   - model
+   - plateNumber
+   - photos (array of file URLs)
+   - createdAt, updatedAt
+
+3. VerificationItem (new)
+   - id
+   - driverId
+   - type (enum/string: "ID", "DRIVERS_LICENSE", "VEHICLE_REGISTRATION", "VEHICLE_PHOTOS", "INSURANCE", "BACKGROUND_CHECK", "PAYOUT_SETUP", etc.)
+   - status (enum/string: "PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "EXPIRED")
+   - data (JSON field for metadata like licenseNumber, policyNumber, insurerName, expiryDate, etc.)
+   - rejectionReason (optional string)
+   - createdAt
+   - updatedAt
+
+4. VerificationFile / Document (optional)
+   - If needed, a separate table for uploaded files.
+   - id
+   - verificationItemId
+   - fileUrl
+   - fileType
+   - createdAt
+
+Back-end API endpoints (REST or GraphQL, follow existing style):
+
+- GET /api/driver/verification
+  → returns all VerificationItems for the authenticated driver, plus any relevant vehicle info.
+
+- POST /api/driver/verification/:type
+  → create or update a VerificationItem for the given type.
+  → Accepts a body with metadata fields and file upload handling.
+  → Sets status = UNDER_REVIEW unless admin changes it.
+
+- Optionally, PUT /api/driver/verification/:id
+  → to update an item’s metadata or re-upload documents.
+
+IMPORTANT:
+- Enforce authentication & role middleware: Only the logged-in driver can see or modify their own items.
+- Do not expose admin-only fields (e.g., manual internal comments) from the driver endpoint.
+
+--------------------------------
+BLOCK "GO ONLINE" BASED ON VERIFICATION
+--------------------------------
+
+Currently, drivers can go “Online” to receive bookings. We want to block that if their verification is incomplete:
+
+Business rule:
+- Driver can only go Online if:
+  - All REQUIRED items have status = APPROVED (not rejected or expired).
+  - No REQUIRED items are EXPIRED.
+
+Required types:
+- ID
+- DRIVER_LICENSE
+- VEHICLE_REGISTRATION
+- VEHICLE_PHOTOS
+- INSURANCE
+- BACKGROUND_CHECK
+- PAYOUT_SETUP
+
+Implementation:
+
+1. Add a helper function on the backend, e.g.:
+   - `isDriverVerificationComplete(driverId)` → returns true/false plus optional explanation.
+
+2. Integrate this check into:
+   - The endpoint or socket that toggles driver status to "Online".
+   - If verification is incomplete, respond with an error like:
+     - HTTP 400 with a JSON payload:
+       `{ ok: false, reason: "VERIFICATION_INCOMPLETE", missingItems: [...] }`
+
+3. On the front end:
+   - When the driver taps “Go Online”, call that endpoint.
+   - If it returns VERIFICATION_INCOMPLETE, show a modal/banner:
+     - “You can’t go online yet. Please complete your Verification Checklist.”
+     - Show a list of missing or rejected items with a button "Go to Verification".
+
+--------------------------------
+FRONT-END UI IMPLEMENTATION
+--------------------------------
+
+Use existing UI components (tables, cards, badges, modals) where possible.
+
+On the driver “Verification” page:
+- Show at the top:
+  - A summary panel:
+    - e.g., “Verification Status: X of Y items approved”
+    - A progress bar or step indicator.
+
+- Below that, show a table or list:
+  - Each row: Item Name, Status badge, Last Updated date, Action button.
+  - Status badges:
+    - Pending → grey
+    - Under Review → yellow
+    - Approved → green
+    - Rejected → red
+    - Expired → orange
+
+- Clicking an item opens a detail form / modal:
+  - Show instructions: e.g., “Upload a clear photo of your driver’s license. The name must match your profile.”
+  - Show current uploaded documents if any.
+  - Show rejectionReason if status = REJECTED.
+
+--------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------
+
+1. A “Verification” option is visible and reachable from the driver’s main navigation.
+2. Drivers see a checklist with status for each required document type.
+3. Drivers can upload or re-upload documents for each item.
+4. After upload, statuses become “Under Review” until changed by admin.
+5. If a document expiryDate is in the past, the item automatically shows as “Expired”.
+6. If the driver tries to go Online with incomplete verification, the system blocks it with a clear explanation and link to the Verification page.
+7. Code is clean, well-structured, and uses the existing stack (no arbitrary framework changes).
+
+Implement this now and wire it into the existing Lervit project. Explain briefly in comments where key logic lives (models, API routes, main components).

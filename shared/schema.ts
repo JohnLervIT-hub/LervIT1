@@ -251,6 +251,38 @@ export const insertSupportTicketReplySchema = createInsertSchema(supportTicketRe
   createdAt: true,
 });
 
+export const verificationItems = pgTable("verification_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  type: text("type").notNull(),
+  status: text("status").notNull().default("pending"),
+  data: text("data"),
+  fileUrls: text("file_urls").array(),
+  rejectionReason: text("rejection_reason"),
+  expiryDate: timestamp("expiry_date"),
+  submittedAt: timestamp("submitted_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  moverIdIdx: index("verification_items_mover_id_idx").on(table.moverId),
+  statusIdx: index("verification_items_status_idx").on(table.status),
+  typeIdx: index("verification_items_type_idx").on(table.type),
+}));
+
+export const insertVerificationItemSchema = createInsertSchema(verificationItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  reviewedAt: true,
+  reviewedBy: true,
+}).extend({
+  type: z.enum(['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP']),
+  status: z.enum(['pending', 'under_review', 'approved', 'rejected', 'expired']).optional(),
+  expiryDate: z.string().or(z.date()).transform((val) => val ? new Date(val) : null).optional().nullable(),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertMover = z.infer<typeof insertMoverSchema>;
@@ -267,3 +299,5 @@ export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertSupportTicketReply = z.infer<typeof insertSupportTicketReplySchema>;
 export type SupportTicketReply = typeof supportTicketReplies.$inferSelect;
+export type InsertVerificationItem = z.infer<typeof insertVerificationItemSchema>;
+export type VerificationItem = typeof verificationItems.$inferSelect;
