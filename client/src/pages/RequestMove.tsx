@@ -13,6 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -484,17 +485,13 @@ export default function RequestMove() {
                       <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
                         Pickup Address
                       </Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="pickup"
-                          placeholder="123 Main St SW, Calgary, AB"
-                          className="pl-10 h-12"
-                          value={pickupAddress}
-                          onChange={(e) => setPickupAddress(e.target.value)}
-                          data-testid="input-pickup-address"
-                        />
-                      </div>
+                      <AddressAutocomplete
+                        id="pickup"
+                        placeholder="123 Main St SW, Calgary, AB"
+                        value={pickupAddress}
+                        onChange={(address) => setPickupAddress(address)}
+                        data-testid="input-pickup-address"
+                      />
                     </div>
 
                     <div>
@@ -518,17 +515,13 @@ export default function RequestMove() {
                       <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
                         Dropoff Address
                       </Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                          id="dropoff"
-                          placeholder="456 Oak Ave NW, Calgary, AB"
-                          className="pl-10 h-12"
-                          value={dropoffAddress}
-                          onChange={(e) => setDropoffAddress(e.target.value)}
-                          data-testid="input-dropoff-address"
-                        />
-                      </div>
+                      <AddressAutocomplete
+                        id="dropoff"
+                        placeholder="456 Oak Ave NW, Calgary, AB"
+                        value={dropoffAddress}
+                        onChange={(address) => setDropoffAddress(address)}
+                        data-testid="input-dropoff-address"
+                      />
                     </div>
 
                     <div>

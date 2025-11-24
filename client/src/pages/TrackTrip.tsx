@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { GoogleMap, Marker, Polyline, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, InfoWindow, TrafficLayer, useJsApiLoader } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -295,6 +295,9 @@ export default function TrackTrip() {
                     }],
                   }}
                 />
+
+                {/* Real-time traffic layer */}
+                <TrafficLayer />
               </GoogleMap>
             </div>
           </CardContent>
