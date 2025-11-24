@@ -201,7 +201,7 @@ export default function TrackTrip() {
         {/* Google Map */}
         <Card>
           <CardContent className="p-0">
-            <div className="h-[500px] w-full relative overflow-hidden rounded-lg">
+            <div className="h-[500px] w-full relative overflow-hidden rounded-lg" data-testid="map-container">
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
                 center={center}
@@ -213,7 +213,7 @@ export default function TrackTrip() {
                 <Marker
                   position={{ lat: pickup.latitude, lng: pickup.longitude }}
                   icon={{
-                    url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                    url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
                   }}
                   onClick={() => setSelectedMarker('pickup')}
                   data-testid="marker-pickup"
@@ -234,7 +234,7 @@ export default function TrackTrip() {
                 <Marker
                   position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
                   icon={{
-                    url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                    url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
                   }}
                   onClick={() => setSelectedMarker('dropoff')}
                   data-testid="marker-dropoff"
@@ -258,7 +258,7 @@ export default function TrackTrip() {
                       key={`mover-${currentLocation.latitude}-${currentLocation.longitude}`}
                       position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
                       icon={{
-                        url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                        url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
                       }}
                       onClick={() => setSelectedMarker('mover')}
                       data-testid="marker-mover"
