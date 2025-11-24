@@ -6,6 +6,29 @@ LervIT is a mobile-first web application designed as a two-sided marketplace con
 
 ## Recent Changes
 
+### Volume-Based Load Size Categorization (November 24, 2025)
+Implemented comprehensive volume-based load size system with AI auto-detection and visual examples:
+
+**Load Size Categories:**
+- **Boxes (1-10 ft³):** Small personal items - shoes, bags, boxes, lamps, monitors - No fee
+- **Medium (11-50 ft³):** Small furniture - chairs, small tables, TVs, bookshelves - $15 fee
+- **Large (50-150 ft³):** Large furniture - sofas, beds, fridges, dressers - $30 fee
+- **Apartment (150+ ft³):** Full room furniture or multiple large items - $45 fee
+
+**Implementation Details:**
+- Updated Zod schema in `shared/schema.ts` to validate new load size categories
+- Enhanced AI photo analysis (both OpenAI Vision and mock fallback) to auto-assign load sizes based on detected item volume
+- Updated pricing logic in `shared/pricing.ts` with new tiered load fees
+- Redesigned `LoadSizeSelector` component with visual examples, volume ranges, and fee displays
+- Added AI recommendation badges and validation warnings when user selects smaller size than detected
+- Implemented load size comparison logic to alert users about potential mismatches
+
+**UI Enhancements:**
+- Each load size card displays: volume range, description, 5 specific examples, and pricing
+- "AI Suggested" badge appears on AI-recommended category
+- Warning alert displays when user selects smaller load size than AI recommendation
+- Mobile-responsive grid layout (1 column mobile, 2 columns tablet, 4 columns desktop)
+
 ### Typography & Layout Optimizations (November 24, 2025)
 Implemented comprehensive typography system and responsive layout improvements across the platform:
 
