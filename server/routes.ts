@@ -93,17 +93,17 @@ const storage_multer = multer.diskStorage({
 const upload = multer({
   storage: storage_multer,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit (HEIC files can be larger)
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|heic|heif/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const mimetype = file.mimetype === 'image/heic' || file.mimetype === 'image/heif' || /image\/(jpeg|jpg|png|gif|webp)/.test(file.mimetype);
     
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'));
+      cb(new Error('Only image files (JPG, PNG, GIF, WebP, HEIC) are allowed!'));
     }
   }
 });
