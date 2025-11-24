@@ -1,19 +1,45 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar, MapPin } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { useToast } from "@/hooks/use-toast";
 import heroImage from "@assets/generated_images/moving_truck_calgary_hero.png";
 
 export default function HeroSection() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
+  const [preferredDate, setPreferredDate] = useState("");
 
   const handleGetPrice = () => {
-    console.log("Get price clicked", { pickupAddress, dropoffAddress });
-    setLocation("/request-move");
+    if (!pickupAddress.trim()) {
+      toast({
+        title: "Pickup Address Required",
+        description: "Please enter a pickup address to get a quote.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!dropoffAddress.trim()) {
+      toast({
+        title: "Dropoff Address Required",
+        description: "Please enter a dropoff address to get a quote.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const params = new URLSearchParams({
+      pickup: pickupAddress,
+      dropoff: dropoffAddress,
+      ...(preferredDate && { date: preferredDate }),
+    });
+    setLocation(`/request-move?${params.toString()}`);
   };
 
   return (
@@ -53,34 +79,26 @@ export default function HeroSection() {
                 <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
                   Pickup Location
                 </Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="pickup"
-                    placeholder="Enter pickup address"
-                    className="pl-10 h-12"
-                    value={pickupAddress}
-                    onChange={(e) => setPickupAddress(e.target.value)}
-                    data-testid="input-pickup"
-                  />
-                </div>
+                <AddressAutocomplete
+                  id="pickup"
+                  value={pickupAddress}
+                  onChange={(address) => setPickupAddress(address)}
+                  placeholder="Enter pickup address in Calgary"
+                  data-testid="input-pickup"
+                />
               </div>
 
               <div>
                 <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
                   Dropoff Location
                 </Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="dropoff"
-                    placeholder="Enter dropoff address"
-                    className="pl-10 h-12"
-                    value={dropoffAddress}
-                    onChange={(e) => setDropoffAddress(e.target.value)}
-                    data-testid="input-dropoff"
-                  />
-                </div>
+                <AddressAutocomplete
+                  id="dropoff"
+                  value={dropoffAddress}
+                  onChange={(address) => setDropoffAddress(address)}
+                  placeholder="Enter dropoff address in Calgary"
+                  data-testid="input-dropoff"
+                />
               </div>
 
               <div>
@@ -88,11 +106,13 @@ export default function HeroSection() {
                   Preferred Date
                 </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10" />
                   <Input
                     id="date"
                     type="date"
                     className="pl-10 h-12"
+                    value={preferredDate}
+                    onChange={(e) => setPreferredDate(e.target.value)}
                     data-testid="input-date"
                   />
                 </div>

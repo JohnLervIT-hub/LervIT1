@@ -47,13 +47,9 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/browse-movers" component={BrowseMovers} />
       <Route path="/support" component={Support} />
+      <Route path="/request-move" component={RequestMove} />
 
       {/* Customer-Only Routes */}
-      <Route path="/request-move">
-        <ProtectedRoute allowedRoles={["customer"]}>
-          <RequestMove />
-        </ProtectedRoute>
-      </Route>
       <Route path="/dashboard">
         <ProtectedRoute allowedRoles={["customer"]}>
           <CustomerDashboard />

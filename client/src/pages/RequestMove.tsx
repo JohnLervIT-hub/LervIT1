@@ -52,6 +52,63 @@ export default function RequestMove() {
   const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysisResult | null>(null);
   const [analyzedPhotoUrl, setAnalyzedPhotoUrl] = useState<string | null>(null);
 
+  // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
+  useEffect(() => {
+    // First, check for pending booking data from sessionStorage (user returned from login)
+    const pendingBookingData = sessionStorage.getItem('pendingBooking');
+    if (pendingBookingData) {
+      try {
+        const data = JSON.parse(pendingBookingData);
+        setPickupAddress(data.pickupAddress || "");
+        setDropoffAddress(data.dropoffAddress || "");
+        setPickupDifficulty(data.pickupDifficulty || "ground");
+        setDropoffDifficulty(data.dropoffDifficulty || "ground");
+        setLoadSize(data.loadSize || "medium");
+        setHeavyItem(data.heavyItem || false);
+        setNumberOfMovers(data.numberOfMovers || 1);
+        setDescription(data.description || "");
+        setImages(data.images || []);
+        setDate(data.date || "");
+        setStep(3); // Jump to final step since they already filled everything
+        
+        sessionStorage.removeItem('pendingBooking');
+        
+        toast({
+          title: "Welcome Back!",
+          description: "Your booking details have been restored. You can now complete your request.",
+        });
+        return;
+      } catch (error) {
+        console.error("Failed to restore pending booking:", error);
+        sessionStorage.removeItem('pendingBooking');
+      }
+    }
+
+    // If no pending booking, check URL parameters (from hero form)
+    const params = new URLSearchParams(window.location.search);
+    const pickup = params.get('pickup');
+    const dropoff = params.get('dropoff');
+    const preferredDate = params.get('date');
+
+    if (pickup) {
+      setPickupAddress(pickup);
+    }
+    if (dropoff) {
+      setDropoffAddress(dropoff);
+    }
+    if (preferredDate) {
+      setDate(preferredDate);
+    }
+
+    // Show a toast if data was pre-filled from hero
+    if (pickup && dropoff) {
+      toast({
+        title: "Quote Form Pre-filled",
+        description: "Your addresses have been loaded. Complete the details below to request your move.",
+      });
+    }
+  }, [toast]);
+
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const res = await apiRequest("POST", "/api/bookings", bookingData);
@@ -228,9 +285,34 @@ export default function RequestMove() {
         return;
       }
 
+      // Check authentication before allowing booking submission
+      if (!user) {
+        toast({
+          title: "Login Required",
+          description: "Please log in or sign up to complete your booking request.",
+          variant: "destructive",
+        });
+        // Store current form data in sessionStorage so user can resume after login
+        sessionStorage.setItem('pendingBooking', JSON.stringify({
+          pickupAddress,
+          dropoffAddress,
+          pickupDifficulty,
+          dropoffDifficulty,
+          loadSize,
+          heavyItem,
+          numberOfMovers,
+          description,
+          images,
+          date
+        }));
+        // Redirect to login with return path
+        setLocation('/login?redirect=/request-move');
+        return;
+      }
+
       // Create the booking - backend will calculate distance and price
       const bookingData = {
-        customerId: user?.id,
+        customerId: user.id,
         pickupAddress,
         dropoffAddress,
         pickupDifficulty,
