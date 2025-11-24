@@ -1822,8 +1822,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Analyze file size in MB to estimate load
     const sizeMB = fileSize / (1024 * 1024);
     
-    // Simple heuristics based on file size and name
-    let loadSize: "small" | "medium" | "large" = "medium";
+    // New volume-based load size categories:
+    // boxes: 1-10 ft³ (small personal items, boxes, bags)
+    // medium: 11-50 ft³ (chairs, small tables, TVs)
+    // large: 50-150 ft³ (sofas, beds, fridges, appliances)
+    // apartment: 150+ ft³ (full room furniture)
+    let loadSize: "boxes" | "medium" | "large" | "apartment" = "medium";
     let heavyItem = false;
     let recommendedMovers = 1;
     let itemType = "Household item";
@@ -1834,7 +1838,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // File size analysis (smaller photos often = smaller items)
     if (sizeMB < 1) {
-      loadSize = "small";
+      loadSize = "boxes";
       estimatedWeight = "light";
       weightClass = "light";
       estimatedWeightLbs = 30;
@@ -1858,7 +1862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Furniture - Seating
     if (lowerName.includes('sofa') || lowerName.includes('couch') || lowerName.includes('sectional')) {
       itemType = lowerName.includes('sectional') ? "Sectional sofa" : "Sofa";
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large furniture
       weightClass = "medium";
       estimatedWeightLbs = 300;
       heavyItem = true;
@@ -1874,14 +1878,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         itemType = "Chair";
       }
-      loadSize = "small";
+      loadSize = "medium"; // 11-50 ft³: Small furniture
       weightClass = "light";
       estimatedWeightLbs = 40;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
     } else if (lowerName.includes('stool')) {
       itemType = "Stool";
-      loadSize = "small";
+      loadSize = "boxes"; // 1-10 ft³: Very small items
       weightClass = "light";
       estimatedWeightLbs = 25;
       recommendedMovers = 1;
@@ -1892,27 +1896,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     else if (lowerName.includes('table')) {
       if (lowerName.includes('coffee')) {
         itemType = "Coffee table";
-        loadSize = "medium";
+        loadSize = "medium"; // 11-50 ft³
         estimatedWeightLbs = 80;
       } else if (lowerName.includes('dining')) {
         itemType = "Dining table";
-        loadSize = "large";
+        loadSize = "large"; // 50-150 ft³: Large furniture
         estimatedWeightLbs = 200;
         recommendedMovers = 2;
       } else if (lowerName.includes('side') || lowerName.includes('end')) {
         itemType = "Side table";
-        loadSize = "small";
+        loadSize = "boxes"; // 1-10 ft³: Very small items
         estimatedWeightLbs = 40;
       } else {
         itemType = "Table";
-        loadSize = "medium";
+        loadSize = "medium"; // 11-50 ft³
         estimatedWeightLbs = 120;
       }
       weightClass = "medium";
       recommendedVehicle = "Pickup";
     } else if (lowerName.includes('desk')) {
       itemType = lowerName.includes('standing') ? "Standing desk" : "Desk";
-      loadSize = "medium";
+      loadSize = "medium"; // 11-50 ft³: Small furniture
       weightClass = "medium";
       estimatedWeightLbs = 150;
       recommendedMovers = 1;
@@ -1934,7 +1938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemType = "Bed frame";
         estimatedWeightLbs = 250;
       }
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large furniture
       weightClass = "medium";
       heavyItem = true;
       recommendedMovers = 2;
@@ -1950,7 +1954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemType = "Mattress";
         estimatedWeightLbs = 100;
       }
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large item
       weightClass = "medium";
       recommendedMovers = 2;
       recommendedVehicle = "Cargo Van";
@@ -1959,7 +1963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Appliances
     else if (lowerName.includes('fridge') || lowerName.includes('refrigerator')) {
       itemType = lowerName.includes('mini') ? "Mini fridge" : "Refrigerator";
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large appliance
       weightClass = "heavy";
       estimatedWeightLbs = lowerName.includes('mini') ? 100 : 550;
       heavyItem = true;
@@ -1967,7 +1971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Cube Truck";
     } else if (lowerName.includes('washer') || lowerName.includes('dryer')) {
       itemType = lowerName.includes('washer') ? "Washing machine" : "Dryer";
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large appliance
       weightClass = "heavy";
       estimatedWeightLbs = 500;
       heavyItem = true;
@@ -1975,9 +1979,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Cube Truck";
     } else if (lowerName.includes('appliance') || lowerName.includes('stove') || lowerName.includes('oven')) {
       itemType = "Kitchen appliance";
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large appliance
       weightClass = "heavy";
       estimatedWeightLbs = 400;
+      heavyItem = true;
+      recommendedMovers = 2;
+      recommendedVehicle = "Cube Truck";
+    } else if (lowerName.includes('treadmill') || lowerName.includes('exercise')) {
+      itemType = "Treadmill";
+      loadSize = "large"; // 50-150 ft³: Large equipment
+      weightClass = "heavy";
+      estimatedWeightLbs = 450;
       heavyItem = true;
       recommendedMovers = 2;
       recommendedVehicle = "Cube Truck";
@@ -1986,7 +1998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Storage & Shelving
     else if (lowerName.includes('dresser') || lowerName.includes('drawer')) {
       itemType = "Dresser";
-      loadSize = "large";
+      loadSize = "large"; // 50-150 ft³: Large furniture
       weightClass = "medium";
       estimatedWeightLbs = 250;
       heavyItem = true;
@@ -1994,14 +2006,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Cargo Van";
     } else if (lowerName.includes('bookshelf') || lowerName.includes('bookcase')) {
       itemType = "Bookshelf";
-      loadSize = "medium";
+      loadSize = "medium"; // 11-50 ft³: Medium furniture
       weightClass = "medium";
       estimatedWeightLbs = 120;
       recommendedMovers = 1;
       recommendedVehicle = "Pickup";
     } else if (lowerName.includes('cabinet') || lowerName.includes('cupboard')) {
       itemType = "Cabinet";
-      loadSize = "medium";
+      loadSize = "medium"; // 11-50 ft³: Medium furniture
       weightClass = "medium";
       estimatedWeightLbs = 180;
       recommendedMovers = 2;
@@ -2011,28 +2023,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Small items & Personal belongings
     else if (lowerName.includes('box') || lowerName.includes('boxes')) {
       itemType = "Moving boxes";
-      loadSize = "small";
+      loadSize = "boxes"; // 1-10 ft³: Boxes category
       weightClass = "light";
       estimatedWeightLbs = 40;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
     } else if (lowerName.includes('shoe') || lowerName.includes('sneaker') || lowerName.includes('boot')) {
       itemType = "Shoes";
-      loadSize = "small";
+      loadSize = "boxes"; // 1-10 ft³: Very small items
       weightClass = "light";
       estimatedWeightLbs = 5;
       recommendedMovers = 1;
       recommendedVehicle = "Car";
     } else if (lowerName.includes('bag') || lowerName.includes('luggage') || lowerName.includes('suitcase')) {
       itemType = lowerName.includes('suitcase') ? "Suitcase" : (lowerName.includes('backpack') ? "Backpack" : "Bag");
-      loadSize = "small";
+      loadSize = "boxes"; // 1-10 ft³: Very small items
       weightClass = "light";
       estimatedWeightLbs = 15;
       recommendedMovers = 1;
       recommendedVehicle = "Car";
     } else if (lowerName.includes('lamp') || lowerName.includes('light')) {
       itemType = lowerName.includes('floor') || lowerName.includes('standing') ? "Standing lamp" : "Lamp";
-      loadSize = "small";
+      loadSize = "boxes"; // 1-10 ft³: Small items
       weightClass = "light";
       estimatedWeightLbs = 20;
       recommendedMovers = 1;
@@ -2042,14 +2054,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Electronics
     else if (lowerName.includes('tv') || lowerName.includes('television')) {
       itemType = "Television";
-      loadSize = "medium";
+      loadSize = "medium"; // 11-50 ft³: Medium electronics
       weightClass = "medium";
       estimatedWeightLbs = 60;
       recommendedMovers = 1;
       recommendedVehicle = "SUV";
     } else if (lowerName.includes('monitor') || lowerName.includes('screen')) {
       itemType = "Monitor";
-      loadSize = "small";
+      loadSize = "boxes"; // 1-10 ft³: Small electronics
       weightClass = "light";
       estimatedWeightLbs = 25;
       recommendedMovers = 1;
@@ -2126,21 +2138,26 @@ Examples of BAD descriptions (too generic):
 
 Analyze the image and determine:
 1. **Specific item description** - Be detailed! (e.g., "Sectional sofa", "Queen bed", "Running shoes", "Luggage bag")
-2. Load size: small (fits in hand/bag), medium (requires lifting), large (bulky/heavy)
+2. Load size based on VOLUME (FT³):
+   - "boxes": 1-10 ft³ (small personal items: shoes, bags, boxes, lamps, monitors)
+   - "medium": 11-50 ft³ (small furniture: chairs, small tables, TVs, bookshelves)
+   - "large": 50-150 ft³ (large furniture: sofas, beds, fridges, appliances, dressers, treadmills)
+   - "apartment": 150+ ft³ (full room furniture or multiple large items)
 3. Is it heavy/fragile requiring special care? (true/false)
 4. Recommended movers: 1 or 2
 5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
 6. Approximate weight in pounds
 7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
 
-Weight/Vehicle Guidelines:
-- Shoes, bags, small items → Light (<100 lbs) → Car/SUV
-- Chairs, small tables, medium boxes → Medium (100-500 lbs) → Pickup/Cargo Van
-- Sofas, beds, appliances → Heavy (>500 lbs) → Cube Truck/Flatbed
+Load Size Classification Guidelines:
+- Shoes, bags, boxes, lamps, monitors → "boxes" (1-10 ft³)
+- Chairs, small tables, TVs, bookshelves → "medium" (11-50 ft³)
+- Sofas, beds, fridges, treadmills, dressers → "large" (50-150 ft³)
+- Full room furniture sets → "apartment" (150+ ft³)
 
 Respond with VALID JSON only:
 {
-  "loadSize": "small" | "medium" | "large",
+  "loadSize": "boxes" | "medium" | "large" | "apartment",
   "heavyItem": true | false,
   "recommendedMovers": 1 | 2,
   "itemType": "SPECIFIC description here (e.g., 'Queen-size bed', 'Leather sofa', 'Running shoes')",
@@ -2149,7 +2166,7 @@ Respond with VALID JSON only:
   "estimatedWeightLbs": number,
   "recommendedVehicle": "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed",
   "confidence": 0-100,
-  "explanation": "brief explanation with specific item details",
+  "explanation": "brief explanation with specific item details and volume estimate",
   "allowManualOverride": true
 }`
                     },

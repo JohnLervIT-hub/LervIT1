@@ -184,7 +184,9 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   // Add enum validation for pricing-related fields
   pickupDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
   dropoffDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']),
-  loadSize: z.enum(['small', 'medium', 'large']),
+  // Updated load size categories based on volume (FT³)
+  // boxes: 1-10 ft³, medium: 11-50 ft³, large: 50-150 ft³, apartment: 150+ ft³
+  loadSize: z.enum(['boxes', 'medium', 'large', 'apartment']),
   numberOfMovers: z.number().int().min(1).max(2),
 });
 
