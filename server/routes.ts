@@ -487,6 +487,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== VERIFICATION HELPER FUNCTIONS =====
+  
+  async function getDriverVerificationSummary(moverId: string) {
+    const REQUIRED_TYPES = [
+      'GOVERNMENT_ID_SELFIE',
+      'DRIVERS_LICENSE',
+      'VEHICLE_REGISTRATION',
+      'VEHICLE_PHOTOS',
+      'INSURANCE_PROOF',
+      'BACKGROUND_CHECK',
+      'PAYOUT_SETUP'
+    ];
+
+    const items = await db.select().from(verificationItems).where(eq(verificationItems.moverId, moverId));
+    const now = new Date();
+
+    let approvedCount = 0;
+    let hasExpired = false;
+    let hasRejected = false;
+
+    for (const type of REQUIRED_TYPES) {
+      const item = items.find(i => i.type === type);
+      if (item) {
+        if (item.status === 'Approved') {
+          if (item.expiresAt && new Date(item.expiresAt) < now) {
+            hasExpired = true;
+          } else {
+            approvedCount++;
+          }
+        } else if (item.status === 'Rejected') {
+          hasRejected = true;
+        } else if (item.expiresAt && new Date(item.expiresAt) < now) {
+          hasExpired = true;
+        }
+      }
+    }
+
+    let overallStatus = 'INCOMPLETE';
+    if (hasExpired || hasRejected) {
+      overallStatus = 'ATTENTION';
+    } else if (approvedCount === REQUIRED_TYPES.length) {
+      overallStatus = 'APPROVED';
+    }
+
+    return {
+      approvedCount,
+      totalRequired: REQUIRED_TYPES.length,
+      hasExpired,
+      hasRejected,
+      overallStatus,
+      items
+    };
+  }
+  
   // ===== VERIFICATION ROUTES =====
   
   app.get("/api/movers/:moverId/verification", async (req: Request, res: Response) => {
@@ -674,6 +728,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(result[0]);
     } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // ===== ADMIN VERIFICATION DASHBOARD ROUTES =====
+  
+  // GET /api/admin/verification/drivers - List all drivers with verification summaries
+  app.get("/api/admin/verification/drivers", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { search, statusFilter, page = '1', pageSize = '20' } = req.query;
+      const pageNum = parseInt(page as string);
+      const pageSizeNum = parseInt(pageSize as string);
+      const offset = (pageNum - 1) * pageSizeNum;
+
+      // Get all movers with their users
+      const moversQuery = await db
+        .select({
+          mover: moversTable,
+          user: usersTable
+        })
+        .from(moversTable)
+        .leftJoin(usersTable, eq(moversTable.userId, usersTable.id))
+        .limit(pageSizeNum)
+        .offset(offset);
+
+      // Filter by search term
+      let filteredMovers = moversQuery;
+      if (search) {
+        const searchLower = (search as string).toLowerCase();
+        filteredMovers = moversQuery.filter(({ mover, user }) => 
+          user?.name.toLowerCase().includes(searchLower) ||
+          user?.email.toLowerCase().includes(searchLower) ||
+          user?.phone?.toLowerCase().includes(searchLower) ||
+          mover.id.includes(searchLower)
+        );
+      }
+
+      // Get verification summaries for each mover
+      const driversWithVerification = await Promise.all(
+        filteredMovers.map(async ({ mover, user }) => {
+          const summary = await getDriverVerificationSummary(mover.id);
+          const lastVerificationItem = summary.items.length > 0 
+            ? summary.items.sort((a, b) => 
+                new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+              )[0]
+            : null;
+
+          return {
+            driverId: mover.id,
+            name: user?.name || 'Unknown',
+            email: user?.email || '',
+            phone: user?.phone || '',
+            rating: mover.rating,
+            overallStatus: summary.overallStatus,
+            approvedCount: summary.approvedCount,
+            totalRequired: summary.totalRequired,
+            hasExpired: summary.hasExpired,
+            hasRejected: summary.hasRejected,
+            isAvailable: mover.isAvailable,
+            lastUpdated: lastVerificationItem?.updatedAt || mover.createdAt,
+          };
+        })
+      );
+
+      // Filter by status
+      let finalDrivers = driversWithVerification;
+      if (statusFilter && statusFilter !== 'ALL') {
+        finalDrivers = driversWithVerification.filter(d => {
+          if (statusFilter === 'MISSING_REQUIRED') {
+            return d.approvedCount < d.totalRequired;
+          }
+          return d.overallStatus === statusFilter;
+        });
+      }
+
+      res.json({
+        drivers: finalDrivers,
+        total: finalDrivers.length,
+        page: pageNum,
+        pageSize: pageSizeNum,
+      });
+    } catch (error) {
+      console.error('Admin verification drivers error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/admin/verification/driver/:driverId - Get detailed driver verification info
+  app.get("/api/admin/verification/driver/:driverId", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { driverId } = req.params;
+
+      // Get mover and user info
+      const mover = await storage.getMover(driverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Driver not found" });
+      }
+
+      const user = await storage.getUser(mover.userId);
+      const summary = await getDriverVerificationSummary(driverId);
+
+      res.json({
+        driver: {
+          id: mover.id,
+          userId: mover.userId,
+          name: user?.name || 'Unknown',
+          email: user?.email || '',
+          phone: user?.phone || '',
+          moverImage: mover.moverImage,
+          bio: mover.bio,
+          rating: mover.rating,
+          totalMoves: mover.totalMoves,
+          isAvailable: mover.isAvailable,
+          vehicleType: mover.vehicleType,
+          vehicleColor: mover.vehicleColor,
+          licensePlate: mover.licensePlate,
+          vehiclePhoto: mover.vehiclePhoto,
+          profileVerified: mover.profileVerified,
+          documentsVerified: mover.documentsVerified,
+        },
+        verificationSummary: {
+          overallStatus: summary.overallStatus,
+          approvedCount: summary.approvedCount,
+          totalRequired: summary.totalRequired,
+          hasExpired: summary.hasExpired,
+          hasRejected: summary.hasRejected,
+        },
+        verificationItems: summary.items,
+      });
+    } catch (error) {
+      console.error('Admin driver detail error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // PATCH /api/admin/verification/item/:id - Approve/reject verification item
+  app.patch("/api/admin/verification/item/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const user = (req as any).user;
+      
+      const { status, rejectionReason } = req.body;
+      
+      if (!['Approved', 'Rejected', 'Under Review'].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'Approved', 'Rejected', or 'Under Review'" });
+      }
+      
+      if (status === 'Rejected' && !rejectionReason) {
+        return res.status(400).json({ error: "Rejection reason is required when rejecting" });
+      }
+      
+      const result = await db.update(verificationItems)
+        .set({
+          status,
+          rejectionReason: status === 'Rejected' ? rejectionReason : null,
+          reviewedAt: new Date(),
+          reviewedBy: user.id,
+          updatedAt: new Date()
+        })
+        .where(eq(verificationItems.id, parseInt(req.params.id)))
+        .returning();
+      
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Verification item not found" });
+      }
+
+      // Stub notification hook
+      const item = result[0];
+      if (status === 'Approved') {
+        console.log(`[Notification] Verification item ${item.type} approved for mover ${item.moverId}`);
+        // TODO: Send notification: "Your ${item.type} has been approved. You're one step closer to going online."
+      } else if (status === 'Rejected') {
+        console.log(`[Notification] Verification item ${item.type} rejected for mover ${item.moverId}: ${rejectionReason}`);
+        // TODO: Send notification: "Your ${item.type} was rejected: ${rejectionReason}. Please upload a corrected version."
+      }
+      
+      res.json(result[0]);
+    } catch (error) {
+      console.error('Admin verification item update error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });
