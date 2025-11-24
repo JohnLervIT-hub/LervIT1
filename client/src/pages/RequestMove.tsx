@@ -14,12 +14,14 @@ import LoadSizeSelector from "@/components/LoadSizeSelector";
 import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
+import { PricingSummary } from "@/components/PricingSummary";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
+import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -64,6 +66,11 @@ export default function RequestMove() {
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysisResult | null>(null);
   const [analyzedPhotoUrl, setAnalyzedPhotoUrl] = useState<string | null>(null);
+  
+  // Live Pricing state
+  const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
+  const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
@@ -163,6 +170,8 @@ export default function RequestMove() {
   useEffect(() => {
     const calculateDistance = async () => {
       if (pickupAddress && dropoffAddress) {
+        setIsCalculatingPrice(true);
+        setPricingError(null);
         try {
           // Use the backend geocoding API to calculate real distance
           const response = await fetch('/api/geocode/distance', {
@@ -180,16 +189,47 @@ export default function RequestMove() {
           } else {
             // Fallback to estimated distance if geocoding fails
             setEstimateDistance(10);
+            setPricingError("Using estimated distance - geocoding unavailable");
           }
         } catch (error) {
           // Fallback to estimated distance on error
           setEstimateDistance(10);
+          setPricingError("Using estimated distance - geocoding unavailable");
+        } finally {
+          setIsCalculatingPrice(false);
         }
+      } else {
+        setPriceBreakdown(null);
+        setEstimateDistance(0);
       }
     };
     
     calculateDistance();
   }, [pickupAddress, dropoffAddress]);
+  
+  // Calculate live pricing whenever form fields change
+  useEffect(() => {
+    if (estimateDistance > 0 && pickupAddress && dropoffAddress && date) {
+      try {
+        const breakdown = calculatePrice(
+          estimateDistance,
+          loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
+          pickupDifficulty as PickupDifficultyType,
+          dropoffDifficulty as DropoffDifficultyType,
+          heavyItem,
+          numberOfMovers as 1 | 2,
+          undefined // moverToPickupDistance - will be calculated after mover assignment
+        );
+        setPriceBreakdown(breakdown);
+        setPricingError(null);
+      } catch (error) {
+        console.error('Pricing calculation error:', error);
+        setPricingError("Error calculating price");
+      }
+    } else {
+      setPriceBreakdown(null);
+    }
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, date]);
 
   // AI Feature 2: Generate price explanation when booking is created
   useEffect(() => {
@@ -564,6 +604,7 @@ export default function RequestMove() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
+          {/* Main Form */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
@@ -923,63 +964,28 @@ export default function RequestMove() {
             </Card>
           </div>
 
+          {/* Live Pricing Sidebar - Desktop & Mobile */}
           <div className="lg:col-span-1">
-            <Card className="sticky top-24">
-              <CardHeader>
-                <h3 className="text-xl font-bold">What Happens Next?</h3>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
-                      1
-                    </div>
-                    <div>
-                      <p className="font-semibold">Distance Calculated</p>
-                      <p className="text-sm text-muted-foreground">
-                        We'll calculate the exact distance between your locations
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
-                      2
-                    </div>
-                    <div>
-                      <p className="font-semibold">Dynamic Pricing</p>
-                      <p className="text-sm text-muted-foreground">
-                        Transparent pricing based on distance, load size, and mover travel
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
-                      3
-                    </div>
-                    <div>
-                      <p className="font-semibold">Find Nearest Movers</p>
-                      <p className="text-sm text-muted-foreground">
-                        Top 5 nearest movers automatically notified
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm flex-shrink-0">
-                      4
-                    </div>
-                    <div>
-                      <p className="font-semibold">10-Minute Response</p>
-                      <p className="text-sm text-muted-foreground">
-                        Movers have 10 minutes to accept
-                      </p>
-                    </div>
-                  </div>
-                </div>
+            <div className="lg:sticky lg:top-24">
+              <PricingSummary 
+                breakdown={priceBreakdown}
+                isCalculating={isCalculatingPrice}
+                error={pricingError}
+                className="mb-6"
+              />
+              
+              {/* Show load size info below pricing */}
+              {priceBreakdown && (
                 <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                  <p className="text-sm font-semibold text-primary">Selected Load Size: {loadSize.charAt(0).toUpperCase() + loadSize.slice(1)}</p>
+                  <p className="text-sm font-semibold text-primary">
+                    Selected Load Size: {loadSize.charAt(0).toUpperCase() + loadSize.slice(1)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Price updates automatically as you fill the form
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           </div>
         </div>
       </div>
