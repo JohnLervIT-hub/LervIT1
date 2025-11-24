@@ -4,6 +4,35 @@
 
 LervIT is a mobile-first web application designed as a two-sided marketplace connecting customers with freelance movers in Calgary. Its primary goal is to simplify the moving process through features like real-time messaging, booking management, administrative tools, and comprehensive support. The platform emphasizes trust, transparent pricing, and intuitive user experiences, with an ambitious vision to evolve into an intelligent, Uber-style location-based service that matches customers with nearby movers using proximity and dynamic pricing algorithms.
 
+## Recent Changes
+
+### Typography & Layout Optimizations (November 24, 2025)
+Implemented comprehensive typography system and responsive layout improvements across the platform:
+
+**Typography System (index.css):**
+- Established proper heading hierarchy matching design guidelines: h1 (2.5rem mobile → 4rem desktop), h2 (1.75rem mobile → 2.5rem desktop), h3-h6 with proper scaling
+- Created bespoke helper classes for special tracking needs: `.tracking-tight-headings`, `.tracking-tight`, `.tracking-normal-text`
+- Removed problematic utility class overrides (e.g., `.text-lg`, `.text-xl`) to prevent shadcn component conflicts
+- Used proper responsive media queries for typography scaling
+
+**Optimized Pages:**
+- **LifecycleDemo.tsx (Customer Demo):** Enhanced mobile responsiveness with improved padding (pt-20 px-4 pb-8 md:pt-24 md:px-6 lg:px-8 md:pb-12), better visual hierarchy for header and stats cards, optimized pricing breakdown section
+- **MoverLifecycleDemo.tsx (Mover Demo):** Improved stats cards with responsive sizing, enhanced header with scalable icon (w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12), better progress indicators
+- **Home.tsx:** Better section spacing (py-12 md:py-16 lg:py-20), enhanced feature cards and "How It Works" section with proper responsive breakpoints
+
+**Responsive Design Patterns:**
+- Mobile-first approach with three key breakpoints: default (320px+), md (768px+), lg (1024px+)
+- Consistent gap spacing that scales with viewport: gap-4 md:gap-5 lg:gap-6
+- Cards use responsive padding: p-5 md:p-6
+- Icons scale appropriately across breakpoints
+
+### Technical Debt & Future Improvements
+- **Google Maps API Deprecation:** Console warnings indicate deprecated APIs in use. Future work should migrate to new APIs:
+  - Replace `google.maps.places.PlacesService` with `google.maps.places.Place`
+  - Replace `google.maps.Marker` with `google.maps.marker.AdvancedMarkerElement`
+  - Migration guide: https://developers.google.com/maps/documentation/javascript/places-migration-overview
+- **Additional Pages for Optimization:** Apply same typography/layout patterns to BrowseMovers, RequestMove, MyBookings, and MoverDashboard for consistency
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
