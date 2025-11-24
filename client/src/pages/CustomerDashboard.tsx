@@ -1,11 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, AlertTriangle } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
 type Booking = {
   id: string;
@@ -31,11 +44,53 @@ type Booking = {
 export default function CustomerDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   // Fetch bookings for this customer ONLY (server enforces filtering by role)
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
+  });
+
+  // Report mover mutation
+  const reportMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const booking = bookings?.find(b => b.id === bookingId);
+      if (!booking || !booking.mover) {
+        throw new Error("Booking or mover not found");
+      }
+
+      return await apiRequest("/api/support-tickets", {
+        method: "POST",
+        body: JSON.stringify({
+          subject: `Report: Mover ${booking.mover.user.name} (Booking #${bookingId.slice(0, 8)})`,
+          category: "mover_concern",
+          priority: "high",
+          description: `Customer ${user?.name} is reporting a concern about mover ${booking.mover.user.name} for booking #${bookingId}. Please investigate.`,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Report Submitted",
+        description: "We've received your report and will investigate promptly. We'll contact you via email.",
+      });
+      setReportDialogOpen(false);
+      setSelectedBooking(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/support-tickets"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Report Failed",
+        description: error.message || "Unable to submit report. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   // Filter active bookings (not completed/cancelled)
@@ -54,6 +109,17 @@ export default function CustomerDashboard() {
 
   const handleViewDetails = (id: string) => {
     setLocation(`/my-bookings`);
+  };
+
+  const handleReportMover = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setReportDialogOpen(true);
+  };
+
+  const confirmReport = () => {
+    if (selectedBooking) {
+      reportMutation.mutate(selectedBooking.id);
+    }
   };
 
   if (isLoading) {
@@ -130,14 +196,26 @@ export default function CustomerDashboard() {
                         Mover: {booking.mover.user.name}
                       </div>
                     )}
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking.id)}>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking.id)} data-testid={`button-view-${booking.id}`}>
                         View Details
                       </Button>
                       {booking.moverId && (
-                        <Button variant="ghost" size="sm" onClick={() => handleMessage(booking.id)}>
-                          Message
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => handleMessage(booking.id)} data-testid={`button-message-${booking.id}`}>
+                            Message
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleReportMover(booking)}
+                            className="text-destructive hover:text-destructive gap-1"
+                            data-testid={`button-report-${booking.id}`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            Report
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -190,6 +268,46 @@ export default function CustomerDashboard() {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Report Mover Dialog */}
+        <AlertDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                Report Safety Concern
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {selectedBooking && selectedBooking.mover && (
+                  <>
+                    You're about to report mover <strong>{selectedBooking.mover.user.name}</strong> for booking <strong>#{selectedBooking.id.slice(0, 8)}</strong>.
+                    <br /><br />
+                    Our support team will investigate this report immediately and contact you via email. 
+                    If you're in immediate danger, please call emergency services.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-report">Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={confirmReport}
+                disabled={reportMutation.isPending}
+                className="bg-destructive hover:bg-destructive/90"
+                data-testid="button-confirm-report"
+              >
+                {reportMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Report"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
