@@ -1,54 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
-import { Icon, LatLngBounds } from "leaflet";
+import { GoogleMap, Marker, Polyline, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, MapPin, Package, Navigation } from "lucide-react";
 import { Link } from "wouter";
-import "leaflet/dist/leaflet.css";
-
-// Fix for default marker icons in React-Leaflet
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-
-delete (Icon.Default.prototype as any)._getIconUrl;
-Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
-
-// Custom icons
-const pickupIcon = new Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const dropoffIcon = new Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const moverIcon = new Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
 
 interface LocationData {
   bookingId: string;
@@ -70,38 +28,30 @@ interface LocationData {
   } | null;
 }
 
-// Component to update map bounds when markers change
-function MapBoundsUpdater({ 
-  pickup, 
-  dropoff, 
-  currentLocation 
-}: { 
-  pickup: { latitude: number; longitude: number }; 
-  dropoff: { latitude: number; longitude: number }; 
-  currentLocation: { latitude: number; longitude: number } | null;
-}) {
-  const map = useMap();
+const mapContainerStyle = {
+  width: "100%",
+  height: "100%",
+};
 
-  useEffect(() => {
-    const bounds = new LatLngBounds([
-      [pickup.latitude, pickup.longitude],
-      [dropoff.latitude, dropoff.longitude],
-    ]);
-
-    if (currentLocation) {
-      bounds.extend([currentLocation.latitude, currentLocation.longitude]);
-    }
-
-    map.fitBounds(bounds, { padding: [50, 50] });
-  }, [map, pickup.latitude, pickup.longitude, dropoff.latitude, dropoff.longitude, currentLocation?.latitude, currentLocation?.longitude]);
-
-  return null;
-}
+const mapOptions = {
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: true,
+};
 
 export default function TrackTrip() {
   const [, params] = useRoute("/track-trip/:bookingId");
   const bookingId = params?.bookingId;
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [selectedMarker, setSelectedMarker] = useState<'pickup' | 'dropoff' | 'mover' | null>(null);
+
+  // Load Google Maps
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
 
   // Fetch location data with auto-refresh
   const { data: locationData, isLoading } = useQuery<LocationData>({
@@ -116,7 +66,40 @@ export default function TrackTrip() {
     }
   }, [locationData?.status]);
 
-  if (isLoading || !locationData) {
+  // Update map bounds when location changes
+  useEffect(() => {
+    if (map && locationData) {
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
+      bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
+      
+      if (locationData.currentLocation) {
+        bounds.extend({ 
+          lat: locationData.currentLocation.latitude, 
+          lng: locationData.currentLocation.longitude 
+        });
+      }
+      
+      map.fitBounds(bounds, 50); // 50px padding
+    }
+  }, [map, locationData]);
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    setMap(map);
+  }, []);
+
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-destructive mb-2">Failed to load Google Maps</p>
+          <p className="text-sm text-muted-foreground">Please check your API key configuration</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoaded || isLoading || !locationData) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -132,19 +115,21 @@ export default function TrackTrip() {
   const currentLocation = locationData.currentLocation;
 
   // Calculate map center
-  const centerLat = (pickup.latitude + dropoff.latitude) / 2;
-  const centerLng = (pickup.longitude + dropoff.longitude) / 2;
+  const center = {
+    lat: (pickup.latitude + dropoff.latitude) / 2,
+    lng: (pickup.longitude + dropoff.longitude) / 2,
+  };
 
   // Create route line coordinates
-  const routeCoordinates: [number, number][] = [
-    [pickup.latitude, pickup.longitude],
+  const routeCoordinates: google.maps.LatLngLiteral[] = [
+    { lat: pickup.latitude, lng: pickup.longitude },
   ];
   
   if (currentLocation) {
-    routeCoordinates.push([currentLocation.latitude, currentLocation.longitude]);
+    routeCoordinates.push({ lat: currentLocation.latitude, lng: currentLocation.longitude });
   }
   
-  routeCoordinates.push([dropoff.latitude, dropoff.longitude]);
+  routeCoordinates.push({ lat: dropoff.latitude, lng: dropoff.longitude });
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -213,67 +198,104 @@ export default function TrackTrip() {
           </Card>
         )}
 
-        {/* Map */}
+        {/* Google Map */}
         <Card>
           <CardContent className="p-0">
             <div className="h-[500px] w-full relative overflow-hidden rounded-lg">
-              <MapContainer
-                center={[centerLat, centerLng]}
+              <GoogleMap
+                mapContainerStyle={mapContainerStyle}
+                center={center}
                 zoom={12}
-                style={{ height: "100%", width: "100%" }}
-                data-testid="map-container"
+                options={mapOptions}
+                onLoad={onMapLoad}
               >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                {/* Pickup marker (green) */}
+                <Marker
+                  position={{ lat: pickup.latitude, lng: pickup.longitude }}
+                  icon={{
+                    url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                  }}
+                  onClick={() => setSelectedMarker('pickup')}
+                  data-testid="marker-pickup"
                 />
-                
-                {/* Pickup marker */}
-                <Marker position={[pickup.latitude, pickup.longitude]} icon={pickupIcon}>
-                  <Popup>
-                    <strong>Pickup</strong><br />
-                    {pickup.address}
-                  </Popup>
-                </Marker>
-
-                {/* Dropoff marker */}
-                <Marker position={[dropoff.latitude, dropoff.longitude]} icon={dropoffIcon}>
-                  <Popup>
-                    <strong>Dropoff</strong><br />
-                    {dropoff.address}
-                  </Popup>
-                </Marker>
-
-                {/* Current location marker */}
-                {currentLocation && (
-                  <Marker 
-                    key={`mover-${currentLocation.latitude}-${currentLocation.longitude}`}
-                    position={[currentLocation.latitude, currentLocation.longitude]} 
-                    icon={moverIcon}
+                {selectedMarker === 'pickup' && (
+                  <InfoWindow
+                    position={{ lat: pickup.latitude, lng: pickup.longitude }}
+                    onCloseClick={() => setSelectedMarker(null)}
                   >
-                    <Popup>
-                      <strong>Mover Location</strong><br />
-                      Updated: {new Date(currentLocation.updatedAt).toLocaleTimeString()}
-                    </Popup>
-                  </Marker>
+                    <div>
+                      <strong>Pickup</strong><br />
+                      {pickup.address}
+                    </div>
+                  </InfoWindow>
+                )}
+
+                {/* Dropoff marker (red) */}
+                <Marker
+                  position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
+                  icon={{
+                    url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                  }}
+                  onClick={() => setSelectedMarker('dropoff')}
+                  data-testid="marker-dropoff"
+                />
+                {selectedMarker === 'dropoff' && (
+                  <InfoWindow
+                    position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
+                    onCloseClick={() => setSelectedMarker(null)}
+                  >
+                    <div>
+                      <strong>Dropoff</strong><br />
+                      {dropoff.address}
+                    </div>
+                  </InfoWindow>
+                )}
+
+                {/* Current location marker (blue) */}
+                {currentLocation && (
+                  <>
+                    <Marker
+                      key={`mover-${currentLocation.latitude}-${currentLocation.longitude}`}
+                      position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
+                      icon={{
+                        url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                      }}
+                      onClick={() => setSelectedMarker('mover')}
+                      data-testid="marker-mover"
+                    />
+                    {selectedMarker === 'mover' && (
+                      <InfoWindow
+                        position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
+                        onCloseClick={() => setSelectedMarker(null)}
+                      >
+                        <div>
+                          <strong>Mover Location</strong><br />
+                          Updated: {new Date(currentLocation.updatedAt).toLocaleTimeString()}
+                        </div>
+                      </InfoWindow>
+                    )}
+                  </>
                 )}
 
                 {/* Route line */}
-                <Polyline 
-                  positions={routeCoordinates} 
-                  color="#3b82f6" 
-                  weight={3} 
-                  opacity={0.7}
-                  dashArray="10, 10"
+                <Polyline
+                  path={routeCoordinates}
+                  options={{
+                    strokeColor: "#3b82f6",
+                    strokeOpacity: 0.7,
+                    strokeWeight: 3,
+                    icons: [{
+                      icon: {
+                        path: "M 0,-1 0,1",
+                        strokeOpacity: 1,
+                        scale: 3,
+                      },
+                      offset: "0",
+                      repeat: "20px",
+                    }],
+                  }}
                 />
-
-                {/* Update map bounds when location changes */}
-                <MapBoundsUpdater 
-                  pickup={pickup} 
-                  dropoff={dropoff} 
-                  currentLocation={currentLocation} 
-                />
-              </MapContainer>
+              </GoogleMap>
             </div>
           </CardContent>
         </Card>
