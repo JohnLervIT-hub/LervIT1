@@ -93,14 +93,18 @@ const storage_multer = multer.diskStorage({
 const upload = multer({
   storage: storage_multer,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit for mobile photos
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    // Support mobile formats including HEIC/HEIF from iOS
+    const allowedExtensions = /jpeg|jpg|png|gif|webp|heic|heif|avif/;
+    const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
     
-    if (mimetype && extname) {
+    // Check mimetype - be lenient for mobile browsers that may send generic types
+    const allowedMimeTypes = /image\/(jpeg|jpg|png|gif|webp|heic|heif|avif)/;
+    const mimetypeValid = allowedMimeTypes.test(file.mimetype) || file.mimetype.startsWith('image/');
+    
+    if (extname || mimetypeValid) {
       return cb(null, true);
     } else {
       cb(new Error('Only image files are allowed!'));

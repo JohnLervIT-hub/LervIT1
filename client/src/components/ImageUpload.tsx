@@ -27,16 +27,34 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
       return;
     }
 
-    // Validate file types
+    // Validate file types - support mobile formats including HEIC/HEIF
+    const allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'image/heic', 'image/heif', 'image/avif'
+    ];
+    
     const validFiles = fileArray.filter(file => {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      return allowedTypes.includes(file.type);
+      // Check MIME type first
+      if (allowedTypes.includes(file.type.toLowerCase())) {
+        return true;
+      }
+      // Fallback: check file extension for mobile browsers that may not set MIME type
+      const ext = file.name.toLowerCase().split('.').pop();
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif'];
+      if (ext && allowedExtensions.includes(ext)) {
+        return true;
+      }
+      // Also accept if MIME type starts with 'image/' (generic image type)
+      if (file.type.startsWith('image/')) {
+        return true;
+      }
+      return false;
     });
 
     if (validFiles.length !== fileArray.length) {
       toast({
         title: "Invalid files",
-        description: "Only image files (JPG, PNG, GIF, WebP) are allowed.",
+        description: "Only image files are allowed. Please try again.",
         variant: "destructive",
       });
       return;
@@ -179,8 +197,9 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
         <input
           id="image-upload"
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif"
           multiple
+          capture="environment"
           onChange={handleFileSelect}
           className="hidden"
           disabled={uploading || images.length >= maxImages}
