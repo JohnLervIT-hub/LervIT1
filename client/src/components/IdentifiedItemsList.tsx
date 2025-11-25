@@ -1,16 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Loader2, Package, Weight, Ruler, Truck, Users, Shield, AlertCircle } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 
 interface IdentifiedItemsListProps {
   items: IdentifiedItem[];
   isLoading?: boolean;
-  onApplyRecommendations?: () => void;
 }
 
-export function IdentifiedItemsList({ items, isLoading, onApplyRecommendations }: IdentifiedItemsListProps) {
+export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListProps) {
   if (isLoading) {
     return (
       <Card data-testid="card-identified-items-loading">
@@ -52,27 +50,14 @@ export function IdentifiedItemsList({ items, isLoading, onApplyRecommendations }
     <div className="space-y-4" data-testid="container-identified-items">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                AI Identified Items
-              </CardTitle>
-              <CardDescription>
-                {completedItems.length} item{completedItems.length !== 1 ? 's' : ''} identified successfully
-                {failedItems.length > 0 && ` (${failedItems.length} failed)`}
-              </CardDescription>
-            </div>
-            {completedItems.length > 0 && onApplyRecommendations && (
-              <Button
-                onClick={onApplyRecommendations}
-                size="sm"
-                data-testid="button-apply-recommendations"
-              >
-                Apply Recommendations
-              </Button>
-            )}
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Identified Items
+          </CardTitle>
+          <CardDescription>
+            {completedItems.length} item{completedItems.length !== 1 ? 's' : ''} identified successfully
+            {failedItems.length > 0 && ` (${failedItems.length} failed)`}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {completedItems.map((item, index) => (
@@ -177,7 +162,7 @@ export function IdentifiedItemsList({ items, isLoading, onApplyRecommendations }
               <CardContent className="pt-6">
                 <h5 className="font-semibold mb-3 flex items-center gap-2">
                   <Truck className="h-5 w-5" />
-                  AI Recommendations (Auto-Applied)
+                  Recommendations (Auto-Applied)
                 </h5>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                   <div>

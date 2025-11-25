@@ -900,9 +900,9 @@ export default function RequestMove() {
                 {step === 2 && (
                   <>
                     {/* ============================================================
-                        ARCHIVED: AI Item Detection Feature (Future Development)
+                        ARCHIVED: Item Detection Feature (Future Development)
                         ============================================================
-                        This section contains AI photo analysis that auto-fills load details.
+                        This section contains photo analysis that auto-fills load details.
                         It has been archived for future development.
                         To restore: Uncomment this section and the related handlePhotoAnalysis function.
                     
@@ -912,7 +912,7 @@ export default function RequestMove() {
                           <Sparkles className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-lg">AI Item Detection</h3>
+                          <h3 className="font-semibold text-lg">Item Detection</h3>
                           <p className="text-sm text-muted-foreground">
                             Upload a photo and let AI auto-fill load details
                           </p>
@@ -1005,9 +1005,9 @@ export default function RequestMove() {
                                   <Scan className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
-                                  <h4 className="font-semibold">AI Item Detection</h4>
+                                  <h4 className="font-semibold">Item Detection</h4>
                                   <p className="text-sm text-muted-foreground">
-                                    Let AI identify items and recommend load details
+                                    Identify items and recommend load details
                                   </p>
                                 </div>
                               </div>
@@ -1035,7 +1035,6 @@ export default function RequestMove() {
                           <IdentifiedItemsList
                             items={identifiedItems}
                             isLoading={isIdentifyingItems}
-                            onApplyRecommendations={handleApplyAIRecommendations}
                           />
                         </div>
                       )}
