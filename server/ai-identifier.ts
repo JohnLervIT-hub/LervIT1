@@ -92,7 +92,14 @@ export async function identifyItemFromPhoto(photoUrl: string): Promise<{
   const startTime = Date.now();
   
   if (!openai) {
-    throw new Error('OpenAI API key not configured - AI features are disabled');
+    console.warn('[AI Identifier] OpenAI not available, returning fallback identification');
+    return {
+      itemName: 'Unidentified Item',
+      category: 'Other',
+      confidence: 0,
+      estimatedWeight: 10,
+      estimatedDimensions: { length_cm: 50, width_cm: 50, height_cm: 50 },
+    };
   }
   
   try {
