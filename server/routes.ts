@@ -2772,32 +2772,35 @@ Respond with VALID JSON only:
   // ===== AI PRODUCT IDENTIFIER ROUTES =====
   
   // POST /api/ai/items/identify - Identify items from photos
+  // Supports pre-booking identification (without bookingId) or post-booking identification (with bookingId)
   app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
     try {
       if (!requireUser(req, res)) return;
       
       const { bookingId, photoUrls } = req.body;
       
-      if (!bookingId || !photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
-        return res.status(400).json({ error: "bookingId and photoUrls array required" });
-      }
-      
-      // Verify booking exists and belongs to user
-      const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        return res.status(404).json({ error: "Booking not found" });
+      if (!photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
+        return res.status(400).json({ error: "photoUrls array required" });
       }
       
       const user = (req as any).user;
-      if (booking.customerId !== user.id && user.role !== 'admin') {
-        return res.status(403).json({ error: "Not authorized" });
+      
+      // If bookingId provided, verify it exists and belongs to user
+      if (bookingId) {
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) {
+          return res.status(404).json({ error: "Booking not found" });
+        }
+        if (booking.customerId !== user.id && user.role !== 'admin') {
+          return res.status(403).json({ error: "Not authorized" });
+        }
       }
       
       // Import AI identifier (dynamic to avoid loading on startup)
       const { identifyAndCategorizeItem } = await import('./ai-identifier');
       
-      // Process each photo asynchronously
-      const results = [];
+      // Process each photo
+      const items = [];
       const errors = [];
       
       for (let i = 0; i < photoUrls.length; i++) {
@@ -2805,37 +2808,64 @@ Respond with VALID JSON only:
         try {
           console.log(`[AI Identifier] Processing photo ${i + 1}/${photoUrls.length}: ${photoUrl}`);
           
-          // Create initial record with pending status
-          const identifiedItem = await storage.createIdentifiedItem({
-            bookingId,
-            photoUrl,
-            processingStatus: 'processing',
-          });
-          
           // Run AI identification
           const result = await identifyAndCategorizeItem(photoUrl);
           
-          // Update with results - convert numbers to strings for Drizzle decimal fields
-          const updated = await storage.updateIdentifiedItem(identifiedItem.id, {
-            itemName: result.itemName,
-            category: result.category,
-            weightKg: result.weightKg.toString() as any,
-            dimensionsLcm: result.dimensionsLcm.toString() as any,
-            dimensionsWcm: result.dimensionsWcm.toString() as any,
-            dimensionsHcm: result.dimensionsHcm.toString() as any,
-            volumeCuft: result.volumeCuft.toString() as any,
-            handlingComplexity: result.handlingComplexity,
-            vehicleType: result.vehicleType,
-            recommendedMovers: result.recommendedMovers,
-            insuranceLevel: result.insuranceLevel,
-            confidence: result.confidence.toString() as any,
-            sourceMetadata: result.sourceMetadata,
-            processingStatus: 'completed',
-          });
+          // If bookingId provided, save to database
+          if (bookingId) {
+            const identifiedItem = await storage.createIdentifiedItem({
+              bookingId,
+              photoUrl,
+              processingStatus: 'completed',
+              itemName: result.itemName,
+              category: result.category,
+              weightKg: result.weightKg.toString() as any,
+              dimensionsLcm: result.dimensionsLcm.toString() as any,
+              dimensionsWcm: result.dimensionsWcm.toString() as any,
+              dimensionsHcm: result.dimensionsHcm.toString() as any,
+              volumeCuft: result.volumeCuft.toString() as any,
+              handlingComplexity: result.handlingComplexity,
+              vehicleType: result.vehicleType,
+              recommendedMovers: result.recommendedMovers,
+              insuranceLevel: result.insuranceLevel,
+              confidence: result.confidence.toString() as any,
+              sourceMetadata: result.sourceMetadata,
+            });
+            items.push(identifiedItem);
+          } else {
+            // Return result directly without saving (pre-booking identification)
+            items.push({
+              id: `temp-${i}`,
+              photoUrl,
+              processingStatus: 'completed',
+              itemName: result.itemName,
+              category: result.category,
+              weightKg: result.weightKg.toString(),
+              dimensionsLcm: result.dimensionsLcm.toString(),
+              dimensionsWcm: result.dimensionsWcm.toString(),
+              dimensionsHcm: result.dimensionsHcm.toString(),
+              volumeCuft: result.volumeCuft.toString(),
+              handlingComplexity: result.handlingComplexity,
+              vehicleType: result.vehicleType,
+              recommendedMovers: result.recommendedMovers,
+              insuranceLevel: result.insuranceLevel,
+              confidence: result.confidence.toString(),
+              sourceMetadata: result.sourceMetadata,
+            });
+          }
           
-          results.push(updated);
+          console.log(`[AI Identifier] Successfully identified: ${result.itemName}`);
         } catch (error: any) {
           console.error(`[AI Identifier] Error processing photo ${i + 1}:`, error);
+          
+          // Add failed item to results
+          items.push({
+            id: `temp-${i}`,
+            photoUrl,
+            processingStatus: 'failed',
+            errorMessage: error.message || 'Unknown error',
+          });
+          
           errors.push({
             photoUrl,
             error: error.message || 'Unknown error',
@@ -2845,11 +2875,11 @@ Respond with VALID JSON only:
       
       res.json({
         success: true,
-        results,
+        items,
         errors: errors.length > 0 ? errors : undefined,
         summary: {
           total: photoUrls.length,
-          successful: results.length,
+          successful: items.filter(i => i.processingStatus === 'completed').length,
           failed: errors.length,
         },
       });
