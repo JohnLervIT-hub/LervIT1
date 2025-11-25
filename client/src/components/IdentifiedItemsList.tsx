@@ -12,15 +12,15 @@ export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListPro
   if (isLoading) {
     return (
       <Card className="overflow-hidden" data-testid="card-identified-items-loading">
-        <CardContent className="py-12 flex flex-col items-center justify-center gap-4">
+        <CardContent className="py-8 sm:py-12 flex flex-col items-center justify-center gap-4">
           <div className="relative">
             <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse" />
             <div className="relative bg-gradient-to-br from-primary/10 to-primary/5 rounded-full p-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           </div>
-          <div className="text-center">
-            <p className="font-medium text-foreground">Analyzing your items...</p>
+          <div className="text-center px-4">
+            <p className="font-medium text-foreground text-base">Analyzing your items...</p>
             <p className="text-sm text-muted-foreground mt-1">Our AI is identifying dimensions and weight</p>
           </div>
         </CardContent>
