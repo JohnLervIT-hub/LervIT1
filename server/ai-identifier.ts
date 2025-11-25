@@ -1,9 +1,39 @@
 import OpenAI from "openai";
+import * as fs from "fs";
+import * as path from "path";
 import type { IdentifiedItem, InsertIdentifiedItem, InsertAiRun } from "@shared/schema";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+/**
+ * Convert a local image file to a base64 data URL
+ */
+function imageToBase64DataUrl(imagePath: string): string {
+  // Handle relative paths from uploads
+  let fullPath = imagePath;
+  if (imagePath.startsWith('/uploads/')) {
+    fullPath = path.join(process.cwd(), imagePath);
+  }
+  
+  // Read the file and convert to base64
+  const imageBuffer = fs.readFileSync(fullPath);
+  const base64 = imageBuffer.toString('base64');
+  
+  // Determine mime type from extension
+  const ext = path.extname(imagePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+  };
+  const mimeType = mimeTypes[ext] || 'image/jpeg';
+  
+  return `data:${mimeType};base64,${base64}`;
+}
 
 interface ProductSpec {
   name: string;
@@ -44,6 +74,13 @@ export async function identifyItemFromPhoto(photoUrl: string): Promise<{
   const startTime = Date.now();
   
   try {
+    // Convert local image to base64 data URL for OpenAI
+    let imageUrl = photoUrl;
+    if (photoUrl.startsWith('/uploads/')) {
+      console.log('[AI Identifier] Converting local image to base64...');
+      imageUrl = imageToBase64DataUrl(photoUrl);
+    }
+    
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -67,7 +104,7 @@ Return ONLY valid JSON with this exact structure:
             {
               type: "image_url",
               image_url: {
-                url: photoUrl,
+                url: imageUrl,
               },
             },
           ],
