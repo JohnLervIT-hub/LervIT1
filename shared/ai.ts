@@ -39,17 +39,8 @@ export interface PriceBreakdown {
 }
 
 // AI Feature 3: Item Detection Types
-export interface DetectedItem {
-  name: string;
-  category: "furniture" | "appliance" | "box" | "electronics" | "personal" | "other";
-  estimatedWeightLbs: number;
-  estimatedCubicFeet: number;
-  requiresSpecialCare: boolean;
-  quantity: number;
-}
-
 export interface PhotoAnalysisResult {
-  loadSize: "boxes" | "medium" | "large" | "apartment";
+  loadSize: "small" | "medium" | "large";
   heavyItem: boolean;
   recommendedMovers: 1 | 2;
   itemType: string;
@@ -60,8 +51,6 @@ export interface PhotoAnalysisResult {
   confidence: number;
   explanation: string;
   allowManualOverride: boolean;
-  items?: DetectedItem[];
-  totalCubicFeet?: number;
 }
 
 /**

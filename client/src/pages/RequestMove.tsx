@@ -16,7 +16,7 @@ import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Sofa, Monitor, Box, Briefcase } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -805,108 +805,18 @@ export default function RequestMove() {
                         )}
                         
                         {photoAnalysis && (
-                          <div className="space-y-3">
-                            {/* Summary Card */}
-                            <Alert className="bg-primary/10 border-primary/30">
-                              <Sparkles className="w-4 h-4" />
-                              <AlertDescription>
-                                <strong>AI detected:</strong> {photoAnalysis.itemType} •{" "}
-                                {photoAnalysis.loadSize} load •{" "}
-                                {photoAnalysis.heavyItem ? "Heavy" : "Standard"} •{" "}
-                                {photoAnalysis.recommendedMovers} mover{photoAnalysis.recommendedMovers > 1 ? "s" : ""} recommended
-                                <div className="text-xs mt-1 text-muted-foreground">
-                                  {photoAnalysis.explanation}
-                                </div>
-                              </AlertDescription>
-                            </Alert>
-                            
-                            {/* Itemized List (if multiple items detected) */}
-                            {photoAnalysis.items && photoAnalysis.items.length > 0 && (() => {
-                              const totalItemCount = photoAnalysis.items.reduce((sum, item) => sum + item.quantity, 0);
-                              const totalWeight = photoAnalysis.items.reduce((sum, item) => sum + (item.estimatedWeightLbs * item.quantity), 0);
-                              const totalCubicFeet = photoAnalysis.items.reduce((sum, item) => sum + (item.estimatedCubicFeet * item.quantity), 0);
-                              
-                              return (
-                              <Card className="bg-background/50" data-testid="card-detected-items">
-                                <div className="p-4 space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <h4 className="font-semibold text-sm flex items-center gap-2" data-testid="heading-detected-items">
-                                      <Package className="w-4 h-4" />
-                                      Detected Items ({totalItemCount})
-                                    </h4>
-                                    {photoAnalysis.totalCubicFeet && (
-                                      <span className="text-xs font-medium text-primary" data-testid="text-total-cubic-feet">
-                                        {photoAnalysis.totalCubicFeet.toFixed(0)} ft³ total
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    {photoAnalysis.items.map((item, index) => (
-                                      <div 
-                                        key={index} 
-                                        className="flex items-start gap-3 p-2 rounded-md bg-background/80 hover-elevate"
-                                        data-testid={`detected-item-${index}`}
-                                      >
-                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                          {item.category === 'furniture' && <Sofa className="w-4 h-4 text-primary" />}
-                                          {item.category === 'appliance' && <Package className="w-4 h-4 text-primary" />}
-                                          {item.category === 'electronics' && <Monitor className="w-4 h-4 text-primary" />}
-                                          {item.category === 'box' && <Box className="w-4 h-4 text-primary" />}
-                                          {item.category === 'personal' && <Briefcase className="w-4 h-4 text-primary" />}
-                                          {item.category === 'other' && <Package className="w-4 h-4 text-primary" />}
-                                        </div>
-                                        
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between gap-2">
-                                            <div className="flex-1 min-w-0">
-                                              <p className="font-medium text-sm truncate" data-testid={`item-name-${index}`}>
-                                                {item.quantity > 1 ? `${item.quantity}× ` : ''}{item.name}
-                                              </p>
-                                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                                                <span data-testid={`item-weight-${index}`}>
-                                                  {item.estimatedWeightLbs} lbs
-                                                </span>
-                                                <span>•</span>
-                                                <span data-testid={`item-volume-${index}`}>
-                                                  {item.estimatedCubicFeet} ft³
-                                                </span>
-                                                {item.requiresSpecialCare && (
-                                                  <>
-                                                    <span>•</span>
-                                                    <span className="text-amber-600 dark:text-amber-400 font-medium" data-testid={`item-special-care-${index}`}>
-                                                      Heavy/Fragile
-                                                    </span>
-                                                  </>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  
-                                  {/* Total Summary - Always show for multi-item responses */}
-                                  <div className="pt-2 border-t border-border/50 space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="font-medium">Total Cubic Feet</span>
-                                      <span data-testid="text-summary-cubic-feet">
-                                        {photoAnalysis.totalCubicFeet || totalCubicFeet} ft³
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="font-medium">Total Weight</span>
-                                      <span data-testid="text-total-weight">
-                                        {totalWeight} lbs
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </Card>
-                              );
-                            })()}
-                          </div>
+                          <Alert className="bg-primary/10 border-primary/30">
+                            <Sparkles className="w-4 h-4" />
+                            <AlertDescription>
+                              <strong>AI detected:</strong> {photoAnalysis.itemType} •{" "}
+                              {photoAnalysis.loadSize} load •{" "}
+                              {photoAnalysis.heavyItem ? "Heavy" : "Standard"} •{" "}
+                              {photoAnalysis.recommendedMovers} mover{photoAnalysis.recommendedMovers > 1 ? "s" : ""} recommended
+                              <div className="text-xs mt-1 text-muted-foreground">
+                                {photoAnalysis.explanation}
+                              </div>
+                            </AlertDescription>
+                          </Alert>
                         )}
                       </div>
                     </div>

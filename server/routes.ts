@@ -2122,67 +2122,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Car";
     }
     
-    // Generate items array for mock analysis
-    const items: any[] = [];
-    let totalCubicFeet = 0;
-    
-    // Enhanced detection: Check for specific single-item keywords first
-    const isSingleItemPhoto = lowerName.includes('sofa') || lowerName.includes('couch') || 
-                              lowerName.includes('chair') || lowerName.includes('table') || 
-                              lowerName.includes('desk') || lowerName.includes('dresser') ||
-                              lowerName.includes('mattress') || lowerName.includes('tv') ||
-                              lowerName.includes('box') || lowerName.includes('appliance');
-    
-    if (!isSingleItemPhoto) {
-      // Default to multi-item detection (simulates room photo)
-      // Randomly alternate between living room and bedroom scenarios
-      const timestamp = Date.now();
-      const isLivingRoom = timestamp % 2 === 0;
-      
-      if (isLivingRoom) {
-        items.push(
-          { name: "L-shaped sectional sofa", category: "furniture", estimatedWeightLbs: 250, estimatedCubicFeet: 100, requiresSpecialCare: true, quantity: 1 },
-          { name: "Coffee table", category: "furniture", estimatedWeightLbs: 60, estimatedCubicFeet: 20, requiresSpecialCare: false, quantity: 1 },
-          { name: "TV stand with 55\" TV", category: "electronics", estimatedWeightLbs: 80, estimatedCubicFeet: 25, requiresSpecialCare: true, quantity: 1 },
-          { name: "Floor lamp", category: "other", estimatedWeightLbs: 15, estimatedCubicFeet: 4, requiresSpecialCare: false, quantity: 1 }
-        );
-        itemType = "Living room furniture (4 items)";
-      } else {
-        items.push(
-          { name: "Queen-size bed frame with headboard", category: "furniture", estimatedWeightLbs: 280, estimatedCubicFeet: 70, requiresSpecialCare: true, quantity: 1 },
-          { name: "Nightstand", category: "furniture", estimatedWeightLbs: 50, estimatedCubicFeet: 8, requiresSpecialCare: false, quantity: 2 },
-          { name: "Dresser with mirror", category: "furniture", estimatedWeightLbs: 200, estimatedCubicFeet: 40, requiresSpecialCare: true, quantity: 1 }
-        );
-        itemType = "Bedroom furniture (4 items)";
-      }
-    } else {
-      // Single item detection only for specific item photos
-      const cubicFeet = loadSize === "large" ? 80 : loadSize === "medium" ? 30 : loadSize === "apartment" ? 200 : 5;
-      items.push(
-        { name: itemType, category: "furniture", estimatedWeightLbs, estimatedCubicFeet: cubicFeet, requiresSpecialCare: heavyItem, quantity: 1 }
-      );
-    }
-    
-    // Calculate total cubic feet and total weight
-    totalCubicFeet = items.reduce((sum, item) => sum + (item.estimatedCubicFeet * item.quantity), 0);
-    const totalWeight = items.reduce((sum, item) => sum + (item.estimatedWeightLbs * item.quantity), 0);
-    const totalItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    
     return {
-      items,
-      totalCubicFeet,
       loadSize,
       heavyItem,
       recommendedMovers,
       itemType,
       estimatedWeight,
       weightClass,
-      estimatedWeightLbs: totalWeight,
+      estimatedWeightLbs,
       recommendedVehicle,
       confidence: 75,
-      explanation: items.length > 1 
-        ? `Detected ${totalItemCount} item${totalItemCount > 1 ? 's' : ''} totaling ${totalCubicFeet} ft³ and ${totalWeight} lbs. Includes ${items.map(i => i.quantity > 1 ? `${i.quantity}× ${i.name.toLowerCase()}` : i.name.toLowerCase()).join(', ')}. ${heavyItem ? 'Heavy items require 2 movers.' : ''}`
-        : `Based on image analysis, this appears to be a ${itemType.toLowerCase()} with ${estimatedWeight} weight (~${estimatedWeightLbs} lbs). We recommend ${recommendedMovers} mover${recommendedMovers > 1 ? 's' : ''} and a ${recommendedVehicle} for safe handling.`,
+      explanation: `Based on image analysis, this appears to be a ${itemType.toLowerCase()} with ${estimatedWeight} weight (~${estimatedWeightLbs} lbs). We recommend ${recommendedMovers} mover${recommendedMovers > 1 ? 's' : ''} and a ${recommendedVehicle} for safe handling.`,
       allowManualOverride: true
     };
   }
@@ -2216,61 +2166,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   content: [
                     {
                       type: 'text',
-                      text: `You are an expert moving estimator analyzing photos of items that need to be moved. **Detect and list EVERY visible item** in the photo with SPECIFIC, DETAILED descriptions.
+                      text: `You are an expert moving estimator analyzing photos of items that need to be moved. Provide SPECIFIC, DETAILED item descriptions.
 
-🔍 MULTI-ITEM DETECTION:
-- List EVERY piece of furniture, appliance, box, or item you can see
-- Count duplicates (e.g., "2 dining chairs", "3 boxes")
-- Be specific about what you see - don't use generic terms
+CRITICAL: Be very specific about what you see. Don't use generic terms like "furniture" or "item".
 
-Examples of GOOD item descriptions:
-✅ "L-shaped sectional sofa" (not just "sofa")
-✅ "Queen-size bed frame with headboard"
-✅ "2 leather dining chairs"
-✅ "Coffee table with glass top"
-✅ "55-inch flat screen TV"
-✅ "3 cardboard moving boxes (stacked)"
-✅ "Standing floor lamp"
+Examples of GOOD descriptions:
+✅ "Queen-size bed frame"
+✅ "L-shaped sectional sofa"
+✅ "Leather office chair"
+✅ "Cardboard moving boxes (3 stacked)"
+✅ "Pair of running shoes"
+✅ "Large suitcase"
+✅ "King-size mattress"
+✅ "Wooden dining table (6-seater)"
 ✅ "Mini fridge"
-✅ "Wooden bookshelf (6 shelves)"
-✅ "Office desk with drawers"
+✅ "Standing lamp"
+✅ "Backpack"
+✅ "Coffee table (glass top)"
 
 Examples of BAD descriptions (too generic):
 ❌ "Furniture"
 ❌ "Item"
-❌ "Some stuff"
+❌ "Object"
+❌ "Thing"
 
-📦 ITEM CATEGORIZATION:
-For EACH detected item, provide:
-1. **name**: Specific description (e.g., "L-shaped sectional sofa", "2 dining chairs")
-2. **category**: furniture | appliance | box | electronics | personal | other
-3. **estimatedWeightLbs**: Approximate weight in pounds
-4. **estimatedCubicFeet**: Volume in cubic feet
-5. **requiresSpecialCare**: true for heavy/fragile items
-6. **quantity**: Number of this item (default 1)
-
-📏 VOLUME GUIDELINES:
-- Sofa/Sectional: 80-120 ft³
-- Queen bed frame: 60-80 ft³
-- Dining chair: 10-15 ft³
-- Coffee table: 15-25 ft³
-- TV (large): 8-12 ft³
-- Bookshelf: 30-40 ft³
-- Moving box: 2-4 ft³
-- Lamp: 3-5 ft³
-- Mini fridge: 15-25 ft³
-
-🎯 AGGREGATE ANALYSIS:
-Calculate totals across ALL items:
-1. **totalCubicFeet**: Sum of all item volumes
-2. **loadSize** based on TOTAL volume:
-   - "boxes": 1-10 ft³ total
-   - "medium": 11-50 ft³ total
-   - "large": 50-150 ft³ total
-   - "apartment": 150+ ft³ total
-3. **heavyItem**: true if ANY item requires special care
-4. **recommendedMovers**: 1 or 2 based on heaviest item
-5. **recommendedVehicle**: Based on total volume and largest item
+Analyze the image and determine:
+1. **Specific item description** - Be detailed! (e.g., "Sectional sofa", "Queen bed", "Running shoes", "Luggage bag")
+2. Load size based on VOLUME (FT³):
+   - "boxes": 1-10 ft³ (small personal items: shoes, bags, boxes, lamps, monitors)
+   - "medium": 11-50 ft³ (small furniture: chairs, small tables, TVs, bookshelves)
+   - "large": 50-150 ft³ (large furniture: sofas, beds, fridges, appliances, dressers, treadmills)
+   - "apartment": 150+ ft³ (full room furniture or multiple large items)
+3. Is it heavy/fragile requiring special care? (true/false)
+4. Recommended movers: 1 or 2
+5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
+6. Approximate weight in pounds
+7. Recommended vehicle: Car, SUV, Pickup, Cargo Van, Cube Truck, or Flatbed
 
 ⚠️ STRICT MANDATORY CATEGORIZATION RULES (CANNOT BE OVERRIDDEN):
 
@@ -2300,35 +2231,16 @@ Load Size Classification Guidelines:
 
 Respond with VALID JSON only:
 {
-  "items": [
-    {
-      "name": "L-shaped sectional sofa",
-      "category": "furniture",
-      "estimatedWeightLbs": 250,
-      "estimatedCubicFeet": 100,
-      "requiresSpecialCare": true,
-      "quantity": 1
-    },
-    {
-      "name": "Coffee table with glass top",
-      "category": "furniture",
-      "estimatedWeightLbs": 60,
-      "estimatedCubicFeet": 20,
-      "requiresSpecialCare": false,
-      "quantity": 1
-    }
-  ],
-  "totalCubicFeet": 120,
-  "loadSize": "large",
-  "heavyItem": true,
-  "recommendedMovers": 2,
-  "itemType": "Living room furniture (2 items)",
-  "estimatedWeight": "medium",
-  "weightClass": "medium",
-  "estimatedWeightLbs": 310,
-  "recommendedVehicle": "Cargo Van",
-  "confidence": 85,
-  "explanation": "Detected L-shaped sectional sofa (100 ft³, 250 lbs) and coffee table (20 ft³, 60 lbs). Total: 120 ft³ = Large load. Heavy items require 2 movers.",
+  "loadSize": "boxes" | "medium" | "large" | "apartment",
+  "heavyItem": true | false,
+  "recommendedMovers": 1 | 2,
+  "itemType": "SPECIFIC description here (e.g., 'Queen-size bed', 'Leather sofa', 'Running shoes')",
+  "estimatedWeight": "light" | "medium" | "heavy",
+  "weightClass": "light" | "medium" | "heavy",
+  "estimatedWeightLbs": number,
+  "recommendedVehicle": "Car" | "SUV" | "Pickup" | "Cargo Van" | "Cube Truck" | "Flatbed",
+  "confidence": 0-100,
+  "explanation": "brief explanation with specific item details and volume estimate",
   "allowManualOverride": true
 }`
                     },
