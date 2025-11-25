@@ -68,10 +68,11 @@ export default function RequestMove() {
   const [showPriceExplanation, setShowPriceExplanation] = useState(false);
   const [priceExplanation, setPriceExplanation] = useState("");
   
-  // AI Feature 3: Photo Analysis state
+  /* ARCHIVED: AI Feature 3 - Photo Analysis state (Future Development)
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const [photoAnalysis, setPhotoAnalysis] = useState<PhotoAnalysisResult | null>(null);
   const [analyzedPhotoUrl, setAnalyzedPhotoUrl] = useState<string | null>(null);
+  */
   
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
@@ -280,7 +281,13 @@ export default function RequestMove() {
     }
   }, [createdBooking]);
 
-  // AI Feature 3: Photo Analysis Handler
+  /* ============================================================
+     ARCHIVED: AI Photo Analysis Handler (Future Development)
+     ============================================================
+     This function handles photo upload and AI analysis for auto-filling load details.
+     It has been archived for future development.
+     To restore: Uncomment this function and the related UI section in Step 2.
+  
   const handlePhotoAnalysis = async (file: File) => {
     setIsAnalyzingPhoto(true);
     try {
@@ -319,6 +326,7 @@ export default function RequestMove() {
       setIsAnalyzingPhoto(false);
     }
   };
+  ============================================================ */
 
   const handleNext = () => {
     // Step 1: Validate addresses (MANDATORY)
