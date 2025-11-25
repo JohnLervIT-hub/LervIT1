@@ -124,6 +124,13 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
     onImagesChange(newImages);
   };
 
+  const triggerFileInput = () => {
+    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div
@@ -131,39 +138,44 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <label htmlFor="image-upload">
-          <div className="cursor-pointer">
-            <Card className={`border-2 border-dashed hover-elevate active-elevate-2 p-8 text-center transition-colors ${
-              isDragging ? 'border-primary bg-primary/5' : ''
-            }`}>
-              <div className="flex flex-col items-center gap-2">
-                <Upload className={`w-8 h-8 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
-                <div>
-                  <p className="font-medium">
-                    {isDragging ? 'Drop images here' : 'Upload Images'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
-                  </p>
-                </div>
-                {!isDragging && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={uploading || images.length >= maxImages}
-                    data-testid="button-select-images"
-                  >
-                    <ImageIcon className="w-4 h-4 mr-2" />
-                    {uploading ? "Uploading..." : "Select Images"}
-                  </Button>
-                )}
+        <div
+          onClick={triggerFileInput}
+          className="cursor-pointer"
+        >
+          <Card className={`border-2 border-dashed hover-elevate active-elevate-2 p-8 text-center transition-colors ${
+            isDragging ? 'border-primary bg-primary/5' : ''
+          }`}>
+            <div className="flex flex-col items-center gap-2">
+              <Upload className={`w-8 h-8 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+              <div>
+                <p className="font-medium">
+                  {isDragging ? 'Drop images here' : 'Upload Images'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
+                </p>
               </div>
-            </Card>
-          </div>
-        </label>
+              {!isDragging && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={uploading || images.length >= maxImages}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    triggerFileInput();
+                  }}
+                  data-testid="button-select-images"
+                >
+                  <ImageIcon className="w-4 h-4 mr-2" />
+                  {uploading ? "Uploading..." : "Select Images"}
+                </Button>
+              )}
+            </div>
+          </Card>
+        </div>
         <input
           id="image-upload"
           type="file"

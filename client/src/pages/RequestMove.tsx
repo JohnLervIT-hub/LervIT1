@@ -860,10 +860,10 @@ export default function RequestMove() {
 
                     <div>
                       <Label className="text-base font-semibold mb-2 block">
-                        Upload Photos of Items
+                        Upload Photos for Movers to Understand Your Load
                       </Label>
                       <p className="text-sm text-muted-foreground mb-3">
-                        Required: Upload at least one photo so movers can provide accurate quotes
+                        At least one photo required
                       </p>
                       <ImageUpload onImagesChange={setImages} maxImages={10} />
                     </div>
