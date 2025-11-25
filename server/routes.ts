@@ -2777,10 +2777,9 @@ Respond with VALID JSON only:
   
   // POST /api/ai/items/identify - Identify items from photos
   // Supports pre-booking identification (without bookingId) or post-booking identification (with bookingId)
+  // Pre-booking identification works without authentication for better UX
   app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
     try {
-      if (!requireUser(req, res)) return;
-      
       const { bookingId, photoUrls } = req.body;
       
       if (!photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
@@ -2789,13 +2788,14 @@ Respond with VALID JSON only:
       
       const user = (req as any).user;
       
-      // If bookingId provided, verify it exists and belongs to user
+      // If bookingId provided, require authentication and verify ownership
       if (bookingId) {
+        if (!requireUser(req, res)) return;
         const booking = await storage.getBooking(bookingId);
         if (!booking) {
           return res.status(404).json({ error: "Booking not found" });
         }
-        if (booking.customerId !== user.id && user.role !== 'admin') {
+        if (booking.customerId !== user?.id && user?.role !== 'admin') {
           return res.status(403).json({ error: "Not authorized" });
         }
       }
