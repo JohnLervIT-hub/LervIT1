@@ -40,7 +40,7 @@ const loadSizes: LoadSize[] = [
   {
     id: "large",
     label: "Large",
-    volume: "50-150 ft³",
+    volume: "50-170 ft³",
     description: "Large furniture",
     examples: ["Sofas", "Beds", "Fridges", "Dressers"],
     icon: <Sofa className="w-8 h-8" />,
@@ -49,7 +49,7 @@ const loadSizes: LoadSize[] = [
   {
     id: "apartment",
     label: "Apartment",
-    volume: "150+ ft³",
+    volume: "170+ ft³",
     description: "Full room furniture",
     examples: ["1-2 bedroom", "Multiple large items"],
     icon: <Home className="w-8 h-8" />,
