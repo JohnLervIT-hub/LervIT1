@@ -73,9 +73,9 @@ function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
 
   if (isLoading) {
     return (
-      <div className="text-sm text-muted-foreground flex items-center gap-2">
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-        Loading item details...
+      <div className="flex items-center gap-3 py-2">
+        <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
+        <span className="text-sm text-muted-foreground">Loading item details...</span>
       </div>
     );
   }
@@ -90,62 +90,92 @@ function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
   const totalVolume = completedItems.reduce((sum, item) => sum + (parseFloat(item.volumeCuft || '0') || 0), 0);
   const totalWeight = completedItems.reduce((sum, item) => sum + (parseFloat(item.weightKg || '0') || 0), 0);
 
+  const getComplexityBadge = (complexity: string | null) => {
+    if (!complexity || complexity === 'standard') return null;
+    const styles: Record<string, { label: string; variant: "destructive" | "default" | "secondary" }> = {
+      'very_high': { label: 'Very Heavy', variant: 'destructive' },
+      'high': { label: 'Heavy', variant: 'default' },
+      'medium': { label: 'Medium', variant: 'secondary' },
+    };
+    return styles[complexity] || null;
+  };
+
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium flex items-center gap-2">
-        <Sparkles className="w-4 h-4 text-primary" />
-        AI-Detected Items ({completedItems.length})
-      </p>
-      
-      <div className="grid grid-cols-1 gap-2">
-        {completedItems.map((item) => (
-          <div 
-            key={item.id} 
-            className="bg-muted/50 rounded-lg p-3 flex items-start gap-3"
-            data-testid={`identified-item-${item.id}`}
-          >
-            <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 border">
-              <img 
-                src={item.photoUrl} 
-                alt={item.itemName || 'Item'} 
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">{item.itemName}</p>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1">
-                {item.category && (
-                  <span className="flex items-center gap-1">
-                    <Box className="w-3 h-3" />
-                    {item.category}
-                  </span>
-                )}
-                {item.volumeCuft && (
-                  <span>{parseFloat(item.volumeCuft).toFixed(1)} ft³</span>
-                )}
-                {item.weightKg && (
-                  <span>{parseFloat(item.weightKg).toFixed(0)} kg</span>
-                )}
-              </div>
-            </div>
-            {item.handlingComplexity && item.handlingComplexity !== 'standard' && (
-              <Badge variant="secondary" className="text-xs">
-                {item.handlingComplexity}
-              </Badge>
-            )}
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 rounded-lg p-1.5">
+            <Sparkles className="w-4 h-4 text-primary" />
           </div>
-        ))}
+          <span className="font-semibold text-sm">AI-Detected Items</span>
+          <Badge variant="secondary" className="text-xs">{completedItems.length}</Badge>
+        </div>
+      </div>
+      
+      {/* Items Grid */}
+      <div className="space-y-2">
+        {completedItems.map((item) => {
+          const complexityBadge = getComplexityBadge(item.handlingComplexity);
+          return (
+            <div 
+              key={item.id} 
+              className="group bg-muted/40 hover:bg-muted/60 rounded-xl p-3 flex items-center gap-3 transition-colors"
+              data-testid={`identified-item-${item.id}`}
+            >
+              {/* Thumbnail */}
+              <div className="relative w-14 h-14 rounded-lg overflow-hidden ring-1 ring-border flex-shrink-0">
+                <img 
+                  src={item.photoUrl} 
+                  alt={item.itemName || 'Item'} 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{item.itemName}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  {item.category && (
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-background/50 px-2 py-0.5 rounded-md">
+                      <Box className="w-3 h-3" />
+                      {item.category}
+                    </span>
+                  )}
+                  {item.volumeCuft && (
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {parseFloat(item.volumeCuft).toFixed(1)} ft³
+                    </span>
+                  )}
+                  {item.weightKg && (
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {parseFloat(item.weightKg).toFixed(0)} kg
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Complexity Badge */}
+              {complexityBadge && (
+                <Badge variant={complexityBadge.variant} className="text-xs flex-shrink-0">
+                  {complexityBadge.label}
+                </Badge>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      <div className="bg-primary/10 rounded-lg p-3 text-sm">
-        <div className="flex flex-wrap gap-4">
+      {/* Summary Stats */}
+      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent rounded-xl p-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <span className="text-muted-foreground">Total Volume:</span>
-            <span className="font-bold ml-1">{totalVolume.toFixed(1)} ft³</span>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Volume</p>
+            <p className="text-xl font-bold mt-0.5">{totalVolume.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">ft³</span></p>
           </div>
           <div>
-            <span className="text-muted-foreground">Total Weight:</span>
-            <span className="font-bold ml-1">{totalWeight.toFixed(0)} kg</span>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Weight</p>
+            <p className="text-xl font-bold mt-0.5">{totalWeight.toFixed(0)} <span className="text-sm font-normal text-muted-foreground">kg</span></p>
           </div>
         </div>
       </div>
