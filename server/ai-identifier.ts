@@ -3,9 +3,17 @@ import * as fs from "fs";
 import * as path from "path";
 import type { IdentifiedItem, InsertIdentifiedItem, InsertAiRun } from "@shared/schema";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Check for OpenAI API key availability
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const openaiAvailable = !!OPENAI_API_KEY;
+
+if (!openaiAvailable) {
+  console.warn('[AI Identifier] OpenAI API key not configured - AI features will be disabled');
+}
+
+const openai = openaiAvailable ? new OpenAI({
+  apiKey: OPENAI_API_KEY,
+}) : null;
 
 /**
  * Convert a local image file to a base64 data URL
@@ -82,6 +90,10 @@ export async function identifyItemFromPhoto(photoUrl: string): Promise<{
   estimatedDimensions?: { length_cm: number; width_cm: number; height_cm: number };
 }> {
   const startTime = Date.now();
+  
+  if (!openai) {
+    throw new Error('OpenAI API key not configured - AI features are disabled');
+  }
   
   try {
     // Convert local image to base64 data URL for OpenAI
@@ -291,6 +303,11 @@ export async function searchProductSpecs(itemName: string, searchQuery?: string)
  * Use GPT to extract and normalize specifications from search results
  */
 async function extractSpecsWithGPT(itemName: string, searchResults: string): Promise<ProductSpec | null> {
+  if (!openai) {
+    console.warn('[AI Identifier] OpenAI not available for spec extraction');
+    return null;
+  }
+  
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -434,6 +451,15 @@ function categorizeItem(itemName: string, category: string, weightKg?: number, v
  * Estimate specifications using GPT when real specs aren't available
  */
 async function estimateSpecsWithGPT(itemName: string, category: string): Promise<ProductSpec> {
+  if (!openai) {
+    console.warn('[AI Identifier] OpenAI not available for estimation, using defaults');
+    return {
+      name: itemName,
+      weight_kg: 10,
+      dimensions: { length_cm: 50, width_cm: 50, height_cm: 50 },
+    };
+  }
+  
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
