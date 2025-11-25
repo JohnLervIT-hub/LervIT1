@@ -16,7 +16,9 @@ import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info } from "lucide-react";
+import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan } from "lucide-react";
+import type { IdentifiedItem } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +84,10 @@ export default function RequestMove() {
   // Single mover warning state
   const [showSingleMoverWarning, setShowSingleMoverWarning] = useState(false);
   const [hasSingleMoverAcknowledgment, setHasSingleMoverAcknowledgment] = useState(false);
+  
+  // AI Product Identifier state
+  const [isIdentifyingItems, setIsIdentifyingItems] = useState(false);
+  const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
@@ -329,6 +335,91 @@ export default function RequestMove() {
     }
   };
   ============================================================ */
+
+  // AI Product Identifier - Identify items from uploaded photos
+  const handleIdentifyItems = async () => {
+    if (images.length === 0) {
+      toast({
+        title: "No photos to analyze",
+        description: "Please upload at least one photo first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsIdentifyingItems(true);
+    setIdentifiedItems([]);
+    
+    try {
+      const response = await apiRequest("POST", "/api/ai/items/identify", {
+        photoUrls: images,
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to identify items");
+      }
+      
+      const result = await response.json();
+      setIdentifiedItems(result.items || []);
+      
+      const completedCount = (result.items || []).filter((item: IdentifiedItem) => item.processingStatus === 'completed').length;
+      
+      if (completedCount > 0) {
+        toast({
+          title: "Items Identified!",
+          description: `AI successfully identified ${completedCount} item${completedCount !== 1 ? 's' : ''} from your photos.`,
+        });
+      } else {
+        toast({
+          title: "Identification Complete",
+          description: "AI could not identify items. Please select load details manually.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("AI identification error:", error);
+      toast({
+        title: "Identification Failed",
+        description: "Could not analyze photos. Please select load details manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsIdentifyingItems(false);
+    }
+  };
+
+  // Apply AI recommendations to booking form
+  const handleApplyAIRecommendations = () => {
+    const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed');
+    if (completedItems.length === 0) return;
+    
+    // Calculate total volume and determine load size
+    const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
+    let recommendedLoadSize = 'boxes';
+    if (totalVolume >= 150) recommendedLoadSize = 'apartment';
+    else if (totalVolume >= 50) recommendedLoadSize = 'large';
+    else if (totalVolume >= 10) recommendedLoadSize = 'medium';
+    
+    // Get max recommended movers
+    const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
+    
+    // Check for heavy/complex items
+    const hasHeavyItems = completedItems.some(item => 
+      item.handlingComplexity === 'high' || 
+      item.handlingComplexity === 'very_high' ||
+      parseFloat(item.weightKg || '0') > 30
+    );
+    
+    // Apply recommendations
+    setLoadSize(recommendedLoadSize);
+    setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setHeavyItem(hasHeavyItems);
+    
+    toast({
+      title: "Recommendations Applied!",
+      description: `Load size: ${capitalizeFirst(recommendedLoadSize)}, ${maxMovers} mover${maxMovers !== 1 ? 's' : ''}, Heavy items: ${hasHeavyItems ? 'Yes' : 'No'}`,
+    });
+  };
 
   const handleNext = () => {
     // Step 1: Validate addresses (MANDATORY)
@@ -868,6 +959,50 @@ export default function RequestMove() {
                         At least one photo required
                       </p>
                       <ImageUpload onImagesChange={setImages} maxImages={10} />
+                      
+                      {images.length > 0 && (
+                        <div className="mt-4 space-y-4">
+                          <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-4">
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                  <Scan className="w-5 h-5 text-primary" />
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold">AI Item Detection</h4>
+                                  <p className="text-sm text-muted-foreground">
+                                    Let AI identify items and recommend load details
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                onClick={handleIdentifyItems}
+                                disabled={isIdentifyingItems}
+                                data-testid="button-identify-items"
+                              >
+                                {isIdentifyingItems ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Analyzing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="w-4 h-4 mr-2" />
+                                    Identify Items
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          <IdentifiedItemsList
+                            items={identifiedItems}
+                            isLoading={isIdentifyingItems}
+                            onApplyRecommendations={handleApplyAIRecommendations}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="border-t pt-6">
