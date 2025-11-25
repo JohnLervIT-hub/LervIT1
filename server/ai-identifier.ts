@@ -360,7 +360,15 @@ Return ONLY valid JSON with typical/average values:
       max_tokens: 150,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
+    let content = response.choices[0]?.message?.content || "{}";
+    
+    // Strip markdown code blocks if present (```json ... ```)
+    content = content.trim();
+    if (content.startsWith('```')) {
+      content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
+    
+    console.log('[AI Identifier] GPT estimation response:', content);
     const parsed = JSON.parse(content);
     
     return {
