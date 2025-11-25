@@ -85,6 +85,7 @@ export const bookings = pgTable("bookings", {
   aiWeightClass: text("ai_weight_class"),
   aiRecommendedVehicle: text("ai_recommended_vehicle"),
   aiConfidenceScore: decimal("ai_confidence_score", { precision: 3, scale: 2 }),
+  detectedItems: text("detected_items"),
   
   paymentStatus: text("payment_status").default("pending"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
@@ -286,6 +287,71 @@ export const insertVerificationItemSchema = createInsertSchema(verificationItems
   expiryDate: z.string().or(z.date()).transform((val) => val ? new Date(val) : null).optional().nullable(),
 });
 
+export const identifiedItems = pgTable("identified_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  photoUrl: text("photo_url").notNull(),
+  itemName: text("item_name"),
+  category: text("category"),
+  weightKg: decimal("weight_kg", { precision: 8, scale: 2 }),
+  dimensionsLcm: decimal("dimensions_l_cm", { precision: 8, scale: 2 }),
+  dimensionsWcm: decimal("dimensions_w_cm", { precision: 8, scale: 2 }),
+  dimensionsHcm: decimal("dimensions_h_cm", { precision: 8, scale: 2 }),
+  volumeCuft: decimal("volume_cuft", { precision: 8, scale: 2 }),
+  handlingComplexity: text("handling_complexity"),
+  vehicleType: text("vehicle_type"),
+  recommendedMovers: integer("recommended_movers"),
+  insuranceLevel: text("insurance_level"),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }),
+  sourceMetadata: text("source_metadata"),
+  processingStatus: text("processing_status").notNull().default("pending"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("identified_items_booking_id_idx").on(table.bookingId),
+  statusIdx: index("identified_items_status_idx").on(table.processingStatus),
+}));
+
+export const aiRuns = pgTable("ai_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id),
+  provider: text("provider").notNull(),
+  operation: text("operation").notNull(),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  totalCost: decimal("total_cost", { precision: 10, scale: 4 }),
+  status: text("status").notNull().default("success"),
+  errorMessage: text("error_message"),
+  responseTime: integer("response_time"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("ai_runs_booking_id_idx").on(table.bookingId),
+  providerIdx: index("ai_runs_provider_idx").on(table.provider),
+  createdAtIdx: index("ai_runs_created_at_idx").on(table.createdAt),
+}));
+
+export const insertIdentifiedItemSchema = createInsertSchema(identifiedItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  category: z.enum(['Furniture', 'Appliance', 'Fragile', 'Oversized', 'Bulky', 'Electronics', 'Other']).optional(),
+  handlingComplexity: z.enum(['low', 'medium', 'high', 'very_high']).optional(),
+  vehicleType: z.enum(['car', 'van', 'pickup', 'truck']).optional(),
+  insuranceLevel: z.enum(['standard', 'medium', 'high', 'premium']).optional(),
+  processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
+});
+
+export const insertAiRunSchema = createInsertSchema(aiRuns).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  provider: z.enum(['openai', 'serpapi', 'amazon', 'google']),
+  operation: z.enum(['vision', 'search', 'categorization', 'spec_extraction']),
+  status: z.enum(['success', 'failed', 'timeout']).optional(),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertMover = z.infer<typeof insertMoverSchema>;
@@ -304,3 +370,7 @@ export type InsertSupportTicketReply = z.infer<typeof insertSupportTicketReplySc
 export type SupportTicketReply = typeof supportTicketReplies.$inferSelect;
 export type InsertVerificationItem = z.infer<typeof insertVerificationItemSchema>;
 export type VerificationItem = typeof verificationItems.$inferSelect;
+export type InsertIdentifiedItem = z.infer<typeof insertIdentifiedItemSchema>;
+export type IdentifiedItem = typeof identifiedItems.$inferSelect;
+export type InsertAiRun = z.infer<typeof insertAiRunSchema>;
+export type AiRun = typeof aiRuns.$inferSelect;
