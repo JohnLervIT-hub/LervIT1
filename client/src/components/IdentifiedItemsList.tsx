@@ -182,7 +182,7 @@ export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListPro
                     )}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Estimate Accuracy:</span>
+                    <span className="text-muted-foreground">Accuracy:</span>
                     <p className="font-bold text-lg">
                       {(completedItems.reduce((sum, item) => sum + parseFloat(item.confidence || '0'), 0) / completedItems.length * 100).toFixed(0)}%
                     </p>
