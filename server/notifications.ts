@@ -1,7 +1,10 @@
 import type { Booking, User } from "@shared/schema";
+import { Resend } from 'resend';
 
-// Email notification service
-// For MVP: logs to console (can be upgraded to SendGrid/Resend later)
+// Initialize Resend client
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Email notification service with Resend integration
 export interface EmailNotification {
   to: string;
   subject: string;
@@ -10,23 +13,38 @@ export interface EmailNotification {
 }
 
 class NotificationService {
+  private fromEmail = 'LervIT <onboarding@resend.dev>'; // Use your verified domain in production
+  
   async sendEmail(notification: EmailNotification): Promise<void> {
-    // For MVP: log to console
-    // In production: integrate with SendGrid/Resend
+    // Log for debugging
     console.log('\n📧 EMAIL NOTIFICATION:');
     console.log('To:', notification.to);
     console.log('Subject:', notification.subject);
     console.log('Type:', notification.type);
-    console.log('Body:', notification.body);
-    console.log('---\n');
     
-    // TODO: Integrate with Resend/SendGrid for actual email delivery
-    // await resend.emails.send({
-    //   from: 'LervIT <notifications@lervit.com>',
-    //   to: notification.to,
-    //   subject: notification.subject,
-    //   html: notification.body,
-    // });
+    // Send real email via Resend
+    if (resend) {
+      try {
+        const { data, error } = await resend.emails.send({
+          from: this.fromEmail,
+          to: notification.to,
+          subject: notification.subject,
+          html: notification.body,
+        });
+        
+        if (error) {
+          console.error('Resend error:', error);
+        } else {
+          console.log('✅ Email sent successfully! ID:', data?.id);
+        }
+      } catch (error) {
+        console.error('Failed to send email:', error);
+      }
+    } else {
+      console.log('⚠️ Resend not configured - email logged only');
+      console.log('Body:', notification.body);
+    }
+    console.log('---\n');
   }
 
   // Booking confirmation email to customer

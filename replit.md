@@ -62,4 +62,4 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 ## Known Technical Debt
 
 *   **Google Maps PlacesService Deprecation:** Browser console shows warning about migrating from `google.maps.places.PlacesService` to `google.maps.places.Place`. The current implementation works but should be updated before March 2026 deprecation deadline.
-*   **Email Notifications:** Currently logs to console for MVP. Production deployment should integrate with SendGrid/Resend for actual email delivery.
+*   **Email Sender Domain:** Currently using Resend's test domain (`onboarding@resend.dev`). For production, verify your own domain in Resend dashboard and update the `fromEmail` in `server/notifications.ts`.
