@@ -379,10 +379,10 @@ export default function RequestMove() {
           sum + parseFloat(item.volumeCuft || '0'), 0);
         
         // Determine load size based on total volume thresholds
-        // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 51-150 ft³, Apartment: 150+ ft³
+        // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 50-170 ft³, Apartment: 170+ ft³
         let recommendedLoadSize = 'boxes';
         let recommendedVehicle = 'car';
-        if (totalVolume > 150) {
+        if (totalVolume > 170) {
           recommendedLoadSize = 'apartment';
           recommendedVehicle = 'truck';
         } else if (totalVolume > 50) {
@@ -437,10 +437,10 @@ export default function RequestMove() {
     if (completedItems.length === 0) return;
     
     // Calculate total volume and determine load size
-    // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 51-150 ft³, Apartment: 150+ ft³
+    // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 50-170 ft³, Apartment: 170+ ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
     let recommendedLoadSize = 'boxes';
-    if (totalVolume > 150) recommendedLoadSize = 'apartment';
+    if (totalVolume > 170) recommendedLoadSize = 'apartment';
     else if (totalVolume > 50) recommendedLoadSize = 'large';
     else if (totalVolume > 10) recommendedLoadSize = 'medium';
     

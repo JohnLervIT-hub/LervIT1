@@ -1852,8 +1852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // New volume-based load size categories:
     // boxes: 1-10 ft³ (small personal items, boxes, bags)
     // medium: 11-50 ft³ (chairs, small tables, TVs)
-    // large: 50-150 ft³ (sofas, beds, fridges, appliances)
-    // apartment: 150+ ft³ (full room furniture)
+    // large: 50-170 ft³ (sofas, beds, fridges, appliances)
+    // apartment: 170+ ft³ (full room furniture)
     let loadSize: "boxes" | "medium" | "large" | "apartment" = "medium";
     let heavyItem = false;
     let recommendedMovers = 1;
@@ -1920,7 +1920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Furniture - Seating
     if (lowerName.includes('sofa') || lowerName.includes('couch') || lowerName.includes('sectional')) {
       itemType = lowerName.includes('sectional') ? "Sectional sofa" : "Sofa";
-      loadSize = "large"; // 50-150 ft³: Large furniture
+      loadSize = "large"; // 50-170 ft³: Large furniture
       weightClass = "medium";
       estimatedWeightLbs = 300;
       heavyItem = true;
@@ -1958,7 +1958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         estimatedWeightLbs = 80;
       } else if (lowerName.includes('dining')) {
         itemType = "Dining table";
-        loadSize = "large"; // 50-150 ft³: Large furniture
+        loadSize = "large"; // 50-170 ft³: Large furniture
         estimatedWeightLbs = 200;
         recommendedMovers = 2;
       } else if (lowerName.includes('side') || lowerName.includes('end')) {
@@ -1996,7 +1996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemType = "Bed frame";
         estimatedWeightLbs = 250;
       }
-      loadSize = "large"; // 50-150 ft³: Large furniture
+      loadSize = "large"; // 50-170 ft³: Large furniture
       weightClass = "medium";
       heavyItem = true;
       recommendedMovers = 2;
@@ -2012,7 +2012,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemType = "Mattress";
         estimatedWeightLbs = 100;
       }
-      loadSize = "large"; // 50-150 ft³: Large item
+      loadSize = "large"; // 50-170 ft³: Large item
       weightClass = "medium";
       recommendedMovers = 2;
       recommendedVehicle = "Cargo Van";
@@ -2021,7 +2021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Appliances
     else if (lowerName.includes('fridge') || lowerName.includes('refrigerator')) {
       itemType = lowerName.includes('mini') ? "Mini fridge" : "Refrigerator";
-      loadSize = "large"; // 50-150 ft³: Large appliance
+      loadSize = "large"; // 50-170 ft³: Large appliance
       weightClass = "heavy";
       estimatedWeightLbs = lowerName.includes('mini') ? 100 : 550;
       heavyItem = true;
@@ -2029,7 +2029,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Cube Truck";
     } else if (lowerName.includes('washer') || lowerName.includes('dryer')) {
       itemType = lowerName.includes('washer') ? "Washing machine" : "Dryer";
-      loadSize = "large"; // 50-150 ft³: Large appliance
+      loadSize = "large"; // 50-170 ft³: Large appliance
       weightClass = "heavy";
       estimatedWeightLbs = 500;
       heavyItem = true;
@@ -2037,7 +2037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Cube Truck";
     } else if (lowerName.includes('appliance') || lowerName.includes('stove') || lowerName.includes('oven')) {
       itemType = "Kitchen appliance";
-      loadSize = "large"; // 50-150 ft³: Large appliance
+      loadSize = "large"; // 50-170 ft³: Large appliance
       weightClass = "heavy";
       estimatedWeightLbs = 400;
       heavyItem = true;
@@ -2045,7 +2045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       recommendedVehicle = "Cube Truck";
     } else if (lowerName.includes('treadmill') || lowerName.includes('exercise')) {
       itemType = "Treadmill";
-      loadSize = "large"; // 50-150 ft³: Large equipment
+      loadSize = "large"; // 50-170 ft³: Large equipment
       weightClass = "heavy";
       estimatedWeightLbs = 450;
       heavyItem = true;
@@ -2056,7 +2056,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Storage & Shelving
     else if (lowerName.includes('dresser') || lowerName.includes('drawer')) {
       itemType = "Dresser";
-      loadSize = "large"; // 50-150 ft³: Large furniture
+      loadSize = "large"; // 50-170 ft³: Large furniture
       weightClass = "medium";
       estimatedWeightLbs = 250;
       heavyItem = true;
@@ -2199,8 +2199,8 @@ Analyze the image and determine:
 2. Load size based on VOLUME (FT³):
    - "boxes": 1-10 ft³ (small personal items: shoes, bags, boxes, lamps, monitors)
    - "medium": 11-50 ft³ (small furniture: chairs, small tables, TVs, bookshelves)
-   - "large": 50-150 ft³ (large furniture: sofas, beds, fridges, appliances, dressers, treadmills)
-   - "apartment": 150+ ft³ (full room furniture or multiple large items)
+   - "large": 50-170 ft³ (large furniture: sofas, beds, fridges, appliances, dressers, treadmills)
+   - "apartment": 170+ ft³ (full room furniture or multiple large items)
 3. Is it heavy/fragile requiring special care? (true/false)
 4. Recommended movers: 1 or 2
 5. Weight category: light (<100 lbs), medium (100-500 lbs), heavy (>500 lbs)
@@ -2209,7 +2209,7 @@ Analyze the image and determine:
 
 ⚠️ STRICT MANDATORY CATEGORIZATION RULES (CANNOT BE OVERRIDDEN):
 
-MUST classify as "large" (50-150 ft³):
+MUST classify as "large" (50-170 ft³):
 - ALL sofas, couches, sectionals, loveseats, futons
 - ALL beds, mattresses, bed frames (twin, full, queen, king)
 - ALL refrigerators, freezers, fridges
@@ -2218,7 +2218,7 @@ MUST classify as "large" (50-150 ft³):
 - ALL bookcases, bookshelves
 - ALL treadmills, ellipticals, exercise equipment
 
-MUST classify as "apartment" (150+ ft³):
+MUST classify as "apartment" (170+ ft³):
 - Bedroom sets, living room sets, dining room sets
 - Full room furniture or multiple large items
 
@@ -2231,7 +2231,7 @@ Load Size Classification Guidelines:
 - If you see a SOFA, COUCH, SECTIONAL, BED, FRIDGE, DRESSER, or BOOKSHELF → MUST be "large"
 - Shoes, bags, boxes, lamps, monitors → "boxes" (1-10 ft³)
 - Chairs, small tables, TVs → "medium" (11-50 ft³)
-- Full room furniture sets → "apartment" (150+ ft³)
+- Full room furniture sets → "apartment" (170+ ft³)
 
 Respond with VALID JSON only:
 {

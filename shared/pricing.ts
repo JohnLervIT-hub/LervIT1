@@ -22,8 +22,8 @@ const PRICING_CONFIG = {
   LOAD_FEES: {
     boxes: 0.00,      // 1-10 ft³: No fee for smallest items
     medium: 15.00,    // 11-50 ft³: Small furniture
-    large: 30.00,     // 50-150 ft³: Large furniture
-    apartment: 45.00, // 150+ ft³: Full room furniture
+    large: 30.00,     // 50-170 ft³: Large furniture
+    apartment: 45.00, // 170+ ft³: Full room furniture
   },
   PICKUP_DIFFICULTY_FEES: {
     ground: 0.00,
