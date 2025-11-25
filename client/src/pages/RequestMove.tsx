@@ -986,21 +986,11 @@ export default function RequestMove() {
                     ============================================================ */}
 
                     <div>
-                      <Label className="text-base font-semibold mb-4 block">
-                        Select Load Size
-                      </Label>
-                      <LoadSizeSelector
-                        selectedSize={loadSize}
-                        onSelectSize={setLoadSize}
-                      />
-                    </div>
-
-                    <div>
                       <Label className="text-base font-semibold mb-2 block">
-                        Upload Photos for Movers to Understand Your Load
+                        Upload Photos of Your Items
                       </Label>
                       <p className="text-sm text-muted-foreground mb-3">
-                        At least one photo required
+                        At least one photo required - Our AI will help identify your items
                       </p>
                       <ImageUpload onImagesChange={setImages} maxImages={10} />
                       
@@ -1048,6 +1038,16 @@ export default function RequestMove() {
                           />
                         </div>
                       )}
+                    </div>
+
+                    <div>
+                      <Label className="text-base font-semibold mb-4 block">
+                        Select Load Size
+                      </Label>
+                      <LoadSizeSelector
+                        selectedSize={loadSize}
+                        onSelectSize={setLoadSize}
+                      />
                     </div>
 
                     <div className="border-t pt-6">
