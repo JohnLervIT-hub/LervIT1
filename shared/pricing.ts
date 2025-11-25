@@ -67,7 +67,12 @@ export function calculatePrice(
   console.log('[calculatePrice] loadSize param:', loadSize, 'type:', typeof loadSize);
   console.log('[calculatePrice] LOAD_FEES lookup:', PRICING_CONFIG.LOAD_FEES[loadSize]);
   console.log('[calculatePrice] All LOAD_FEES:', PRICING_CONFIG.LOAD_FEES);
-  const loadFee = PRICING_CONFIG.LOAD_FEES[loadSize] || PRICING_CONFIG.LOAD_FEES.medium;
+  
+  // Explicitly check if loadSize exists in LOAD_FEES
+  const loadFee = PRICING_CONFIG.LOAD_FEES.hasOwnProperty(loadSize) 
+    ? PRICING_CONFIG.LOAD_FEES[loadSize]
+    : PRICING_CONFIG.LOAD_FEES.medium;
+  
   console.log('[calculatePrice] Final loadFee:', loadFee);
   
   // Pickup difficulty fee
