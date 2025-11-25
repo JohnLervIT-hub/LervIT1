@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -52,6 +52,106 @@ type Booking = {
     phone?: string;
   } | null;
 };
+
+type IdentifiedItem = {
+  id: string;
+  photoUrl: string;
+  processingStatus: string;
+  itemName: string | null;
+  category: string | null;
+  weightKg: string | null;
+  volumeCuft: string | null;
+  vehicleType: string | null;
+  recommendedMovers: number | null;
+  handlingComplexity: string | null;
+};
+
+function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
+  const { data: items, isLoading } = useQuery<IdentifiedItem[]>({
+    queryKey: ['/api/ai/items', bookingId],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="text-sm text-muted-foreground flex items-center gap-2">
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+        Loading item details...
+      </div>
+    );
+  }
+
+  if (!items || items.length === 0) {
+    return null;
+  }
+
+  const completedItems = items.filter(i => i.processingStatus === 'completed' && i.itemName);
+  if (completedItems.length === 0) return null;
+
+  const totalVolume = completedItems.reduce((sum, item) => sum + (parseFloat(item.volumeCuft || '0') || 0), 0);
+  const totalWeight = completedItems.reduce((sum, item) => sum + (parseFloat(item.weightKg || '0') || 0), 0);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-primary" />
+        AI-Detected Items ({completedItems.length})
+      </p>
+      
+      <div className="grid grid-cols-1 gap-2">
+        {completedItems.map((item) => (
+          <div 
+            key={item.id} 
+            className="bg-muted/50 rounded-lg p-3 flex items-start gap-3"
+            data-testid={`identified-item-${item.id}`}
+          >
+            <div className="w-12 h-12 rounded overflow-hidden flex-shrink-0 border">
+              <img 
+                src={item.photoUrl} 
+                alt={item.itemName || 'Item'} 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">{item.itemName}</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1">
+                {item.category && (
+                  <span className="flex items-center gap-1">
+                    <Box className="w-3 h-3" />
+                    {item.category}
+                  </span>
+                )}
+                {item.volumeCuft && (
+                  <span>{parseFloat(item.volumeCuft).toFixed(1)} ft³</span>
+                )}
+                {item.weightKg && (
+                  <span>{parseFloat(item.weightKg).toFixed(0)} kg</span>
+                )}
+              </div>
+            </div>
+            {item.handlingComplexity && item.handlingComplexity !== 'standard' && (
+              <Badge variant="secondary" className="text-xs">
+                {item.handlingComplexity}
+              </Badge>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-primary/10 rounded-lg p-3 text-sm">
+        <div className="flex flex-wrap gap-4">
+          <div>
+            <span className="text-muted-foreground">Total Volume:</span>
+            <span className="font-bold ml-1">{totalVolume.toFixed(1)} ft³</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Total Weight:</span>
+            <span className="font-bold ml-1">{totalWeight.toFixed(0)} kg</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MoverDashboard() {
   const { user } = useAuth();
@@ -549,6 +649,9 @@ export default function MoverDashboard() {
             </div>
           </>
         )}
+
+        <Separator />
+        <IdentifiedItemsDisplay bookingId={booking.id} />
 
         {(showActions || booking.status === "confirmed" || (booking.status !== "cancelled" && booking.status !== "pending")) && (
           <>
