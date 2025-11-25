@@ -22,11 +22,15 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Employs a geocoding system (with Google Maps Distance Matrix API integration and Haversine fallback), a 7-component dynamic pricing model, and a matching algorithm that ranks the top 5 nearest available movers within a 15-50km radius. A `jobNotifications` system handles invitations with a 10-minute expiration, protected by atomic updates and 5-layer validation for job acceptance. A ProximityDemo page visualizes mover locations and matching results. The booking form uses Google Maps Autocomplete for pickup/dropoff locations. A live pricing calculator provides real-time cost updates.
 *   **Enhanced Mover Display:** The MoverCard component provides comprehensive mover information, including verification status, ratings, trip counts, vehicle details, distance calculations, ETA estimates, and estimated pricing.
+*   **Booking Flow Optimization:**
+    *   **Step 1:** Locations (pickup/dropoff addresses with difficulty selection)
+    *   **Step 2:** Load Details (load size selector at top, followed by optional photo upload, heavy items toggle, and mover count selection)
+    *   **Step 3:** Schedule & Details (date/time selection and optional description)
 *   **AI-Powered Features:**
     *   **AI Auto-Quote Predictor:** Provides instant price estimate ranges with confidence levels and natural language explanations.
     *   **AI Price Breakdown Explainer:** Offers natural language explanations for pricing components.
-    *   **AI Item Detection from Photo (Optimized):** Uses OpenAI Vision API with enhanced prompts for specific, detailed item descriptions. Auto-fills load size, heavy item estimates, number of movers, weight detection, and vehicle recommendations. A mock fallback handles various item types. Volume-based load size categorization with strict AI rules ensures accurate classification, and a warning system guides customers on mover selection for heavy loads.
-*   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling.
+    *   **AI Item Detection from Photo (ARCHIVED):** Archived for future development. Previously used OpenAI Vision API for auto-filling load details from photos. Code preserved in comments for restoration.
+*   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling. Photo upload is now in Step 2, positioned below load size selector.
 *   **Role-Specific User Experience:** Implements `ProtectedRoute` for access control, dynamic navigation, and protected login/signup redirects based on user roles.
 *   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard.
 *   **Payment Processing:** Integrated with Stripe for secure payment intent creation, status tracking, webhook handling, and CAD currency support.
