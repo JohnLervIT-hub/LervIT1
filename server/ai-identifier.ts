@@ -497,41 +497,36 @@ Return ONLY valid JSON with typical/average values:
 
 /**
  * Main function: Complete AI identification pipeline
- * Priority: Web specs > Vision API estimates > GPT estimates
+ * FAST MODE: Uses Vision API estimates directly (no web search)
+ * This is 3-5x faster than searching the web for specs
  */
 export async function identifyAndCategorizeItem(photoUrl: string): Promise<IdentificationResult> {
-  // Step 1: Identify item using Vision API (now includes estimates and search query)
+  const startTime = Date.now();
+  
+  // Step 1: Identify item using Vision API (now includes estimates)
   const visionResult = await identifyItemFromPhoto(photoUrl);
   
   let specs: ProductSpec | null = null;
   let specSource = 'unknown';
   
-  // Step 2: Search for REAL specifications using optimized search query
-  specs = await searchProductSpecs(visionResult.itemName, visionResult.searchQuery);
-  
-  if (specs && specs.weight_kg && specs.dimensions) {
-    specSource = 'web_search';
-    console.log('[AI Identifier] ✓ Using REAL specs from web search');
+  // FAST PATH: Use Vision API's estimated specs directly (skip slow web search)
+  if (visionResult.estimatedDimensions && visionResult.estimatedWeight) {
+    specs = {
+      name: visionResult.itemName,
+      weight_kg: visionResult.estimatedWeight,
+      dimensions: {
+        length_cm: visionResult.estimatedDimensions.length_cm,
+        width_cm: visionResult.estimatedDimensions.width_cm,
+        height_cm: visionResult.estimatedDimensions.height_cm,
+      },
+    };
+    specSource = 'vision_ai';
+    console.log(`[AI Identifier] ⚡ Fast path: Vision AI specs | ${specs.weight_kg}kg`);
   } else {
-    // Step 3: Use Vision API's estimated specs if available
-    if (visionResult.estimatedDimensions && visionResult.estimatedWeight) {
-      specs = {
-        name: visionResult.itemName,
-        weight_kg: visionResult.estimatedWeight,
-        dimensions: {
-          length_cm: visionResult.estimatedDimensions.length_cm,
-          width_cm: visionResult.estimatedDimensions.width_cm,
-          height_cm: visionResult.estimatedDimensions.height_cm,
-        },
-      };
-      specSource = 'vision_estimate';
-      console.log('[AI Identifier] Using Vision API estimated specs:', specs.weight_kg, 'kg');
-    } else {
-      // Step 4: Fall back to GPT estimation
-      console.log('[AI Identifier] No specs found, estimating with GPT');
-      specs = await estimateSpecsWithGPT(visionResult.itemName, visionResult.category);
-      specSource = 'gpt_estimate';
-    }
+    // Fallback: GPT estimation (still faster than web search)
+    console.log('[AI Identifier] No Vision estimates, using GPT fallback');
+    specs = await estimateSpecsWithGPT(visionResult.itemName, visionResult.category);
+    specSource = 'gpt_estimate';
   }
   
   // Step 5: Calculate volume
@@ -549,7 +544,8 @@ export async function identifyAndCategorizeItem(photoUrl: string): Promise<Ident
     volumeCuft
   );
   
-  console.log(`[AI Identifier] Final: ${visionResult.itemName} | ${specs.weight_kg}kg | ${volumeCuft.toFixed(1)}ft³ | Source: ${specSource}`);
+  const processingTime = Date.now() - startTime;
+  console.log(`[AI Identifier] ✓ ${visionResult.itemName} | ${specs.weight_kg}kg | ${volumeCuft.toFixed(1)}ft³ | ${processingTime}ms`);
   
   return {
     itemName: visionResult.itemName,

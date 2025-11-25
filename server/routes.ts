@@ -2799,19 +2799,30 @@ Respond with VALID JSON only:
       // Import AI identifier (dynamic to avoid loading on startup)
       const { identifyAndCategorizeItem } = await import('./ai-identifier');
       
-      // Process each photo
-      const items = [];
-      const errors = [];
+      console.log(`[AI Identifier] Processing ${photoUrls.length} photos in parallel...`);
+      const startTime = Date.now();
       
-      for (let i = 0; i < photoUrls.length; i++) {
-        const photoUrl = photoUrls[i];
-        try {
-          console.log(`[AI Identifier] Processing photo ${i + 1}/${photoUrls.length}: ${photoUrl}`);
-          
-          // Run AI identification
+      // Process ALL photos in parallel for speed
+      const results = await Promise.allSettled(
+        photoUrls.map(async (photoUrl: string, i: number) => {
+          console.log(`[AI Identifier] Starting photo ${i + 1}/${photoUrls.length}: ${photoUrl}`);
           const result = await identifyAndCategorizeItem(photoUrl);
+          console.log(`[AI Identifier] Completed photo ${i + 1}: ${result.itemName}`);
+          return { photoUrl, result, index: i };
+        })
+      );
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`[AI Identifier] All ${photoUrls.length} photos processed in ${processingTime}ms`);
+      
+      // Collect results
+      const items: any[] = [];
+      const errors: any[] = [];
+      
+      for (const settled of results) {
+        if (settled.status === 'fulfilled') {
+          const { photoUrl, result, index } = settled.value;
           
-          // If bookingId provided, save to database
           if (bookingId) {
             const identifiedItem = await storage.createIdentifiedItem({
               bookingId,
@@ -2833,9 +2844,8 @@ Respond with VALID JSON only:
             });
             items.push(identifiedItem);
           } else {
-            // Return result directly without saving (pre-booking identification)
             items.push({
-              id: `temp-${i}`,
+              id: `temp-${index}`,
               photoUrl,
               processingStatus: 'completed',
               itemName: result.itemName,
@@ -2853,22 +2863,21 @@ Respond with VALID JSON only:
               sourceMetadata: result.sourceMetadata,
             });
           }
+        } else {
+          const error = settled.reason;
+          const photoUrl = photoUrls[results.indexOf(settled)];
+          console.error(`[AI Identifier] Error processing photo:`, error);
           
-          console.log(`[AI Identifier] Successfully identified: ${result.itemName}`);
-        } catch (error: any) {
-          console.error(`[AI Identifier] Error processing photo ${i + 1}:`, error);
-          
-          // Add failed item to results
           items.push({
-            id: `temp-${i}`,
+            id: `temp-${results.indexOf(settled)}`,
             photoUrl,
             processingStatus: 'failed',
-            errorMessage: error.message || 'Unknown error',
+            errorMessage: error?.message || 'Unknown error',
           });
           
           errors.push({
             photoUrl,
-            error: error.message || 'Unknown error',
+            error: error?.message || 'Unknown error',
           });
         }
       }

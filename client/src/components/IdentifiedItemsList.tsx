@@ -162,7 +162,7 @@ export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListPro
               <CardContent className="pt-6">
                 <h5 className="font-semibold mb-3 flex items-center gap-2">
                   <Truck className="h-5 w-5" />
-                  Recommendations (Auto-Applied)
+                  Recommendations
                 </h5>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                   <div>
