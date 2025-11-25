@@ -37,6 +37,16 @@ export function IdentifiedItemsList({ items, isLoading, onApplyRecommendations }
   const hasHighComplexity = completedItems.some(item => 
     item.handlingComplexity === 'high' || item.handlingComplexity === 'very_high'
   );
+  
+  // Determine recommended vehicle based on TOTAL volume
+  // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 51-150 ft³, Apartment: 150+ ft³
+  const getVehicleRecommendation = () => {
+    if (totalVolume > 150) return { vehicle: 'Truck', loadSize: 'Apartment Move (150+ ft³)', color: 'text-red-600' };
+    if (totalVolume > 50) return { vehicle: 'Pickup', loadSize: 'Large Load (51-150 ft³)', color: 'text-orange-600' };
+    if (totalVolume > 10) return { vehicle: 'Van', loadSize: 'Medium Load (11-50 ft³)', color: 'text-blue-600' };
+    return { vehicle: 'Car/SUV', loadSize: 'Boxes Only (1-10 ft³)', color: 'text-green-600' };
+  };
+  const vehicleRec = getVehicleRecommendation();
 
   return (
     <div className="space-y-4" data-testid="container-identified-items">
@@ -163,36 +173,33 @@ export function IdentifiedItemsList({ items, isLoading, onApplyRecommendations }
           )}
           
           {completedItems.length > 0 && (
-            <Card className="bg-muted/50">
+            <Card className="bg-primary/5 border-primary/20">
               <CardContent className="pt-6">
-                <h5 className="font-semibold mb-3">AI Recommendations Summary</h5>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <h5 className="font-semibold mb-3 flex items-center gap-2">
+                  <Truck className="h-5 w-5" />
+                  AI Recommendations (Auto-Applied)
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Total Volume:</span>
-                    <p className="font-semibold">{totalVolume.toFixed(2)} ft³</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {totalVolume < 10 ? 'Boxes category' :
-                       totalVolume < 50 ? 'Medium load' :
-                       totalVolume < 150 ? 'Large load' :
-                       'Apartment move'}
-                    </p>
+                    <p className="font-bold text-lg">{totalVolume.toFixed(1)} ft³</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Recommended Movers:</span>
-                    <p className="font-semibold">{maxRecommendedMovers} mover{maxRecommendedMovers !== 1 ? 's' : ''}</p>
+                    <span className="text-muted-foreground">Vehicle Required:</span>
+                    <p className={`font-bold text-lg ${vehicleRec.color}`}>{vehicleRec.vehicle}</p>
+                    <p className="text-xs text-muted-foreground">{vehicleRec.loadSize}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Movers Needed:</span>
+                    <p className="font-bold text-lg">{maxRecommendedMovers}</p>
                     {hasHighComplexity && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Items require careful handling
-                      </p>
+                      <p className="text-xs text-orange-600">Heavy/Complex items</p>
                     )}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Confidence:</span>
-                    <p className="font-semibold">
+                    <span className="text-muted-foreground">AI Confidence:</span>
+                    <p className="font-bold text-lg">
                       {(completedItems.reduce((sum, item) => sum + parseFloat(item.confidence || '0'), 0) / completedItems.length * 100).toFixed(0)}%
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Average AI confidence
                     </p>
                   </div>
                 </div>

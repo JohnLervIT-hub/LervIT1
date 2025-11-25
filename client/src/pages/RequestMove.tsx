@@ -360,14 +360,49 @@ export default function RequestMove() {
       }
       
       const result = await response.json();
-      setIdentifiedItems(result.items || []);
+      const items = result.items || [];
+      setIdentifiedItems(items);
       
-      const completedCount = (result.items || []).filter((item: IdentifiedItem) => item.processingStatus === 'completed').length;
+      const completedItems = items.filter((item: IdentifiedItem) => item.processingStatus === 'completed');
       
-      if (completedCount > 0) {
+      if (completedItems.length > 0) {
+        // AUTO-APPLY AI recommendations based on total volume
+        const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
+          sum + parseFloat(item.volumeCuft || '0'), 0);
+        
+        // Determine load size based on total volume thresholds
+        // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 51-150 ft³, Apartment: 150+ ft³
+        let recommendedLoadSize = 'boxes';
+        let recommendedVehicle = 'car';
+        if (totalVolume > 150) {
+          recommendedLoadSize = 'apartment';
+          recommendedVehicle = 'truck';
+        } else if (totalVolume > 50) {
+          recommendedLoadSize = 'large';
+          recommendedVehicle = 'pickup';
+        } else if (totalVolume > 10) {
+          recommendedLoadSize = 'medium';
+          recommendedVehicle = 'van';
+        }
+        
+        // Get max recommended movers from all items
+        const maxMovers = Math.max(...completedItems.map((item: IdentifiedItem) => item.recommendedMovers || 1));
+        
+        // Check for heavy/complex items
+        const hasHeavyItems = completedItems.some((item: IdentifiedItem) => 
+          item.handlingComplexity === 'high' || 
+          item.handlingComplexity === 'very_high' ||
+          parseFloat(item.weightKg || '0') > 30
+        );
+        
+        // Auto-apply all recommendations
+        setLoadSize(recommendedLoadSize);
+        setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+        setHeavyItem(hasHeavyItems);
+        
         toast({
-          title: "Items Identified!",
-          description: `AI successfully identified ${completedCount} item${completedCount !== 1 ? 's' : ''} from your photos.`,
+          title: "AI Auto-Applied Recommendations!",
+          description: `Total: ${totalVolume.toFixed(1)} ft³ → ${capitalizeFirst(recommendedLoadSize)} load (${recommendedVehicle}), ${maxMovers} mover${maxMovers !== 1 ? 's' : ''}${hasHeavyItems ? ', Heavy items' : ''}`,
         });
       } else {
         toast({
@@ -394,11 +429,12 @@ export default function RequestMove() {
     if (completedItems.length === 0) return;
     
     // Calculate total volume and determine load size
+    // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 51-150 ft³, Apartment: 150+ ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
     let recommendedLoadSize = 'boxes';
-    if (totalVolume >= 150) recommendedLoadSize = 'apartment';
-    else if (totalVolume >= 50) recommendedLoadSize = 'large';
-    else if (totalVolume >= 10) recommendedLoadSize = 'medium';
+    if (totalVolume > 150) recommendedLoadSize = 'apartment';
+    else if (totalVolume > 50) recommendedLoadSize = 'large';
+    else if (totalVolume > 10) recommendedLoadSize = 'medium';
     
     // Get max recommended movers
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
