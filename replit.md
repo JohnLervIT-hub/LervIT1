@@ -24,13 +24,13 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **Enhanced Mover Display:** The MoverCard component provides comprehensive mover information, including verification status, ratings, trip counts, vehicle details, distance calculations, ETA estimates, and estimated pricing.
 *   **Booking Flow Optimization:**
     *   **Step 1:** Locations (pickup/dropoff addresses with difficulty selection)
-    *   **Step 2:** Load Details (load size selector at top, followed by optional photo upload, heavy items toggle, and mover count selection)
+    *   **Step 2:** Load Details (load size selector at top, followed by **mandatory** photo upload, heavy items toggle, and mover count selection)
     *   **Step 3:** Schedule & Details (date/time selection and optional description)
 *   **AI-Powered Features:**
     *   **AI Auto-Quote Predictor:** Provides instant price estimate ranges with confidence levels and natural language explanations.
     *   **AI Price Breakdown Explainer:** Offers natural language explanations for pricing components.
     *   **AI Item Detection from Photo (ARCHIVED):** Archived for future development. Previously used OpenAI Vision API for auto-filling load details from photos. Code preserved in comments for restoration.
-*   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling. Photo upload is now in Step 2, positioned below load size selector.
+*   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling. Photo upload is **mandatory** in Step 2, positioned below load size selector. Customers must upload at least one photo before proceeding.
 *   **Role-Specific User Experience:** Implements `ProtectedRoute` for access control, dynamic navigation, and protected login/signup redirects based on user roles.
 *   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard.
 *   **Payment Processing:** Integrated with Stripe for secure payment intent creation, status tracking, webhook handling, and CAD currency support.

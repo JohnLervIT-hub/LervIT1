@@ -358,6 +358,18 @@ export default function RequestMove() {
       }
     }
 
+    // Step 2: Validate photos (MANDATORY)
+    if (step === 2) {
+      if (!images || images.length === 0) {
+        toast({
+          title: "Photos required",
+          description: "Please upload at least one photo of your items to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (step < 3) {
       setStep(step + 1);
     } else {
@@ -848,10 +860,10 @@ export default function RequestMove() {
 
                     <div>
                       <Label className="text-base font-semibold mb-2 block">
-                        Upload Photos of Items (Optional)
+                        Upload Photos of Items
                       </Label>
                       <p className="text-sm text-muted-foreground mb-3">
-                        Help movers provide accurate quotes by showing what needs to be moved
+                        Required: Upload at least one photo so movers can provide accurate quotes
                       </p>
                       <ImageUpload onImagesChange={setImages} maxImages={10} />
                     </div>
