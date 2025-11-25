@@ -222,6 +222,7 @@ export default function RequestMove() {
   useEffect(() => {
     if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
       try {
+        console.log('[Pricing] Calculating with loadSize:', loadSize);
         const breakdown = calculatePrice(
           estimateDistance,
           loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
@@ -231,6 +232,7 @@ export default function RequestMove() {
           numberOfMovers as 1 | 2,
           undefined // moverToPickupDistance - will be calculated after mover assignment
         );
+        console.log('[Pricing] New breakdown:', breakdown);
         setPriceBreakdown(breakdown);
         setPricingError(null);
       } catch (error) {
