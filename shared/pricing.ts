@@ -64,7 +64,11 @@ export function calculatePrice(
   const distanceFee = pickupToDropoffDistance * PRICING_CONFIG.DISTANCE_RATE_PER_KM;
   
   // Load fee based on size
+  console.log('[calculatePrice] loadSize param:', loadSize, 'type:', typeof loadSize);
+  console.log('[calculatePrice] LOAD_FEES lookup:', PRICING_CONFIG.LOAD_FEES[loadSize]);
+  console.log('[calculatePrice] All LOAD_FEES:', PRICING_CONFIG.LOAD_FEES);
   const loadFee = PRICING_CONFIG.LOAD_FEES[loadSize] || PRICING_CONFIG.LOAD_FEES.medium;
+  console.log('[calculatePrice] Final loadFee:', loadFee);
   
   // Pickup difficulty fee
   const pickupDifficultyFee = PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0;
