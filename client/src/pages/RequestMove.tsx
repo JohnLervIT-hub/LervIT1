@@ -750,7 +750,13 @@ export default function RequestMove() {
 
                 {step === 2 && (
                   <>
-                    {/* AI Feature 3: Photo Analysis */}
+                    {/* ============================================================
+                        ARCHIVED: AI Item Detection Feature (Future Development)
+                        ============================================================
+                        This section contains AI photo analysis that auto-fills load details.
+                        It has been archived for future development.
+                        To restore: Uncomment this section and the related handlePhotoAnalysis function.
+                    
                     <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-6">
                       <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
@@ -820,6 +826,7 @@ export default function RequestMove() {
                         )}
                       </div>
                     </div>
+                    ============================================================ */}
 
                     <div>
                       <Label className="text-base font-semibold mb-4 block">
@@ -828,18 +835,17 @@ export default function RequestMove() {
                       <LoadSizeSelector
                         selectedSize={loadSize}
                         onSelectSize={setLoadSize}
-                        aiRecommendedSize={photoAnalysis?.loadSize}
                       />
-                      
-                      {photoAnalysis && isLoadSizeSmaller(loadSize, photoAnalysis.loadSize) && (
-                        <Alert className="mt-4 bg-yellow-500/10 border-yellow-500/30">
-                          <Info className="w-4 h-4" />
-                          <AlertDescription>
-                            <strong>Warning:</strong> You selected "{capitalizeFirst(loadSize)}" but AI detected "{capitalizeFirst(photoAnalysis.loadSize)}". 
-                            Selecting a smaller load size may result in insufficient space or additional charges.
-                          </AlertDescription>
-                        </Alert>
-                      )}
+                    </div>
+
+                    <div>
+                      <Label className="text-base font-semibold mb-2 block">
+                        Upload Photos of Items (Optional)
+                      </Label>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Help movers provide accurate quotes by showing what needs to be moved
+                      </p>
+                      <ImageUpload onImagesChange={setImages} maxImages={10} />
                     </div>
 
                     <div className="border-t pt-6">
@@ -976,16 +982,6 @@ export default function RequestMove() {
                           data-testid="input-description"
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-base font-semibold mb-2 block">
-                        Upload Photos of Items
-                      </Label>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Help movers provide accurate quotes by showing what needs to be moved
-                      </p>
-                      <ImageUpload onImagesChange={setImages} maxImages={10} />
                     </div>
                   </>
                 )}
