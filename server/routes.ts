@@ -2126,13 +2126,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const items: any[] = [];
     let totalCubicFeet = 0;
     
-    // Detect if this is a room photo (multiple items)
-    const isRoomPhoto = lowerName.includes('living') || lowerName.includes('bedroom') || 
-                        lowerName.includes('room') || lowerName.includes('apartment');
+    // Enhanced detection: Check for specific single-item keywords first
+    const isSingleItemPhoto = lowerName.includes('sofa') || lowerName.includes('couch') || 
+                              lowerName.includes('chair') || lowerName.includes('table') || 
+                              lowerName.includes('desk') || lowerName.includes('dresser') ||
+                              lowerName.includes('mattress') || lowerName.includes('tv') ||
+                              lowerName.includes('box') || lowerName.includes('appliance');
     
-    if (isRoomPhoto) {
-      // Simulate detecting multiple items in a room
-      if (lowerName.includes('living')) {
+    if (!isSingleItemPhoto) {
+      // Default to multi-item detection (simulates room photo)
+      // Randomly alternate between living room and bedroom scenarios
+      const timestamp = Date.now();
+      const isLivingRoom = timestamp % 2 === 0;
+      
+      if (isLivingRoom) {
         items.push(
           { name: "L-shaped sectional sofa", category: "furniture", estimatedWeightLbs: 250, estimatedCubicFeet: 100, requiresSpecialCare: true, quantity: 1 },
           { name: "Coffee table", category: "furniture", estimatedWeightLbs: 60, estimatedCubicFeet: 20, requiresSpecialCare: false, quantity: 1 },
@@ -2140,20 +2147,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { name: "Floor lamp", category: "other", estimatedWeightLbs: 15, estimatedCubicFeet: 4, requiresSpecialCare: false, quantity: 1 }
         );
         itemType = "Living room furniture (4 items)";
-      } else if (lowerName.includes('bedroom')) {
+      } else {
         items.push(
           { name: "Queen-size bed frame with headboard", category: "furniture", estimatedWeightLbs: 280, estimatedCubicFeet: 70, requiresSpecialCare: true, quantity: 1 },
           { name: "Nightstand", category: "furniture", estimatedWeightLbs: 50, estimatedCubicFeet: 8, requiresSpecialCare: false, quantity: 2 },
           { name: "Dresser with mirror", category: "furniture", estimatedWeightLbs: 200, estimatedCubicFeet: 40, requiresSpecialCare: true, quantity: 1 }
         );
         itemType = "Bedroom furniture (4 items)";
-      } else {
-        items.push(
-          { name: itemType, category: "furniture", estimatedWeightLbs, estimatedCubicFeet: loadSize === "large" ? 80 : loadSize === "medium" ? 30 : 5, requiresSpecialCare: heavyItem, quantity: 1 }
-        );
       }
     } else {
-      // Single item detection
+      // Single item detection only for specific item photos
       const cubicFeet = loadSize === "large" ? 80 : loadSize === "medium" ? 30 : loadSize === "apartment" ? 200 : 5;
       items.push(
         { name: itemType, category: "furniture", estimatedWeightLbs, estimatedCubicFeet: cubicFeet, requiresSpecialCare: heavyItem, quantity: 1 }
