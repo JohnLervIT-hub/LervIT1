@@ -11,11 +11,13 @@ const openai = new OpenAI({
  * Convert a local image file to a base64 data URL
  */
 function imageToBase64DataUrl(imagePath: string): string {
-  // Handle relative paths from uploads
+  // Handle relative paths from uploads - files are in public/uploads
   let fullPath = imagePath;
   if (imagePath.startsWith('/uploads/')) {
-    fullPath = path.join(process.cwd(), imagePath);
+    fullPath = path.join(process.cwd(), 'public', imagePath);
   }
+  
+  console.log('[AI Identifier] Reading image from:', fullPath);
   
   // Read the file and convert to base64
   const imageBuffer = fs.readFileSync(fullPath);
@@ -31,6 +33,8 @@ function imageToBase64DataUrl(imagePath: string): string {
     '.webp': 'image/webp',
   };
   const mimeType = mimeTypes[ext] || 'image/jpeg';
+  
+  console.log('[AI Identifier] Image converted to base64, size:', Math.round(base64.length / 1024), 'KB');
   
   return `data:${mimeType};base64,${base64}`;
 }
