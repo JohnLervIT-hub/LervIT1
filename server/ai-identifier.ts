@@ -117,7 +117,15 @@ Return ONLY valid JSON with this exact structure:
       max_tokens: 300,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
+    let content = response.choices[0]?.message?.content || "{}";
+    
+    // Strip markdown code blocks if present (```json ... ```)
+    content = content.trim();
+    if (content.startsWith('```')) {
+      content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
+    
+    console.log('[AI Identifier] Parsed response:', content.substring(0, 200));
     const result = JSON.parse(content);
     
     const responseTime = Date.now() - startTime;
