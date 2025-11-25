@@ -69,11 +69,17 @@ interface IdentificationResult {
 
 /**
  * Use OpenAI Vision API to identify the item in a photo
+ * Enhanced to get brand/model and accurate dimensions for spec lookup
  */
 export async function identifyItemFromPhoto(photoUrl: string): Promise<{
   itemName: string;
   category: string;
   confidence: number;
+  brand?: string;
+  model?: string;
+  searchQuery?: string;
+  estimatedWeight?: number;
+  estimatedDimensions?: { length_cm: number; width_cm: number; height_cm: number };
 }> {
   const startTime = Date.now();
   
@@ -93,16 +99,35 @@ export async function identifyItemFromPhoto(photoUrl: string): Promise<{
           content: [
             {
               type: "text",
-              text: `Identify the main item in this image for a moving service. Provide:
-1. Item name (be specific, include brand/model if visible)
-2. Category (Furniture, Appliance, Fragile, Oversized, Bulky, Electronics, or Other)
-3. Confidence score (0-1)
+              text: `You are an expert at identifying household items for a moving company. Analyze this image carefully.
 
-Return ONLY valid JSON with this exact structure:
+LOOK FOR:
+- Brand logos/labels (IKEA, Ashley, West Elm, Samsung, LG, etc.)
+- Model names or product lines
+- Size indicators (Queen, King, 65-inch, 3-seater, L-shaped, etc.)
+- Material (leather, fabric, wood, metal, glass)
+- Style descriptors (sectional, modular, recliner, etc.)
+
+PROVIDE ACCURATE DIMENSIONS based on item type:
+- L-shaped sectional sofa: ~280-320cm L x 160-200cm W x 80-90cm H, 100-150kg
+- 3-seat sofa: ~200-230cm L x 85-95cm W x 80-90cm H, 60-90kg
+- Armchair: ~80-100cm L x 80-90cm W x 85-100cm H, 20-35kg
+- Queen bed frame: ~160cm L x 210cm W x 40-100cm H, 40-70kg
+- 6-drawer dresser: ~140-160cm L x 45-55cm W x 80-90cm H, 60-80kg
+- Dining table (6-seat): ~180cm L x 90cm W x 75cm H, 40-60kg
+- 65-inch TV: ~145cm L x 10cm W x 85cm H, 20-30kg
+- Refrigerator: ~70-90cm L x 70-80cm W x 170-180cm H, 80-120kg
+
+Return ONLY valid JSON:
 {
-  "itemName": "specific item name",
-  "category": "category name",
-  "confidence": 0.95
+  "itemName": "detailed name with size/style (e.g., 'Gray L-shaped sectional sofa with chaise')",
+  "category": "Furniture|Appliance|Fragile|Oversized|Bulky|Electronics|Other",
+  "confidence": 0.0-1.0,
+  "brand": "brand if visible or null",
+  "model": "model/product line if visible or null",
+  "searchQuery": "best search query to find this exact product specifications online (e.g., 'IKEA KIVIK sectional sofa dimensions weight')",
+  "estimatedWeight": weight in kg (number),
+  "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number }
 }`
             },
             {
@@ -114,7 +139,7 @@ Return ONLY valid JSON with this exact structure:
           ],
         },
       ],
-      max_tokens: 300,
+      max_tokens: 500,
     });
 
     let content = response.choices[0]?.message?.content || "{}";
@@ -140,10 +165,19 @@ Return ONLY valid JSON with this exact structure:
       status: 'success',
     };
     
+    console.log('[AI Identifier] Vision detected:', result.itemName, 
+      result.brand ? `(${result.brand})` : '', 
+      result.estimatedDimensions ? `${result.estimatedDimensions.length_cm}x${result.estimatedDimensions.width_cm}x${result.estimatedDimensions.height_cm}cm` : '');
+    
     return {
       itemName: result.itemName || 'Unknown Item',
       category: result.category || 'Other',
       confidence: result.confidence || 0.5,
+      brand: result.brand || undefined,
+      model: result.model || undefined,
+      searchQuery: result.searchQuery || undefined,
+      estimatedWeight: result.estimatedWeight || undefined,
+      estimatedDimensions: result.estimatedDimensions || undefined,
     };
   } catch (error: any) {
     console.error('[AI Identifier] OpenAI Vision error:', error);
@@ -153,8 +187,9 @@ Return ONLY valid JSON with this exact structure:
 
 /**
  * Search for product specifications using SerpAPI
+ * Enhanced to use optimized search query and GPT for spec extraction
  */
-export async function searchProductSpecs(itemName: string): Promise<ProductSpec | null> {
+export async function searchProductSpecs(itemName: string, searchQuery?: string): Promise<ProductSpec | null> {
   const apiKey = process.env.SERPAPI_API_KEY;
   
   if (!apiKey) {
@@ -163,34 +198,85 @@ export async function searchProductSpecs(itemName: string): Promise<ProductSpec 
   }
   
   try {
-    const searchQuery = encodeURIComponent(`${itemName} specifications dimensions weight`);
-    const url = `https://serpapi.com/search.json?q=${searchQuery}&api_key=${apiKey}&num=5`;
+    // Use provided search query or generate one
+    const query = searchQuery || `${itemName} specifications dimensions weight kg cm`;
+    const encodedQuery = encodeURIComponent(query);
+    const url = `https://serpapi.com/search.json?q=${encodedQuery}&api_key=${apiKey}&num=10`;
+    
+    console.log('[AI Identifier] Searching for specs:', query);
     
     const response = await fetch(url);
     const data = await response.json();
     
-    // Extract specifications from search results
+    // Collect all snippets for GPT analysis
     const organicResults = data.organic_results || [];
+    const allSnippets: string[] = [];
     
-    // Look for product specification pages
+    // First try direct regex extraction
     for (const result of organicResults) {
       const snippet = result.snippet || '';
       const title = result.title || '';
+      allSnippets.push(`${title}: ${snippet}`);
       
-      // Try to extract dimensions and weight from snippets
-      const weightMatch = snippet.match(/(\d+\.?\d*)\s*(kg|lbs?|pounds?)/i);
-      const dimensionsMatch = snippet.match(/(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*(cm|inches?|in)/i);
+      // Enhanced regex patterns for various formats
+      // Weight patterns: "50 kg", "110 lbs", "Weight: 50kg"
+      const weightPatterns = [
+        /(?:weight|weighs?)[\s:]*(\d+\.?\d*)\s*(kg|lbs?|pounds?|kilograms?)/i,
+        /(\d+\.?\d*)\s*(kg|lbs?)\s*(?:weight|total)/i,
+        /(\d+\.?\d*)\s*(kg|lbs?|pounds?)/i,
+      ];
       
-      if (weightMatch || dimensionsMatch) {
+      // Dimension patterns: "200 x 90 x 85 cm", "78" x 35" x 33"", "L: 200cm W: 90cm"
+      const dimensionPatterns = [
+        /(\d+\.?\d*)\s*(?:"|in|inches?)?\s*[x×]\s*(\d+\.?\d*)\s*(?:"|in|inches?)?\s*[x×]\s*(\d+\.?\d*)\s*("|in|inches?|cm|mm)/i,
+        /(?:dimensions?)[\s:]*(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)\s*[x×]\s*(\d+\.?\d*)\s*(cm|inches?|in|mm)/i,
+        /(?:l|length)[\s:]*(\d+\.?\d*)\s*(cm|in).*?(?:w|width)[\s:]*(\d+\.?\d*)\s*(cm|in).*?(?:h|height)[\s:]*(\d+\.?\d*)\s*(cm|in)/i,
+      ];
+      
+      let weightKg: number | undefined;
+      let dimensions: { length_cm: number; width_cm: number; height_cm: number } | undefined;
+      
+      for (const pattern of weightPatterns) {
+        const match = snippet.match(pattern);
+        if (match) {
+          const value = parseFloat(match[1]);
+          const unit = match[2].toLowerCase();
+          weightKg = unit.includes('lb') || unit.includes('pound') ? value * 0.453592 : value;
+          break;
+        }
+      }
+      
+      for (const pattern of dimensionPatterns) {
+        const match = snippet.match(pattern);
+        if (match) {
+          const unit = match[4].toLowerCase();
+          const multiplier = unit.includes('in') || unit === '"' ? 2.54 : (unit === 'mm' ? 0.1 : 1);
+          dimensions = {
+            length_cm: parseFloat(match[1]) * multiplier,
+            width_cm: parseFloat(match[2]) * multiplier,
+            height_cm: parseFloat(match[3]) * multiplier,
+          };
+          break;
+        }
+      }
+      
+      if (weightKg && dimensions) {
+        console.log('[AI Identifier] Found exact specs from web:', weightKg, 'kg,', dimensions);
         return {
           name: itemName,
-          weight_kg: weightMatch ? parseFloat(weightMatch[1]) * (weightMatch[2].toLowerCase().includes('lb') ? 0.453592 : 1) : undefined,
-          dimensions: dimensionsMatch ? {
-            length_cm: parseFloat(dimensionsMatch[1]) * (dimensionsMatch[4].toLowerCase().includes('in') ? 2.54 : 1),
-            width_cm: parseFloat(dimensionsMatch[2]) * (dimensionsMatch[4].toLowerCase().includes('in') ? 2.54 : 1),
-            height_cm: parseFloat(dimensionsMatch[3]) * (dimensionsMatch[4].toLowerCase().includes('in') ? 2.54 : 1),
-          } : undefined,
+          weight_kg: weightKg,
+          dimensions,
         };
+      }
+    }
+    
+    // If regex didn't find complete specs, use GPT to analyze all snippets
+    if (allSnippets.length > 0) {
+      console.log('[AI Identifier] Using GPT to extract specs from', allSnippets.length, 'search results');
+      const specs = await extractSpecsWithGPT(itemName, allSnippets.join('\n\n'));
+      if (specs && (specs.weight_kg || specs.dimensions)) {
+        console.log('[AI Identifier] GPT extracted specs from web search:', specs);
+        return specs;
       }
     }
     
@@ -211,32 +297,46 @@ async function extractSpecsWithGPT(itemName: string, searchResults: string): Pro
       messages: [
         {
           role: "system",
-          content: "You are a product specification expert. Extract dimensions and weight from search results."
+          content: "You are a product specification expert. Extract exact dimensions and weight from search results. Be precise - only use values explicitly mentioned in the search results."
         },
         {
           role: "user",
           content: `Extract specifications for: ${itemName}
 
-Search results: ${searchResults}
+Search results:
+${searchResults}
 
-Return ONLY valid JSON:
+Find and extract EXACT weight and dimensions from the search results.
+Convert all measurements to metric (kg for weight, cm for dimensions).
+
+Return ONLY valid JSON (no markdown):
 {
   "weight_kg": number or null,
   "dimensions": {
     "length_cm": number,
     "width_cm": number,
     "height_cm": number
-  } or null,
-  "material": "string" or null,
-  "category": "string" or null
+  } or null
 }`
         }
       ],
       max_tokens: 200,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
-    return JSON.parse(content);
+    let content = response.choices[0]?.message?.content || "{}";
+    
+    // Strip markdown code blocks if present
+    content = content.trim();
+    if (content.startsWith('```')) {
+      content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
+    
+    const parsed = JSON.parse(content);
+    return {
+      name: itemName,
+      weight_kg: parsed.weight_kg,
+      dimensions: parsed.dimensions,
+    };
   } catch (error) {
     console.error('[AI Identifier] GPT spec extraction error:', error);
     return null;
@@ -397,34 +497,59 @@ Return ONLY valid JSON with typical/average values:
 
 /**
  * Main function: Complete AI identification pipeline
+ * Priority: Web specs > Vision API estimates > GPT estimates
  */
 export async function identifyAndCategorizeItem(photoUrl: string): Promise<IdentificationResult> {
-  // Step 1: Identify item using Vision API
+  // Step 1: Identify item using Vision API (now includes estimates and search query)
   const visionResult = await identifyItemFromPhoto(photoUrl);
   
-  // Step 2: Search for real specifications
-  let specs = await searchProductSpecs(visionResult.itemName);
+  let specs: ProductSpec | null = null;
+  let specSource = 'unknown';
   
-  // Step 3: If no specs found, estimate using GPT
-  if (!specs || !specs.weight_kg || !specs.dimensions) {
-    console.log('[AI Identifier] No real specs found, estimating with GPT');
-    specs = await estimateSpecsWithGPT(visionResult.itemName, visionResult.category);
+  // Step 2: Search for REAL specifications using optimized search query
+  specs = await searchProductSpecs(visionResult.itemName, visionResult.searchQuery);
+  
+  if (specs && specs.weight_kg && specs.dimensions) {
+    specSource = 'web_search';
+    console.log('[AI Identifier] ✓ Using REAL specs from web search');
+  } else {
+    // Step 3: Use Vision API's estimated specs if available
+    if (visionResult.estimatedDimensions && visionResult.estimatedWeight) {
+      specs = {
+        name: visionResult.itemName,
+        weight_kg: visionResult.estimatedWeight,
+        dimensions: {
+          length_cm: visionResult.estimatedDimensions.length_cm,
+          width_cm: visionResult.estimatedDimensions.width_cm,
+          height_cm: visionResult.estimatedDimensions.height_cm,
+        },
+      };
+      specSource = 'vision_estimate';
+      console.log('[AI Identifier] Using Vision API estimated specs:', specs.weight_kg, 'kg');
+    } else {
+      // Step 4: Fall back to GPT estimation
+      console.log('[AI Identifier] No specs found, estimating with GPT');
+      specs = await estimateSpecsWithGPT(visionResult.itemName, visionResult.category);
+      specSource = 'gpt_estimate';
+    }
   }
   
-  // Step 4: Calculate volume
+  // Step 5: Calculate volume
   const volumeCuft = calculateVolumeCuft(
     specs.dimensions?.length_cm || 50,
     specs.dimensions?.width_cm || 50,
     specs.dimensions?.height_cm || 50
   );
   
-  // Step 5: Categorize and determine handling requirements
+  // Step 6: Categorize and determine handling requirements
   const categorization = categorizeItem(
     visionResult.itemName,
     visionResult.category,
     specs.weight_kg,
     volumeCuft
   );
+  
+  console.log(`[AI Identifier] Final: ${visionResult.itemName} | ${specs.weight_kg}kg | ${volumeCuft.toFixed(1)}ft³ | Source: ${specSource}`);
   
   return {
     itemName: visionResult.itemName,
@@ -440,6 +565,9 @@ export async function identifyAndCategorizeItem(photoUrl: string): Promise<Ident
     insuranceLevel: categorization.insuranceLevel,
     confidence: visionResult.confidence,
     sourceMetadata: JSON.stringify({
+      specSource,
+      brand: visionResult.brand,
+      model: visionResult.model,
       visionResult,
       specs,
       searchMethod: specs ? 'serpapi' : 'gpt_estimation',
