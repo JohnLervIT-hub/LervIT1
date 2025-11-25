@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
-import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification } from "@shared/schema";
+import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification, IdentifiedItem, InsertIdentifiedItem, AiRun, InsertAiRun } from "@shared/schema";
 import { db } from "./db";
-import { users, movers, bookings, messages, reviews, jobNotifications } from "@shared/schema";
+import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns } from "@shared/schema";
 import { eq, and, desc, sql, lt } from "drizzle-orm";
 
 export interface IStorage {
@@ -42,6 +42,14 @@ export interface IStorage {
   updateJobNotification(id: string, updates: Partial<JobNotification>): Promise<JobNotification | undefined>;
   getMoverByUserId(userId: string): Promise<Mover | undefined>;
   getAvailableMoversWithCoordinates(): Promise<Mover[]>;
+  
+  // Identified Items (AI Product Identifier)
+  getIdentifiedItemsByBooking(bookingId: string): Promise<IdentifiedItem[]>;
+  createIdentifiedItem(insertItem: InsertIdentifiedItem): Promise<IdentifiedItem>;
+  updateIdentifiedItem(id: string, updates: Partial<IdentifiedItem>): Promise<IdentifiedItem | undefined>;
+  
+  // AI Runs (tracking)
+  createAiRun(insertRun: InsertAiRun): Promise<AiRun>;
 }
 
 class PostgresStorage implements IStorage {
@@ -200,6 +208,29 @@ class PostgresStorage implements IStorage {
         sql`${movers.latitude} IS NOT NULL AND ${movers.longitude} IS NOT NULL`
       ))
       .orderBy(desc(movers.rating));
+  }
+  
+  // Identified Items (AI Product Identifier)
+  async getIdentifiedItemsByBooking(bookingId: string): Promise<IdentifiedItem[]> {
+    return await db.select().from(identifiedItems)
+      .where(eq(identifiedItems.bookingId, bookingId))
+      .orderBy(desc(identifiedItems.createdAt));
+  }
+  
+  async createIdentifiedItem(insertItem: InsertIdentifiedItem): Promise<IdentifiedItem> {
+    const result = await db.insert(identifiedItems).values(insertItem).returning();
+    return result[0];
+  }
+  
+  async updateIdentifiedItem(id: string, updates: Partial<IdentifiedItem>): Promise<IdentifiedItem | undefined> {
+    const result = await db.update(identifiedItems).set(updates).where(eq(identifiedItems.id, id)).returning();
+    return result[0];
+  }
+  
+  // AI Runs (tracking)
+  async createAiRun(insertRun: InsertAiRun): Promise<AiRun> {
+    const result = await db.insert(aiRuns).values(insertRun).returning();
+    return result[0];
   }
 }
 

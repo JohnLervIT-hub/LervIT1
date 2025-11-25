@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -2766,6 +2766,160 @@ Respond with VALID JSON only:
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch location" });
+    }
+  });
+
+  // ===== AI PRODUCT IDENTIFIER ROUTES =====
+  
+  // POST /api/ai/items/identify - Identify items from photos
+  app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const { bookingId, photoUrls } = req.body;
+      
+      if (!bookingId || !photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
+        return res.status(400).json({ error: "bookingId and photoUrls array required" });
+      }
+      
+      // Verify booking exists and belongs to user
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const user = (req as any).user;
+      if (booking.customerId !== user.id && user.role !== 'admin') {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      // Import AI identifier (dynamic to avoid loading on startup)
+      const { identifyAndCategorizeItem } = await import('./ai-identifier');
+      
+      // Process each photo asynchronously
+      const results = [];
+      const errors = [];
+      
+      for (let i = 0; i < photoUrls.length; i++) {
+        const photoUrl = photoUrls[i];
+        try {
+          console.log(`[AI Identifier] Processing photo ${i + 1}/${photoUrls.length}: ${photoUrl}`);
+          
+          // Create initial record with pending status
+          const identifiedItem = await storage.createIdentifiedItem({
+            bookingId,
+            photoUrl,
+            processingStatus: 'processing',
+          });
+          
+          // Run AI identification
+          const result = await identifyAndCategorizeItem(photoUrl);
+          
+          // Update with results - convert numbers to strings for Drizzle decimal fields
+          const updated = await storage.updateIdentifiedItem(identifiedItem.id, {
+            itemName: result.itemName,
+            category: result.category,
+            weightKg: result.weightKg.toString() as any,
+            dimensionsLcm: result.dimensionsLcm.toString() as any,
+            dimensionsWcm: result.dimensionsWcm.toString() as any,
+            dimensionsHcm: result.dimensionsHcm.toString() as any,
+            volumeCuft: result.volumeCuft.toString() as any,
+            handlingComplexity: result.handlingComplexity,
+            vehicleType: result.vehicleType,
+            recommendedMovers: result.recommendedMovers,
+            insuranceLevel: result.insuranceLevel,
+            confidence: result.confidence.toString() as any,
+            sourceMetadata: result.sourceMetadata,
+            processingStatus: 'completed',
+          });
+          
+          results.push(updated);
+        } catch (error: any) {
+          console.error(`[AI Identifier] Error processing photo ${i + 1}:`, error);
+          errors.push({
+            photoUrl,
+            error: error.message || 'Unknown error',
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        results,
+        errors: errors.length > 0 ? errors : undefined,
+        summary: {
+          total: photoUrls.length,
+          successful: results.length,
+          failed: errors.length,
+        },
+      });
+    } catch (error: any) {
+      console.error('[AI Identifier] Route error:', error);
+      res.status(500).json({ error: "Failed to identify items" });
+    }
+  });
+  
+  // GET /api/ai/items/:bookingId - Get identified items for a booking
+  app.get("/api/ai/items/:bookingId", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const { bookingId } = req.params;
+      
+      // Verify booking exists and user has access
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const user = (req as any).user;
+      const isMover = booking.moverId && (await storage.getMover(booking.moverId))?.userId === user.id;
+      
+      if (booking.customerId !== user.id && !isMover && user.role !== 'admin') {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      const items = await storage.getIdentifiedItemsByBooking(bookingId);
+      res.json(items);
+    } catch (error) {
+      console.error('[AI Identifier] Get items error:', error);
+      res.status(500).json({ error: "Failed to fetch identified items" });
+    }
+  });
+  
+  // PATCH /api/ai/items/:itemId - Manual override for identified item
+  app.patch("/api/ai/items/:itemId", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const { itemId } = req.params;
+      const updates = req.body;
+      
+      // Get the item to verify ownership
+      const items = await db.select().from(identifiedItems).where(eq(identifiedItems.id, itemId)).limit(1);
+      const item = items[0];
+      
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      // Verify booking ownership
+      const booking = await storage.getBooking(item.bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const user = (req as any).user;
+      if (booking.customerId !== user.id && user.role !== 'admin') {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      // Update item
+      const updated = await storage.updateIdentifiedItem(itemId, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error('[AI Identifier] Update item error:', error);
+      res.status(500).json({ error: "Failed to update item" });
     }
   });
 
