@@ -53,3 +53,13 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **File Upload:** Multer
 *   **AI Integration:** OpenAI API
 *   **Maps:** Google Maps JavaScript API via @react-google-maps/api library
+
+## Security Notes
+
+*   **Session-Based Authentication:** Uses express-session with connect-pg-simple PostgreSQL store. Sessions are regenerated on login/signup to prevent session fixation attacks. Cookies are HTTP-only with secure settings.
+*   **API Key Protection:** OpenAI and SerpAPI services fail gracefully when keys are missing, returning fallback values instead of crashing.
+
+## Known Technical Debt
+
+*   **Google Maps PlacesService Deprecation:** Browser console shows warning about migrating from `google.maps.places.PlacesService` to `google.maps.places.Place`. The current implementation works but should be updated before March 2026 deprecation deadline.
+*   **Email Notifications:** Currently logs to console for MVP. Production deployment should integrate with SendGrid/Resend for actual email delivery.

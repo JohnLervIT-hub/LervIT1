@@ -536,8 +536,9 @@ Return ONLY valid JSON with typical/average values:
 export async function identifyAndCategorizeItem(photoUrl: string): Promise<IdentificationResult> {
   const startTime = Date.now();
   
-  // Step 1: Identify item using Vision API (now includes estimates)
-  const visionResult = await identifyItemFromPhoto(photoUrl);
+  try {
+    // Step 1: Identify item using Vision API (now includes estimates)
+    const visionResult = await identifyItemFromPhoto(photoUrl);
   
   let specs: ProductSpec | null = null;
   let specSource = 'unknown';
@@ -580,26 +581,49 @@ export async function identifyAndCategorizeItem(photoUrl: string): Promise<Ident
   const processingTime = Date.now() - startTime;
   console.log(`[AI Identifier] ✓ ${visionResult.itemName} | ${specs.weight_kg}kg | ${volumeCuft.toFixed(1)}ft³ | ${processingTime}ms`);
   
-  return {
-    itemName: visionResult.itemName,
-    category: categorization.category,
-    weightKg: specs.weight_kg || 10,
-    dimensionsLcm: specs.dimensions?.length_cm || 50,
-    dimensionsWcm: specs.dimensions?.width_cm || 50,
-    dimensionsHcm: specs.dimensions?.height_cm || 50,
-    volumeCuft,
-    handlingComplexity: categorization.handlingComplexity,
-    vehicleType: categorization.vehicleType,
-    recommendedMovers: categorization.recommendedMovers,
-    insuranceLevel: categorization.insuranceLevel,
-    confidence: visionResult.confidence,
-    sourceMetadata: JSON.stringify({
-      specSource,
-      brand: visionResult.brand,
-      model: visionResult.model,
-      visionResult,
-      specs,
-      searchMethod: specs ? 'serpapi' : 'gpt_estimation',
-    }),
-  };
+    return {
+      itemName: visionResult.itemName,
+      category: categorization.category,
+      weightKg: specs.weight_kg || 10,
+      dimensionsLcm: specs.dimensions?.length_cm || 50,
+      dimensionsWcm: specs.dimensions?.width_cm || 50,
+      dimensionsHcm: specs.dimensions?.height_cm || 50,
+      volumeCuft,
+      handlingComplexity: categorization.handlingComplexity,
+      vehicleType: categorization.vehicleType,
+      recommendedMovers: categorization.recommendedMovers,
+      insuranceLevel: categorization.insuranceLevel,
+      confidence: visionResult.confidence,
+      sourceMetadata: JSON.stringify({
+        specSource,
+        brand: visionResult.brand,
+        model: visionResult.model,
+        visionResult,
+        specs,
+        searchMethod: specs ? 'serpapi' : 'gpt_estimation',
+      }),
+    };
+  } catch (error: any) {
+    console.error('[AI Identifier] Pipeline error, returning fallback:', error.message);
+    
+    // Return complete fallback result when pipeline fails
+    return {
+      itemName: 'Unidentified Item',
+      category: 'Other',
+      weightKg: 10,
+      dimensionsLcm: 50,
+      dimensionsWcm: 50,
+      dimensionsHcm: 50,
+      volumeCuft: 1.8,
+      handlingComplexity: 'medium',
+      vehicleType: 'van',
+      recommendedMovers: 1,
+      insuranceLevel: 'standard',
+      confidence: 0,
+      sourceMetadata: JSON.stringify({
+        specSource: 'fallback',
+        error: error.message,
+      }),
+    };
+  }
 }
