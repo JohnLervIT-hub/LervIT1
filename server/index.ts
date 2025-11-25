@@ -1,14 +1,46 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import pgSession from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { pool } from "./db";
 
 const app = express();
+
+// Session configuration with PostgreSQL store
+const PgStore = pgSession(session);
+
+app.use(session({
+  store: new PgStore({
+    pool: pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+  }),
+  secret: process.env.SESSION_SECRET || 'lervit-dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    sameSite: 'lax',
+  },
+  name: 'lervit.sid',
+}));
 
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
   }
 }
+
+declare module 'express-session' {
+  interface SessionData {
+    userId: string;
+    userRole: string;
+  }
+}
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;

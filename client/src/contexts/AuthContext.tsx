@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 interface User {
   id: string;
@@ -11,8 +11,9 @@ interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string, role?: string, phone?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isLoading: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,79 +22,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem("moveit_user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
-  }, []);
-
-  const login = async (email: string, password: string) => {
+  const refreshUser = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const response = await fetch("/api/auth/me", {
+        credentials: "include",
       });
       
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Login failed");
+      if (response.ok) {
+        const userData = await response.json();
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          name: userData.name,
+          role: userData.role || "customer",
+        });
+      } else {
+        setUser(null);
       }
-      
-      const userData = await response.json();
-      
-      const userAuth: User = {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role || "customer",
-      };
-      
-      setUser(userAuth);
-      localStorage.setItem("moveit_user", JSON.stringify(userAuth));
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : "Login failed. Please check your credentials.");
+      setUser(null);
     }
+  }, []);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      await refreshUser();
+      setIsLoading(false);
+    };
+    initAuth();
+  }, [refreshUser]);
+
+  const login = async (email: string, password: string) => {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Login failed");
+    }
+    
+    const userData = await response.json();
+    
+    setUser({
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role || "customer",
+    });
   };
 
   const signup = async (name: string, email: string, password: string, role: string = "customer", phone?: string) => {
-    try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role, phone }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Signup failed");
-      }
-      
-      const userData = await response.json();
-      
-      const userAuth: User = {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role || "customer",
-      };
-      
-      setUser(userAuth);
-      localStorage.setItem("moveit_user", JSON.stringify(userAuth));
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : "Signup failed. Please try again.");
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, email, password, role, phone }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Signup failed");
     }
+    
+    const userData = await response.json();
+    
+    setUser({
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role || "customer",
+    });
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
     setUser(null);
-    localStorage.removeItem("moveit_user");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, isLoading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

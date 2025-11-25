@@ -39,18 +39,18 @@ function validateBody<T>(schema: z.ZodSchema<T>, data: unknown): T {
   return schema.parse(data);
 }
 
-// Auth middleware to attach user to req
+// Auth middleware to attach user to req (session-based)
 async function authMiddleware(req: Request, res: Response, next: Function) {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const userId = authHeader.substring(7);
+  // Check session first (secure method)
+  if (req.session?.userId) {
     try {
-      const user = await storage.getUser(userId);
+      const user = await storage.getUser(req.session.userId);
       if (user) {
         (req as any).user = user;
       }
     } catch (error) {
-      // User not found, continue without auth
+      // User not found, clear invalid session
+      req.session.destroy(() => {});
     }
   }
   next();
@@ -219,8 +219,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      // Regenerate session to prevent session fixation attacks
+      const createdUser = user;
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Session error" });
+        }
+        
+        // Set session data after regeneration
+        req.session.userId = createdUser.id;
+        req.session.userRole = createdUser.role;
+        
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            return res.status(500).json({ error: "Session save error" });
+          }
+          const { password: _, ...userWithoutPassword } = createdUser;
+          res.json(userWithoutPassword);
+        });
+      });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
@@ -234,33 +251,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const { email, password } = validateBody(loginSchema, req.body);
       
-      console.log("[LOGIN DEBUG] Email received:", email);
-      console.log("[LOGIN DEBUG] Password length:", password.length);
-      
       const user = await storage.getUserByEmail(email);
-      console.log("[LOGIN DEBUG] User found:", user ? "YES" : "NO");
-      console.log("[LOGIN DEBUG] User has password:", user?.password ? "YES" : "NO");
       
       if (!user || !user.password) {
-        console.log("[LOGIN DEBUG] Failed: User not found or no password");
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
       const isValid = verifyPassword(password, user.password);
-      console.log("[LOGIN DEBUG] Password valid:", isValid);
       
       if (!isValid) {
-        console.log("[LOGIN DEBUG] Failed: Invalid password");
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
-      console.log("[LOGIN DEBUG] Login successful for:", email);
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      // Regenerate session to prevent session fixation attacks
+      const userData = user;
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Session error" });
+        }
+        
+        // Set session data after regeneration
+        req.session.userId = userData.id;
+        req.session.userRole = userData.role;
+        
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            return res.status(500).json({ error: "Session save error" });
+          }
+          const { password: _, ...userWithoutPassword } = userData;
+          res.json(userWithoutPassword);
+        });
+      });
     } catch (error) {
-      console.log("[LOGIN DEBUG] Error:", error);
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
+  });
+
+  // Logout route
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.clearCookie('lervit.sid');
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // Get current authenticated user
+  app.get("/api/auth/me", async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const { password, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
   });
 
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
