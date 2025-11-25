@@ -338,6 +338,8 @@ export default function RequestMove() {
 
   // AI Product Identifier - Identify items from uploaded photos
   const handleIdentifyItems = async () => {
+    console.log('[ItemDetection] Starting identification, images:', images);
+    
     if (images.length === 0) {
       toast({
         title: "No photos to analyze",
@@ -351,15 +353,21 @@ export default function RequestMove() {
     setIdentifiedItems([]);
     
     try {
+      console.log('[ItemDetection] Sending API request...');
       const response = await apiRequest("POST", "/api/ai/items/identify", {
         photoUrls: images,
       });
       
+      console.log('[ItemDetection] Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error("Failed to identify items");
+        const errorText = await response.text();
+        console.error('[ItemDetection] API error:', response.status, errorText);
+        throw new Error(`Failed to identify items: ${response.status}`);
       }
       
       const result = await response.json();
+      console.log('[ItemDetection] Result:', result);
       const items = result.items || [];
       setIdentifiedItems(items);
       

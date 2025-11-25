@@ -18,6 +18,11 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
   const uploadFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     
+    console.log('[ImageUpload] Starting upload for', fileArray.length, 'files');
+    fileArray.forEach((file, i) => {
+      console.log(`[ImageUpload] File ${i + 1}:`, file.name, file.type, file.size, 'bytes');
+    });
+    
     if (images.length + fileArray.length > maxImages) {
       toast({
         title: "Too many images",
@@ -28,33 +33,33 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
     }
 
     // Validate file types - support mobile formats including HEIC/HEIF
-    const allowedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-      'image/heic', 'image/heif', 'image/avif'
-    ];
-    
+    // Be very lenient for mobile compatibility
     const validFiles = fileArray.filter(file => {
-      // Check MIME type first
-      if (allowedTypes.includes(file.type.toLowerCase())) {
+      // Accept any file that has image in its MIME type
+      if (file.type && file.type.startsWith('image/')) {
+        console.log('[ImageUpload] Accepted by MIME type:', file.type);
         return true;
       }
-      // Fallback: check file extension for mobile browsers that may not set MIME type
+      // Fallback: check file extension
       const ext = file.name.toLowerCase().split('.').pop();
-      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif'];
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'tiff', 'tif'];
       if (ext && allowedExtensions.includes(ext)) {
+        console.log('[ImageUpload] Accepted by extension:', ext);
         return true;
       }
-      // Also accept if MIME type starts with 'image/' (generic image type)
-      if (file.type.startsWith('image/')) {
+      // If no MIME type but has a reasonable file size, accept it (mobile quirk)
+      if (!file.type && file.size > 0 && file.size < 20 * 1024 * 1024) {
+        console.log('[ImageUpload] Accepted without MIME type (mobile fallback)');
         return true;
       }
+      console.log('[ImageUpload] Rejected file:', file.name, file.type);
       return false;
     });
 
-    if (validFiles.length !== fileArray.length) {
+    if (validFiles.length === 0) {
       toast({
         title: "Invalid files",
-        description: "Only image files are allowed. Please try again.",
+        description: "Could not process the selected files. Please try again.",
         variant: "destructive",
       });
       return;
@@ -68,16 +73,23 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
     }
 
     try {
+      console.log('[ImageUpload] Sending upload request...');
       const response = await fetch('/api/upload/images', {
         method: 'POST',
         body: formData,
       });
 
+      console.log('[ImageUpload] Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorText = await response.text();
+        console.error('[ImageUpload] Upload failed:', response.status, errorText);
+        throw new Error(`Upload failed: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('[ImageUpload] Upload successful, URLs:', data.urls);
+      
       const newImages = [...images, ...data.urls];
       setImages(newImages);
       onImagesChange(newImages);
@@ -87,9 +99,10 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
         description: `${validFiles.length} image(s) uploaded successfully.`,
       });
     } catch (error) {
+      console.error('[ImageUpload] Upload error:', error);
       toast({
         title: "Upload failed",
-        description: "Failed to upload images. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to upload images. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -199,7 +212,6 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
           type="file"
           accept="image/*,.heic,.heif"
           multiple
-          capture="environment"
           onChange={handleFileSelect}
           className="hidden"
           disabled={uploading || images.length >= maxImages}
