@@ -137,7 +137,7 @@ export default function TrackTrip() {
       <div className="bg-card border-b sticky top-0 z-10">
         <div className="max-w-6xl mx-auto p-4 flex items-center gap-4">
           <Link href="/my-bookings">
-            <Button variant="ghost" size="icon" data-testid="button-back">
+            <Button variant="ghost" size="icon" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>

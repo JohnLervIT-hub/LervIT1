@@ -144,7 +144,7 @@ export default function Payment() {
       <div className="min-h-screen pt-24 pb-12">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <p className="text-muted-foreground">Booking not found.</p>
-          <Button onClick={() => setLocation("/my-bookings")} className="mt-4">
+          <Button onClick={() => setLocation("/my-bookings")} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white">
             Back to My Bookings
           </Button>
         </div>
@@ -166,7 +166,7 @@ export default function Payment() {
               <CardDescription>This booking has already been paid</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => setLocation("/my-bookings")} className="w-full">
+              <Button onClick={() => setLocation("/my-bookings")} className="w-full bg-orange-500 hover:bg-orange-600 text-white">
                 Back to My Bookings
               </Button>
             </CardContent>

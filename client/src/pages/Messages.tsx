@@ -106,7 +106,7 @@ export default function Messages() {
             variant="ghost"
             size="sm"
             onClick={() => setLocation(user.role === "mover" ? "/mover-dashboard" : "/my-bookings")}
-            className="mb-4"
+            className="mb-4 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20"
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

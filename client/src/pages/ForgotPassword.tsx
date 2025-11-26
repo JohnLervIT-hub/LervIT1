@@ -69,7 +69,7 @@ export default function ForgotPassword() {
           <CardFooter className="flex flex-col gap-4">
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full text-orange-600 border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20"
               onClick={() => setLocation("/login")}
               data-testid="button-back-to-login"
             >
@@ -124,7 +124,7 @@ export default function ForgotPassword() {
             <Button
               type="button"
               variant="ghost"
-              className="w-full"
+              className="w-full text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20"
               onClick={() => setLocation("/login")}
               data-testid="button-back-to-login"
             >

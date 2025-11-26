@@ -84,7 +84,7 @@ export default function Review() {
           </p>
           <Button
             variant="outline"
-            className="mt-4"
+            className="mt-4 text-orange-600 border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20"
             onClick={() => setLocation("/my-bookings")}
           >
             Back to My Bookings
