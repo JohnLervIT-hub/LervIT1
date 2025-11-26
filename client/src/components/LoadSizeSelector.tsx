@@ -67,31 +67,31 @@ export default function LoadSizeSelector({ selectedSize, onSelectSize, aiRecomme
         return (
           <Card
             key={size.id}
-            className={`p-5 cursor-pointer transition-all hover-elevate active-elevate-2 ${
+            className={`p-5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg border-2 ${
               isSelected
-                ? 'border-primary border-2 bg-primary/5'
-                : ''
+                ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30 shadow-lg shadow-orange-500/20'
+                : 'border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600'
             }`}
             onClick={() => onSelectSize(size.id)}
             data-testid={`card-load-${size.id}`}
           >
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
-                <div className={isSelected ? 'text-primary' : 'text-muted-foreground'}>
+                <div className={`p-2 rounded-lg ${isSelected ? 'bg-orange-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
                   {size.icon}
                 </div>
                 {isAiRecommended && (
-                  <Badge variant="default" className="text-xs">
+                  <Badge className="text-xs bg-green-500 text-white">
                     AI Suggested
                   </Badge>
                 )}
               </div>
               
               <div>
-                <div className="font-semibold mb-1" data-testid={`text-load-label-${size.id}`}>
+                <div className={`font-bold text-lg mb-1 ${isSelected ? 'text-orange-600 dark:text-orange-400' : ''}`} data-testid={`text-load-label-${size.id}`}>
                   {size.label}
                 </div>
-                <div className="text-xs font-medium text-muted-foreground mb-2">
+                <div className={`text-sm font-semibold mb-2 ${isSelected ? 'text-orange-500' : 'text-muted-foreground'}`}>
                   {size.volume}
                 </div>
                 <div className="text-sm text-muted-foreground mb-2">
@@ -104,7 +104,7 @@ export default function LoadSizeSelector({ selectedSize, onSelectSize, aiRecomme
                   ))}
                 </div>
                 
-                <div className="text-sm font-semibold mt-3 text-primary">
+                <div className={`text-base font-bold mt-3 ${isSelected ? 'text-orange-600 dark:text-orange-400' : 'text-orange-500'}`}>
                   {size.fee === 0 ? "No fee" : `+$${size.fee}`}
                 </div>
               </div>

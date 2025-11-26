@@ -173,17 +173,24 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
           onClick={triggerFileInput}
           className="cursor-pointer"
         >
-          <Card className={`border-2 border-dashed hover-elevate active-elevate-2 p-8 text-center transition-colors ${
-            isDragging ? 'border-primary bg-primary/5' : ''
+          <Card className={`border-2 border-dashed p-8 text-center transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
+            isDragging 
+              ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30 shadow-lg shadow-orange-500/20' 
+              : 'border-orange-300 dark:border-orange-600 bg-orange-50/50 dark:bg-orange-950/10 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20'
           }`}>
-            <div className="flex flex-col items-center gap-2">
-              <Upload className={`w-8 h-8 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+            <div className="flex flex-col items-center gap-3">
+              <div className={`p-3 rounded-full ${isDragging ? 'bg-orange-500 text-white' : 'bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400'}`}>
+                <Upload className="w-8 h-8" />
+              </div>
               <div>
-                <p className="font-medium">
-                  {isDragging ? 'Drop images here' : 'Upload Images'}
+                <p className={`font-bold text-lg ${isDragging ? 'text-orange-600 dark:text-orange-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                  {isDragging ? 'Drop images here' : 'Upload Photos'}
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mt-1">
                   {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
+                </p>
+                <p className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-2">
+                  Required: At least 1 photo of your items
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
@@ -192,7 +199,7 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
               {!isDragging && (
                 <Button
                   type="button"
-                  variant="outline"
+                  className="bg-orange-500 hover:bg-orange-600 text-white mt-2"
                   disabled={uploading || images.length >= maxImages}
                   onClick={(e) => {
                     e.stopPropagation();
