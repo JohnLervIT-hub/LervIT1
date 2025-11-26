@@ -214,20 +214,39 @@ class NotificationService {
     const resetUrl = `${process.env.BASE_URL || 'https://lervit.com'}/reset-password?token=${resetToken}`;
     const subject = 'Reset Your LervIT Password';
     const body = `
-Hi ${name},
-
-We received a request to reset your password for your LervIT account.
-
-Click the link below to reset your password:
-
-${resetUrl}
-
-This link will expire in 1 hour.
-
-If you didn't request a password reset, you can safely ignore this email.
-
-Thanks,
-The LervIT Team
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Password Reset Request</h2>
+          <p>Hi ${name},</p>
+          <p>We received a request to reset your password for your LervIT account.</p>
+          
+          <p><strong>Click the button below to reset your password:</strong></p>
+          
+          <table cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;">
+            <tr>
+              <td align="center" bgcolor="#4CAF50" style="border-radius: 4px;">
+                <a href="${resetUrl}" target="_blank" style="display: inline-block; padding: 14px 28px; font-size: 16px; color: #ffffff; text-decoration: none; font-weight: bold;">Reset Password</a>
+              </td>
+            </tr>
+          </table>
+          
+          <p>Or copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #0066cc;"><a href="${resetUrl}" style="color: #0066cc;">${resetUrl}</a></p>
+          
+          <p><strong>This link will expire in 1 hour.</strong></p>
+          
+          <p>If you didn't request a password reset, you can safely ignore this email. Your password will not be changed.</p>
+          
+          <p>Thanks,<br>The LervIT Team</p>
+        </div>
+      </body>
+      </html>
     `;
 
     await this.sendEmail({
