@@ -84,7 +84,7 @@ export default function AdminMoversPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Link href="/admin">
-            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+            <Button variant="ghost" size="sm" className="mb-4 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back-admin">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Dashboard
             </Button>
