@@ -239,17 +239,18 @@ export default function Support() {
   };
 
   return (
-    <div className="container max-w-6xl mx-auto px-4 py-8">
-      <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold mb-2" data-testid="text-support-title">
-          Support & Help Center
-        </h1>
-        <p className="text-muted-foreground text-lg">
-          Get answers to your questions or contact our support team
-        </p>
-      </div>
+    <div className="min-h-screen pt-24 pb-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl md:text-4xl font-bold mb-2" data-testid="text-support-title">
+            Support & Help Center
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Get answers to your questions or contact our support team
+          </p>
+        </div>
 
-      <Tabs defaultValue="faq" className="space-y-6">
+        <Tabs defaultValue="faq" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
           <TabsTrigger value="faq" data-testid="tab-faq">
             <Book className="w-4 h-4 mr-2" />
@@ -499,7 +500,8 @@ export default function Support() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 }

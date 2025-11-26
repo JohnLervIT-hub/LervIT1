@@ -171,15 +171,16 @@ export default function AdminSupportDashboard() {
   };
 
   return (
-    <div className="container max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2" data-testid="text-admin-support-title">
-          Support Dashboard
-        </h1>
-        <p className="text-muted-foreground text-lg">
-          Manage and respond to user support tickets
-        </p>
-      </div>
+    <div className="min-h-screen pt-24 pb-12 bg-muted/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold mb-2" data-testid="text-admin-support-title">
+            Support Dashboard
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Manage and respond to user support tickets
+          </p>
+        </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -450,6 +451,7 @@ export default function AdminSupportDashboard() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
