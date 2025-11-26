@@ -214,18 +214,56 @@ class NotificationService {
     const resetUrl = `${process.env.BASE_URL || 'https://lervit.com'}/reset-password?token=${resetToken}`;
     const subject = 'Reset Your LervIT Password';
     const body = `
-<p>Hi ${name},</p>
-
-<p>We received a request to reset your password for your LervIT account.</p>
-
-<p><strong>Click here to reset your password:</strong></p>
-<p><a href="${resetUrl}">${resetUrl}</a></p>
-
-<p>This link will expire in 1 hour.</p>
-
-<p>If you didn't request a password reset, you can safely ignore this email.</p>
-
-<p>Thanks,<br>The LervIT Team</p>
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Password Reset Request</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">We received a request to reset your password for your LervIT account. Click the button below to set a new password:</p>
+              
+              <!-- Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 30px 0;">
+                <tr>
+                  <td style="background-color:#4CAF50;border-radius:6px;padding:15px 30px;">
+                    <a href="${resetUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">Reset Password</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 10px 0;">Or copy this link into your browser:</p>
+              <p style="color:#4CAF50;font-size:14px;line-height:22px;margin:0 0 30px 0;word-break:break-all;">
+                <a href="${resetUrl}" style="color:#4CAF50;">${resetUrl}</a>
+              </p>
+              
+              <p style="color:#888888;font-size:14px;line-height:22px;margin:0 0 10px 0;"><strong>This link expires in 1 hour.</strong></p>
+              <p style="color:#888888;font-size:14px;line-height:22px;margin:0;">If you didn't request this, you can safely ignore this email.</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">© ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `;
 
     await this.sendEmail({
