@@ -13,6 +13,13 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Users, ArrowLeft, Search, Shield, Truck, User } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
@@ -29,6 +36,7 @@ type User = {
 export default function AdminUsersPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -44,11 +52,17 @@ export default function AdminUsersPage() {
     );
   }
 
-  const filteredUsers = users?.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const filteredUsers = users?.filter(u => {
+    const matchesSearch = 
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.lastName?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesRole = 
+      roleFilter === "all" || u.role === roleFilter;
+    
+    return matchesSearch && matchesRole;
+  }) || [];
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -85,31 +99,46 @@ export default function AdminUsersPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 mb-6">
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${roleFilter === "customer" ? "ring-2 ring-blue-500" : ""}`}
+            onClick={() => setRoleFilter(roleFilter === "customer" ? "all" : "customer")}
+            data-testid="card-filter-customers"
+          >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Customers</CardTitle>
-              <User className="w-4 h-4 text-muted-foreground" />
+              <User className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">{customerCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Click to filter</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${roleFilter === "mover" ? "ring-2 ring-green-500" : ""}`}
+            onClick={() => setRoleFilter(roleFilter === "mover" ? "all" : "mover")}
+            data-testid="card-filter-movers"
+          >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Movers</CardTitle>
-              <Truck className="w-4 h-4 text-muted-foreground" />
+              <Truck className="w-4 h-4 text-green-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{moverCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Click to filter</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${roleFilter === "admin" ? "ring-2 ring-red-500" : ""}`}
+            onClick={() => setRoleFilter(roleFilter === "admin" ? "all" : "admin")}
+            data-testid="card-filter-admins"
+          >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Admins</CardTitle>
-              <Shield className="w-4 h-4 text-muted-foreground" />
+              <Shield className="w-4 h-4 text-red-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-red-600">{adminCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Click to filter</p>
             </CardContent>
           </Card>
         </div>
@@ -118,15 +147,28 @@ export default function AdminUsersPage() {
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <CardTitle>User List ({filteredUsers.length})</CardTitle>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search users..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                  data-testid="input-search-users"
-                />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search users..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search-users"
+                  />
+                </div>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="w-full sm:w-40" data-testid="select-role-filter">
+                    <SelectValue placeholder="Filter role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="customer">Customers</SelectItem>
+                    <SelectItem value="mover">Movers</SelectItem>
+                    <SelectItem value="admin">Admins</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardHeader>
