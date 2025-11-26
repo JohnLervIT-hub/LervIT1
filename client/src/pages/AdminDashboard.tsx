@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight } from "lucide-react";
 
 type User = {
   id: string;
@@ -84,57 +85,77 @@ export default function AdminDashboard() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Total Users</CardTitle>
-              <Users className="w-5 h-5 text-blue-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold" data-testid="stat-total-users">
-                {users?.length || 0}
-              </div>
-              <p className="text-xs text-blue-200 mt-1">Registered accounts</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/users" data-testid="link-admin-users">
+            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-blue-100">Total Users</CardTitle>
+                <Users className="w-5 h-5 text-blue-200" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold" data-testid="stat-total-users">
+                  {users?.length || 0}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-blue-200">Registered accounts</p>
+                  <ChevronRight className="w-4 h-4 text-blue-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Verified Movers</CardTitle>
-              <Truck className="w-5 h-5 text-green-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold" data-testid="stat-verified-movers">
-                {verifiedMovers}
-              </div>
-              <p className="text-xs text-green-200 mt-1">Active drivers</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/movers?status=verified" data-testid="link-admin-movers">
+            <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-green-500/25">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-green-100">Verified Movers</CardTitle>
+                <Truck className="w-5 h-5 text-green-200" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold" data-testid="stat-verified-movers">
+                  {verifiedMovers}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-green-200">Active drivers</p>
+                  <ChevronRight className="w-4 h-4 text-green-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-purple-100">Completed Moves</CardTitle>
-              <CheckCircle className="w-5 h-5 text-purple-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold" data-testid="stat-completed-bookings">
-                {completedBookings}
-              </div>
-              <p className="text-xs text-purple-200 mt-1">Successful deliveries</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/moves?status=completed" data-testid="link-admin-moves">
+            <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-purple-500/25">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-purple-100">Completed Moves</CardTitle>
+                <CheckCircle className="w-5 h-5 text-purple-200" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold" data-testid="stat-completed-bookings">
+                  {completedBookings}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-purple-200">Successful deliveries</p>
+                  <ChevronRight className="w-4 h-4 text-purple-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-amber-100">Total Revenue</CardTitle>
-              <TrendingUp className="w-5 h-5 text-amber-200" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold" data-testid="stat-total-revenue">
-                ${totalRevenue.toFixed(2)}
-              </div>
-              <p className="text-xs text-amber-200 mt-1">CAD earned</p>
-            </CardContent>
-          </Card>
+          <Link href="/admin/revenue" data-testid="link-admin-revenue">
+            <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-orange-500/25">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-amber-100">Total Revenue</CardTitle>
+                <TrendingUp className="w-5 h-5 text-amber-200" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold" data-testid="stat-total-revenue">
+                  ${totalRevenue.toFixed(2)}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-amber-200">CAD earned</p>
+                  <ChevronRight className="w-4 h-4 text-amber-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 mb-8">
