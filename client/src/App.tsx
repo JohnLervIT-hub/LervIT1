@@ -19,6 +19,10 @@ import MoverProfileSetup from "@/pages/MoverProfileSetup";
 import Messages from "@/pages/Messages";
 import Review from "@/pages/Review";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AdminUsersPage from "@/pages/AdminUsersPage";
+import AdminMoversPage from "@/pages/AdminMoversPage";
+import AdminMovesPage from "@/pages/AdminMovesPage";
+import AdminRevenuePage from "@/pages/AdminRevenuePage";
 import ProximityDemo from "@/pages/ProximityDemo";
 import LifecycleDemo from "@/pages/LifecycleDemo";
 import MoverLifecycleDemo from "@/pages/MoverLifecycleDemo";
@@ -99,6 +103,26 @@ function Router() {
       <Route path="/admin/verification">
         <ProtectedRoute allowedRoles={["admin"]}>
           <AdminVerificationDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/users">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminUsersPage />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/movers">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminMoversPage />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/moves">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminMovesPage />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/revenue">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <AdminRevenuePage />
         </ProtectedRoute>
       </Route>
 

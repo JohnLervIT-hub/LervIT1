@@ -1,0 +1,221 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link, useSearch } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star } from "lucide-react";
+import { useState } from "react";
+
+type Mover = {
+  id: string;
+  vehicleType: string;
+  isVerified: boolean;
+  rating: string;
+  totalMoves: number;
+  isAvailable: boolean;
+  user: {
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+};
+
+export default function AdminMoversPage() {
+  const { user } = useAuth();
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialStatus = searchParams.get("status") || "all";
+  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+
+  const { data: movers, isLoading } = useQuery<Mover[]>({
+    queryKey: ["/api/movers"],
+  });
+
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <p className="text-muted-foreground">This page is only available for administrators.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredMovers = movers?.filter(m => {
+    const matchesSearch = 
+      m.user?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.user?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.vehicleType?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = 
+      statusFilter === "all" ||
+      (statusFilter === "verified" && m.isVerified) ||
+      (statusFilter === "unverified" && !m.isVerified) ||
+      (statusFilter === "available" && m.isAvailable);
+    
+    return matchesSearch && matchesStatus;
+  }) || [];
+
+  const verifiedCount = movers?.filter(m => m.isVerified).length || 0;
+  const unverifiedCount = movers?.filter(m => !m.isVerified).length || 0;
+  const availableCount = movers?.filter(m => m.isAvailable).length || 0;
+
+  return (
+    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-green-50/50 to-background dark:from-green-950/20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <Link href="/admin">
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </Link>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-green-600 rounded-lg">
+              <Truck className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold">All Movers</h1>
+          </div>
+          <p className="text-muted-foreground text-lg">Manage registered movers and their verification status</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3 mb-6">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("verified")}>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Verified</CardTitle>
+              <CheckCircle className="w-4 h-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{verifiedCount}</div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("unverified")}>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Unverified</CardTitle>
+              <XCircle className="w-4 h-4 text-yellow-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">{unverifiedCount}</div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("available")}>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Available Now</CardTitle>
+              <Truck className="w-4 h-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{availableCount}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <CardTitle>Mover List ({filteredMovers.length})</CardTitle>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search movers..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search-movers"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-40" data-testid="select-status-filter">
+                    <SelectValue placeholder="Filter status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Movers</SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="unverified">Unverified</SelectItem>
+                    <SelectItem value="available">Available</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading movers...</div>
+            ) : filteredMovers.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>Moves</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMovers.map((m) => (
+                      <TableRow key={m.id} data-testid={`row-mover-${m.id}`}>
+                        <TableCell className="font-medium">
+                          {m.user?.firstName} {m.user?.lastName}
+                        </TableCell>
+                        <TableCell>{m.user?.email || "N/A"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{m.vehicleType || "Not specified"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                            <span>{parseFloat(m.rating || "0").toFixed(1)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{m.totalMoves || 0}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {m.isVerified ? (
+                              <Badge className="bg-green-500 text-white">Verified</Badge>
+                            ) : (
+                              <Badge variant="secondary">Pending</Badge>
+                            )}
+                            {m.isAvailable && (
+                              <Badge className="bg-blue-500 text-white">Available</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Truck className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No movers found</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
