@@ -28,6 +28,7 @@ class NotificationService {
         const { data, error } = await resend.emails.send({
           from: this.fromEmail,
           to: notification.to,
+          replyTo: 'support@lervit.com',
           subject: notification.subject,
           html: notification.body,
         });
