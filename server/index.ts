@@ -7,6 +7,9 @@ import { pool } from "./db";
 
 const app = express();
 
+// Trust the first proxy (Replit's proxy) - required for secure cookies behind a proxy
+app.set('trust proxy', 1);
+
 // Session configuration with PostgreSQL store
 const PgStore = pgSession(session);
 
@@ -20,10 +23,10 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: true, // Always true since Replit uses HTTPS
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax',
+    sameSite: 'none', // Required for cross-origin requests (mobile browser to Replit domain)
   },
   name: 'lervit.sid',
 }));

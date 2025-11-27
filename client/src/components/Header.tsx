@@ -22,9 +22,10 @@ export default function Header() {
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     closeMobileMenu();
-    logout();
+    await logout();
+    setLocation('/');
   };
 
   const handleHowItWorks = (e: React.MouseEvent) => {
@@ -129,7 +130,7 @@ export default function Header() {
                     Role: {user.role}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout} data-testid="button-logout">
+                  <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
                     <LogOut className="w-4 h-4 mr-2" />
                     Log Out
                   </DropdownMenuItem>
