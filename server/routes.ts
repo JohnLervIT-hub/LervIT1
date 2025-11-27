@@ -1064,7 +1064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const distance = drivingDistanceResult.distanceKm;
       const priceBreakdown = calculatePrice(
         distance,
-        bookingData.loadSize as 'small' | 'medium' | 'large',
+        bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
         bookingData.pickupDifficulty as any,
         bookingData.dropoffDifficulty as any,
         bookingData.heavyItem || false,
@@ -1132,7 +1132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nearestMovers = findNearestMovers(
         pickupGeo.coordinates,
         dropoffGeo.coordinates,
-        bookingData.loadSize as 'small' | 'medium' | 'large',
+        bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
         moversWithUserData,
         {},
         bookingData.aiRecommendedVehicle || null

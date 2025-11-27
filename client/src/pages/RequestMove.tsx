@@ -88,6 +88,7 @@ export default function RequestMove() {
   // AI Product Identifier state
   const [isIdentifyingItems, setIsIdentifyingItems] = useState(false);
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
+  const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
@@ -337,10 +338,12 @@ export default function RequestMove() {
   ============================================================ */
 
   // AI Product Identifier - Identify items from uploaded photos
-  const handleIdentifyItems = async () => {
-    console.log('[ItemDetection] Starting identification, images:', images);
+  // This function can be called manually or automatically after photo upload
+  const handleIdentifyItems = async (photoUrls?: string[]) => {
+    const urlsToAnalyze = photoUrls || images;
+    console.log('[ItemDetection] Starting identification, images:', urlsToAnalyze);
     
-    if (images.length === 0) {
+    if (urlsToAnalyze.length === 0) {
       toast({
         title: "No photos to analyze",
         description: "Please upload at least one photo first.",
@@ -355,7 +358,7 @@ export default function RequestMove() {
     try {
       console.log('[ItemDetection] Sending API request...');
       const response = await apiRequest("POST", "/api/ai/items/identify", {
-        photoUrls: images,
+        photoUrls: urlsToAnalyze,
       });
       
       console.log('[ItemDetection] Response status:', response.status);
@@ -407,6 +410,7 @@ export default function RequestMove() {
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
         setHeavyItem(hasHeavyItems);
+        setHasAutoAnalyzed(true);
         
         toast({
           title: "AI Auto-Applied Recommendations!",
@@ -429,6 +433,13 @@ export default function RequestMove() {
     } finally {
       setIsIdentifyingItems(false);
     }
+  };
+  
+  // Auto-analyze callback for ImageUpload - runs in background after photo upload
+  const handleAutoAnalyze = (photoUrls: string[]) => {
+    console.log('[AutoAnalyze] Triggered with', photoUrls.length, 'photos');
+    // Run analysis in background - don't await to keep UI responsive
+    handleIdentifyItems(photoUrls);
   };
 
   // Apply AI recommendations to booking form
@@ -990,144 +1001,175 @@ export default function RequestMove() {
                         Upload Photos of Your Items
                       </Label>
                       <p className="text-sm text-muted-foreground mb-3">
-                        At least one photo required - Our AI will help identify your items
+                        At least one photo required - Our AI will automatically analyze your items
                       </p>
-                      <ImageUpload onImagesChange={setImages} maxImages={10} />
+                      <ImageUpload 
+                        onImagesChange={setImages} 
+                        onAnalyze={handleAutoAnalyze}
+                        maxImages={10} 
+                      />
                       
-                      {images.length > 0 && (
-                        <div className="mt-4 space-y-4">
-                          <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl p-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                                  <Scan className="w-6 h-6 text-primary" />
-                                </div>
-                                <div>
-                                  <h4 className="font-semibold text-base">Item Detection</h4>
-                                  <p className="text-sm text-muted-foreground">
-                                    AI identifies items and recommends settings
-                                  </p>
-                                </div>
-                              </div>
-                              <Button
-                                type="button"
-                                size="lg"
-                                onClick={handleIdentifyItems}
-                                disabled={isIdentifyingItems}
-                                className="w-full sm:w-auto min-h-[48px] text-base"
-                                data-testid="button-identify-items"
-                              >
-                                {isIdentifyingItems ? (
-                                  <>
-                                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                    Analyzing...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Sparkles className="w-5 h-5 mr-2" />
-                                    Identify Items
-                                  </>
-                                )}
-                              </Button>
+                      {/* Show analyzing status when AI is processing in background */}
+                      {isIdentifyingItems && (
+                        <div className="mt-4 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                              <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-base">Analyzing Your Items...</h4>
+                              <p className="text-sm text-muted-foreground">
+                                AI is identifying items and calculating load requirements
+                              </p>
                             </div>
                           </div>
-                          
+                        </div>
+                      )}
+                      
+                      {/* Show results after analysis completes */}
+                      {!isIdentifyingItems && identifiedItems.length > 0 && (
+                        <div className="mt-4">
                           <IdentifiedItemsList
                             items={identifiedItems}
-                            isLoading={isIdentifyingItems}
+                            isLoading={false}
                           />
                         </div>
                       )}
                     </div>
 
-                    <div>
-                      <Label className="text-base font-semibold mb-4 block">
-                        Select Load Size
-                      </Label>
-                      <LoadSizeSelector
-                        selectedSize={loadSize}
-                        onSelectSize={setLoadSize}
-                      />
-                    </div>
-
-                    <div className="border-t pt-6">
-                      <div className="flex items-center justify-between gap-4">
+                    {/* Show AI-selected summary when auto-analyzed, otherwise show manual selection */}
+                    {hasAutoAnalyzed && !isIdentifyingItems ? (
+                      <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-6 space-y-4">
                         <div className="flex items-center gap-3">
-                          <Weight className="w-5 h-5 text-muted-foreground" />
+                          <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          </div>
                           <div>
-                            <Label htmlFor="heavy-item" className="text-base font-semibold">
-                              Heavy Items
-                            </Label>
+                            <h3 className="font-semibold text-lg">AI Auto-Configured</h3>
                             <p className="text-sm text-muted-foreground">
-                              Includes: sofa beds, appliances, marble/glass, treadmills, sectionals
+                              Based on your uploaded photos
                             </p>
                           </div>
                         </div>
-                        <Switch
-                          id="heavy-item"
-                          checked={heavyItem}
-                          onCheckedChange={setHeavyItem}
-                          data-testid="switch-heavy-item"
-                        />
-                      </div>
-                      {heavyItem && (
-                        <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                          <p className="text-sm font-semibold text-primary">+$15 Heavy Item Fee</p>
+                        
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-3 bg-background/50 rounded-lg">
+                            <Package className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                            <p className="text-sm font-medium capitalize">{loadSize} Load</p>
+                          </div>
+                          <div className="text-center p-3 bg-background/50 rounded-lg">
+                            <Users className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                            <p className="text-sm font-medium">{numberOfMovers} Mover{numberOfMovers > 1 ? 's' : ''}</p>
+                          </div>
+                          <div className="text-center p-3 bg-background/50 rounded-lg">
+                            <Weight className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                            <p className="text-sm font-medium">{heavyItem ? 'Heavy Items' : 'Standard'}</p>
+                          </div>
                         </div>
-                      )}
-                    </div>
+                        
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHasAutoAnalyzed(false)}
+                          className="w-full"
+                          data-testid="button-modify-settings"
+                        >
+                          Modify Settings Manually
+                        </Button>
+                      </div>
+                    ) : !isIdentifyingItems ? (
+                      <>
+                        <div>
+                          <Label className="text-base font-semibold mb-4 block">
+                            Select Load Size
+                          </Label>
+                          <LoadSizeSelector
+                            selectedSize={loadSize}
+                            onSelectSize={setLoadSize}
+                          />
+                        </div>
 
-                    <div className="border-t pt-6">
-                      <Label className="text-base font-semibold mb-2 block flex items-center gap-2">
-                        <Users className="w-5 h-5" />
-                        Number of Movers
-                      </Label>
-                      {requiresTwoMovers(loadSize, heavyItem) && (
-                        <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-                          <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
-                            <strong>Recommended: 2 Movers</strong> - Your load size or heavy items typically require assistance from 2 movers for safe handling.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                      <div className="grid grid-cols-2 gap-4">
-                        <button
-                          type="button"
-                          onClick={() => setNumberOfMovers(1)}
-                          className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
-                            numberOfMovers === 1
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card"
-                          }`}
-                          data-testid="button-1-mover"
-                        >
-                          <div className="text-center">
-                            <p className="font-bold text-lg">1 Mover</p>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Customer helps with carry
-                            </p>
-                            <p className="text-sm font-semibold mt-2">Standard Price</p>
+                        <div className="border-t pt-6">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <Weight className="w-5 h-5 text-muted-foreground" />
+                              <div>
+                                <Label htmlFor="heavy-item" className="text-base font-semibold">
+                                  Heavy Items
+                                </Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Includes: sofa beds, appliances, marble/glass, treadmills, sectionals
+                                </p>
+                              </div>
+                            </div>
+                            <Switch
+                              id="heavy-item"
+                              checked={heavyItem}
+                              onCheckedChange={setHeavyItem}
+                              data-testid="switch-heavy-item"
+                            />
                           </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNumberOfMovers(2)}
-                          className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
-                            numberOfMovers === 2
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card"
-                          }`}
-                          data-testid="button-2-movers"
-                        >
-                          <div className="text-center">
-                            <p className="font-bold text-lg">2 Movers</p>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Movers handle everything
-                            </p>
-                            <p className="text-sm font-semibold mt-2 text-primary">×1.30 Price</p>
+                          {heavyItem && (
+                            <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                              <p className="text-sm font-semibold text-primary">+$15 Heavy Item Fee</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="border-t pt-6">
+                          <Label className="text-base font-semibold mb-2 block flex items-center gap-2">
+                            <Users className="w-5 h-5" />
+                            Number of Movers
+                          </Label>
+                          {requiresTwoMovers(loadSize, heavyItem) && (
+                            <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                              <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
+                                <strong>Recommended: 2 Movers</strong> - Your load size or heavy items typically require assistance from 2 movers for safe handling.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          <div className="grid grid-cols-2 gap-4">
+                            <button
+                              type="button"
+                              onClick={() => setNumberOfMovers(1)}
+                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                                numberOfMovers === 1
+                                  ? "border-primary bg-primary/10"
+                                  : "border-border bg-card"
+                              }`}
+                              data-testid="button-1-mover"
+                            >
+                              <div className="text-center">
+                                <p className="font-bold text-lg">1 Mover</p>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  Customer helps with carry
+                                </p>
+                                <p className="text-sm font-semibold mt-2">Standard Price</p>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNumberOfMovers(2)}
+                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                                numberOfMovers === 2
+                                  ? "border-primary bg-primary/10"
+                                  : "border-border bg-card"
+                              }`}
+                              data-testid="button-2-movers"
+                            >
+                              <div className="text-center">
+                                <p className="font-bold text-lg">2 Movers</p>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  Movers handle everything
+                                </p>
+                                <p className="text-sm font-semibold mt-2 text-primary">×1.30 Price</p>
+                              </div>
+                            </button>
                           </div>
-                        </button>
-                      </div>
-                    </div>
+                        </div>
+                      </>
+                    ) : null}
                   </>
                 )}
 

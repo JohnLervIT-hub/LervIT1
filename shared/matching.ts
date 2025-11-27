@@ -50,7 +50,7 @@ const VEHICLE_TYPE_COMPATIBILITY: Record<string, string[]> = {
 export function findNearestMovers(
   pickupCoords: Coordinates,
   dropoffCoords: Coordinates,
-  loadSize: 'small' | 'medium' | 'large',
+  loadSize: 'boxes' | 'medium' | 'large' | 'apartment',
   availableMovers: Array<{
     moverId: string;
     userId: string;

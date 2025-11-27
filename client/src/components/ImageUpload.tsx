@@ -6,10 +6,11 @@ import { useToast } from "@/hooks/use-toast";
 
 interface ImageUploadProps {
   onImagesChange: (urls: string[]) => void;
+  onAnalyze?: (urls: string[]) => void;
   maxImages?: number;
 }
 
-export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUploadProps) {
+export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 }: ImageUploadProps) {
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -98,6 +99,12 @@ export default function ImageUpload({ onImagesChange, maxImages = 10 }: ImageUpl
         title: "Success",
         description: `${validFiles.length} image(s) uploaded successfully.`,
       });
+      
+      // Trigger auto-analyze after upload if callback provided
+      if (onAnalyze) {
+        console.log('[ImageUpload] Triggering auto-analyze for', newImages.length, 'images');
+        onAnalyze(newImages);
+      }
     } catch (error) {
       console.error('[ImageUpload] Upload error:', error);
       toast({
