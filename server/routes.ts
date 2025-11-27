@@ -1106,83 +1106,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notifiedAt: new Date(),
       } as any);
       
-      // Find nearest available movers
-      const allMovers = await storage.getAvailableMoversWithCoordinates();
-      const moversWithUserData = await Promise.all(
-        allMovers.map(async (m) => {
-          const user = await storage.getUser(m.userId);
-          if (!user || m.latitude === null || m.longitude === null) {
-            return null;
-          }
-          return {
-            moverId: m.id,
-            userId: m.userId,
-            name: user.name,
-            vehicleType: m.vehicleType,
-            rating: m.rating || '0',
-            totalMoves: m.totalMoves,
-            isAvailable: m.isAvailable,
-            latitude: m.latitude as number,
-            longitude: m.longitude as number,
-          };
-        })
-      ).then(results => results.filter((m): m is NonNullable<typeof m> => m !== null));
-      
-      // Use AI-recommended vehicle type for intelligent mover filtering
-      const nearestMovers = findNearestMovers(
-        pickupGeo.coordinates,
-        dropoffGeo.coordinates,
-        bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
-        moversWithUserData,
-        {},
-        bookingData.aiRecommendedVehicle || null
-      );
-      
-      // Create job notifications for top movers
-      const expiresAt = calculateExpiryTime(10); // 10 minutes
-      await Promise.all(
-        nearestMovers.map(mover =>
-          storage.createJobNotification({
-            bookingId: booking.id,
-            moverId: mover.moverId,
-            distanceToPickup: toDecimalString(mover.distanceToPickup),
-            estimatedEarnings: toDecimalString(mover.estimatedEarnings),
-            status: 'pending',
-            expiresAt,
-          })
-        )
-      );
-      
-      // Send email notifications
-      const customer = await storage.getUser(bookingData.customerId);
+      // Send booking confirmation to customer (mover matching happens after payment)
+      const customer = await storage.getUser(user.id);
       if (customer) {
-        // Send booking confirmation to customer
         await notificationService.sendBookingConfirmation(customer, booking);
-        
-        // Send job assignment emails to movers
-        await Promise.all(
-          nearestMovers.map(async (mover) => {
-            const moverUser = await storage.getUser(mover.userId);
-            if (moverUser) {
-              await notificationService.sendJobAssignment(
-                moverUser,
-                booking,
-                mover.estimatedEarnings.toFixed(2)
-              );
-            }
-          })
-        );
       }
       
+      // Note: Mover matching now happens AFTER payment succeeds (in Stripe webhook)
       res.json({
         ...booking,
-        notifiedMovers: nearestMovers.length,
-        nearestMovers: nearestMovers.map(m => ({
-          id: m.moverId,
-          name: m.name,
-          distanceToPickup: m.distanceToPickup,
-          estimatedEarnings: m.estimatedEarnings,
-        })),
+        message: "Booking created. Please complete payment to find movers.",
       });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -1652,6 +1585,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
               );
             }
             
+            // NOW find and notify movers (payment completed)
+            const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+            const { toDecimalString } = await import("@shared/utils");
+            
+            const pickupCoords = {
+              lat: parseFloat(booking.pickupLatitude || '0'),
+              lng: parseFloat(booking.pickupLongitude || '0'),
+            };
+            const dropoffCoords = {
+              lat: parseFloat(booking.dropoffLatitude || '0'),
+              lng: parseFloat(booking.dropoffLongitude || '0'),
+            };
+            
+            // Find nearest available movers
+            const allMovers = await storage.getAvailableMoversWithCoordinates();
+            const moversWithUserData = await Promise.all(
+              allMovers.map(async (m: any) => {
+                const moverUser = await storage.getUser(m.userId);
+                if (!moverUser || m.latitude === null || m.longitude === null) {
+                  return null;
+                }
+                return {
+                  moverId: m.id,
+                  userId: m.userId,
+                  name: moverUser.name,
+                  vehicleType: m.vehicleType,
+                  rating: m.rating || '0',
+                  totalMoves: m.totalMoves,
+                  isAvailable: m.isAvailable,
+                  latitude: m.latitude as number,
+                  longitude: m.longitude as number,
+                };
+              })
+            ).then(results => results.filter((m: any): m is NonNullable<typeof m> => m !== null));
+            
+            // Use AI-recommended vehicle type for intelligent mover filtering
+            const nearestMovers = findNearestMovers(
+              pickupCoords,
+              dropoffCoords,
+              (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+              moversWithUserData,
+              {},
+              booking.aiRecommendedVehicle || null
+            );
+            
+            // Create job notifications for top movers
+            const expiresAt = calculateExpiryTime(10); // 10 minutes
+            await Promise.all(
+              nearestMovers.map((mover: any) =>
+                storage.createJobNotification({
+                  bookingId: booking.id,
+                  moverId: mover.moverId,
+                  distanceToPickup: toDecimalString(mover.distanceToPickup),
+                  estimatedEarnings: toDecimalString(mover.estimatedEarnings),
+                  status: 'pending',
+                  expiresAt,
+                })
+              )
+            );
+            
+            // Send job assignment emails to movers
+            await Promise.all(
+              nearestMovers.map(async (mover: any) => {
+                const moverUser = await storage.getUser(mover.userId);
+                if (moverUser) {
+                  await notificationService.sendJobAssignment(
+                    moverUser,
+                    booking,
+                    mover.estimatedEarnings.toFixed(2)
+                  );
+                }
+              })
+            );
+            
+            console.log(`[Payment] Booking ${booking.id} paid - notified ${nearestMovers.length} movers`);
           }
           break;
           

@@ -205,9 +205,6 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({
 export const insertJobNotificationSchema = createInsertSchema(jobNotifications).omit({
   id: true,
   notifiedAt: true,
-  distanceToPickup: true,
-  estimatedEarnings: true,
-  expiresAt: true,
 });
 
 export const supportTickets = pgTable("support_tickets", {

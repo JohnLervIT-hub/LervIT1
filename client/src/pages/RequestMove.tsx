@@ -1037,48 +1037,8 @@ export default function RequestMove() {
                       )}
                     </div>
 
-                    {/* Show AI-selected summary when auto-analyzed, otherwise show manual selection */}
-                    {hasAutoAnalyzed && !isIdentifyingItems ? (
-                      <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-lg">AI Auto-Configured</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Based on your uploaded photos
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="text-center p-3 bg-background/50 rounded-lg">
-                            <Package className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
-                            <p className="text-sm font-medium capitalize">{loadSize} Load</p>
-                          </div>
-                          <div className="text-center p-3 bg-background/50 rounded-lg">
-                            <Users className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
-                            <p className="text-sm font-medium">{numberOfMovers} Mover{numberOfMovers > 1 ? 's' : ''}</p>
-                          </div>
-                          <div className="text-center p-3 bg-background/50 rounded-lg">
-                            <Weight className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
-                            <p className="text-sm font-medium">{heavyItem ? 'Heavy Items' : 'Standard'}</p>
-                          </div>
-                        </div>
-                        
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setHasAutoAnalyzed(false)}
-                          className="w-full"
-                          data-testid="button-modify-settings"
-                        >
-                          Modify Settings Manually
-                        </Button>
-                      </div>
-                    ) : !isIdentifyingItems ? (
+                    {/* Load details - always show manual selection (AI runs in background) */}
+                    {!isIdentifyingItems && (
                       <>
                         <div>
                           <Label className="text-base font-semibold mb-4 block">
@@ -1169,7 +1129,7 @@ export default function RequestMove() {
                           </div>
                         </div>
                       </>
-                    ) : null}
+                    )}
                   </>
                 )}
 
