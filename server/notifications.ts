@@ -51,22 +51,63 @@ class NotificationService {
   // Booking confirmation email to customer
   async sendBookingConfirmation(customer: User, booking: Partial<Booking>): Promise<void> {
     const subject = `Booking Confirmed - Move #${booking.id?.slice(0, 8)}`;
+    const formattedDate = booking.preferredDate 
+      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        })
+      : 'TBD';
+    
     const body = `
-      <h2>Your Move is Confirmed!</h2>
-      <p>Hi ${customer.name},</p>
-      <p>Your booking has been confirmed and we're finding the best mover for you.</p>
-      
-      <h3>Booking Details:</h3>
-      <ul>
-        <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
-        <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
-        <li><strong>Date:</strong> ${booking.preferredDate}</li>
-        <li><strong>Load Size:</strong> ${booking.loadSize}</li>
-      </ul>
-      
-      <p>You'll receive another email once a mover accepts your job.</p>
-      
-      <p>Thanks for choosing LervIT!</p>
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Your Move is Confirmed!</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${customer.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">Your booking has been confirmed and we're finding the best mover for you.</p>
+              
+              <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Booking Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
+                <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Load Size:</strong> ${booking.loadSize}</li>
+              </ul>
+              
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">You'll receive another email once a mover accepts your job.</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0;">Thanks for choosing LervIT!</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `;
 
     await this.sendEmail({
@@ -110,27 +151,68 @@ class NotificationService {
   // Payment receipt email to customer
   async sendPaymentReceipt(customer: User, booking: Partial<Booking>, amount: string): Promise<void> {
     const subject = `Payment Receipt - Move #${booking.id?.slice(0, 8)}`;
+    const formattedDate = booking.preferredDate 
+      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        })
+      : 'TBD';
+    
     const body = `
-      <h2>Payment Received</h2>
-      <p>Hi ${customer.name},</p>
-      <p>Thank you for your payment! Your move is all set.</p>
-      
-      <h3>Payment Details:</h3>
-      <ul>
-        <li><strong>Amount Paid:</strong> $${amount} CAD</li>
-        <li><strong>Booking ID:</strong> ${booking.id?.slice(0, 8)}</li>
-        <li><strong>Date:</strong> ${booking.preferredDate}</li>
-      </ul>
-      
-      <h3>Move Details:</h3>
-      <ul>
-        <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
-        <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
-      </ul>
-      
-      <p>Your mover will contact you closer to the move date.</p>
-      
-      <p>See you soon!</p>
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Payment Received</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${customer.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">Thank you for your payment! Your move is all set.</p>
+              
+              <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Payment Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Amount Paid:</strong> $${amount} CAD</li>
+                <li><strong>Booking ID:</strong> ${booking.id?.slice(0, 8)}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+              </ul>
+              
+              <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Move Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
+                <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
+              </ul>
+              
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Your mover will contact you closer to the move date.</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0;">See you soon!</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `;
 
     await this.sendEmail({
