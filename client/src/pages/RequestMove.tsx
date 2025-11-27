@@ -1058,50 +1058,35 @@ export default function RequestMove() {
                           </div>
                         )}
                         
-                        {/* Show AI-recommended load size as read-only info */}
-                        {identifiedItems.length > 0 && (
-                          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Sparkles className="w-5 h-5 text-primary" />
-                              <Label className="text-base font-semibold">AI-Recommended Load Size</Label>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-semibold capitalize">
-                                {loadSize}
+                        {/* Show heavy items toggle only when AI hasn't detected items */}
+                        {identifiedItems.length === 0 && (
+                          <div className="border-t pt-6">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                <Weight className="w-5 h-5 text-muted-foreground" />
+                                <div>
+                                  <Label htmlFor="heavy-item" className="text-base font-semibold">
+                                    Heavy Items
+                                  </Label>
+                                  <p className="text-sm text-muted-foreground">
+                                    Includes: sofa beds, appliances, marble/glass, treadmills, sectionals
+                                  </p>
+                                </div>
                               </div>
-                              <p className="text-sm text-muted-foreground">
-                                Based on your detected items
-                              </p>
+                              <Switch
+                                id="heavy-item"
+                                checked={heavyItem}
+                                onCheckedChange={setHeavyItem}
+                                data-testid="switch-heavy-item"
+                              />
                             </div>
+                            {heavyItem && (
+                              <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                                <p className="text-sm font-semibold text-primary">+$15 Heavy Item Fee</p>
+                              </div>
+                            )}
                           </div>
                         )}
-
-                        <div className="border-t pt-6">
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <Weight className="w-5 h-5 text-muted-foreground" />
-                              <div>
-                                <Label htmlFor="heavy-item" className="text-base font-semibold">
-                                  Heavy Items
-                                </Label>
-                                <p className="text-sm text-muted-foreground">
-                                  Includes: sofa beds, appliances, marble/glass, treadmills, sectionals
-                                </p>
-                              </div>
-                            </div>
-                            <Switch
-                              id="heavy-item"
-                              checked={heavyItem}
-                              onCheckedChange={setHeavyItem}
-                              data-testid="switch-heavy-item"
-                            />
-                          </div>
-                          {heavyItem && (
-                            <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                              <p className="text-sm font-semibold text-primary">+$15 Heavy Item Fee</p>
-                            </div>
-                          )}
-                        </div>
 
                         <div className="border-t pt-6">
                           <Label className="text-base font-semibold mb-2 block flex items-center gap-2">
