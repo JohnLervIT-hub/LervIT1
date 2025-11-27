@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { GoogleMap, Marker, Polyline, InfoWindow, TrafficLayer, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer, useJsApiLoader } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Package, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Package, Navigation, Clock, Route } from "lucide-react";
 import { Link } from "wouter";
 
 interface LocationData {
@@ -47,25 +47,87 @@ export default function TrackTrip() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<'pickup' | 'dropoff' | 'mover' | null>(null);
+  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
 
-  // Google Maps is already loaded globally in App.tsx
-  // Still use useJsApiLoader to handle loading state properly
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
   });
 
-  // Fetch location data with auto-refresh
   const { data: locationData, isLoading } = useQuery<LocationData>({
     queryKey: ["/api/bookings", bookingId, "location"],
-    refetchInterval: autoRefresh ? 5000 : false, // Refresh every 5 seconds
+    refetchInterval: autoRefresh ? 5000 : false,
   });
 
-  // Stop auto-refresh when trip is completed
   useEffect(() => {
     if (locationData?.status === "completed" || locationData?.status === "cancelled") {
       setAutoRefresh(false);
     }
   }, [locationData?.status]);
+
+  // Calculate driving directions when location data changes
+  useEffect(() => {
+    if (!isLoaded || !locationData) return;
+
+    const directionsService = new google.maps.DirectionsService();
+
+    // Determine origin based on mover's current location or pickup
+    const origin = locationData.currentLocation 
+      ? { lat: locationData.currentLocation.latitude, lng: locationData.currentLocation.longitude }
+      : { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude };
+
+    // If mover has current location, route from mover to pickup to dropoff
+    // Otherwise, route from pickup to dropoff
+    if (locationData.currentLocation) {
+      // Mover is on the way - show route from mover to dropoff via pickup
+      directionsService.route(
+        {
+          origin: origin,
+          destination: { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude },
+          waypoints: [
+            { location: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude }, stopover: true }
+          ],
+          travelMode: google.maps.TravelMode.DRIVING,
+          optimizeWaypoints: false,
+        },
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            setDirections(result);
+            // Calculate total distance and duration
+            let totalDistance = 0;
+            let totalDuration = 0;
+            result.routes[0].legs.forEach(leg => {
+              totalDistance += leg.distance?.value || 0;
+              totalDuration += leg.duration?.value || 0;
+            });
+            setRouteInfo({
+              distance: (totalDistance / 1000).toFixed(1) + ' km',
+              duration: Math.ceil(totalDuration / 60) + ' min',
+            });
+          }
+        }
+      );
+    } else {
+      // No mover location yet - show route from pickup to dropoff
+      directionsService.route(
+        {
+          origin: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude },
+          destination: { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude },
+          travelMode: google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            setDirections(result);
+            const leg = result.routes[0].legs[0];
+            setRouteInfo({
+              distance: leg.distance?.text || '',
+              duration: leg.duration?.text || '',
+            });
+          }
+        }
+      );
+    }
+  }, [isLoaded, locationData]);
 
   // Update map bounds when location changes
   useEffect(() => {
@@ -81,7 +143,7 @@ export default function TrackTrip() {
         });
       }
       
-      map.fitBounds(bounds, 50); // 50px padding
+      map.fitBounds(bounds, 50);
     }
   }, [map, locationData]);
 
@@ -115,22 +177,10 @@ export default function TrackTrip() {
   const dropoff = locationData.dropoff;
   const currentLocation = locationData.currentLocation;
 
-  // Calculate map center
   const center = {
     lat: (pickup.latitude + dropoff.latitude) / 2,
     lng: (pickup.longitude + dropoff.longitude) / 2,
   };
-
-  // Create route line coordinates
-  const routeCoordinates: google.maps.LatLngLiteral[] = [
-    { lat: pickup.latitude, lng: pickup.longitude },
-  ];
-  
-  if (currentLocation) {
-    routeCoordinates.push({ lat: currentLocation.latitude, lng: currentLocation.longitude });
-  }
-  
-  routeCoordinates.push({ lat: dropoff.latitude, lng: dropoff.longitude });
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -152,6 +202,31 @@ export default function TrackTrip() {
       </div>
 
       <div className="max-w-6xl mx-auto p-4 space-y-4">
+        {/* Route Info Card */}
+        {routeInfo && (
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-around">
+                <div className="flex items-center gap-2">
+                  <Route className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Distance</p>
+                    <p className="font-semibold text-lg" data-testid="text-route-distance">{routeInfo.distance}</p>
+                  </div>
+                </div>
+                <div className="w-px h-10 bg-border" />
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">ETA</p>
+                    <p className="font-semibold text-lg" data-testid="text-route-duration">{routeInfo.duration}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Location Info Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
@@ -181,25 +256,28 @@ export default function TrackTrip() {
 
         {/* Current Location Status */}
         {currentLocation && (
-          <Card>
+          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="bg-primary/10 p-2 rounded-full">
-                  <Navigation className="h-5 w-5 text-primary" />
+                <div className="bg-green-500/20 p-2 rounded-full">
+                  <Navigation className="h-5 w-5 text-green-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium">Mover is on the way</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="font-medium text-green-800 dark:text-green-200">Mover is on the way!</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">
                     Last updated: {new Date(currentLocation.updatedAt).toLocaleTimeString()}
                   </p>
                 </div>
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" data-testid="indicator-live"></div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" data-testid="indicator-live"></div>
+                  <span className="text-sm font-medium text-green-600">LIVE</span>
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Google Map */}
+        {/* Google Map with Driving Directions */}
         <Card>
           <CardContent className="p-0">
             <div className="h-[500px] w-full relative overflow-hidden rounded-lg" data-testid="map-container">
@@ -210,6 +288,21 @@ export default function TrackTrip() {
                 options={mapOptions}
                 onLoad={onMapLoad}
               >
+                {/* Render driving directions */}
+                {directions && (
+                  <DirectionsRenderer
+                    directions={directions}
+                    options={{
+                      suppressMarkers: true,
+                      polylineOptions: {
+                        strokeColor: "#3b82f6",
+                        strokeWeight: 5,
+                        strokeOpacity: 0.8,
+                      },
+                    }}
+                  />
+                )}
+
                 {/* Pickup marker (green) */}
                 <Marker
                   position={{ lat: pickup.latitude, lng: pickup.longitude }}
@@ -252,14 +345,15 @@ export default function TrackTrip() {
                   </InfoWindow>
                 )}
 
-                {/* Current location marker (blue) */}
+                {/* Current mover location marker (blue truck icon) */}
                 {currentLocation && (
                   <>
                     <Marker
                       key={`mover-${currentLocation.latitude}-${currentLocation.longitude}`}
                       position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
                       icon={{
-                        url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                        url: "https://maps.google.com/mapfiles/ms/icons/truck.png",
+                        scaledSize: new google.maps.Size(40, 40),
                       }}
                       onClick={() => setSelectedMarker('mover')}
                       data-testid="marker-mover"
@@ -278,25 +372,6 @@ export default function TrackTrip() {
                   </>
                 )}
 
-                {/* Route line */}
-                <Polyline
-                  path={routeCoordinates}
-                  options={{
-                    strokeColor: "#3b82f6",
-                    strokeOpacity: 0.7,
-                    strokeWeight: 3,
-                    icons: [{
-                      icon: {
-                        path: "M 0,-1 0,1",
-                        strokeOpacity: 1,
-                        scale: 3,
-                      },
-                      offset: "0",
-                      repeat: "20px",
-                    }],
-                  }}
-                />
-
                 {/* Real-time traffic layer */}
                 <TrafficLayer />
               </GoogleMap>
@@ -313,7 +388,7 @@ export default function TrackTrip() {
                   ? "Your move has been completed!" 
                   : locationData.status === "pending"
                   ? "Waiting for mover to accept..."
-                  : locationData.status === "accepted"
+                  : locationData.status === "confirmed"
                   ? "Mover has accepted. Trip will start soon."
                   : "Trip status: " + locationData.status}
               </p>
