@@ -1439,9 +1439,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
-      // Check if booking is in valid state for payment
-      if (booking.status !== 'confirmed') {
-        return res.status(400).json({ error: "Booking must be confirmed before payment" });
+      // Check if booking is in valid state for payment (pending or confirmed)
+      if (booking.status !== 'pending' && booking.status !== 'confirmed') {
+        return res.status(400).json({ error: "Booking must be pending or confirmed for payment" });
       }
       
       // Check if already paid
