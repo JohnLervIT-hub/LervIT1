@@ -149,17 +149,25 @@ export default function RequestMove() {
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
+      console.log('[Booking] Submitting booking data:', JSON.stringify(bookingData, null, 2));
       const res = await apiRequest("POST", "/api/bookings", bookingData);
-      return await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('[Booking] Server returned error:', data);
+        throw new Error(data.error || 'Failed to create booking');
+      }
+      console.log('[Booking] Booking created successfully:', data.id);
+      return data;
     },
     onSuccess: (data) => {
       setCreatedBooking(data);
       setShowSuccessDialog(true);
     },
-    onError: () => {
+    onError: (error: Error) => {
+      console.error('[Booking] Mutation error:', error);
       toast({
-        title: "Error",
-        description: "Failed to create booking. Please try again.",
+        title: "Booking Failed",
+        description: error.message || "Failed to create booking. Please try again.",
         variant: "destructive",
       });
     },
