@@ -47,11 +47,14 @@ const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
 
     setIsProcessing(true);
 
-    const { error } = await stripe.confirmPayment({
+    // Use redirect: 'if_required' to handle payment inline without redirect
+    // This avoids cross-origin navigation errors in iframes
+    const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/my-bookings`,
       },
+      redirect: 'if_required',
     });
 
     setIsProcessing(false);
@@ -62,14 +65,27 @@ const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
         description: error.message,
         variant: "destructive",
       });
-    } else {
-      // Payment succeeded - update will come via webhook
+    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+      // Payment succeeded
       toast({
         title: "Payment Successful!",
         description: "Thank you! Your payment has been processed.",
       });
       queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
       setTimeout(() => setLocation("/my-bookings"), 1500);
+    } else if (paymentIntent && paymentIntent.status === 'processing') {
+      toast({
+        title: "Payment Processing",
+        description: "Your payment is being processed. We'll update you shortly.",
+      });
+      setTimeout(() => setLocation("/my-bookings"), 1500);
+    } else {
+      // Handle other statuses
+      toast({
+        title: "Payment Status",
+        description: `Payment status: ${paymentIntent?.status || 'unknown'}`,
+      });
     }
   };
 
