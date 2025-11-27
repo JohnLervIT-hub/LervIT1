@@ -128,14 +128,29 @@ export default function Payment() {
 
     // Create payment intent when component loads
     apiRequest("POST", `/api/bookings/${bookingId}/create-payment-intent`, {})
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        const data = await res.json();
+        
+        if (!res.ok) {
+          // Check if payment was already completed
+          if (data.alreadyPaid) {
+            // Invalidate booking cache to refresh status
+            queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
+            queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+            // Redirect to my-bookings
+            setLocation("/my-bookings");
+            return;
+          }
+          console.error("Payment intent error:", data.error);
+          return;
+        }
+        
         setClientSecret(data.clientSecret);
       })
       .catch((error) => {
         console.error("Error creating payment intent:", error);
       });
-  }, [bookingId, user]);
+  }, [bookingId, user, setLocation]);
 
   if (!user || !bookingId) {
     return (

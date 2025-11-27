@@ -1453,32 +1453,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create or retrieve payment intent
       let paymentIntent;
+      let needsNewPaymentIntent = false;
       
       if (booking.stripePaymentIntentId) {
         // Retrieve existing payment intent
         try {
           paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+          
+          // Check if payment intent is in a terminal state
+          if (paymentIntent.status === 'succeeded') {
+            // Payment already succeeded - update booking and return
+            await storage.updateBooking(bookingId, { paymentStatus: 'succeeded' });
+            return res.status(400).json({ 
+              error: "Payment already completed",
+              alreadyPaid: true,
+              status: 'succeeded'
+            });
+          } else if (paymentIntent.status === 'canceled') {
+            // Canceled - need a new payment intent
+            needsNewPaymentIntent = true;
+          }
+          // Other statuses like 'requires_payment_method', 'processing' can be reused
         } catch (error) {
           // If payment intent doesn't exist, create a new one
-          paymentIntent = await stripe.paymentIntents.create({
-            amount: amountInCents,
-            currency: "cad",
-            metadata: {
-              bookingId: booking.id,
-              customerId: user.id,
-              customerName: user.name,
-            },
-            description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
-          });
-          
-          // Update booking with payment intent ID
-          await storage.updateBooking(bookingId, {
-            stripePaymentIntentId: paymentIntent.id,
-            paymentStatus: 'pending',
-          });
+          needsNewPaymentIntent = true;
         }
       } else {
-        // Create new payment intent
+        needsNewPaymentIntent = true;
+      }
+      
+      // Create new payment intent if needed
+      if (needsNewPaymentIntent) {
         paymentIntent = await stripe.paymentIntents.create({
           amount: amountInCents,
           currency: "cad",
@@ -1490,7 +1495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
         });
         
-        // Update booking with payment intent ID
+        // Update booking with new payment intent ID
         await storage.updateBooking(bookingId, {
           stripePaymentIntentId: paymentIntent.id,
           paymentStatus: 'pending',
@@ -1498,8 +1503,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json({ 
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
+        clientSecret: paymentIntent!.client_secret,
+        paymentIntentId: paymentIntent!.id,
       });
     } catch (error: any) {
       console.error("Error creating payment intent:", error);
