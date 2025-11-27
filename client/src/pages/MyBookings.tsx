@@ -428,15 +428,16 @@ export default function MyBookings() {
                         Track Trip Live
                       </Button>
                     )}
-                    {booking.status === "confirmed" && booking.paymentStatus !== "succeeded" && booking.price && (
+                    {(booking.status === "confirmed" || booking.status === "pending") && booking.paymentStatus !== "succeeded" && booking.price && (
                       <Button
                         variant="default"
                         size="sm"
                         onClick={() => setLocation(`/payment/${booking.id}`)}
+                        className="bg-orange-500 hover:bg-orange-600"
                         data-testid={`button-pay-${booking.id}`}
                       >
                         <CreditCard className="w-4 h-4 mr-2" />
-                        Pay Now ${booking.price}
+                        Pay Now ${parseFloat(booking.price).toFixed(2)} CAD
                       </Button>
                     )}
                     {booking.status === "pending" && (

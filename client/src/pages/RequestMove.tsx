@@ -17,7 +17,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -605,9 +605,9 @@ export default function RequestMove() {
                 <CheckCircle className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-2xl">Booking Created Successfully!</DialogTitle>
+                <DialogTitle className="text-2xl">Booking Created!</DialogTitle>
                 <DialogDescription>
-                  We've calculated your move details and notified nearby movers
+                  Complete payment to notify nearby movers and get matched
                 </DialogDescription>
               </div>
             </div>
@@ -631,13 +631,6 @@ export default function RequestMove() {
                     <span className="font-medium">Load Size</span>
                   </div>
                   <span className="font-semibold capitalize">{createdBooking.loadSize}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm">
-                    <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">Movers Notified</span>
-                  </div>
-                  <span className="font-semibold">{createdBooking.notifiedMovers} nearby movers</span>
                 </div>
               </div>
 
@@ -740,14 +733,15 @@ export default function RequestMove() {
                 )}
               </div>
 
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                <p className="text-sm text-primary font-medium">
-                  ⏱️ Movers have 10 minutes to accept. You'll be notified when one accepts!
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+                <p className="text-sm text-orange-600 font-medium">
+                  Complete payment now to notify movers. After payment, movers have 10 minutes to accept your job!
                 </p>
               </div>
 
               <div className="flex gap-3">
                 <Button
+                  variant="outline"
                   onClick={() => {
                     setShowSuccessDialog(false);
                     setLocation("/my-bookings");
@@ -755,7 +749,18 @@ export default function RequestMove() {
                   className="flex-1"
                   data-testid="button-view-bookings"
                 >
-                  View My Bookings
+                  Pay Later
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowSuccessDialog(false);
+                    setLocation(`/payment/${createdBooking.id}`);
+                  }}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                  data-testid="button-proceed-payment"
+                >
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Proceed to Payment
                 </Button>
               </div>
             </div>
