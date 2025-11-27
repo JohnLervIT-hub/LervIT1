@@ -66,10 +66,18 @@ const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
         variant: "destructive",
       });
     } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      // Payment succeeded
+      // Payment succeeded - update booking status immediately
+      try {
+        await apiRequest("POST", `/api/bookings/${bookingId}/confirm-payment`, {
+          paymentIntentId: paymentIntent.id
+        });
+      } catch (err) {
+        console.error("Failed to confirm payment status:", err);
+      }
+      
       toast({
         title: "Payment Successful!",
-        description: "Thank you! Your payment has been processed.",
+        description: "Thank you! Your payment has been processed. Finding movers now...",
       });
       queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });

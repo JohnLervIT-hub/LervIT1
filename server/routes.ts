@@ -1514,6 +1514,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Confirm payment (called after successful inline payment)
+  app.post("/api/bookings/:id/confirm-payment", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      const { paymentIntentId } = req.body;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Verify user owns this booking
+      if (booking.customerId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Verify payment intent ID matches
+      if (booking.stripePaymentIntentId !== paymentIntentId) {
+        return res.status(400).json({ error: "Payment intent mismatch" });
+      }
+      
+      // Verify payment with Stripe
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ error: "Payment not yet completed" });
+      }
+      
+      // Check if already processed
+      if (booking.paymentStatus === 'succeeded') {
+        return res.json({ success: true, message: "Payment already confirmed" });
+      }
+      
+      // Update booking payment status
+      await storage.updateBooking(bookingId, {
+        paymentStatus: 'succeeded',
+        status: 'confirmed',
+      });
+      
+      console.log(`[Payment] Confirmed payment for booking ${bookingId}`);
+      
+      // Send confirmation emails
+      const customer = await storage.getUser(booking.customerId);
+      if (customer) {
+        try {
+          await notificationService.sendBookingConfirmation(customer, booking);
+          await notificationService.sendPaymentReceipt(customer, booking, booking.price || '0');
+          console.log(`[Payment] Sent confirmation emails to ${customer.email}`);
+        } catch (emailErr) {
+          console.error("[Payment] Failed to send emails:", emailErr);
+        }
+      }
+      
+      // Find and notify nearby movers
+      try {
+        const allMovers = await storage.getMovers();
+        const availableMovers = allMovers.filter(m => m.isAvailable);
+        
+        if (availableMovers.length > 0) {
+          // Notify up to 5 nearest movers
+          const moversToNotify = availableMovers.slice(0, 5);
+          for (const mover of moversToNotify) {
+            await storage.createJobNotification({
+              moverId: mover.userId,
+              bookingId: booking.id,
+              status: 'pending',
+              estimatedDistance: 0,
+              estimatedEarnings: booking.price || '0',
+            });
+          }
+          console.log(`[Payment] Notified ${moversToNotify.length} movers about job`);
+        }
+      } catch (moverErr) {
+        console.error("[Payment] Failed to notify movers:", moverErr);
+      }
+      
+      res.json({ success: true, message: "Payment confirmed" });
+    } catch (error: any) {
+      console.error("Error confirming payment:", error);
+      res.status(500).json({ error: "Failed to confirm payment" });
+    }
+  });
+
   // Get payment status for a booking
   app.get("/api/bookings/:id/payment-status", async (req: Request, res: Response) => {
     try {
