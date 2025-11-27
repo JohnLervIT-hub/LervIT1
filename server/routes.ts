@@ -1106,13 +1106,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notifiedAt: new Date(),
       } as any);
       
-      // Send booking confirmation to customer (mover matching happens after payment)
-      const customer = await storage.getUser(user.id);
-      if (customer) {
-        await notificationService.sendBookingConfirmation(customer, booking);
-      }
-      
-      // Note: Mover matching now happens AFTER payment succeeds (in Stripe webhook)
+      // Note: Confirmation email and mover matching happen AFTER payment succeeds (in Stripe webhook)
+      // Do NOT send booking confirmation here - booking is still pending payment
       res.json({
         ...booking,
         message: "Booking created. Please complete payment to find movers.",
@@ -1575,9 +1570,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentStatus: 'succeeded',
             });
             
-            // Send payment receipt email
+            // Send booking confirmation and payment receipt emails
             const customer = await storage.getUser(booking.customerId);
             if (customer) {
+              // NOW send booking confirmation (payment completed)
+              await notificationService.sendBookingConfirmation(customer, booking);
+              
+              // Also send payment receipt
               await notificationService.sendPaymentReceipt(
                 customer,
                 booking,
