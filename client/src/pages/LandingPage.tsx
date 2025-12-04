@@ -3,6 +3,15 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Accordion,
   AccordionContent,
@@ -31,11 +40,15 @@ import {
   Eye,
   Brain,
   Sparkles,
+  Menu,
+  X,
+  Calendar,
 } from "lucide-react";
 import { SiLinkedin, SiX, SiInstagram, SiFacebook } from "react-icons/si";
 
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,6 +62,8 @@ export default function LandingPage() {
               </div>
               <span className="text-xl font-bold">LervIT</span>
             </div>
+            
+            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-8">
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 How It Works
@@ -63,7 +78,9 @@ export default function LandingPage() {
                 For Movers
               </a>
             </div>
-            <div className="flex items-center gap-3">
+            
+            {/* Desktop Auth Buttons */}
+            <div className="hidden md:flex items-center gap-3">
               <Link href="/login">
                 <Button variant="ghost" size="sm" data-testid="button-login">
                   Log In
@@ -74,6 +91,84 @@ export default function LandingPage() {
                   Get Started
                 </Button>
               </Link>
+            </div>
+            
+            {/* Mobile: Book a Move CTA + Hamburger */}
+            <div className="flex md:hidden items-center gap-2">
+              <Link href="/request-move">
+                <Button size="sm" data-testid="button-mobile-book">
+                  Book a Move
+                </Button>
+              </Link>
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
+                    <Menu className="w-5 h-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-80">
+                  <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                        <Truck className="w-4 h-4 text-primary-foreground" />
+                      </div>
+                      LervIT
+                    </SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-8 space-y-6">
+                    <div className="space-y-4">
+                      <a 
+                        href="#how-it-works" 
+                        className="block text-lg font-medium hover:text-primary transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        How It Works
+                      </a>
+                      <a 
+                        href="#ai-technology" 
+                        className="block text-lg font-medium hover:text-primary transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        AI Technology
+                      </a>
+                      <a 
+                        href="#pricing" 
+                        className="block text-lg font-medium hover:text-primary transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Pricing
+                      </a>
+                      <a 
+                        href="#for-movers" 
+                        className="block text-lg font-medium hover:text-primary transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        For Movers
+                      </a>
+                    </div>
+                    <div className="border-t pt-6 space-y-3">
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="outline" className="w-full">
+                          Log In
+                        </Button>
+                      </Link>
+                      <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                        <Button className="w-full">
+                          Get Started
+                        </Button>
+                      </Link>
+                    </div>
+                    <div className="border-t pt-6">
+                      <p className="text-sm text-muted-foreground mb-2">Join 500+ Calgary movers</p>
+                      <Link href="/signup?role=mover" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="secondary" className="w-full gap-2">
+                          <Truck className="w-4 h-4" /> Become a Mover
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>
@@ -131,64 +226,71 @@ export default function LandingPage() {
               </div>
             </div>
             
-            {/* Hero Visual - AI Demo Preview */}
+            {/* Hero Right - Quick Booking Form */}
             <div className="relative">
+              {/* Quick Booking Form Card */}
               <div className="relative bg-card rounded-2xl border shadow-xl p-6 md:p-8">
                 <div className="absolute -top-3 -right-3">
                   <Badge className="bg-primary text-primary-foreground px-3 py-1">
-                    <Zap className="w-3 h-3 mr-1" /> Live Demo
+                    <Zap className="w-3 h-3 mr-1" /> Get Instant Quote
                   </Badge>
                 </div>
                 
-                {/* Simulated Photo Upload Area */}
-                <div className="bg-muted rounded-xl p-8 mb-6 text-center border-2 border-dashed border-muted-foreground/30">
-                  <Camera className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-sm text-muted-foreground">Upload a photo of your items</p>
+                <h3 className="text-xl font-semibold mb-6">Book Your Move</h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="pickup" className="text-sm font-medium flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-primary" /> Pickup Location
+                    </Label>
+                    <Input 
+                      id="pickup"
+                      placeholder="Enter pickup address in Calgary"
+                      className="h-12"
+                      data-testid="input-hero-pickup"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="dropoff" className="text-sm font-medium flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-destructive" /> Dropoff Location
+                    </Label>
+                    <Input 
+                      id="dropoff"
+                      placeholder="Enter dropoff address"
+                      className="h-12"
+                      data-testid="input-hero-dropoff"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="date" className="text-sm font-medium flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" /> Moving Date
+                    </Label>
+                    <Input 
+                      id="date"
+                      type="date"
+                      className="h-12"
+                      data-testid="input-hero-date"
+                    />
+                  </div>
+                  
+                  <Link href="/request-move">
+                    <Button size="lg" className="w-full gap-2 mt-2" data-testid="button-hero-get-price">
+                      Get Price <ArrowRight className="w-5 h-5" />
+                    </Button>
+                  </Link>
                 </div>
                 
-                {/* AI Detection Results */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Brain className="w-4 h-4 text-primary" />
-                    AI Detection Results
-                  </div>
-                  
-                  <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Package className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                          <div className="font-medium">3-Seater Sofa</div>
-                          <div className="text-xs text-muted-foreground">200cm x 90cm x 85cm</div>
-                        </div>
-                      </div>
-                      <Badge variant="secondary">45 kg</Badge>
+                {/* AI Feature Highlight */}
+                <div className="mt-6 pt-4 border-t">
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Camera className="w-5 h-5 text-primary" />
                     </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-                          <Package className="w-5 h-5 text-accent-foreground" />
-                        </div>
-                        <div>
-                          <div className="font-medium">Queen Bed Frame</div>
-                          <div className="text-xs text-muted-foreground">160cm x 200cm x 45cm</div>
-                        </div>
-                      </div>
-                      <Badge variant="secondary">35 kg</Badge>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-3 border-t">
                     <div>
-                      <div className="text-sm text-muted-foreground">Recommended</div>
-                      <div className="font-semibold">Large Van + 2 Movers</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-muted-foreground">Estimated</div>
-                      <div className="text-xl font-bold text-primary">$189 CAD</div>
+                      <div className="font-medium">AI Photo Detection</div>
+                      <div className="text-xs text-muted-foreground">Upload photos for exact pricing</div>
                     </div>
                   </div>
                 </div>
@@ -201,8 +303,23 @@ export default function LandingPage() {
                     <CheckCircle2 className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
-                    <div className="font-medium text-sm">98% Accuracy</div>
-                    <div className="text-xs text-muted-foreground">AI Detection Rate</div>
+                    <div className="font-medium text-sm">98% AI Accuracy</div>
+                    <div className="text-xs text-muted-foreground">Precise Quotes</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Floating Mover Badge */}
+              <div className="absolute -top-2 -left-2 bg-card rounded-xl border shadow-lg p-3 hidden lg:block">
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-2">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-xs font-bold">JD</div>
+                    <div className="w-8 h-8 rounded-full bg-accent/20 border-2 border-background flex items-center justify-center text-xs font-bold">MK</div>
+                    <div className="w-8 h-8 rounded-full bg-secondary border-2 border-background flex items-center justify-center text-xs font-bold">+8</div>
+                  </div>
+                  <div className="text-xs">
+                    <div className="font-medium">10 movers</div>
+                    <div className="text-muted-foreground">near you</div>
                   </div>
                 </div>
               </div>
