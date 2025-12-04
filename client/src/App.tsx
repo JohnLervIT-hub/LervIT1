@@ -36,6 +36,7 @@ import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
 import AdminVerificationDashboard from "@/pages/AdminVerificationDashboard";
 import Payment from "@/pages/Payment";
 import TrackTrip from "@/pages/TrackTrip";
+import LandingPage from "@/pages/LandingPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -43,6 +44,7 @@ function Router() {
     <Switch>
       {/* Public Routes */}
       <Route path="/" component={Home} />
+      <Route path="/website" component={LandingPage} />
       <Route path="/demo" component={ProximityDemo} />
       <Route path="/lifecycle" component={LifecycleDemo} />
       <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
