@@ -45,6 +45,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { SiLinkedin, SiX, SiInstagram, SiFacebook } from "react-icons/si";
+import heroImage from "@assets/generated_images/calgary_mover_loading_furniture.png";
 
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
@@ -176,13 +177,24 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 md:pt-40 md:pb-32 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
-        <div className="absolute top-20 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+        {/* Background Image - All Breakpoints */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${heroImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        >
+          {/* Gradient overlay for text readability - stronger on mobile */}
+          <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/90 to-background/80 lg:bg-gradient-to-r lg:from-background lg:via-background/95 lg:to-background/40" />
+        </div>
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="text-center lg:text-left">
+          {/* Asymmetric Layout: 60% content, 40% form */}
+          <div className="grid lg:grid-cols-5 gap-12 items-center">
+            {/* Left Content - 60% on desktop */}
+            <div className="lg:col-span-3 text-center lg:text-left">
               <Badge className="mb-6 px-4 py-2" variant="secondary">
                 <Sparkles className="w-4 h-4 mr-2" />
                 AI-Powered Moving Platform
@@ -226,8 +238,8 @@ export default function LandingPage() {
               </div>
             </div>
             
-            {/* Hero Right - Quick Booking Form */}
-            <div className="relative">
+            {/* Hero Right - Quick Booking Form - 40% on desktop */}
+            <div className="lg:col-span-2 relative">
               {/* Quick Booking Form Card */}
               <div className="relative bg-card rounded-2xl border shadow-xl p-6 md:p-8">
                 <div className="absolute -top-3 -right-3">
