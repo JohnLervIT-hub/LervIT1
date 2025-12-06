@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -3239,23 +3239,27 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       
       // Find bookings with NULL/empty images OR old /uploads/ paths (which don't persist after deploy)
-      const allBookings = await storage.getBookings();
-      const brokenBookings = allBookings.filter(b => {
+      const allBookings = await storage.getAllBookings();
+      const brokenBookings = allBookings.filter((b: any) => {
         if (!b.images || b.images.length === 0) return true;
         // Check if any image uses old /uploads/ path (not cloud storage)
-        return b.images.some(img => img.startsWith('/uploads/') && !img.startsWith('/objects/'));
+        return b.images.some((img: string) => img.startsWith('/uploads/') && !img.startsWith('/objects/'));
       });
       
       if (brokenBookings.length === 0) {
         return res.json({ message: "No broken bookings found", deleted: 0 });
       }
       
-      const bookingIds = brokenBookings.map(b => b.id);
+      const bookingIds = brokenBookings.map((b: any) => b.id);
       
-      // Delete related records first (FK constraints)
+      // Delete related records first (FK constraints) - order matters!
       for (const bookingId of bookingIds) {
+        // Delete from all tables with FK to bookings
         await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
-        // Note: messages and reviews tables would also need cleanup if they have FK
+        await db.delete(messages).where(eq(messages.bookingId, bookingId));
+        await db.delete(reviews).where(eq(reviews.bookingId, bookingId));
+        await db.delete(identifiedItems).where(eq(identifiedItems.bookingId, bookingId));
+        await db.delete(aiRuns).where(eq(aiRuns.bookingId, bookingId));
       }
       
       // Delete the bookings
