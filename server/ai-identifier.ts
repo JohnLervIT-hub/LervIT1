@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import * as fs from "fs";
 import * as path from "path";
 import type { IdentifiedItem, InsertIdentifiedItem, InsertAiRun } from "@shared/schema";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 // Check for OpenAI API key availability
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -45,6 +46,41 @@ function imageToBase64DataUrl(imagePath: string): string {
   console.log('[AI Identifier] Image converted to base64, size:', Math.round(base64.length / 1024), 'KB');
   
   return `data:${mimeType};base64,${base64}`;
+}
+
+/**
+ * Download image from Object Storage and convert to base64 data URL
+ */
+async function objectStorageImageToBase64(imagePath: string): Promise<string> {
+  console.log('[AI Identifier] Downloading image from Object Storage:', imagePath);
+  
+  const objectStorageService = new ObjectStorageService();
+  
+  try {
+    const objectFile = await objectStorageService.getObjectEntityFile(imagePath);
+    
+    // Download the file content
+    const [buffer] = await objectFile.download();
+    const base64 = buffer.toString('base64');
+    
+    // Determine mime type from extension
+    const ext = path.extname(imagePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    const mimeType = mimeTypes[ext] || 'image/jpeg';
+    
+    console.log('[AI Identifier] Object Storage image converted to base64, size:', Math.round(base64.length / 1024), 'KB');
+    
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error: any) {
+    console.error('[AI Identifier] Failed to download from Object Storage:', error.message);
+    throw new Error(`Failed to download image from Object Storage: ${error.message}`);
+  }
 }
 
 interface ProductSpec {
@@ -105,7 +141,10 @@ export async function identifyItemFromPhoto(photoUrl: string): Promise<{
   try {
     // Convert local image to base64 data URL for OpenAI
     let imageUrl = photoUrl;
-    if (photoUrl.startsWith('/uploads/')) {
+    if (photoUrl.startsWith('/objects/')) {
+      console.log('[AI Identifier] Converting Object Storage image to base64...');
+      imageUrl = await objectStorageImageToBase64(photoUrl);
+    } else if (photoUrl.startsWith('/uploads/')) {
       console.log('[AI Identifier] Converting local image to base64...');
       imageUrl = imageToBase64DataUrl(photoUrl);
     }
