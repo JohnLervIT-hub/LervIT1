@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -380,13 +380,22 @@ export default function MyBookings() {
                       </p>
                       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
                         {booking.images.map((imageUrl, index) => (
-                          <div key={index} className="relative aspect-square rounded-lg overflow-hidden border hover-elevate">
+                          <div key={index} className="relative aspect-square rounded-lg overflow-hidden border hover-elevate bg-muted">
                             <img
                               src={imageUrl}
                               alt={`Item ${index + 1}`}
                               className="w-full h-full object-cover"
                               data-testid={`image-item-${booking.id}-${index}`}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const placeholder = target.nextElementSibling as HTMLElement;
+                                if (placeholder) placeholder.style.display = 'flex';
+                              }}
                             />
+                            <div className="absolute inset-0 hidden items-center justify-center bg-muted">
+                              <ImageOff className="w-6 h-6 text-muted-foreground" />
+                            </div>
                           </div>
                         ))}
                       </div>

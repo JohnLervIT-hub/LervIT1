@@ -2051,7 +2051,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No images uploaded" });
       }
       
-      const imageUrls = req.files.map(file => `/uploads/${file.filename}`);
+      // Get user ID for ownership (use session user or default)
+      const userId = req.session?.userId || 'anonymous';
+      
+      // Upload to Object Storage for production persistence
+      const objectStorageService = new ObjectStorageService();
+      const imageUrls: string[] = [];
+      
+      for (const file of req.files as Express.Multer.File[]) {
+        try {
+          // Read the file from local disk (multer saves it temporarily)
+          const fileBuffer = fs.readFileSync(file.path);
+          
+          // Upload to cloud storage
+          const cloudPath = await objectStorageService.uploadBuffer(
+            fileBuffer,
+            file.originalname,
+            file.mimetype,
+            userId
+          );
+          
+          imageUrls.push(cloudPath);
+          
+          // Clean up local file after successful upload
+          fs.unlinkSync(file.path);
+        } catch (uploadError) {
+          console.error('Object Storage upload failed, using local fallback:', uploadError);
+          // Fallback to local path if Object Storage fails
+          imageUrls.push(`/uploads/${file.filename}`);
+        }
+      }
+      
       res.json({ urls: imageUrls });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Upload failed" });
