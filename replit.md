@@ -13,6 +13,12 @@ Preferred communication style: Simple, everyday language.
 ### UI/UX Decisions
 The platform features a mobile-first design using shadcn/ui (Radix UI-based) components, ensuring a consistent and responsive user experience. It includes role-based navigation, protected routes, transparent pricing breakdowns for customers, and an intuitive booking flow. A comprehensive typography system and responsive layout improvements have been implemented across the platform for enhanced visual consistency and user experience.
 
+**Premium Admin Portal:** The admin dashboard features investor-ready premium styling with gradient headers, colorful stat cards, and polished visual hierarchy. Key features include:
+- **AdminNav:** Gradient blue/indigo navigation bar with shield icon branding and active state highlighting
+- **AdminDashboard:** Gradient stat cards for users, movers, completed moves, and revenue with hover effects
+- **AdminVerificationDashboard:** Blue gradient header with stats (Total Drivers, Approved, Pending, Needs Attention)
+- **AdminSupportDashboard:** Purple gradient header with ticket stats (Total, Open, In Progress, Resolved)
+
 ### Technical Implementations
 *   **Frontend:** Built with React 18+ (TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS). Authentication state is managed via AuthContext, and server state with React Query.
 *   **Backend:** Utilizes Express.js (Node.js, TypeScript, ESM) with a RESTful API design, Zod for validation, and custom SHA-256 hashing for authentication.
