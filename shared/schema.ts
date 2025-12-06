@@ -16,6 +16,11 @@ export const users = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
+  // Account lockout security fields
+  failedLoginAttempts: integer("failed_login_attempts").default(0).notNull(),
+  lockedUntil: timestamp("locked_until"),
+  lockedByAdmin: boolean("locked_by_admin").default(false).notNull(),
+  lockReason: text("lock_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
