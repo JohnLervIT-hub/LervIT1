@@ -337,7 +337,7 @@ export default function MoverVerification() {
     );
   }
 
-  const approvedCount = items.filter(item => item.status === 'approved').length;
+  const approvedCount = items.filter(item => item.status?.toLowerCase() === 'approved').length;
   const totalRequired = VERIFICATION_ITEMS.filter(item => item.required).length;
   const progressPercentage = (approvedCount / totalRequired) * 100;
 
