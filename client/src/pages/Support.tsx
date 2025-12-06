@@ -29,7 +29,6 @@ import {
   Sparkles,
   Phone,
   Mail,
-  Headphones,
   ChevronRight,
   Loader2
 } from "lucide-react";
@@ -245,34 +244,26 @@ export default function Support() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-background to-muted/20">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Hero Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-accent/5 to-transparent rounded-2xl p-6 sm:p-8 mb-8">
-          <div className="absolute -right-16 -top-16 w-48 h-48 bg-primary/10 rounded-full blur-3xl" />
-          <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-2xl" />
+    <div className="min-h-screen pt-20 pb-12 bg-background">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        {/* Page Header */}
+        <div className="py-6 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1" data-testid="text-support-title">
+            Help & Support
+          </h1>
+          <p className="text-muted-foreground">
+            Find answers or get in touch with our team
+          </p>
           
-          <div className="relative text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Headphones className="w-8 h-8 text-primary-foreground" />
+          {/* Quick Contact */}
+          <div className="flex flex-wrap gap-3 mt-4">
+            <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full text-sm">
+              <Mail className="w-4 h-4 text-primary" />
+              <span>support@lervit.com</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold mb-2" data-testid="text-support-title">
-              Support & Help Center
-            </h1>
-            <p className="text-muted-foreground text-lg max-w-lg mx-auto">
-              Get answers to your questions or contact our friendly support team
-            </p>
-            
-            {/* Quick Contact */}
-            <div className="flex flex-wrap justify-center gap-4 mt-6">
-              <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm px-4 py-2 rounded-full border">
-                <Mail className="w-4 h-4 text-primary" />
-                <span className="text-sm">support@lervit.com</span>
-              </div>
-              <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm px-4 py-2 rounded-full border">
-                <Phone className="w-4 h-4 text-primary" />
-                <span className="text-sm">1-800-LERVIT</span>
-              </div>
+            <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full text-sm">
+              <Phone className="w-4 h-4 text-primary" />
+              <span>1-800-LERVIT</span>
             </div>
           </div>
         </div>

@@ -781,14 +781,15 @@ export default function RequestMove() {
         </DialogContent>
       </Dialog>
 
-      <div className="min-h-screen pt-24 pb-12 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">
+      <div className="min-h-screen pt-20 pb-12 bg-background">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        {/* Page Header */}
+        <div className="py-6 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1">
             Request a Move
           </h1>
           <p className="text-muted-foreground">
-            Fill in the details to get matched with available movers
+            Tell us what you need moved
           </p>
         </div>
 
@@ -829,9 +830,9 @@ export default function RequestMove() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid gap-6">
           {/* Main Form */}
-          <div className="lg:col-span-2">
+          <div>
             <Card>
               <CardHeader>
                 <h2 className="text-2xl font-bold">
@@ -1534,48 +1535,12 @@ export default function RequestMove() {
             </Card>
           </div>
 
-          {/* Live Pricing Sidebar - Desktop & Mobile */}
-          <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-24">
-              <PricingSummary 
-                breakdown={priceBreakdown}
-                isCalculating={isCalculatingPrice}
-                error={pricingError}
-                className="mb-6"
-              />
-              
-              {/* Show current selections summary below pricing */}
-              {priceBreakdown && (
-                <Card className="overflow-hidden">
-                  <div className="bg-muted/30 px-4 py-3 border-b">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your Selections</p>
-                  </div>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Load Size</span>
-                      <span className="text-sm font-medium">{loadSize.charAt(0).toUpperCase() + loadSize.slice(1)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Movers</span>
-                      <span className="text-sm font-medium">{numberOfMovers}</span>
-                    </div>
-                    {heavyItem && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Heavy Items</span>
-                        <span className="text-sm font-medium text-amber-600">Yes</span>
-                      </div>
-                    )}
-                    {estimateDistance > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Distance</span>
-                        <span className="text-sm font-medium">{estimateDistance.toFixed(1)} km</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
+          {/* Live Pricing Summary */}
+          <PricingSummary 
+            breakdown={priceBreakdown}
+            isCalculating={isCalculatingPrice}
+            error={pricingError}
+          />
         </div>
       </div>
     </div>

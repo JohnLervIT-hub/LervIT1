@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, Eye, EyeOff } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -27,7 +27,6 @@ export default function Signup() {
   const [role, setRole] = useState("customer");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect after successful signup when user state updates
   useEffect(() => {
     if (user && !isLoading) {
       if (user.role === "customer") {
@@ -51,7 +50,6 @@ export default function Signup() {
         title: "Account created!",
         description: "Welcome to LervIT!",
       });
-      // Redirect handled by useEffect
     } catch (error) {
       toast({
         variant: "destructive",
@@ -63,21 +61,21 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
+        <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-              <Truck className="w-8 h-8 text-primary-foreground" />
+            <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
+              <Truck className="w-7 h-7 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Join LervIT</h1>
-          <p className="text-muted-foreground">
-            Create an account to get started
+          <h1 className="text-2xl font-bold tracking-tight">Create an account</h1>
+          <p className="text-muted-foreground text-sm">
+            Join LervIT to get moving
           </p>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
               <Input
@@ -86,6 +84,7 @@ export default function Signup() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                className="h-11"
                 data-testid="input-name"
               />
             </div>
@@ -94,21 +93,23 @@ export default function Signup() {
               <Input
                 id="email"
                 type="email"
-                placeholder="john.doe@example.com"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="h-11"
                 data-testid="input-email"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+              <Label htmlFor="phone">Phone (optional)</Label>
               <Input
                 id="phone"
                 type="tel"
                 placeholder="(403) 555-1234"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                className="h-11"
                 data-testid="input-phone"
               />
             </div>
@@ -122,56 +123,58 @@ export default function Signup() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="h-11 pr-10"
                   data-testid="input-password"
-                  className="pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
                   data-testid="button-toggle-password"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">I want to</Label>
               <Select value={role} onValueChange={setRole}>
-                <SelectTrigger id="role" data-testid="select-role">
+                <SelectTrigger id="role" className="h-11" data-testid="select-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="customer">Find movers (Customer)</SelectItem>
-                  <SelectItem value="mover">Become a mover</SelectItem>
+                  <SelectItem value="customer">Find movers for my move</SelectItem>
+                  <SelectItem value="mover">Become a mover and earn</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter className="flex flex-col gap-4 pt-2">
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-11"
               disabled={isLoading}
               data-testid="button-signup"
             >
-              {isLoading ? "Creating account..." : "Create Account"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                "Create Account"
+              )}
             </Button>
             <div className="text-center text-sm">
               <span className="text-muted-foreground">Already have an account? </span>
               <button
                 type="button"
                 onClick={() => setLocation("/login")}
-                className="text-primary hover:underline"
+                className="text-primary font-medium hover:underline"
                 data-testid="link-login"
               >
-                Log in
+                Sign in
               </button>
             </div>
           </CardFooter>

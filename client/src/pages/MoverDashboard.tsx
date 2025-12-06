@@ -750,64 +750,63 @@ export default function MoverDashboard() {
     </Card>
   );
 
+  const firstName = user?.name?.split(' ')[0] || 'there';
+
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-muted/30">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">Mover Dashboard</h1>
-            <p className="text-muted-foreground text-lg">Manage your bookings and find new jobs</p>
-            
-            {!verificationStatus?.isComplete && (
-              <Alert className="mt-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Complete verification to go online and accept jobs.{" "}
-                  <button 
-                    type="button"
-                    className="text-primary hover:underline font-medium"
-                    onClick={() => {
-                      const tabsElement = document.querySelector('[value="verification"]');
-                      if (tabsElement instanceof HTMLElement) {
-                        tabsElement.click();
-                      }
-                    }}
-                  >
-                    Go to Verification
-                  </button>
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2" data-testid="toggle-availability">
-              <span className="text-sm font-medium hidden sm:inline">
-                {isVerificationLoading ? 'Loading...' : (mover?.isAvailable ? 'Online' : 'Offline')}
-              </span>
-              <Switch 
-                checked={mover?.isAvailable || false}
-                onCheckedChange={handleAvailabilityToggle}
-                disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
-                data-testid="switch-online-status"
-              />
-              {mover?.isAvailable && !isVerificationLoading && (
-                <Badge variant="default" className="bg-green-500 hover:bg-green-600 ml-1">
-                  Active
-                </Badge>
-              )}
+    <div className="min-h-screen pt-20 pb-12 bg-background">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        {/* Page Header */}
+        <div className="py-6 mb-2">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-1">Hey {firstName}!</h1>
+              <p className="text-muted-foreground">Manage your jobs and earnings</p>
             </div>
             
-            <Button
-              variant="outline"
-              onClick={() => setLocation("/mover-profile")}
-              className="gap-2"
-              data-testid="button-edit-profile"
-            >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Profile</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2" data-testid="toggle-availability">
+                <span className="text-sm font-medium">
+                  {isVerificationLoading ? '...' : (mover?.isAvailable ? 'Online' : 'Offline')}
+                </span>
+                <Switch 
+                  checked={mover?.isAvailable || false}
+                  onCheckedChange={handleAvailabilityToggle}
+                  disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
+                  data-testid="switch-online-status"
+                />
+              </div>
+              
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setLocation("/mover-profile")}
+                data-testid="button-edit-profile"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
+          
+          {!verificationStatus?.isComplete && (
+            <Alert className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Complete verification to go online.{" "}
+                <button 
+                  type="button"
+                  className="text-primary hover:underline font-medium"
+                  onClick={() => {
+                    const tabsElement = document.querySelector('[value="verification"]');
+                    if (tabsElement instanceof HTMLElement) {
+                      tabsElement.click();
+                    }
+                  }}
+                >
+                  Go to Verification
+                </button>
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
@@ -852,33 +851,29 @@ export default function MoverDashboard() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <Tabs defaultValue="available" className="space-y-6">
-          <TabsList className="grid w-full max-w-3xl grid-cols-4">
-            <TabsTrigger value="available" data-testid="tab-available" className="gap-2">
-              <span className="hidden sm:inline">Available</span>
-              <span className="sm:hidden">Jobs</span>
+        <Tabs defaultValue="available" className="space-y-4">
+          <TabsList className="w-full grid grid-cols-4 bg-muted/50 p-1">
+            <TabsTrigger value="available" data-testid="tab-available" className="gap-1 text-xs sm:text-sm">
+              Jobs
               {availableBookings && availableBookings.length > 0 && (
-                <Badge variant="secondary" className="ml-1 no-default-hover-elevate">
+                <Badge variant="secondary" className="ml-1 no-default-hover-elevate h-5 px-1.5 text-xs">
                   {availableBookings.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="my-bookings" data-testid="tab-my-bookings">
-              <span className="hidden sm:inline">My Bookings</span>
-              <span className="sm:hidden">Bookings</span>
+            <TabsTrigger value="my-bookings" data-testid="tab-my-bookings" className="text-xs sm:text-sm">
+              Bookings
               {bookings && bookings.length > 0 && (
-                <Badge variant="secondary" className="ml-1 no-default-hover-elevate">
+                <Badge variant="secondary" className="ml-1 no-default-hover-elevate h-5 px-1.5 text-xs">
                   {bookings.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="verification" data-testid="tab-verification">
-              <Shield className="w-4 h-4 sm:mr-1" />
-              <span className="hidden sm:inline">Verification</span>
+            <TabsTrigger value="verification" data-testid="tab-verification" className="text-xs sm:text-sm">
+              Verify
             </TabsTrigger>
-            <TabsTrigger value="earnings" data-testid="tab-earnings">
-              <DollarSign className="w-4 h-4 sm:mr-1" />
-              <span className="hidden sm:inline">Earnings</span>
+            <TabsTrigger value="earnings" data-testid="tab-earnings" className="text-xs sm:text-sm">
+              Earnings
             </TabsTrigger>
           </TabsList>
 

@@ -120,51 +120,40 @@ export default function MyBookings() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-background to-muted/20">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Hero Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-accent/5 to-transparent rounded-2xl p-6 sm:p-8 mb-8">
-          <div className="absolute -right-16 -top-16 w-48 h-48 bg-primary/10 rounded-full blur-3xl" />
-          
-          <div className="relative flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-                <Package className="w-7 h-7 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold">My Bookings</h1>
-                <p className="text-muted-foreground">Track and manage your move requests</p>
-              </div>
-            </div>
-            <Button 
-              onClick={() => setLocation("/request-move")}
-              size="lg"
-              className="shadow-lg shadow-primary/20"
-              data-testid="button-new-move"
-            >
-              <Sparkles className="w-5 h-5 mr-2" />
-              Request New Move
-            </Button>
+    <div className="min-h-screen pt-20 pb-12 bg-background">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        {/* Page Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4 py-6 mb-2">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1">My Bookings</h1>
+            <p className="text-muted-foreground">Track and manage your move requests</p>
           </div>
+          <Button 
+            onClick={() => setLocation("/request-move")}
+            data-testid="button-new-move"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            New Move
+          </Button>
         </div>
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+            <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
             <p className="text-muted-foreground">Loading your bookings...</p>
           </div>
         ) : !bookings || bookings.length === 0 ? (
           <Card className="border-dashed">
-            <CardContent className="pt-12 pb-12 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                <Package className="w-10 h-10 text-primary" />
+            <CardContent className="py-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                <Package className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">No bookings yet</h3>
-              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                Ready to move? Get matched with professional movers in Calgary and enjoy a stress-free moving experience.
+              <h3 className="text-lg font-semibold mb-2">No bookings yet</h3>
+              <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+                Ready to move? We'll match you with trusted local movers in minutes.
               </p>
-              <Button onClick={() => setLocation("/request-move")} size="lg" data-testid="button-book-move">
-                <Sparkles className="w-5 h-5 mr-2" />
+              <Button onClick={() => setLocation("/request-move")} data-testid="button-book-move">
+                <Sparkles className="w-4 h-4 mr-2" />
                 Book Your First Move
               </Button>
             </CardContent>

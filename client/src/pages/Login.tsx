@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, Eye, EyeOff } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -17,18 +17,14 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect after successful login when user state updates
   useEffect(() => {
     if (user && !isLoading) {
-      // Check for redirect parameter first
       const params = new URLSearchParams(window.location.search);
       const redirectPath = params.get('redirect');
       
       if (redirectPath) {
-        // Redirect to the specified path
         setLocation(redirectPath);
       } else {
-        // Default role-based redirect
         if (user.role === "customer") {
           setLocation("/dashboard");
         } else if (user.role === "mover") {
@@ -51,7 +47,6 @@ export default function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
-      // Redirect handled by useEffect
     } catch (error) {
       toast({
         variant: "destructive",
@@ -63,30 +58,31 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
+        <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-              <Truck className="w-8 h-8 text-primary-foreground" />
+            <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
+              <Truck className="w-7 h-7 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Welcome to LervIT</h1>
-          <p className="text-muted-foreground">
-            Log in to your account to continue
+          <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
+          <p className="text-muted-foreground text-sm">
+            Sign in to continue to LervIT
           </p>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="john.doe@example.com"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="h-11"
                 data-testid="input-email"
               />
             </div>
@@ -111,48 +107,47 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
+                  className="h-11 pr-10"
                   data-testid="input-password"
-                  className="pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
                   data-testid="button-toggle-password"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter className="flex flex-col gap-4 pt-2">
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-11"
               disabled={isLoading}
               data-testid="button-login"
             >
-              {isLoading ? "Logging in..." : "Log In"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
             <div className="text-center text-sm">
               <span className="text-muted-foreground">Don't have an account? </span>
               <button
                 type="button"
                 onClick={() => setLocation("/signup")}
-                className="text-primary hover:underline"
+                className="text-primary font-medium hover:underline"
                 data-testid="link-signup"
               >
                 Sign up
               </button>
-            </div>
-            <div className="text-center text-xs text-muted-foreground">
-              Demo: Use john.doe@example.com
             </div>
           </CardFooter>
         </form>
