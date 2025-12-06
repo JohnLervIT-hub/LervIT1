@@ -577,7 +577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             incompleteItems.push({ type, status: 'missing' });
           } else if (item.expiryDate && item.expiryDate < now) {
             incompleteItems.push({ type, status: 'expired' });
-          } else if (item.status !== 'approved') {
+          } else if (item.status.toLowerCase() !== 'approved') {
             incompleteItems.push({ type, status: item.status });
           }
         }
@@ -789,7 +789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           incompleteItems.push({ type, status: 'missing' });
         } else if (item.expiryDate && item.expiryDate < now) {
           incompleteItems.push({ type, status: 'expired', reason: 'Document has expired' });
-        } else if (item.status !== 'approved') {
+        } else if (item.status.toLowerCase() !== 'approved') {
           incompleteItems.push({ 
             type, 
             status: item.status, 
