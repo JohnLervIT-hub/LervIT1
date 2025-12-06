@@ -58,7 +58,7 @@ function MoverCardSkeleton() {
 
 const moverPhotos = [moverPhoto1, moverPhoto2, moverPhoto3];
 
-const VEHICLE_TYPES = ["Pickup Truck", "Cargo Van", "Box Truck", "SUV"];
+const VEHICLE_TYPES = ["Cargo Van", "Pickup Truck", "Large Truck", "SUV"];
 
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
