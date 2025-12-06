@@ -611,27 +611,18 @@ export default function RequestMove() {
   return (
     <>
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden" data-testid="dialog-booking-success">
-          {/* Celebration Header */}
-          <div className="relative bg-gradient-to-br from-green-500 via-green-600 to-green-700 px-6 py-8 text-white overflow-hidden">
-            {/* Decorative elements */}
-            <div className="absolute top-0 left-0 w-full h-full">
-              <div className="absolute top-4 left-8 w-3 h-3 bg-white/20 rounded-full" />
-              <div className="absolute top-12 left-16 w-2 h-2 bg-white/30 rounded-full" />
-              <div className="absolute top-6 right-12 w-4 h-4 bg-white/15 rounded-full" />
-              <div className="absolute bottom-8 right-20 w-2 h-2 bg-white/25 rounded-full" />
-              <div className="absolute bottom-4 left-24 w-3 h-3 bg-white/20 rounded-full" />
-            </div>
-            
-            <div className="relative flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
-                <CheckCircle className="w-9 h-9 text-white" />
+        <DialogContent className="max-w-md p-0 overflow-hidden" data-testid="dialog-booking-success">
+          {/* Compact Header */}
+          <div className="relative bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-5 border-b">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <DialogHeader className="p-0 space-y-1">
-                  <DialogTitle className="text-2xl sm:text-3xl font-bold text-white">Booking Created!</DialogTitle>
-                  <DialogDescription className="text-green-100 text-base">
-                    Your move request is ready for payment
+                <DialogHeader className="p-0 space-y-0.5">
+                  <DialogTitle className="text-xl font-bold">Booking Created!</DialogTitle>
+                  <DialogDescription className="text-sm">
+                    Ready for payment
                   </DialogDescription>
                 </DialogHeader>
               </div>
@@ -639,233 +630,124 @@ export default function RequestMove() {
           </div>
 
           {createdBooking && (
-            <div className="p-6 space-y-5">
-              {/* Route Summary */}
-              <div className="relative bg-muted/30 rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                  {/* Route Icons */}
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-                      <span className="text-xs font-bold text-white">A</span>
-                    </div>
-                    <div className="w-0.5 h-8 bg-gradient-to-b from-green-500 to-primary" />
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary-foreground">B</span>
-                    </div>
+            <div className="p-5 space-y-4">
+              {/* Compact Route Summary */}
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold">A</span>
                   </div>
-                  
-                  {/* Addresses */}
-                  <div className="flex-1 space-y-4">
-                    <div>
-                      <p className="text-[10px] font-medium text-green-600 uppercase tracking-wide">Pickup</p>
-                      <p className="text-sm font-medium truncate">{createdBooking.pickupAddress}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium text-primary uppercase tracking-wide">Dropoff</p>
-                      <p className="text-sm font-medium truncate">{createdBooking.dropoffAddress}</p>
-                    </div>
+                  <p className="truncate text-muted-foreground">{createdBooking.pickupAddress}</p>
+                </div>
+                <TrendingUp className="w-4 h-4 text-muted-foreground flex-shrink-0 rotate-90 sm:rotate-0" />
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-primary">B</span>
                   </div>
-                  
-                  {/* Distance Badge */}
-                  <div className="text-right">
-                    <div className="inline-flex items-center gap-1.5 bg-card px-3 py-2 rounded-lg border">
-                      <Truck className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-lg font-bold" data-testid="text-calculated-distance">
-                        {parseFloat(createdBooking.distance).toFixed(1)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">km</span>
-                    </div>
-                  </div>
+                  <p className="truncate text-muted-foreground">{createdBooking.dropoffAddress}</p>
                 </div>
               </div>
 
-              {/* Quick Stats */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-muted/30 rounded-lg p-3 text-center">
-                  <Package className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
-                  <p className="text-xs text-muted-foreground">Load</p>
-                  <p className="font-semibold capitalize text-sm">{createdBooking.loadSize}</p>
+              {/* Compact Stats Row */}
+              <div className="flex items-center justify-between text-sm bg-muted/30 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium" data-testid="text-calculated-distance">{parseFloat(createdBooking.distance).toFixed(1)} km</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium capitalize">{createdBooking.loadSize}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium">{createdBooking.numberOfMovers}</span>
+                  </div>
                 </div>
-                <div className="bg-muted/30 rounded-lg p-3 text-center">
-                  <Users className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
-                  <p className="text-xs text-muted-foreground">Movers</p>
-                  <p className="font-semibold text-sm">{createdBooking.numberOfMovers}</p>
-                </div>
-                <div className="bg-muted/30 rounded-lg p-3 text-center">
-                  <Calendar className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
-                  <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="font-semibold text-sm">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Calendar className="w-4 h-4" />
+                  <span className="text-xs">
                     {new Date(createdBooking.preferredDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </p>
+                  </span>
                 </div>
               </div>
 
-              {/* Price Breakdown Card */}
-              <div className="border rounded-xl overflow-hidden">
-                <div className="bg-muted/30 px-4 py-3 border-b flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Price Breakdown</h3>
+              {/* Compact Price Breakdown */}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Base Fee</span>
+                  <span className="font-medium" data-testid="text-base-fee">${parseFloat(createdBooking.baseFee).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Distance ({parseFloat(createdBooking.distance).toFixed(1)} km)</span>
+                  <span className="font-medium" data-testid="text-distance-fee">${parseFloat(createdBooking.distanceFee).toFixed(2)}</span>
+                </div>
+                {parseFloat(createdBooking.loadFee || "0") > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Load Size</span>
+                    <span className="font-medium" data-testid="text-load-fee">${parseFloat(createdBooking.loadFee).toFixed(2)}</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowPriceExplanation(!showPriceExplanation)}
-                    className="h-7 text-xs gap-1"
-                    data-testid="button-ai-explain-price"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    AI Explain
-                  </Button>
+                )}
+                {parseFloat(createdBooking.pickupDifficultyFee || "0") > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Pickup Access</span>
+                    <span className="font-medium" data-testid="text-pickup-difficulty-fee">${parseFloat(createdBooking.pickupDifficultyFee).toFixed(2)}</span>
+                  </div>
+                )}
+                {parseFloat(createdBooking.dropoffDifficultyFee || "0") > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Dropoff Access</span>
+                    <span className="font-medium" data-testid="text-dropoff-difficulty-fee">${parseFloat(createdBooking.dropoffDifficultyFee).toFixed(2)}</span>
+                  </div>
+                )}
+                {parseFloat(createdBooking.heavyItemFee || "0") > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Heavy Items</span>
+                    <span className="font-medium" data-testid="text-heavy-item-fee">${parseFloat(createdBooking.heavyItemFee).toFixed(2)}</span>
+                  </div>
+                )}
+                {parseFloat(createdBooking.moverTravelFee || "0") > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Mover Travel</span>
+                    <span className="font-medium" data-testid="text-mover-travel-fee">${parseFloat(createdBooking.moverTravelFee).toFixed(2)}</span>
+                  </div>
+                )}
+                {createdBooking.numberOfMovers === 2 && (
+                  <div className="flex justify-between text-primary">
+                    <span className="font-medium">2-Mover Premium</span>
+                    <span className="font-medium">+30%</span>
+                  </div>
+                )}
+                
+                {/* Total */}
+                <div className="flex justify-between items-center pt-3 mt-2 border-t">
+                  <span className="font-semibold">Total</span>
+                  <span className="text-xl font-bold" data-testid="text-total-price">${parseFloat(createdBooking.price).toFixed(2)} CAD</span>
                 </div>
                 
-                <div className="p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
-                        <DollarSign className="w-3 h-3 text-muted-foreground" />
-                      </div>
-                      <span className="text-muted-foreground">Base Fee</span>
-                    </div>
-                    <span className="font-medium" data-testid="text-base-fee">
-                      ${parseFloat(createdBooking.baseFee).toFixed(2)}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
-                        <MapPin className="w-3 h-3 text-muted-foreground" />
-                      </div>
-                      <span className="text-muted-foreground">Distance ({parseFloat(createdBooking.distance).toFixed(1)} km)</span>
-                    </div>
-                    <span className="font-medium" data-testid="text-distance-fee">
-                      ${parseFloat(createdBooking.distanceFee).toFixed(2)}
-                    </span>
-                  </div>
-                  
-                  {parseFloat(createdBooking.loadFee || "0") > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
-                          <Package className="w-3 h-3 text-muted-foreground" />
-                        </div>
-                        <span className="text-muted-foreground">Load Size</span>
-                      </div>
-                      <span className="font-medium" data-testid="text-load-fee">
-                        ${parseFloat(createdBooking.loadFee).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {parseFloat(createdBooking.pickupDifficultyFee || "0") > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-green-500/10 flex items-center justify-center">
-                          <TrendingUp className="w-3 h-3 text-green-600" />
-                        </div>
-                        <span className="text-muted-foreground">Pickup Access</span>
-                      </div>
-                      <span className="font-medium" data-testid="text-pickup-difficulty-fee">
-                        ${parseFloat(createdBooking.pickupDifficultyFee).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {parseFloat(createdBooking.dropoffDifficultyFee || "0") > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
-                          <TrendingUp className="w-3 h-3 text-primary" />
-                        </div>
-                        <span className="text-muted-foreground">Dropoff Access</span>
-                      </div>
-                      <span className="font-medium" data-testid="text-dropoff-difficulty-fee">
-                        ${parseFloat(createdBooking.dropoffDifficultyFee).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {parseFloat(createdBooking.heavyItemFee || "0") > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center">
-                          <Weight className="w-3 h-3 text-amber-600" />
-                        </div>
-                        <span className="text-muted-foreground">Heavy Items</span>
-                      </div>
-                      <span className="font-medium" data-testid="text-heavy-item-fee">
-                        ${parseFloat(createdBooking.heavyItemFee).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {parseFloat(createdBooking.moverTravelFee || "0") > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
-                          <Truck className="w-3 h-3 text-muted-foreground" />
-                        </div>
-                        <span className="text-muted-foreground">Mover Travel</span>
-                      </div>
-                      <span className="font-medium" data-testid="text-mover-travel-fee">
-                        ${parseFloat(createdBooking.moverTravelFee).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {createdBooking.numberOfMovers === 2 && (
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
-                          <Users className="w-3 h-3 text-primary" />
-                        </div>
-                        <span className="text-primary font-medium">2-Mover Premium</span>
-                      </div>
-                      <span className="font-medium text-primary">+30%</span>
-                    </div>
-                  )}
-                  
-                  {/* Total */}
-                  <div className="pt-3 mt-3 border-t">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Total</span>
-                      <div className="text-right">
-                        <span className="text-2xl font-bold text-primary" data-testid="text-total-price">
-                          ${parseFloat(createdBooking.price).toFixed(2)}
-                        </span>
-                        <span className="text-sm text-muted-foreground ml-1">CAD</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {/* AI Explain Link */}
+                <button
+                  onClick={() => setShowPriceExplanation(!showPriceExplanation)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-ai-explain-price"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  {showPriceExplanation ? "Hide explanation" : "AI explain price"}
+                </button>
                 
-                {/* AI Explanation */}
                 {showPriceExplanation && priceExplanation && (
-                  <div className="border-t bg-gradient-to-r from-primary/5 to-transparent p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-primary" />
-                      <h4 className="font-semibold text-sm">AI Price Explanation</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground whitespace-pre-line">
-                      {priceExplanation}
-                    </p>
+                  <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
+                    {priceExplanation}
                   </div>
                 )}
               </div>
 
-              {/* Urgency Banner */}
-              <div className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-4 text-white">
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl" />
-                <div className="relative flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-semibold">Pay now to start matching!</p>
-                    <p className="text-sm text-orange-100">Movers have 10 minutes to accept after payment</p>
-                  </div>
-                </div>
+              {/* Soft Urgency Note */}
+              <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-lg text-sm">
+                <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+                <p className="text-muted-foreground">
+                  <span className="font-medium text-foreground">Pay now</span> to notify nearby movers
+                </p>
               </div>
 
               {/* Action Buttons */}
@@ -876,7 +758,6 @@ export default function RequestMove() {
                     setShowSuccessDialog(false);
                     setLocation("/my-bookings");
                   }}
-                  className="h-12"
                   data-testid="button-view-bookings"
                 >
                   Pay Later
@@ -886,7 +767,6 @@ export default function RequestMove() {
                     setShowSuccessDialog(false);
                     setLocation(`/payment/${createdBooking.id}`);
                   }}
-                  className="h-12 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white border-0"
                   data-testid="button-proceed-payment"
                 >
                   <CreditCard className="w-4 h-4 mr-2" />
