@@ -752,21 +752,53 @@ export default function MoverDashboard() {
   );
 
   const firstName = user?.name?.split(' ')[0] || 'there';
+  const rating = mover?.rating ? parseFloat(mover.rating).toFixed(1) : '5.0';
+  const totalMoves = mover?.totalMoves || 0;
 
   return (
-    <div className="min-h-screen pt-20 pb-12 bg-background">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        {/* Page Header */}
-        <div className="py-6 mb-2">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold mb-1">Hey {firstName}!</h1>
-              <p className="text-muted-foreground">Manage your jobs and earnings</p>
+    <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
+      {/* Premium Header Section */}
+      <div className="bg-gradient-to-br from-primary/5 via-primary/10 to-transparent border-b">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-8">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            {/* Welcome & Profile */}
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground text-2xl font-bold shadow-lg shadow-primary/20">
+                  {firstName.charAt(0).toUpperCase()}
+                </div>
+                {mover?.isAvailable && (
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-background flex items-center justify-center">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold">Hey {firstName}!</h1>
+                <p className="text-muted-foreground flex items-center gap-2">
+                  {mover?.vehicleType || 'Mover'}
+                  {verificationStatus?.isComplete && (
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 text-xs">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Verified
+                    </Badge>
+                  )}
+                </p>
+              </div>
             </div>
             
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2" data-testid="toggle-availability">
-                <span className="text-sm font-medium">
+            {/* Status Toggle & Actions */}
+            <div className="flex items-center gap-3">
+              <div 
+                className={`flex items-center gap-3 rounded-full px-4 py-2 border-2 transition-all ${
+                  mover?.isAvailable 
+                    ? 'bg-green-500/10 border-green-500/30' 
+                    : 'bg-muted/50 border-muted-foreground/20'
+                }`}
+                data-testid="toggle-availability"
+              >
+                <div className={`w-2.5 h-2.5 rounded-full ${mover?.isAvailable ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/50'}`} />
+                <span className={`text-sm font-semibold ${mover?.isAvailable ? 'text-green-600' : 'text-muted-foreground'}`}>
                   {isVerificationLoading ? '...' : (mover?.isAvailable ? 'Online' : 'Offline')}
                 </span>
                 <Switch 
@@ -782,29 +814,63 @@ export default function MoverDashboard() {
                 size="icon"
                 onClick={() => setLocation("/mover-profile")}
                 data-testid="button-edit-profile"
+                className="rounded-full"
               >
                 <Settings className="w-4 h-4" />
               </Button>
             </div>
           </div>
           
+          {/* Quick Stats Row */}
+          <div className="grid grid-cols-3 gap-3 mt-6">
+            <div className="bg-card/80 backdrop-blur rounded-xl p-4 border shadow-sm">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1">
+                <Truck className="w-3.5 h-3.5" />
+                Completed
+              </div>
+              <p className="text-2xl font-bold">{totalMoves}</p>
+            </div>
+            <div className="bg-card/80 backdrop-blur rounded-xl p-4 border shadow-sm">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1">
+                <DollarSign className="w-3.5 h-3.5" />
+                Earnings
+              </div>
+              <p className="text-2xl font-bold">${earnings?.totalEarnings || '0'}</p>
+            </div>
+            <div className="bg-card/80 backdrop-blur rounded-xl p-4 border shadow-sm">
+              <div className="flex items-center gap-2 text-amber-500 text-xs font-medium mb-1">
+                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+                Rating
+              </div>
+              <p className="text-2xl font-bold">{rating}</p>
+            </div>
+          </div>
+          
           {!verificationStatus?.isComplete && (
-            <Alert className="mt-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Complete verification to go online.{" "}
-                <button 
-                  type="button"
-                  className="text-primary hover:underline font-medium"
-                  onClick={() => setActiveTab("verification")}
-                  data-testid="button-go-to-verification-alert"
-                >
-                  Go to Verification
-                </button>
-              </AlertDescription>
-            </Alert>
+            <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Complete Verification</p>
+                  <p className="text-xs text-muted-foreground">Finish setup to start accepting jobs</p>
+                </div>
+              </div>
+              <Button 
+                size="sm"
+                onClick={() => setActiveTab("verification")}
+                data-testid="button-go-to-verification-alert"
+                className="rounded-full"
+              >
+                Get Verified
+              </Button>
+            </div>
           )}
         </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
 
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
           <AlertDialogContent>
@@ -845,70 +911,102 @@ export default function MoverDashboard() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="w-full grid grid-cols-4 bg-muted/50 p-1">
-            <TabsTrigger value="available" data-testid="tab-available" className="gap-1 text-xs sm:text-sm">
-              Jobs
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="w-full grid grid-cols-4 bg-card border shadow-sm p-1.5 rounded-xl h-auto">
+            <TabsTrigger value="available" data-testid="tab-available" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+              <Package className="w-4 h-4" />
+              <span className="hidden sm:inline">Jobs</span>
               {availableBookings && availableBookings.length > 0 && (
-                <Badge variant="secondary" className="ml-1 no-default-hover-elevate h-5 px-1.5 text-xs">
+                <Badge variant="secondary" className="no-default-hover-elevate h-5 px-1.5 text-xs bg-primary-foreground/20 text-inherit">
                   {availableBookings.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="my-bookings" data-testid="tab-my-bookings" className="text-xs sm:text-sm">
-              Bookings
+            <TabsTrigger value="my-bookings" data-testid="tab-my-bookings" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+              <Calendar className="w-4 h-4" />
+              <span className="hidden sm:inline">Bookings</span>
               {bookings && bookings.length > 0 && (
-                <Badge variant="secondary" className="ml-1 no-default-hover-elevate h-5 px-1.5 text-xs">
+                <Badge variant="secondary" className="no-default-hover-elevate h-5 px-1.5 text-xs bg-primary-foreground/20 text-inherit">
                   {bookings.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="verification" data-testid="tab-verification" className="text-xs sm:text-sm">
-              Verify
+            <TabsTrigger value="verification" data-testid="tab-verification" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+              <Shield className="w-4 h-4" />
+              <span className="hidden sm:inline">Verify</span>
             </TabsTrigger>
-            <TabsTrigger value="earnings" data-testid="tab-earnings" className="text-xs sm:text-sm">
-              Earnings
+            <TabsTrigger value="earnings" data-testid="tab-earnings" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+              <DollarSign className="w-4 h-4" />
+              <span className="hidden sm:inline">Earnings</span>
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="available" className="space-y-4">
             {!availableBookings || availableBookings.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <h3 className="font-semibold text-lg mb-2">No Available Jobs</h3>
-                  <p className="text-muted-foreground">
-                    Check back later for new moving requests in your area.
+              <Card className="border-dashed">
+                <CardContent className="py-16 text-center">
+                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                    <Package className="w-10 h-10 text-primary/60" />
+                  </div>
+                  <h3 className="font-semibold text-xl mb-2">No Available Jobs</h3>
+                  <p className="text-muted-foreground max-w-sm mx-auto mb-6">
+                    New moving requests in your area will appear here. Stay online to receive job notifications.
                   </p>
+                  {!mover?.isAvailable && (
+                    <Button onClick={() => handleAvailabilityToggle(true)} className="rounded-full">
+                      Go Online
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
-              availableBookings.map((booking) => renderBookingCard(booking, true))
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Available Jobs</h2>
+                  <Badge variant="outline" className="text-primary">
+                    {availableBookings.length} available
+                  </Badge>
+                </div>
+                {availableBookings.map((booking) => renderBookingCard(booking, true))}
+              </div>
             )}
           </TabsContent>
 
           <TabsContent value="my-bookings" className="space-y-4">
             {isLoading ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <div className="flex justify-center mb-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <CardContent className="py-16 text-center">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
                   </div>
                   <p className="text-muted-foreground">Loading your bookings...</p>
                 </CardContent>
               </Card>
             ) : !bookings || bookings.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <CheckCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <h3 className="font-semibold text-lg mb-2">No Bookings Yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Accept jobs from the Available Jobs tab to get started.
+              <Card className="border-dashed">
+                <CardContent className="py-16 text-center">
+                  <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-6">
+                    <Calendar className="w-10 h-10 text-green-500/60" />
+                  </div>
+                  <h3 className="font-semibold text-xl mb-2">No Active Bookings</h3>
+                  <p className="text-muted-foreground max-w-sm mx-auto mb-6">
+                    Accept jobs from the Jobs tab to start earning. Your active and completed bookings will appear here.
                   </p>
+                  <Button variant="outline" onClick={() => setActiveTab("available")} className="rounded-full">
+                    Browse Available Jobs
+                  </Button>
                 </CardContent>
               </Card>
             ) : (
-              bookings.map((booking) => renderBookingCard(booking))
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Your Bookings</h2>
+                  <Badge variant="outline">
+                    {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'}
+                  </Badge>
+                </div>
+                {bookings.map((booking) => renderBookingCard(booking))}
+              </div>
             )}
           </TabsContent>
 
@@ -919,65 +1017,64 @@ export default function MoverDashboard() {
           <TabsContent value="earnings" className="space-y-6">
             {!earnings ? (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <div className="flex justify-center mb-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <CardContent className="py-16 text-center">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
                   </div>
                   <p className="text-muted-foreground">Loading earnings...</p>
                 </CardContent>
               </Card>
             ) : (
               <>
-                {/* Earnings Summary Cards */}
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Card data-testid="card-total-earnings">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        Total Earnings
-                      </CardTitle>
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold" data-testid="text-total-earnings">
-                        ${earnings.totalEarnings}
+                {/* Premium Total Earnings Hero Card */}
+                <Card className="bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground overflow-hidden relative" data-testid="card-total-earnings">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32" />
+                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24" />
+                  <CardContent className="p-8 relative">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-primary-foreground/70 text-sm font-medium mb-2">Total Earnings</p>
+                        <p className="text-5xl font-bold mb-2" data-testid="text-total-earnings">${earnings.totalEarnings}</p>
+                        <p className="text-primary-foreground/70 text-sm">
+                          From {earnings.completedJobs} completed {earnings.completedJobs === 1 ? 'move' : 'moves'}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        From {earnings.completedJobs} completed {earnings.completedJobs === 1 ? 'job' : 'jobs'}
-                      </p>
+                      <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">
+                        <DollarSign className="w-8 h-8" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Stats Grid */}
+                <div className="grid gap-4 grid-cols-2">
+                  <Card data-testid="card-pending-earnings" className="hover-elevate">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                          <Clock className="w-6 h-6 text-amber-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Pending</p>
+                          <p className="text-2xl font-bold" data-testid="text-pending-earnings">${earnings.pendingEarnings}</p>
+                          <p className="text-xs text-muted-foreground">{earnings.pendingJobs} active</p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
-                  <Card data-testid="card-pending-earnings">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        Pending Earnings
-                      </CardTitle>
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold" data-testid="text-pending-earnings">
-                        ${earnings.pendingEarnings}
+                  <Card data-testid="card-completed-jobs" className="hover-elevate">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+                          <CheckCircle className="w-6 h-6 text-green-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Completed</p>
+                          <p className="text-2xl font-bold" data-testid="text-completed-jobs-count">{earnings.completedJobs}</p>
+                          <p className="text-xs text-muted-foreground">Jobs done</p>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        From {earnings.pendingJobs} active {earnings.pendingJobs === 1 ? 'job' : 'jobs'}
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card data-testid="card-completed-jobs">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">
-                        Completed Jobs
-                      </CardTitle>
-                      <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold" data-testid="text-completed-jobs-count">
-                        {earnings.completedJobs}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Successfully finished
-                      </p>
                     </CardContent>
                   </Card>
                 </div>
