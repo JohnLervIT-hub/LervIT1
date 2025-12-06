@@ -27,8 +27,7 @@ import { format } from "date-fns";
 type User = {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   role: string;
   createdAt: string;
 };
@@ -55,8 +54,7 @@ export default function AdminUsersPage() {
   const filteredUsers = users?.filter(u => {
     const matchesSearch = 
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.lastName?.toLowerCase().includes(searchTerm.toLowerCase());
+      u.name?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesRole = 
       roleFilter === "all" || u.role === roleFilter;
@@ -190,7 +188,7 @@ export default function AdminUsersPage() {
                     {filteredUsers.map((u) => (
                       <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
                         <TableCell className="font-medium">
-                          {u.firstName} {u.lastName}
+                          {u.name || "Unknown User"}
                         </TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell>{getRoleBadge(u.role)}</TableCell>

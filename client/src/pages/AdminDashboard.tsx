@@ -372,13 +372,21 @@ export default function AdminDashboard() {
                           className="flex items-center justify-between p-3 border rounded-md"
                           data-testid={`mover-row-${mover.id}`}
                         >
-                          <div>
-                            <p className="text-sm font-medium">
-                              {mover.user?.name || "Unknown"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {mover.vehicleType} • {mover.totalMoves} moves
-                            </p>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                              <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {mover.user?.name || "Unknown Mover"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {mover.user?.email || "No email"}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {mover.vehicleType} • {mover.totalMoves} moves
+                              </p>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {mover.isVerified && (
@@ -417,9 +425,22 @@ export default function AdminDashboard() {
                           className="flex items-center justify-between p-3 border rounded-md"
                           data-testid={`user-row-${u.id}`}
                         >
-                          <div>
-                            <p className="text-sm font-medium">{u.name}</p>
-                            <p className="text-xs text-muted-foreground">{u.email}</p>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              u.role === 'admin' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                              u.role === 'mover' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                              'bg-green-100 dark:bg-green-900/30'
+                            }`}>
+                              <UserIcon className={`w-5 h-5 ${
+                                u.role === 'admin' ? 'text-purple-600 dark:text-purple-400' :
+                                u.role === 'mover' ? 'text-blue-600 dark:text-blue-400' :
+                                'text-green-600 dark:text-green-400'
+                              }`} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{u.name || "Unnamed User"}</p>
+                              <p className="text-xs text-muted-foreground">{u.email}</p>
+                            </div>
                           </div>
                           <Badge variant="secondary" className="capitalize">
                             {u.role}

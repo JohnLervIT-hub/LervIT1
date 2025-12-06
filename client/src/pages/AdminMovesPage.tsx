@@ -33,12 +33,16 @@ type Booking = {
   scheduledDate: string;
   createdAt: string;
   customer: {
-    firstName: string;
-    lastName: string;
+    id?: string;
+    name?: string;
+    email?: string;
   } | null;
   mover: {
-    firstName: string;
-    lastName: string;
+    id?: string;
+    user?: {
+      id?: string;
+      name?: string;
+    };
   } | null;
 };
 
@@ -68,8 +72,7 @@ export default function AdminMovesPage() {
     const matchesSearch = 
       b.pickupAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       b.dropoffAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.customer?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.customer?.lastName?.toLowerCase().includes(searchTerm.toLowerCase());
+      b.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = 
       statusFilter === "all" ||
@@ -210,10 +213,10 @@ export default function AdminMovesPage() {
                     {filteredBookings.map((b) => (
                       <TableRow key={b.id} data-testid={`row-booking-${b.id}`}>
                         <TableCell className="font-medium">
-                          {b.customer?.firstName} {b.customer?.lastName}
+                          {b.customer?.name || "Unknown Customer"}
                         </TableCell>
                         <TableCell>
-                          {b.mover ? `${b.mover.firstName} ${b.mover.lastName}` : <span className="text-muted-foreground">Unassigned</span>}
+                          {b.mover?.user?.name ? b.mover.user.name : <span className="text-muted-foreground">Unassigned</span>}
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate" title={b.pickupAddress}>
                           {b.pickupAddress || "N/A"}

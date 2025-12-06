@@ -31,9 +31,9 @@ type Mover = {
   totalMoves: number;
   isAvailable: boolean;
   user: {
-    firstName: string;
-    lastName: string;
+    name: string;
     email: string;
+    phone?: string;
   } | null;
 };
 
@@ -61,8 +61,7 @@ export default function AdminMoversPage() {
 
   const filteredMovers = movers?.filter(m => {
     const matchesSearch = 
-      m.user?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.user?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.vehicleType?.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -177,7 +176,7 @@ export default function AdminMoversPage() {
                     {filteredMovers.map((m) => (
                       <TableRow key={m.id} data-testid={`row-mover-${m.id}`}>
                         <TableCell className="font-medium">
-                          {m.user?.firstName} {m.user?.lastName}
+                          {m.user?.name || "Unknown Mover"}
                         </TableCell>
                         <TableCell>{m.user?.email || "N/A"}</TableCell>
                         <TableCell>

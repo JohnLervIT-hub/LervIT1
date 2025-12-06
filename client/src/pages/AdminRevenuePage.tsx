@@ -25,12 +25,16 @@ type Booking = {
   scheduledDate: string;
   createdAt: string;
   customer: {
-    firstName: string;
-    lastName: string;
+    id?: string;
+    name?: string;
+    email?: string;
   } | null;
   mover: {
-    firstName: string;
-    lastName: string;
+    id?: string;
+    user?: {
+      id?: string;
+      name?: string;
+    };
   } | null;
 };
 
@@ -219,10 +223,10 @@ export default function AdminRevenuePage() {
                           {b.scheduledDate ? format(new Date(b.scheduledDate), "MMM d, yyyy") : "N/A"}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {b.customer?.firstName} {b.customer?.lastName}
+                          {b.customer?.name || "Unknown Customer"}
                         </TableCell>
                         <TableCell>
-                          {b.mover ? `${b.mover.firstName} ${b.mover.lastName}` : "N/A"}
+                          {b.mover?.user?.name || "N/A"}
                         </TableCell>
                         <TableCell className="max-w-[200px]">
                           <div className="truncate text-sm" title={b.pickupAddress}>
