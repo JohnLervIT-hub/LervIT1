@@ -186,7 +186,7 @@ export default function MoverProfile() {
   const avatarUrl = moverData?.moverImage || user.avatarUrl;
 
   return (
-    <div className="min-h-screen pt-20 pb-12 bg-gradient-to-b from-green-50/50 to-background dark:from-green-950/20">
+    <div className="min-h-screen pt-20 pb-12 bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
       <div className="max-w-2xl mx-auto px-4">
         <Link href="/mover-dashboard" data-testid="link-back-mover-dashboard">
           <Button variant="ghost" size="sm" className="mb-4">
@@ -196,12 +196,12 @@ export default function MoverProfile() {
         </Link>
 
         <div className="relative mb-8">
-          <div className="h-32 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl" />
+          <div className="h-32 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-t-2xl" />
           <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
             <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
               <Avatar className="w-24 h-24 border-4 border-background shadow-lg">
                 <AvatarImage src={avatarUrl || undefined} alt={user.name || "Mover"} />
-                <AvatarFallback className="text-2xl bg-green-500 text-white">
+                <AvatarFallback className="text-2xl bg-blue-600 text-white">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -228,12 +228,12 @@ export default function MoverProfile() {
           <h1 className="text-2xl font-bold" data-testid="text-mover-name">{user.name}</h1>
           <p className="text-muted-foreground" data-testid="text-mover-email">{user.email}</p>
           <div className="flex items-center justify-center gap-2 mt-2">
-            <Badge className="bg-green-500">
+            <Badge className="bg-blue-600">
               <Truck className="w-3 h-3 mr-1" />
               Mover
             </Badge>
             {moverData?.isVerified && (
-              <Badge variant="outline" className="border-green-500 text-green-600">
+              <Badge variant="outline" className="border-blue-500 text-blue-600">
                 <Check className="w-3 h-3 mr-1" />
                 Verified
               </Badge>
@@ -260,7 +260,7 @@ export default function MoverProfile() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <User className="w-5 h-5 text-green-500" />
+              <User className="w-5 h-5 text-blue-600" />
               Personal Information
             </CardTitle>
             <CardDescription>
@@ -329,7 +329,7 @@ export default function MoverProfile() {
             <Button 
               onClick={handleSaveProfile}
               disabled={updateProfileMutation.isPending}
-              className="w-full bg-green-500 hover:bg-green-600"
+              className="w-full bg-blue-600 hover:bg-blue-700"
               data-testid="button-save-mover-profile"
             >
               {updateProfileMutation.isPending ? (
@@ -345,7 +345,7 @@ export default function MoverProfile() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bell className="w-5 h-5 text-green-500" />
+              <Bell className="w-5 h-5 text-blue-600" />
               Notification Preferences
             </CardTitle>
             <CardDescription>
@@ -464,7 +464,7 @@ export default function MoverProfile() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <FileCheck className="w-5 h-5 text-green-500" />
+              <FileCheck className="w-5 h-5 text-blue-600" />
               Verification Status
             </CardTitle>
             <CardDescription>
@@ -476,11 +476,11 @@ export default function MoverProfile() {
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                   moverData?.profileVerified 
-                    ? "bg-green-100 dark:bg-green-900/30" 
+                    ? "bg-blue-100 dark:bg-blue-900/30" 
                     : "bg-yellow-100 dark:bg-yellow-900/30"
                 }`}>
                   {moverData?.profileVerified ? (
-                    <Check className="w-5 h-5 text-green-600" />
+                    <Check className="w-5 h-5 text-blue-600" />
                   ) : (
                     <AlertTriangle className="w-5 h-5 text-yellow-600" />
                   )}
@@ -492,7 +492,7 @@ export default function MoverProfile() {
                   </p>
                 </div>
               </div>
-              <Badge className={moverData?.profileVerified ? "bg-green-500" : "bg-yellow-500"}>
+              <Badge className={moverData?.profileVerified ? "bg-blue-600" : "bg-yellow-500"}>
                 {moverData?.profileVerified ? "Verified" : "Pending"}
               </Badge>
             </div>
@@ -501,11 +501,11 @@ export default function MoverProfile() {
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                   moverData?.documentsVerified 
-                    ? "bg-green-100 dark:bg-green-900/30" 
+                    ? "bg-blue-100 dark:bg-blue-900/30" 
                     : "bg-yellow-100 dark:bg-yellow-900/30"
                 }`}>
                   {moverData?.documentsVerified ? (
-                    <Check className="w-5 h-5 text-green-600" />
+                    <Check className="w-5 h-5 text-blue-600" />
                   ) : (
                     <AlertTriangle className="w-5 h-5 text-yellow-600" />
                   )}
@@ -517,7 +517,7 @@ export default function MoverProfile() {
                   </p>
                 </div>
               </div>
-              <Badge className={moverData?.documentsVerified ? "bg-green-500" : "bg-yellow-500"}>
+              <Badge className={moverData?.documentsVerified ? "bg-blue-600" : "bg-yellow-500"}>
                 {moverData?.documentsVerified ? "Verified" : "Pending"}
               </Badge>
             </div>
@@ -534,7 +534,7 @@ export default function MoverProfile() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-green-500" />
+              <Shield className="w-5 h-5 text-blue-600" />
               Account Security
             </CardTitle>
             <CardDescription>
@@ -544,15 +544,15 @@ export default function MoverProfile() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-green-600" />
+                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Check className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="font-medium">Email Verified</p>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
               </div>
-              <Badge className="bg-green-500">Verified</Badge>
+              <Badge className="bg-blue-600">Verified</Badge>
             </div>
             
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
@@ -574,8 +574,8 @@ export default function MoverProfile() {
 
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-green-600" />
+                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="font-medium">Earnings</p>
