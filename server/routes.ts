@@ -13,6 +13,7 @@ import fs from "fs";
 import Stripe from "stripe";
 import { notificationService } from "./notifications";
 import { format } from "date-fns";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -125,6 +126,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Cache-Control', 'public, max-age=31536000');
     },
   }));
+
+  // ===== OBJECT STORAGE ROUTES (Replit App Storage) =====
+  // Endpoint to serve public objects from Object Storage
+  app.get("/public-objects/:filePath(*)", async (req: Request, res: Response) => {
+    const filePath = req.params.filePath;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const file = await objectStorageService.searchPublicObject(filePath);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error searching for public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Endpoint to serve objects from Object Storage (uploaded images)
+  app.get("/objects/:objectPath(*)", async (req: Request, res: Response) => {
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error fetching object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Endpoint to get a presigned upload URL for Object Storage
+  app.post("/api/objects/upload", async (req: Request, res: Response) => {
+    if (!requireUser(req, res)) return;
+    
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ error: "Failed to get upload URL" });
+    }
+  });
+
+  // Endpoint to finalize uploaded object and set its path
+  app.post("/api/objects/finalize", async (req: Request, res: Response) => {
+    if (!requireUser(req, res)) return;
+    
+    const { uploadURL } = req.body;
+    if (!uploadURL) {
+      return res.status(400).json({ error: "uploadURL is required" });
+    }
+
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      res.json({ objectPath });
+    } catch (error) {
+      console.error("Error finalizing object:", error);
+      res.status(500).json({ error: "Failed to finalize object" });
+    }
+  });
   
   // ===== GOOGLE PLACES API PROXY =====
   // Secure proxy for Google Places Autocomplete API
