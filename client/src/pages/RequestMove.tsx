@@ -1354,56 +1354,160 @@ export default function RequestMove() {
 
                 {step === 3 && (
                   <>
-                    <div>
-                      <Label htmlFor="date" className="text-base font-semibold mb-2 block">
-                        Preferred Date & Time
-                      </Label>
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    {/* Schedule Section - Grand Design */}
+                    <div className="relative bg-gradient-to-br from-primary/5 via-accent/5 to-transparent border border-primary/20 rounded-xl p-5">
+                      {/* Decorative element */}
+                      <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary/10 rounded-full blur-2xl" />
+                      
+                      <div className="relative">
+                        <div className="flex items-start gap-4 mb-5">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 flex-shrink-0">
+                            <Calendar className="w-6 h-6 text-primary-foreground" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold">Schedule Your Move</h3>
+                            <p className="text-sm text-muted-foreground mt-0.5">Choose your preferred date and time</p>
+                          </div>
+                        </div>
+
+                        {/* Date & Time Input */}
+                        <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50 mb-4">
+                          <Label htmlFor="date" className="text-sm font-medium text-muted-foreground mb-2 block">
+                            Date & Time
+                          </Label>
                           <Input
                             id="date"
                             type="datetime-local"
-                            className="pl-10 h-12"
+                            className="h-12 text-base"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
                             data-testid="input-move-date"
                           />
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const tomorrow = new Date();
-                            tomorrow.setDate(tomorrow.getDate() + 1);
-                            tomorrow.setHours(9, 0, 0, 0);
-                            const localDateTime = tomorrow.toISOString().slice(0, 16);
-                            setDate(localDateTime);
-                          }}
-                          data-testid="button-quick-schedule"
-                          className="w-full"
-                        >
-                          <Clock className="w-4 h-4 mr-2" />
-                          Quick Schedule: Tomorrow at 9:00 AM
-                        </Button>
+
+                        {/* Quick Schedule Options */}
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick Schedule</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                tomorrow.setHours(9, 0, 0, 0);
+                                setDate(tomorrow.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-tomorrow-morning"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Clock className="w-4 h-4" />
+                              <span className="text-xs font-medium">Tomorrow</span>
+                              <span className="text-[10px] text-muted-foreground">9:00 AM</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                tomorrow.setHours(14, 0, 0, 0);
+                                setDate(tomorrow.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-tomorrow-afternoon"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Clock className="w-4 h-4" />
+                              <span className="text-xs font-medium">Tomorrow</span>
+                              <span className="text-[10px] text-muted-foreground">2:00 PM</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const nextWeek = new Date();
+                                nextWeek.setDate(nextWeek.getDate() + 7);
+                                nextWeek.setHours(9, 0, 0, 0);
+                                setDate(nextWeek.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-next-week"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Calendar className="w-4 h-4" />
+                              <span className="text-xs font-medium">Next Week</span>
+                              <span className="text-[10px] text-muted-foreground">9:00 AM</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const weekend = new Date();
+                                const daysUntilSaturday = (6 - weekend.getDay() + 7) % 7 || 7;
+                                weekend.setDate(weekend.getDate() + daysUntilSaturday);
+                                weekend.setHours(10, 0, 0, 0);
+                                setDate(weekend.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-weekend"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Calendar className="w-4 h-4" />
+                              <span className="text-xs font-medium">This Weekend</span>
+                              <span className="text-[10px] text-muted-foreground">Saturday 10 AM</span>
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <Label htmlFor="description" className="text-base font-semibold mb-2 block">
-                        Item Description (Optional)
-                      </Label>
-                      <div className="relative">
-                        <FileText className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
-                        <Textarea
-                          id="description"
-                          placeholder="Describe your items (e.g., 2-bedroom apartment furniture, 1 sofa, 2 beds, boxes...)"
-                          className="pl-10 min-h-32"
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                          data-testid="input-description"
-                        />
+                    {/* Notes Section */}
+                    <div className="relative bg-gradient-to-r from-muted/30 to-transparent border border-border/50 rounded-xl p-5">
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">Additional Notes</h3>
+                            <span className="text-[10px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">OPTIONAL</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5">Help your mover prepare for the job</p>
+                        </div>
+                      </div>
+                      
+                      <Textarea
+                        id="description"
+                        placeholder="Examples:&#10;• 3rd floor apartment, elevator available&#10;• Need help disassembling bed frame&#10;• Fragile antique furniture - handle with care&#10;• Access code for building: 1234"
+                        className="min-h-32 bg-card/50 resize-none"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        data-testid="input-description"
+                      />
+                      
+                      <div className="flex items-start gap-2 mt-3 p-3 bg-primary/5 rounded-lg">
+                        <Info className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-muted-foreground">
+                          Detailed notes help movers come prepared with the right equipment and plan their time efficiently.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Ready to Submit Summary */}
+                    <div className="relative overflow-hidden bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/20 rounded-xl p-5">
+                      <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-green-500/10 rounded-full blur-2xl" />
+                      <div className="relative flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+                          <CheckCircle className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-green-700 dark:text-green-400">Ready to Find Movers</h3>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            Click "Find Movers" to see available professionals in your area
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </>
