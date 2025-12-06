@@ -374,6 +374,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(userWithoutPassword);
   });
 
+  // Update user profile
+  app.patch("/api/users/profile", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const updateProfileSchema = z.object({
+        name: z.string().min(1).optional(),
+        phone: z.string().optional(),
+        address: z.string().optional(),
+      });
+      
+      const updates = validateBody(updateProfileSchema, req.body);
+      const updatedUser = await storage.updateUser(user.id, updates);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const { password: _, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error('[Profile] Update error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update profile" });
+    }
+  });
+
+  // Upload user avatar
+  app.post("/api/users/avatar", upload.single('avatar'), async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const file = req.file as Express.Multer.File;
+      
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      // Upload to object storage
+      const objectStorage = ObjectStorageService.getInstance();
+      const fileName = `avatars/${user.id}-${Date.now()}${path.extname(file.originalname)}`;
+      const uploadResult = await objectStorage.uploadFile(file.buffer, fileName, file.mimetype);
+      
+      // Update user with avatar URL
+      const avatarUrl = `/objects/${fileName}`;
+      const updatedUser = await storage.updateUser(user.id, { avatarUrl });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const { password: _, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error('[Avatar] Upload error:', error);
+      res.status(500).json({ error: "Failed to upload avatar" });
+    }
+  });
+
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
     try {
       const forgotPasswordSchema = z.object({

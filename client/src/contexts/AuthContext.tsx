@@ -4,7 +4,11 @@ interface User {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
+  address?: string | null;
+  avatarUrl?: string | null;
   role: "customer" | "mover" | "admin";
+  createdAt?: string | null;
 }
 
 interface AuthContextType {
@@ -34,7 +38,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: userData.id,
           email: userData.email,
           name: userData.name,
+          phone: userData.phone,
+          address: userData.address,
+          avatarUrl: userData.avatarUrl,
           role: userData.role || "customer",
+          createdAt: userData.createdAt,
         });
       } else {
         setUser(null);
@@ -71,7 +79,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: userData.id,
       email: userData.email,
       name: userData.name,
+      phone: userData.phone,
+      address: userData.address,
+      avatarUrl: userData.avatarUrl,
       role: userData.role || "customer",
+      createdAt: userData.createdAt,
     });
   };
 
@@ -94,7 +106,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: userData.id,
       email: userData.email,
       name: userData.name,
+      phone: userData.phone,
+      address: userData.address,
+      avatarUrl: userData.avatarUrl,
       role: userData.role || "customer",
+      createdAt: userData.createdAt,
     });
   };
 

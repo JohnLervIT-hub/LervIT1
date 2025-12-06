@@ -115,6 +115,14 @@ export default function Header() {
                     Role: {user.role}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {user.role === "customer" && (
+                    <Link href="/profile">
+                      <DropdownMenuItem data-testid="link-profile">
+                        <User className="w-4 h-4 mr-2" />
+                        My Profile
+                      </DropdownMenuItem>
+                    </Link>
+                  )}
                   <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
                     <LogOut className="w-4 h-4 mr-2" />
                     Log Out

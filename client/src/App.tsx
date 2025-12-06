@@ -37,6 +37,7 @@ import AdminVerificationDashboard from "@/pages/AdminVerificationDashboard";
 import Payment from "@/pages/Payment";
 import TrackTrip from "@/pages/TrackTrip";
 import LandingPage from "@/pages/LandingPage";
+import CustomerProfile from "@/pages/CustomerProfile";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -76,6 +77,11 @@ function Router() {
       <Route path="/track-trip/:bookingId">
         <ProtectedRoute allowedRoles={["customer"]}>
           <TrackTrip />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/profile">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <CustomerProfile />
         </ProtectedRoute>
       </Route>
 
