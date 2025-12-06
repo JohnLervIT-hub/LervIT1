@@ -190,6 +190,7 @@ export default function MoverDashboard() {
   const [locationSharing, setLocationSharing] = useState<string | null>(null);
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("available");
 
   // First get the mover profile
   const { data: mover } = useQuery<any>({
@@ -795,12 +796,8 @@ export default function MoverDashboard() {
                 <button 
                   type="button"
                   className="text-primary hover:underline font-medium"
-                  onClick={() => {
-                    const tabsElement = document.querySelector('[value="verification"]');
-                    if (tabsElement instanceof HTMLElement) {
-                      tabsElement.click();
-                    }
-                  }}
+                  onClick={() => setActiveTab("verification")}
+                  data-testid="button-go-to-verification-alert"
                 >
                   Go to Verification
                 </button>
@@ -838,10 +835,7 @@ export default function MoverDashboard() {
               <AlertDialogAction 
                 onClick={() => {
                   setShowVerificationAlert(false);
-                  const tabsElement = document.querySelector('[value="verification"]');
-                  if (tabsElement instanceof HTMLElement) {
-                    tabsElement.click();
-                  }
+                  setActiveTab("verification");
                 }}
                 data-testid="button-go-to-verification"
               >
@@ -851,7 +845,7 @@ export default function MoverDashboard() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <Tabs defaultValue="available" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="w-full grid grid-cols-4 bg-muted/50 p-1">
             <TabsTrigger value="available" data-testid="tab-available" className="gap-1 text-xs sm:text-sm">
               Jobs
