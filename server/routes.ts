@@ -1015,9 +1015,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (status === 'Approved') {
         console.log(`[Notification] Verification item ${item.type} approved for mover ${item.moverId}`);
         // TODO: Send notification: "Your ${item.type} has been approved. You're one step closer to going online."
+        
+        // Check if ALL 7 required verification items are now approved
+        const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
+        const allItems = await db.select().from(verificationItems).where(eq(verificationItems.moverId, item.moverId));
+        
+        const allApproved = requiredTypes.every(type => {
+          const typeItem = allItems.find(i => i.type === type);
+          return typeItem && typeItem.status === 'Approved';
+        });
+        
+        if (allApproved) {
+          // Update mover's documentsVerified to true
+          await storage.updateMover(item.moverId, { 
+            documentsVerified: true,
+            isVerified: true 
+          });
+          console.log(`[Notification] All verification items approved for mover ${item.moverId}. Mover is now fully verified.`);
+        }
       } else if (status === 'Rejected') {
         console.log(`[Notification] Verification item ${item.type} rejected for mover ${item.moverId}: ${rejectionReason}`);
         // TODO: Send notification: "Your ${item.type} was rejected: ${rejectionReason}. Please upload a corrected version."
+        
+        // If any item is rejected, ensure mover is NOT marked as verified
+        await storage.updateMover(item.moverId, { 
+          documentsVerified: false,
+          isVerified: false 
+        });
       }
       
       res.json(result[0]);
