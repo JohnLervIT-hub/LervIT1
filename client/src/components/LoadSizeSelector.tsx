@@ -1,6 +1,10 @@
 import { Card } from "@/components/ui/card";
-import { Package, Box, Sofa, Home } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+import boxesImage from "@assets/generated_images/3d_boxes_for_small_loads.png";
+import mediumImage from "@assets/generated_images/3d_medium_furniture_items.png";
+import largeImage from "@assets/generated_images/3d_large_furniture_sofa.png";
+import apartmentImage from "@assets/generated_images/3d_apartment_interior_model.png";
 
 interface LoadSize {
   id: string;
@@ -8,7 +12,7 @@ interface LoadSize {
   volume: string;
   description: string;
   examples: string[];
-  icon: React.ReactNode;
+  image: string;
   fee: number;
 }
 
@@ -25,7 +29,7 @@ const loadSizes: LoadSize[] = [
     volume: "1-10 ft³",
     description: "Small personal items",
     examples: ["Shoes", "Bags", "Boxes", "Lamps", "Monitors"],
-    icon: <Package className="w-8 h-8" />,
+    image: boxesImage,
     fee: 0,
   },
   {
@@ -34,7 +38,7 @@ const loadSizes: LoadSize[] = [
     volume: "11-50 ft³",
     description: "Small furniture",
     examples: ["Chairs", "Small tables", "TVs", "Bookshelves"],
-    icon: <Box className="w-8 h-8" />,
+    image: mediumImage,
     fee: 15,
   },
   {
@@ -43,7 +47,7 @@ const loadSizes: LoadSize[] = [
     volume: "50-170 ft³",
     description: "Large furniture",
     examples: ["Sofas", "Beds", "Fridges", "Dressers"],
-    icon: <Sofa className="w-8 h-8" />,
+    image: largeImage,
     fee: 30,
   },
   {
@@ -52,7 +56,7 @@ const loadSizes: LoadSize[] = [
     volume: "170+ ft³",
     description: "Full room furniture",
     examples: ["1-2 bedroom", "Multiple large items"],
-    icon: <Home className="w-8 h-8" />,
+    image: apartmentImage,
     fee: 45,
   },
 ];
@@ -77,8 +81,12 @@ export default function LoadSizeSelector({ selectedSize, onSelectSize, aiRecomme
           >
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
-                <div className={`p-2 rounded-lg ${isSelected ? 'bg-orange-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
-                  {size.icon}
+                <div className={`w-16 h-16 rounded-lg overflow-hidden flex items-center justify-center ${isSelected ? 'ring-2 ring-orange-500 ring-offset-2' : ''}`}>
+                  <img 
+                    src={size.image} 
+                    alt={size.label}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 {isAiRecommended && (
                   <Badge className="text-xs bg-green-500 text-white">
