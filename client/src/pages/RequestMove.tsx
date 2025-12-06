@@ -24,6 +24,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
+
+// 3D mover images for number of movers selection
+import singleMoverImage from "@assets/generated_images/3d_single_mover_with_box.png";
+import twoMoversImage from "@assets/generated_images/3d_two_movers_with_sofa.png";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 // Helper functions for load size validation
@@ -1109,13 +1113,13 @@ export default function RequestMove() {
                               </AlertDescription>
                             </Alert>
                           )}
-                          {/* Animated Mover Selection Cards */}
+                          {/* Animated Mover Selection Cards with 3D Images */}
                           <div className="grid grid-cols-2 gap-4">
-                            {/* 1 Mover Card with animated person icon */}
+                            {/* 1 Mover Card with 3D image */}
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(1)}
-                              className={`group relative p-5 rounded-lg border-2 transition-all duration-300 ease-out
+                              className={`group relative p-4 rounded-lg border-2 transition-all duration-300 ease-out
                                 ${numberOfMovers === 1
                                   ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
                                   : "border-border bg-card hover:border-primary/50 hover:shadow-md"
@@ -1127,23 +1131,13 @@ export default function RequestMove() {
                               data-testid="button-1-mover"
                             >
                               <div className="flex flex-col items-center text-center">
-                                {/* Single Person Icon with animation */}
-                                <div className={`mb-3 transition-all duration-300 ${numberOfMovers === 1 ? 'scale-110' : 'group-hover:scale-105'}`}>
-                                  <svg 
-                                    viewBox="0 0 64 80" 
-                                    className={`w-16 h-20 transition-colors duration-300 ${
-                                      numberOfMovers === 1 ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70'
-                                    }`}
-                                    fill="currentColor"
-                                  >
-                                    {/* Person body with subtle gradient effect */}
-                                    <circle cx="32" cy="16" r="12" className="drop-shadow-sm" />
-                                    <path d="M32 32c-12 0-22 8-22 18v8c0 2 2 4 4 4h36c2 0 4-2 4-4v-8c0-10-10-18-22-18z" className="drop-shadow-sm" />
-                                    {/* Carrying box detail */}
-                                    <rect x="20" y="44" width="24" height="16" rx="2" className="fill-amber-500/80" />
-                                    <line x1="26" y1="44" x2="26" y2="60" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
-                                    <line x1="38" y1="44" x2="38" y2="60" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
-                                  </svg>
+                                {/* 3D Single Mover Image */}
+                                <div className={`mb-2 transition-all duration-300 ${numberOfMovers === 1 ? 'scale-105' : 'group-hover:scale-105'}`}>
+                                  <img 
+                                    src={singleMoverImage} 
+                                    alt="Single mover carrying box" 
+                                    className="w-20 h-20 object-contain"
+                                  />
                                 </div>
                                 <p className="font-bold text-lg">1 Mover</p>
                                 <p className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -1161,11 +1155,11 @@ export default function RequestMove() {
                               )}
                             </button>
 
-                            {/* 2 Movers Card with animated person icons */}
+                            {/* 2 Movers Card with 3D image */}
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(2)}
-                              className={`group relative p-5 rounded-lg border-2 transition-all duration-300 ease-out
+                              className={`group relative p-4 rounded-lg border-2 transition-all duration-300 ease-out
                                 ${numberOfMovers === 2
                                   ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
                                   : "border-border bg-card hover:border-primary/50 hover:shadow-md"
@@ -1177,38 +1171,13 @@ export default function RequestMove() {
                               data-testid="button-2-movers"
                             >
                               <div className="flex flex-col items-center text-center">
-                                {/* Two Person Icons with animation */}
-                                <div className={`mb-3 flex items-end gap-1 transition-all duration-300 ${numberOfMovers === 2 ? 'scale-110' : 'group-hover:scale-105'}`}>
-                                  {/* First person */}
-                                  <svg 
-                                    viewBox="0 0 48 64" 
-                                    className={`w-10 h-14 transition-colors duration-300 ${
-                                      numberOfMovers === 2 ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70'
-                                    }`}
-                                    fill="currentColor"
-                                  >
-                                    <circle cx="24" cy="12" r="9" className="drop-shadow-sm" />
-                                    <path d="M24 24c-10 0-18 6-18 14v6c0 1.5 1.5 3 3 3h30c1.5 0 3-1.5 3-3v-6c0-8-8-14-18-14z" className="drop-shadow-sm" />
-                                  </svg>
-                                  {/* Second person */}
-                                  <svg 
-                                    viewBox="0 0 48 64" 
-                                    className={`w-10 h-14 transition-colors duration-300 ${
-                                      numberOfMovers === 2 ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70'
-                                    }`}
-                                    fill="currentColor"
-                                  >
-                                    <circle cx="24" cy="12" r="9" className="drop-shadow-sm" />
-                                    <path d="M24 24c-10 0-18 6-18 14v6c0 1.5 1.5 3 3 3h30c1.5 0 3-1.5 3-3v-6c0-8-8-14-18-14z" className="drop-shadow-sm" />
-                                  </svg>
-                                </div>
-                                {/* Shared carrying item indicator */}
-                                <div className={`-mt-5 mb-2 transition-all duration-300 ${numberOfMovers === 2 ? 'opacity-100' : 'opacity-70 group-hover:opacity-90'}`}>
-                                  <svg viewBox="0 0 60 24" className="w-14 h-6">
-                                    <rect x="5" y="4" width="50" height="16" rx="3" className={`transition-colors duration-300 ${numberOfMovers === 2 ? 'fill-amber-500' : 'fill-amber-500/60'}`} />
-                                    <line x1="20" y1="4" x2="20" y2="20" stroke="white" strokeWidth="1" strokeOpacity="0.4" />
-                                    <line x1="40" y1="4" x2="40" y2="20" stroke="white" strokeWidth="1" strokeOpacity="0.4" />
-                                  </svg>
+                                {/* 3D Two Movers Image */}
+                                <div className={`mb-2 transition-all duration-300 ${numberOfMovers === 2 ? 'scale-105' : 'group-hover:scale-105'}`}>
+                                  <img 
+                                    src={twoMoversImage} 
+                                    alt="Two movers carrying sofa" 
+                                    className="w-20 h-20 object-contain"
+                                  />
                                 </div>
                                 <p className="font-bold text-lg">2 Movers</p>
                                 <p className="text-xs sm:text-sm text-muted-foreground mt-1">
