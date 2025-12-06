@@ -48,6 +48,7 @@ export default function Support() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("faq");
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -268,7 +269,7 @@ export default function Support() {
           </div>
         </div>
 
-        <Tabs defaultValue="faq" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 max-w-lg mx-auto bg-muted/50 p-1">
             <TabsTrigger value="faq" className="gap-2" data-testid="tab-faq">
               <Book className="w-4 h-4" />
@@ -549,11 +550,11 @@ export default function Support() {
                     <p className="text-muted-foreground mb-4">
                       You haven't created any support tickets yet
                     </p>
-                    <Button variant="outline" onClick={() => {
-                      const tabsList = document.querySelector('[role="tablist"]');
-                      const contactTab = tabsList?.querySelector('[data-testid="tab-contact"]') as HTMLButtonElement;
-                      contactTab?.click();
-                    }}>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setActiveTab("contact")}
+                      data-testid="button-create-first-ticket"
+                    >
                       Create Your First Ticket
                     </Button>
                   </div>
