@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type User = {
   id: string;
@@ -69,6 +71,7 @@ type Booking = {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const { toast } = useToast();
 
   const { data: users } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -80,6 +83,26 @@ export default function AdminDashboard() {
 
   const { data: bookings } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/admin/cleanup-broken-bookings");
+    },
+    onSuccess: async (response: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Cleanup Complete",
+        description: response.message || "Broken bookings have been removed.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Cleanup Failed",
+        description: "Could not remove broken bookings. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   // Helper functions
@@ -144,11 +167,26 @@ export default function AdminDashboard() {
     <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Shield className="w-6 h-6 text-white" />
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-600 rounded-lg">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <h1 className="text-3xl md:text-4xl font-bold">Admin Dashboard</h1>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold">Admin Dashboard</h1>
+            <Button
+              variant="destructive"
+              onClick={() => cleanupMutation.mutate()}
+              disabled={cleanupMutation.isPending}
+              data-testid="button-cleanup-bookings"
+            >
+              {cleanupMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
+              Clean Broken Bookings
+            </Button>
           </div>
           <p className="text-muted-foreground text-lg">Platform overview and management</p>
         </div>

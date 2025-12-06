@@ -3233,6 +3233,46 @@ Respond with VALID JSON only:
     }
   });
 
+  // Admin: Cleanup bookings with broken/missing images
+  app.delete("/api/admin/cleanup-broken-bookings", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Find bookings with NULL/empty images OR old /uploads/ paths (which don't persist after deploy)
+      const allBookings = await storage.getBookings();
+      const brokenBookings = allBookings.filter(b => {
+        if (!b.images || b.images.length === 0) return true;
+        // Check if any image uses old /uploads/ path (not cloud storage)
+        return b.images.some(img => img.startsWith('/uploads/') && !img.startsWith('/objects/'));
+      });
+      
+      if (brokenBookings.length === 0) {
+        return res.json({ message: "No broken bookings found", deleted: 0 });
+      }
+      
+      const bookingIds = brokenBookings.map(b => b.id);
+      
+      // Delete related records first (FK constraints)
+      for (const bookingId of bookingIds) {
+        await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+        // Note: messages and reviews tables would also need cleanup if they have FK
+      }
+      
+      // Delete the bookings
+      for (const bookingId of bookingIds) {
+        await db.delete(bookings).where(eq(bookings.id, bookingId));
+      }
+      
+      res.json({ 
+        message: `Cleaned up ${brokenBookings.length} bookings with broken images`,
+        deleted: brokenBookings.length 
+      });
+    } catch (error) {
+      console.error('[Admin] Cleanup error:', error);
+      res.status(500).json({ error: "Failed to cleanup bookings" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
