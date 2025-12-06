@@ -1111,25 +1111,27 @@ export default function RequestMove() {
                               </AlertDescription>
                             </Alert>
                           )}
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(1)}
-                              className={`relative overflow-hidden rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
+                              className={`relative flex flex-col rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
                                 numberOfMovers === 1
                                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                                   : "border-border bg-card hover:border-primary/50"
                               }`}
                               data-testid="button-1-mover"
                             >
-                              <div className="relative">
+                              {/* Standardized media container so mover images/videos are sized and centered consistently */}
+                              <div className="relative w-full h-28 sm:h-36 flex items-center justify-center bg-muted/30 rounded-t-lg overflow-hidden">
                                 <video
                                   src={singleMoverVideo}
                                   autoPlay
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-32 object-cover rounded-t-lg"
+                                  className="max-w-full max-h-full object-contain"
+                                  style={{ maxWidth: '100%', maxHeight: '100%' }}
                                 />
                                 {numberOfMovers === 1 && (
                                   <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
@@ -1137,35 +1139,37 @@ export default function RequestMove() {
                                   </div>
                                 )}
                               </div>
-                              <div className="p-4 text-center">
-                                <p className="font-bold text-lg">1 Mover</p>
-                                <p className="text-xs text-muted-foreground mt-1">
+                              <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-4 text-center">
+                                <p className="font-bold text-base sm:text-lg">1 Mover</p>
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                                   Customer assists with carrying
                                 </p>
-                                <div className="mt-3 inline-flex items-center gap-1 bg-muted/50 px-3 py-1 rounded-full">
-                                  <DollarSign className="w-3 h-3" />
-                                  <span className="text-sm font-semibold">Standard Rate</span>
+                                <div className="mt-2 sm:mt-3 inline-flex items-center gap-1 bg-muted/50 px-2 sm:px-3 py-1 rounded-full">
+                                  <DollarSign className="w-3 h-3 flex-shrink-0" />
+                                  <span className="text-xs sm:text-sm font-semibold whitespace-nowrap">Standard Rate</span>
                                 </div>
                               </div>
                             </button>
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(2)}
-                              className={`relative overflow-hidden rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
+                              className={`relative flex flex-col rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
                                 numberOfMovers === 2
                                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                                   : "border-border bg-card hover:border-primary/50"
                               }`}
                               data-testid="button-2-movers"
                             >
-                              <div className="relative">
+                              {/* Standardized media container so mover images/videos are sized and centered consistently */}
+                              <div className="relative w-full h-28 sm:h-36 flex items-center justify-center bg-muted/30 rounded-t-lg overflow-hidden">
                                 <video
                                   src={twoMoversVideo}
                                   autoPlay
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-32 object-cover rounded-t-lg"
+                                  className="max-w-full max-h-full object-contain"
+                                  style={{ maxWidth: '100%', maxHeight: '100%' }}
                                 />
                                 {numberOfMovers === 2 && (
                                   <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
@@ -1178,14 +1182,14 @@ export default function RequestMove() {
                                   </div>
                                 )}
                               </div>
-                              <div className="p-4 text-center">
-                                <p className="font-bold text-lg">2 Movers</p>
-                                <p className="text-xs text-muted-foreground mt-1">
+                              <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-4 text-center">
+                                <p className="font-bold text-base sm:text-lg">2 Movers</p>
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                                   Full-service, no assistance needed
                                 </p>
-                                <div className="mt-3 inline-flex items-center gap-1 bg-primary/10 text-primary px-3 py-1 rounded-full">
-                                  <TrendingUp className="w-3 h-3" />
-                                  <span className="text-sm font-semibold">+30% Premium</span>
+                                <div className="mt-2 sm:mt-3 inline-flex items-center gap-1 bg-primary/10 text-primary px-2 sm:px-3 py-1 rounded-full">
+                                  <TrendingUp className="w-3 h-3 flex-shrink-0" />
+                                  <span className="text-xs sm:text-sm font-semibold whitespace-nowrap">+30% Premium</span>
                                 </div>
                               </div>
                             </button>
