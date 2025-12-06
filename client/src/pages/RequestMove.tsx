@@ -1129,7 +1129,7 @@ export default function RequestMove() {
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-16 object-cover rounded-t-lg"
+                                  className="w-full h-32 object-cover rounded-t-lg"
                                 />
                                 {numberOfMovers === 1 && (
                                   <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
@@ -1165,7 +1165,7 @@ export default function RequestMove() {
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-16 object-cover rounded-t-lg"
+                                  className="w-full h-32 object-cover rounded-t-lg"
                                 />
                                 {numberOfMovers === 2 && (
                                   <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
