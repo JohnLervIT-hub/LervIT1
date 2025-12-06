@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar } from "lucide-react";
+import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck } from "lucide-react";
 import { format } from "date-fns";
 
 interface Driver {
@@ -205,20 +205,53 @@ export default function AdminVerificationDashboard() {
     return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
 
-  return (
-    <div className="min-h-screen pt-24 pb-12 bg-muted/30">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">Driver Verification & Compliance</h1>
-          <p className="text-muted-foreground text-lg">Review and manage driver verification documents</p>
-        </div>
+  // Calculate stats
+  const totalDrivers = driversData?.total || 0;
+  const approvedDrivers = driversData?.drivers?.filter((d: Driver) => d.overallStatus === "APPROVED").length || 0;
+  const pendingDrivers = driversData?.drivers?.filter((d: Driver) => d.overallStatus === "INCOMPLETE" || d.overallStatus === "ATTENTION").length || 0;
+  const needsAttention = driversData?.drivers?.filter((d: Driver) => d.hasExpired || d.hasRejected).length || 0;
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>Search and filter drivers by verification status</CardDescription>
-          </CardHeader>
-          <CardContent>
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
+      {/* Premium Header */}
+      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center">
+              <FileCheck className="w-7 h-7" />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold">Driver Verification</h1>
+              <p className="text-blue-200">Review and manage driver compliance documents</p>
+            </div>
+          </div>
+          
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-blue-200 text-sm mb-1">Total Drivers</p>
+              <p className="text-3xl font-bold">{totalDrivers}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-green-200 text-sm mb-1">Fully Approved</p>
+              <p className="text-3xl font-bold text-green-300">{approvedDrivers}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-amber-200 text-sm mb-1">Pending Review</p>
+              <p className="text-3xl font-bold text-amber-300">{pendingDrivers}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-red-200 text-sm mb-1">Needs Attention</p>
+              <p className="text-3xl font-bold text-red-300">{needsAttention}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Search & Filters */}
+        <Card className="mb-6 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
@@ -227,13 +260,13 @@ export default function AdminVerificationDashboard() {
                     placeholder="Search by name, email, phone, or ID..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 h-11"
                     data-testid="input-search-drivers"
                   />
                 </div>
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-status-filter">
+                <SelectTrigger className="w-full sm:w-[200px] h-11" data-testid="select-status-filter">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>

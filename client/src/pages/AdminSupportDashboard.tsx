@@ -171,80 +171,61 @@ export default function AdminSupportDashboard() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-muted/30">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2" data-testid="text-admin-support-title">
-            Support Dashboard
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Manage and respond to user support tickets
-          </p>
-        </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Tickets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold" data-testid="text-total-tickets">{ticketStats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Open</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600" data-testid="text-open-tickets">{ticketStats.open}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600" data-testid="text-inprogress-tickets">{ticketStats.inProgress}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Resolved</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600" data-testid="text-resolved-tickets">{ticketStats.resolved}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Search</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tickets..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-admin-search"
-                />
-              </div>
+    <div className="min-h-screen bg-gradient-to-b from-purple-50/50 to-background dark:from-purple-950/20">
+      {/* Premium Header */}
+      <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-700 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center">
+              <MessageSquare className="w-7 h-7" />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2 block">Status</label>
+              <h1 className="text-3xl md:text-4xl font-bold" data-testid="text-admin-support-title">Support Center</h1>
+              <p className="text-purple-200">Manage and respond to user support tickets</p>
+            </div>
+          </div>
+          
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-purple-200 text-sm mb-1">Total Tickets</p>
+              <p className="text-3xl font-bold" data-testid="text-total-tickets">{ticketStats.total}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-blue-200 text-sm mb-1">Open</p>
+              <p className="text-3xl font-bold text-blue-300" data-testid="text-open-tickets">{ticketStats.open}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-amber-200 text-sm mb-1">In Progress</p>
+              <p className="text-3xl font-bold text-amber-300" data-testid="text-inprogress-tickets">{ticketStats.inProgress}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
+              <p className="text-green-200 text-sm mb-1">Resolved</p>
+              <p className="text-3xl font-bold text-green-300" data-testid="text-resolved-tickets">{ticketStats.resolved}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Filters */}
+        <Card className="mb-6 shadow-sm">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search tickets..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 h-11"
+                    data-testid="input-admin-search"
+                  />
+                </div>
+              </div>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger data-testid="select-admin-filter-status">
+                <SelectTrigger className="h-11" data-testid="select-admin-filter-status">
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -255,11 +236,8 @@ export default function AdminSupportDashboard() {
                   <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Priority</label>
               <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger data-testid="select-admin-filter-priority">
+                <SelectTrigger className="h-11" data-testid="select-admin-filter-priority">
                   <SelectValue placeholder="All priorities" />
                 </SelectTrigger>
                 <SelectContent>
@@ -271,9 +249,8 @@ export default function AdminSupportDashboard() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
       {/* Tickets List */}
       <Card>
