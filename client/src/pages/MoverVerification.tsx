@@ -343,95 +343,147 @@ export default function MoverVerification() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Verification & Compliance
-              </CardTitle>
-              <CardDescription>
-                Complete all verification requirements to go online and accept jobs
-              </CardDescription>
+      {/* Premium Progress Header */}
+      <Card className={status?.isComplete ? "bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20" : "bg-gradient-to-br from-primary/5 to-transparent"}>
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
+                status?.isComplete 
+                  ? 'bg-green-500/20' 
+                  : 'bg-primary/10'
+              }`}>
+                <Shield className={`w-7 h-7 ${status?.isComplete ? 'text-green-500' : 'text-primary'}`} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Verification & Compliance</h2>
+                <p className="text-muted-foreground text-sm">
+                  {status?.isComplete 
+                    ? 'All requirements complete - you can go online!' 
+                    : 'Complete all requirements to start accepting jobs'}
+                </p>
+              </div>
             </div>
             {status?.isComplete && (
-              <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+              <Badge variant="default" className="bg-green-500 hover:bg-green-600 px-3 py-1">
                 <CheckCircle className="w-4 h-4 mr-1" />
-                Fully Verified
+                Verified
               </Badge>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-muted-foreground">Verification Progress</span>
-                <span className="font-medium">{approvedCount} of {totalRequired} approved</span>
-              </div>
-              <Progress value={progressPercentage} className="h-2" data-testid="progress-verification" />
+          
+          <div className="space-y-3">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Verification Progress</span>
+              <span className="font-semibold text-lg">{approvedCount}/{totalRequired}</span>
             </div>
-
-            {!status?.isComplete && status?.incompleteItems && status.incompleteItems.length > 0 && (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  You must complete all verification items before you can go online to accept bookings.
-                </AlertDescription>
-              </Alert>
-            )}
+            <div className="relative">
+              <Progress value={progressPercentage} className="h-3" data-testid="progress-verification" />
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{approvedCount} approved</span>
+              <span>{totalRequired - approvedCount} remaining</span>
+            </div>
           </div>
+
+          {!status?.isComplete && (
+            <div className="mt-4 bg-amber-500/10 rounded-xl p-4 flex items-center gap-3 border border-amber-500/20">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Complete all verification items to go online and start earning.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <div className="space-y-4">
-        {VERIFICATION_ITEMS.map((itemConfig) => {
+      {/* Verification Items List */}
+      <div className="space-y-3">
+        <h3 className="font-semibold text-lg px-1">Required Documents</h3>
+        {VERIFICATION_ITEMS.map((itemConfig, index) => {
           const existingItem = items.find(item => item.type === itemConfig.type);
           const itemStatus = existingItem?.status || 'missing';
+          const normalizedStatus = itemStatus.toLowerCase();
+          const isApproved = normalizedStatus === 'approved';
+          const isRejected = normalizedStatus === 'rejected';
 
           return (
-            <Card key={itemConfig.type} data-testid={`card-verification-${itemConfig.type.toLowerCase()}`}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">{itemConfig.label}</CardTitle>
-                      {itemConfig.required && (
-                        <Badge variant="outline" className="text-xs">Required</Badge>
-                      )}
-                    </div>
-                    <CardDescription className="mt-1">{itemConfig.description}</CardDescription>
+            <Card 
+              key={itemConfig.type} 
+              data-testid={`card-verification-${itemConfig.type.toLowerCase()}`}
+              className={`transition-all hover-elevate ${
+                isApproved 
+                  ? 'border-green-500/30 bg-green-500/5' 
+                  : isRejected 
+                    ? 'border-destructive/30 bg-destructive/5' 
+                    : ''
+              }`}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start gap-4">
+                  {/* Step Number / Status Icon */}
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    isApproved 
+                      ? 'bg-green-500/20 text-green-500' 
+                      : isRejected 
+                        ? 'bg-destructive/20 text-destructive'
+                        : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {isApproved ? (
+                      <CheckCircle className="w-5 h-5" />
+                    ) : (
+                      <span className="font-bold">{index + 1}</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(itemStatus)}
-                    <UploadDocumentDialog
-                      itemConfig={itemConfig}
-                      existingItem={existingItem}
-                      moverId={mover.id}
-                    />
+                  
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold flex items-center gap-2">
+                          {itemConfig.label}
+                          {itemConfig.required && (
+                            <Badge variant="outline" className="text-xs font-normal">Required</Badge>
+                          )}
+                        </h4>
+                        <p className="text-sm text-muted-foreground mt-0.5">{itemConfig.description}</p>
+                        
+                        {existingItem && (
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            {existingItem.submittedAt && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {format(new Date(existingItem.submittedAt), 'MMM d, yyyy')}
+                              </span>
+                            )}
+                            {existingItem.expiryDate && (
+                              <span>Expires: {format(new Date(existingItem.expiryDate), 'MMM d, yyyy')}</span>
+                            )}
+                          </div>
+                        )}
+                        
+                        {existingItem?.status?.toLowerCase() === 'rejected' && existingItem.rejectionReason && (
+                          <div className="mt-3 bg-destructive/10 rounded-lg p-3 border border-destructive/20">
+                            <p className="text-sm text-destructive font-medium">Rejection Reason:</p>
+                            <p className="text-sm text-muted-foreground mt-1">{existingItem.rejectionReason}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        {getStatusBadge(itemStatus)}
+                        <UploadDocumentDialog
+                          itemConfig={itemConfig}
+                          existingItem={existingItem}
+                          moverId={mover.id}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </CardHeader>
-              {existingItem && (
-                <CardContent>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    {existingItem.submittedAt && (
-                      <p>Submitted: {format(new Date(existingItem.submittedAt), 'PPp')}</p>
-                    )}
-                    {existingItem.expiryDate && (
-                      <p>Expires: {format(new Date(existingItem.expiryDate), 'PP')}</p>
-                    )}
-                    {existingItem.status?.toLowerCase() === 'rejected' && existingItem.rejectionReason && (
-                      <Alert variant="destructive" className="mt-2">
-                        <AlertDescription>
-                          <strong>Reason:</strong> {existingItem.rejectionReason}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                </CardContent>
-              )}
+              </CardContent>
             </Card>
           );
         })}
