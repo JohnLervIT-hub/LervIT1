@@ -28,6 +28,8 @@ import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type Dr
 
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
+import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
+import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -1126,10 +1128,12 @@ export default function RequestMove() {
                               <div className="relative w-full h-28 sm:h-36 flex items-center justify-center bg-muted/30 rounded-t-lg overflow-hidden">
                                 <video
                                   src={singleMoverVideo}
+                                  poster={singleMoverPoster}
                                   autoPlay
                                   loop
                                   muted
                                   playsInline
+                                  preload="metadata"
                                   className="max-w-full max-h-full object-contain"
                                   style={{ maxWidth: '100%', maxHeight: '100%' }}
                                 />
@@ -1164,10 +1168,12 @@ export default function RequestMove() {
                               <div className="relative w-full h-28 sm:h-36 flex items-center justify-center bg-muted/30 rounded-t-lg overflow-hidden">
                                 <video
                                   src={twoMoversVideo}
+                                  poster={twoMoversPoster}
                                   autoPlay
                                   loop
                                   muted
                                   playsInline
+                                  preload="metadata"
                                   className="max-w-full max-h-full object-contain"
                                   style={{ maxWidth: '100%', maxHeight: '100%' }}
                                 />
