@@ -610,10 +610,10 @@ export default function RequestMove() {
 
   return (
     <>
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="max-w-md p-0 overflow-hidden" data-testid="dialog-booking-success">
+      <Dialog open={showSuccessDialog} onOpenChange={() => {}}>
+        <DialogContent className="max-w-lg w-[95vw] p-0 max-h-[90vh] overflow-hidden flex flex-col" data-testid="dialog-booking-success">
           {/* Compact Header */}
-          <div className="relative bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-5 border-b">
+          <div className="relative bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-5 border-b flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-primary" />
@@ -630,21 +630,27 @@ export default function RequestMove() {
           </div>
 
           {createdBooking && (
-            <div className="p-5 space-y-4">
-              {/* Compact Route Summary */}
-              <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Route Summary - Vertical on mobile for readability */}
+              <div className="space-y-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-[10px] font-bold">A</span>
                   </div>
-                  <p className="truncate text-muted-foreground">{createdBooking.pickupAddress}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Pickup</p>
+                    <p className="font-medium break-words">{createdBooking.pickupAddress}</p>
+                  </div>
                 </div>
-                <TrendingUp className="w-4 h-4 text-muted-foreground flex-shrink-0 rotate-90 sm:rotate-0" />
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
+                <div className="flex items-start gap-2">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-[10px] font-bold text-primary">B</span>
                   </div>
-                  <p className="truncate text-muted-foreground">{createdBooking.dropoffAddress}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Dropoff</p>
+                    <p className="font-medium break-words">{createdBooking.dropoffAddress}</p>
+                  </div>
                 </div>
               </div>
 

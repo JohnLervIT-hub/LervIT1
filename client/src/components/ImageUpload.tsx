@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Upload, X, Image as ImageIcon, CheckCircle, Loader2 } from "lucide-react";
+import { Upload, X, Camera, CheckCircle, Loader2, ImagePlus, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import imageCompression from "browser-image-compression";
 
@@ -22,10 +22,12 @@ const MAX_CONCURRENT_UPLOADS = 3;
 
 export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 }: ImageUploadProps) {
   const [images, setImages] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const isUploading = uploadProgress.some(p => p.status === 'compressing' || p.status === 'uploading');
 
   const isHeicFile = (file: File): boolean => {
     const ext = file.name.toLowerCase().split('.').pop();
@@ -38,7 +40,6 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
   const compressImage = async (file: File): Promise<File> => {
     if (!needsCompression(file)) {
-      console.log('[ImageUpload] File already optimized:', file.name, (file.size / 1024 / 1024).toFixed(2), 'MB');
       return file;
     }
 
@@ -53,9 +54,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     };
 
     try {
-      console.log('[ImageUpload] Compressing:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB', isHeic ? '(HEIC→JPEG)' : '');
       const compressedFile = await imageCompression(file, options);
-      console.log('[ImageUpload] Compressed:', file.name, 'New size:', (compressedFile.size / 1024 / 1024).toFixed(2), 'MB');
       return compressedFile;
     } catch (error) {
       console.warn('[ImageUpload] Compression failed for', file.name, '- using original:', error);
@@ -133,15 +132,17 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
   const uploadWithConcurrencyLimit = async (
     files: File[], 
-    limit: number
+    limit: number,
+    startIndex: number
   ): Promise<(string | null)[]> => {
     const results: (string | null)[] = new Array(files.length).fill(null);
-    let currentIndex = 0;
+    let currentFileIndex = 0;
     
     const worker = async () => {
-      while (currentIndex < files.length) {
-        const index = currentIndex++;
-        results[index] = await uploadSingleFile(files[index], index);
+      while (currentFileIndex < files.length) {
+        const fileIndex = currentFileIndex++;
+        const globalIndex = startIndex + fileIndex;
+        results[fileIndex] = await uploadSingleFile(files[fileIndex], globalIndex);
       }
     };
 
@@ -153,8 +154,6 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
   const uploadFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
-    
-    console.log('[ImageUpload] Starting upload for', fileArray.length, 'files');
     
     if (images.length + fileArray.length > maxImages) {
       toast({
@@ -189,41 +188,32 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       return;
     }
 
-    setUploading(true);
-    setUploadProgress(validFiles.map(f => ({ 
+    const startIndex = uploadProgress.length;
+    const newProgress = validFiles.map(f => ({ 
       file: f.name, 
       progress: 0, 
       status: 'compressing' as const 
-    })));
+    }));
+    setUploadProgress(prev => [...prev, ...newProgress]);
 
     try {
-      const results = await uploadWithConcurrencyLimit(validFiles, MAX_CONCURRENT_UPLOADS);
+      const results = await uploadWithConcurrencyLimit(validFiles, MAX_CONCURRENT_UPLOADS, startIndex);
       
       const successfulUrls = results.filter((url): url is string => url !== null);
-      const failedCount = results.length - successfulUrls.length;
 
       if (successfulUrls.length > 0) {
         const newImages = [...images, ...successfulUrls];
         setImages(newImages);
         onImagesChange(newImages);
-        
-        toast({
-          title: "Upload Complete",
-          description: failedCount > 0 
-            ? `${successfulUrls.length} uploaded, ${failedCount} failed`
-            : `${successfulUrls.length} image(s) uploaded`,
-        });
 
         if (onAnalyze) {
           onAnalyze(newImages);
         }
-      } else {
-        toast({
-          title: "Upload Failed",
-          description: "All uploads failed. Please try again.",
-          variant: "destructive",
-        });
       }
+
+      setTimeout(() => {
+        setUploadProgress(prev => prev.filter(p => p.status !== 'done'));
+      }, 2000);
     } catch (error) {
       console.error('[ImageUpload] Upload error:', error);
       toast({
@@ -231,9 +221,6 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
         description: error instanceof Error ? error.message : "Failed to upload images.",
         variant: "destructive",
       });
-    } finally {
-      setUploading(false);
-      setTimeout(() => setUploadProgress([]), 1500);
     }
   };
 
@@ -266,13 +253,13 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     e.stopPropagation();
     setIsDragging(false);
 
-    if (uploading || images.length >= maxImages) return;
+    if (images.length >= maxImages) return;
 
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       await uploadFiles(files);
     }
-  }, [uploading, images.length, maxImages]);
+  }, [images.length, maxImages]);
 
   const removeImage = (index: number) => {
     const newImages = images.filter((_, i) => i !== index);
@@ -281,9 +268,8 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
   };
 
   const triggerFileInput = () => {
-    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-    if (fileInput) {
-      fileInput.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -296,7 +282,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       case 'done':
         return <CheckCircle className="w-3 h-3 text-green-500" />;
       case 'error':
-        return <X className="w-3 h-3 text-red-500" />;
+        return <AlertCircle className="w-3 h-3 text-red-500" />;
     }
   };
 
@@ -313,121 +299,131 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div
-          onClick={triggerFileInput}
-          className="cursor-pointer"
-        >
-          <Card className={`border-2 border-dashed p-6 text-center transition-all duration-200 ${
-            isDragging 
-              ? 'border-primary bg-primary/5 shadow-lg' 
-              : 'border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/30'
-          }`}>
-            <div className="flex flex-col items-center gap-3">
-              <div className={`p-3 rounded-full ${isDragging ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                <Upload className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="font-semibold">
-                  {isDragging ? 'Drop images here' : 'Upload Photos'}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {isDragging ? 'Release to upload' : 'Drag & drop or click to select'}
-                </p>
-                <p className="text-xs text-primary font-medium mt-2">
-                  Required: At least 1 photo
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Auto-optimized for fast upload • Max {maxImages} images
-                </p>
-              </div>
-              {!isDragging && !uploading && (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={images.length >= maxImages}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    triggerFileInput();
-                  }}
-                  data-testid="button-select-images"
-                >
-                  <ImageIcon className="w-4 h-4 mr-2" />
-                  Select Images
-                </Button>
-              )}
-            </div>
-          </Card>
-        </div>
-        <input
-          id="image-upload"
-          type="file"
-          accept="image/*,.heic,.heif"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-          disabled={uploading || images.length >= maxImages}
-          data-testid="input-image-upload"
-        />
-      </div>
+  const activeUploads = uploadProgress.filter(p => p.status === 'compressing' || p.status === 'uploading');
+  const hasImages = images.length > 0;
 
-      {uploadProgress.length > 0 && (
-        <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
-          <p className="text-sm font-medium">Uploading {uploadProgress.length} file(s)...</p>
-          <div className="space-y-2">
-            {uploadProgress.map((item, index) => (
-              <div key={index} className="flex items-center gap-3 text-sm">
+  return (
+    <Card className="overflow-visible">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Camera className="w-5 h-5 text-primary" />
+            <div>
+              <h3 className="font-semibold text-sm">Upload Photos</h3>
+              <p className="text-xs text-muted-foreground">Take or upload photos of your items</p>
+            </div>
+          </div>
+          {hasImages && (
+            <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded-full">
+              {images.length}/{maxImages}
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      
+      <CardContent className="space-y-3">
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={triggerFileInput}
+          className={`relative cursor-pointer rounded-lg border-2 border-dashed p-4 text-center transition-all duration-200 ${
+            isDragging 
+              ? 'border-primary bg-primary/5 shadow-md' 
+              : 'border-muted-foreground/20 hover:border-primary/40 hover:bg-muted/20'
+          } ${images.length >= maxImages ? 'opacity-50 cursor-not-allowed' : ''}`}
+          data-testid="dropzone-upload"
+        >
+          <div className="flex flex-col items-center gap-2">
+            <div className={`p-2.5 rounded-full transition-colors ${isDragging ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+              {isDragging ? <Upload className="w-5 h-5" /> : <ImagePlus className="w-5 h-5" />}
+            </div>
+            <div>
+              <p className="font-medium text-sm">
+                {isDragging ? 'Drop photos here' : 'Add Photos'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isDragging ? 'Release to upload' : 'Drag & drop or tap to select'}
+              </p>
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.heic,.heif"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+            disabled={images.length >= maxImages}
+            data-testid="input-image-upload"
+          />
+        </div>
+
+        {!hasImages && (
+          <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              <span className="font-medium">Required:</span> Please upload at least 1 photo of your items
+            </p>
+          </div>
+        )}
+
+        {activeUploads.length > 0 && (
+          <div className="space-y-1.5 p-2 bg-muted/30 rounded-lg text-xs">
+            {activeUploads.map((item, index) => (
+              <div key={index} className="flex items-center gap-2">
                 {getStatusIcon(item.status)}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="truncate text-xs max-w-[150px]">{item.file}</span>
-                    <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">{getStatusText(item)}</span>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="truncate max-w-[120px] text-muted-foreground">{item.file}</span>
+                    <span className="text-muted-foreground ml-2 flex-shrink-0">{getStatusText(item)}</span>
                   </div>
-                  <Progress value={item.progress} className="h-1.5" />
+                  <Progress value={item.progress} className="h-1" />
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {images.length > 0 && (
-        <div>
-          <p className="text-sm font-medium mb-2">
-            Uploaded ({images.length}/{maxImages})
-          </p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+        {hasImages && (
+          <div className="grid grid-cols-4 gap-2">
             {images.map((url, index) => (
               <div key={index} className="relative group aspect-square">
-                <Card className="overflow-hidden h-full">
+                <div className="overflow-hidden rounded-md h-full border bg-muted">
                   <img
                     src={url}
-                    alt={`Upload ${index + 1}`}
+                    alt={`Item ${index + 1}`}
                     className="w-full h-full object-cover"
                     data-testid={`image-preview-${index}`}
                   />
-                </Card>
+                </div>
                 <Button
                   type="button"
                   size="icon"
                   variant="destructive"
-                  className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => removeImage(index)}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeImage(index);
+                  }}
                   data-testid={`button-remove-image-${index}`}
                 >
                   <X className="w-3 h-3" />
                 </Button>
               </div>
             ))}
+            {images.length < maxImages && (
+              <div
+                onClick={triggerFileInput}
+                className="aspect-square rounded-md border-2 border-dashed border-muted-foreground/20 flex items-center justify-center cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors"
+                data-testid="button-add-more-images"
+              >
+                <ImagePlus className="w-5 h-5 text-muted-foreground" />
+              </div>
+            )}
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
