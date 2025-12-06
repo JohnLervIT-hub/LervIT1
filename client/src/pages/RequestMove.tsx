@@ -25,9 +25,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 
-// 3D mover images for number of movers selection (transparent backgrounds)
-import singleMoverImage from "@assets/generated_images/single_mover_no_background.png";
-import twoMoversImage from "@assets/generated_images/two_movers_no_background.png";
+// 3D mover images for number of movers selection
+import singleMoverImage from "@assets/generated_images/3d_single_mover_with_box.png";
+import twoMoversImage from "@assets/generated_images/3d_two_movers_with_sofa.png";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 // Helper functions for load size validation
