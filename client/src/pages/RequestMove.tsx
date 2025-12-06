@@ -1096,6 +1096,7 @@ export default function RequestMove() {
                           </div>
                         )}
 
+                        {/* Number of Movers Section with Animated Person Visuals */}
                         <div className="border-t pt-6">
                           <Label className="text-base font-semibold mb-2 block flex items-center gap-2">
                             <Users className="w-5 h-5" />
@@ -1108,42 +1109,121 @@ export default function RequestMove() {
                               </AlertDescription>
                             </Alert>
                           )}
+                          {/* Animated Mover Selection Cards */}
                           <div className="grid grid-cols-2 gap-4">
+                            {/* 1 Mover Card with animated person icon */}
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(1)}
-                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
-                                numberOfMovers === 1
-                                  ? "border-primary bg-primary/10"
-                                  : "border-border bg-card"
-                              }`}
+                              className={`group relative p-5 rounded-lg border-2 transition-all duration-300 ease-out
+                                ${numberOfMovers === 1
+                                  ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
+                                  : "border-border bg-card hover:border-primary/50 hover:shadow-md"
+                                }
+                                transform hover:scale-[1.03] active:scale-[0.98]
+                                animate-in fade-in slide-in-from-bottom-2 duration-500
+                              `}
+                              style={{ animationDelay: '0ms' }}
                               data-testid="button-1-mover"
                             >
-                              <div className="text-center">
+                              <div className="flex flex-col items-center text-center">
+                                {/* Single Person Icon with animation */}
+                                <div className={`mb-3 transition-all duration-300 ${numberOfMovers === 1 ? 'scale-110' : 'group-hover:scale-105'}`}>
+                                  <svg 
+                                    viewBox="0 0 64 80" 
+                                    className={`w-16 h-20 transition-colors duration-300 ${
+                                      numberOfMovers === 1 ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70'
+                                    }`}
+                                    fill="currentColor"
+                                  >
+                                    {/* Person body with subtle gradient effect */}
+                                    <circle cx="32" cy="16" r="12" className="drop-shadow-sm" />
+                                    <path d="M32 32c-12 0-22 8-22 18v8c0 2 2 4 4 4h36c2 0 4-2 4-4v-8c0-10-10-18-22-18z" className="drop-shadow-sm" />
+                                    {/* Carrying box detail */}
+                                    <rect x="20" y="44" width="24" height="16" rx="2" className="fill-amber-500/80" />
+                                    <line x1="26" y1="44" x2="26" y2="60" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+                                    <line x1="38" y1="44" x2="38" y2="60" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+                                  </svg>
+                                </div>
                                 <p className="font-bold text-lg">1 Mover</p>
-                                <p className="text-sm text-muted-foreground mt-1">
+                                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                                   Customer helps with carry
                                 </p>
-                                <p className="text-sm font-semibold mt-2">Standard Price</p>
+                                <p className={`text-sm font-semibold mt-2 ${numberOfMovers === 1 ? 'text-primary' : ''}`}>
+                                  Standard Price
+                                </p>
                               </div>
+                              {/* Selection indicator */}
+                              {numberOfMovers === 1 && (
+                                <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center animate-in zoom-in duration-200">
+                                  <CheckCircle className="w-4 h-4 text-primary-foreground" />
+                                </div>
+                              )}
                             </button>
+
+                            {/* 2 Movers Card with animated person icons */}
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(2)}
-                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
-                                numberOfMovers === 2
-                                  ? "border-primary bg-primary/10"
-                                  : "border-border bg-card"
-                              }`}
+                              className={`group relative p-5 rounded-lg border-2 transition-all duration-300 ease-out
+                                ${numberOfMovers === 2
+                                  ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
+                                  : "border-border bg-card hover:border-primary/50 hover:shadow-md"
+                                }
+                                transform hover:scale-[1.03] active:scale-[0.98]
+                                animate-in fade-in slide-in-from-bottom-2 duration-500
+                              `}
+                              style={{ animationDelay: '100ms' }}
                               data-testid="button-2-movers"
                             >
-                              <div className="text-center">
+                              <div className="flex flex-col items-center text-center">
+                                {/* Two Person Icons with animation */}
+                                <div className={`mb-3 flex items-end gap-1 transition-all duration-300 ${numberOfMovers === 2 ? 'scale-110' : 'group-hover:scale-105'}`}>
+                                  {/* First person */}
+                                  <svg 
+                                    viewBox="0 0 48 64" 
+                                    className={`w-10 h-14 transition-colors duration-300 ${
+                                      numberOfMovers === 2 ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70'
+                                    }`}
+                                    fill="currentColor"
+                                  >
+                                    <circle cx="24" cy="12" r="9" className="drop-shadow-sm" />
+                                    <path d="M24 24c-10 0-18 6-18 14v6c0 1.5 1.5 3 3 3h30c1.5 0 3-1.5 3-3v-6c0-8-8-14-18-14z" className="drop-shadow-sm" />
+                                  </svg>
+                                  {/* Second person */}
+                                  <svg 
+                                    viewBox="0 0 48 64" 
+                                    className={`w-10 h-14 transition-colors duration-300 ${
+                                      numberOfMovers === 2 ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70'
+                                    }`}
+                                    fill="currentColor"
+                                  >
+                                    <circle cx="24" cy="12" r="9" className="drop-shadow-sm" />
+                                    <path d="M24 24c-10 0-18 6-18 14v6c0 1.5 1.5 3 3 3h30c1.5 0 3-1.5 3-3v-6c0-8-8-14-18-14z" className="drop-shadow-sm" />
+                                  </svg>
+                                </div>
+                                {/* Shared carrying item indicator */}
+                                <div className={`-mt-5 mb-2 transition-all duration-300 ${numberOfMovers === 2 ? 'opacity-100' : 'opacity-70 group-hover:opacity-90'}`}>
+                                  <svg viewBox="0 0 60 24" className="w-14 h-6">
+                                    <rect x="5" y="4" width="50" height="16" rx="3" className={`transition-colors duration-300 ${numberOfMovers === 2 ? 'fill-amber-500' : 'fill-amber-500/60'}`} />
+                                    <line x1="20" y1="4" x2="20" y2="20" stroke="white" strokeWidth="1" strokeOpacity="0.4" />
+                                    <line x1="40" y1="4" x2="40" y2="20" stroke="white" strokeWidth="1" strokeOpacity="0.4" />
+                                  </svg>
+                                </div>
                                 <p className="font-bold text-lg">2 Movers</p>
-                                <p className="text-sm text-muted-foreground mt-1">
+                                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                                   Movers handle everything
                                 </p>
-                                <p className="text-sm font-semibold mt-2 text-primary">×1.30 Price</p>
+                                <p className={`text-sm font-semibold mt-2 ${numberOfMovers === 2 ? 'text-primary' : 'text-primary/80'}`}>
+                                  ×1.30 Price
+                                </p>
                               </div>
+                              {/* Selection indicator */}
+                              {numberOfMovers === 2 && (
+                                <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center animate-in zoom-in duration-200">
+                                  <CheckCircle className="w-4 h-4 text-primary-foreground" />
+                                </div>
+                              )}
                             </button>
                           </div>
                         </div>
