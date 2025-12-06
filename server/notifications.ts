@@ -13,7 +13,7 @@ export interface EmailNotification {
 }
 
 class NotificationService {
-  private fromEmail = 'LervIT <support@app.lervit.com>';
+  private fromEmail = 'LervIT <onboarding@resend.dev>';
   
   async sendEmail(notification: EmailNotification): Promise<void> {
     // Log for debugging
@@ -28,7 +28,7 @@ class NotificationService {
         const { data, error } = await resend.emails.send({
           from: this.fromEmail,
           to: notification.to,
-          replyTo: 'support@app.lervit.com',
+          replyTo: 'support@lervit.com',
           subject: notification.subject,
           html: notification.body,
         });
