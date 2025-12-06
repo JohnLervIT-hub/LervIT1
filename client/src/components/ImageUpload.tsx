@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Image as ImageIcon } from "lucide-react";
+import { Upload, X, Image as ImageIcon, Loader2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ImageUploadProps {
@@ -10,19 +10,61 @@ interface ImageUploadProps {
   maxImages?: number;
 }
 
+async function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    img.onload = () => {
+      let { width, height } = img;
+      
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      if (ctx) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to compress image'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      } else {
+        reject(new Error('Could not get canvas context'));
+      }
+    };
+    
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 }: ImageUploadProps) {
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
-  const uploadFiles = async (files: FileList | File[]) => {
+  const uploadFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     
     console.log('[ImageUpload] Starting upload for', fileArray.length, 'files');
-    fileArray.forEach((file, i) => {
-      console.log(`[ImageUpload] File ${i + 1}:`, file.name, file.type, file.size, 'bytes');
-    });
     
     if (images.length + fileArray.length > maxImages) {
       toast({
@@ -33,27 +75,18 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       return;
     }
 
-    // Validate file types - support mobile formats including HEIC/HEIF
-    // Be very lenient for mobile compatibility
     const validFiles = fileArray.filter(file => {
-      // Accept any file that has image in its MIME type
       if (file.type && file.type.startsWith('image/')) {
-        console.log('[ImageUpload] Accepted by MIME type:', file.type);
         return true;
       }
-      // Fallback: check file extension
       const ext = file.name.toLowerCase().split('.').pop();
       const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'tiff', 'tif'];
       if (ext && allowedExtensions.includes(ext)) {
-        console.log('[ImageUpload] Accepted by extension:', ext);
         return true;
       }
-      // If no MIME type but has a reasonable file size, accept it (mobile quirk)
       if (!file.type && file.size > 0 && file.size < 20 * 1024 * 1024) {
-        console.log('[ImageUpload] Accepted without MIME type (mobile fallback)');
         return true;
       }
-      console.log('[ImageUpload] Rejected file:', file.name, file.type);
       return false;
     });
 
@@ -67,20 +100,53 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     }
 
     setUploading(true);
-    const formData = new FormData();
+    setUploadProgress(0);
     
-    for (let i = 0; i < validFiles.length; i++) {
-      formData.append('images', validFiles[i]);
-    }
-
     try {
-      console.log('[ImageUpload] Sending upload request...');
+      const processedFiles: { blob: Blob; name: string; wasCompressed: boolean }[] = [];
+      
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        setUploadProgress(Math.round((i / validFiles.length) * 50));
+        
+        const isCompressibleFormat = file.type.startsWith('image/') && 
+          !file.type.includes('heic') && !file.type.includes('heif') &&
+          !file.name.toLowerCase().endsWith('.heic') && !file.name.toLowerCase().endsWith('.heif');
+        
+        try {
+          if (isCompressibleFormat && file.size > 500 * 1024) {
+            console.log('[ImageUpload] Compressing', file.name, 'from', (file.size / 1024).toFixed(0), 'KB');
+            const compressed = await compressImage(file);
+            console.log('[ImageUpload] Compressed to', (compressed.size / 1024).toFixed(0), 'KB');
+            processedFiles.push({ 
+              blob: compressed, 
+              name: file.name.replace(/\.[^/.]+$/, '') + '.jpg',
+              wasCompressed: true 
+            });
+          } else {
+            processedFiles.push({ blob: file, name: file.name, wasCompressed: false });
+          }
+        } catch (err) {
+          console.log('[ImageUpload] Compression failed, using original:', err);
+          processedFiles.push({ blob: file, name: file.name, wasCompressed: false });
+        }
+      }
+      
+      setUploadProgress(60);
+      
+      const formData = new FormData();
+      processedFiles.forEach(({ blob, name }) => {
+        formData.append('images', blob, name);
+      });
+
+      console.log('[ImageUpload] Uploading', processedFiles.length, 'files...');
+      
       const response = await fetch('/api/upload/images', {
         method: 'POST',
         body: formData,
       });
 
-      console.log('[ImageUpload] Response status:', response.status);
+      setUploadProgress(90);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -89,20 +155,20 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       }
 
       const data = await response.json();
-      console.log('[ImageUpload] Upload successful, URLs:', data.urls);
+      console.log('[ImageUpload] Upload successful:', data.urls);
       
       const newImages = [...images, ...data.urls];
       setImages(newImages);
       onImagesChange(newImages);
+      setUploadProgress(100);
       
       toast({
-        title: "Success",
+        title: "Upload complete",
         description: `${validFiles.length} image(s) uploaded successfully.`,
       });
       
-      // Trigger auto-analyze after upload if callback provided
       if (onAnalyze) {
-        console.log('[ImageUpload] Triggering auto-analyze for', newImages.length, 'images');
+        console.log('[ImageUpload] Triggering auto-analyze');
         onAnalyze(newImages);
       }
     } catch (error) {
@@ -114,13 +180,13 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       });
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
-  };
+  }, [images, maxImages, onImagesChange, onAnalyze, toast]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    
     await uploadFiles(files);
     e.target.value = '';
   };
@@ -134,9 +200,6 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    // Only clear isDragging if we're actually leaving the drop zone
-    // (not just entering a child element)
     const relatedTarget = e.relatedTarget as Node;
     if (!e.currentTarget.contains(relatedTarget)) {
       setIsDragging(false);
@@ -177,37 +240,58 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
         onDrop={handleDrop}
       >
         <div
-          onClick={triggerFileInput}
-          className="cursor-pointer"
+          onClick={!uploading ? triggerFileInput : undefined}
+          className={uploading ? '' : 'cursor-pointer'}
         >
-          <Card className={`border-2 border-dashed p-8 text-center transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
-            isDragging 
-              ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30 shadow-lg shadow-orange-500/20' 
-              : 'border-orange-300 dark:border-orange-600 bg-orange-50/50 dark:bg-orange-950/10 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20'
+          <Card className={`relative border-2 border-dashed p-6 sm:p-8 text-center transition-all duration-200 ${
+            uploading 
+              ? 'border-primary bg-primary/5' 
+              : isDragging 
+                ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' 
+                : 'border-primary/30 hover:border-primary hover:bg-primary/5'
           }`}>
+            {/* Upload Progress Overlay */}
+            {uploading && (
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
+                <Loader2 className="w-10 h-10 animate-spin text-primary mb-3" />
+                <p className="font-semibold text-primary">Uploading...</p>
+                <div className="w-48 h-2 bg-muted rounded-full mt-3 overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300 rounded-full"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">{uploadProgress}%</p>
+              </div>
+            )}
+            
             <div className="flex flex-col items-center gap-3">
-              <div className={`p-3 rounded-full ${isDragging ? 'bg-orange-500 text-white' : 'bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400'}`}>
+              <div className={`p-4 rounded-full transition-colors ${
+                isDragging ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
+              }`}>
                 <Upload className="w-8 h-8" />
               </div>
               <div>
-                <p className={`font-bold text-lg ${isDragging ? 'text-orange-600 dark:text-orange-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                <p className={`font-bold text-lg ${isDragging ? 'text-primary' : ''}`}>
                   {isDragging ? 'Drop images here' : 'Upload Photos'}
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {isDragging ? 'Release to upload' : 'Drag & drop or click to select images'}
+                  {isDragging ? 'Release to upload' : 'Drag & drop or click to select'}
                 </p>
-                <p className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-2">
-                  Required: At least 1 photo of your items
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Max {maxImages} images, 5MB each (JPG, PNG, GIF, WebP)
-                </p>
+                <div className="flex flex-wrap justify-center gap-2 mt-3">
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                    Required: At least 1 photo
+                  </span>
+                  <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                    Max {maxImages} images
+                  </span>
+                </div>
               </div>
-              {!isDragging && (
+              {!isDragging && !uploading && (
                 <Button
                   type="button"
-                  className="bg-orange-500 hover:bg-orange-600 text-white mt-2"
-                  disabled={uploading || images.length >= maxImages}
+                  className="mt-2"
+                  disabled={images.length >= maxImages}
                   onClick={(e) => {
                     e.stopPropagation();
                     triggerFileInput();
@@ -215,7 +299,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
                   data-testid="button-select-images"
                 >
                   <ImageIcon className="w-4 h-4 mr-2" />
-                  {uploading ? "Uploading..." : "Select Images"}
+                  Select Images
                 </Button>
               )}
             </div>
@@ -235,17 +319,21 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
       {images.length > 0 && (
         <div>
-          <p className="text-sm font-medium mb-2">
-            Uploaded Images ({images.length}/{maxImages})
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+              Uploaded ({images.length}/{maxImages})
+            </p>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
             {images.map((url, index) => (
-              <div key={index} className="relative group">
-                <Card className="overflow-hidden">
+              <div key={index} className="relative group aspect-square">
+                <Card className="overflow-hidden h-full">
                   <img
                     src={url}
                     alt={`Upload ${index + 1}`}
-                    className="w-full h-32 object-cover"
+                    className="w-full h-full object-cover"
+                    loading="lazy"
                     data-testid={`image-preview-${index}`}
                   />
                 </Card>
@@ -253,11 +341,11 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
                   type="button"
                   size="icon"
                   variant="destructive"
-                  className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                   onClick={() => removeImage(index)}
                   data-testid={`button-remove-image-${index}`}
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3 h-3" />
                 </Button>
               </div>
             ))}

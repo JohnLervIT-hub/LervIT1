@@ -24,7 +24,14 @@ import {
   DollarSign,
   MapPin,
   Shield,
-  Search
+  Search,
+  Send,
+  Sparkles,
+  Phone,
+  Mail,
+  Headphones,
+  ChevronRight,
+  Loader2
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { SupportTicket } from "@shared/schema";
@@ -55,7 +62,6 @@ export default function Support() {
 
   const createTicketMutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
-      // Get auth headers
       const storedUser = localStorage.getItem("moveit_user");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (storedUser) {
@@ -64,9 +70,7 @@ export default function Support() {
           if (userData.id) {
             headers["Authorization"] = `Bearer ${userData.id}`;
           }
-        } catch (e) {
-          // Invalid stored user
-        }
+        } catch (e) {}
       }
       
       const res = await fetch("/api/support/tickets", {
@@ -108,6 +112,8 @@ export default function Support() {
     {
       category: "Getting Started",
       icon: Book,
+      color: "text-blue-600",
+      bgColor: "bg-blue-500/10",
       questions: [
         {
           q: "How do I request a move?",
@@ -126,6 +132,8 @@ export default function Support() {
     {
       category: "Booking & Pricing",
       icon: DollarSign,
+      color: "text-green-600",
+      bgColor: "bg-green-500/10",
       questions: [
         {
           q: "What's included in the Base Fee?",
@@ -146,8 +154,10 @@ export default function Support() {
       ]
     },
     {
-      category: "Movers & Proximity Matching",
+      category: "Movers & Matching",
       icon: MapPin,
+      color: "text-primary",
+      bgColor: "bg-primary/10",
       questions: [
         {
           q: "How does LervIT find movers near me?",
@@ -165,7 +175,9 @@ export default function Support() {
     },
     {
       category: "AI Features",
-      icon: HelpCircle,
+      icon: Sparkles,
+      color: "text-purple-600",
+      bgColor: "bg-purple-500/10",
       questions: [
         {
           q: "What is AI Auto-Quote Predictor?",
@@ -184,6 +196,8 @@ export default function Support() {
     {
       category: "Safety & Trust",
       icon: Shield,
+      color: "text-amber-600",
+      bgColor: "bg-amber-500/10",
       questions: [
         {
           q: "Are movers verified?",
@@ -212,294 +226,350 @@ export default function Support() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "open":
-        return <Clock className="w-4 h-4" />;
-      case "in_progress":
-        return <AlertCircle className="w-4 h-4" />;
+      case "open": return <Clock className="w-4 h-4" />;
+      case "in_progress": return <AlertCircle className="w-4 h-4" />;
       case "resolved":
-      case "closed":
-        return <CheckCircle2 className="w-4 h-4" />;
-      default:
-        return <HelpCircle className="w-4 h-4" />;
+      case "closed": return <CheckCircle2 className="w-4 h-4" />;
+      default: return <HelpCircle className="w-4 h-4" />;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "open":
-        return "bg-blue-500/10 text-blue-700 dark:text-blue-400";
-      case "in_progress":
-        return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400";
+      case "open": return "bg-blue-500/10 text-blue-600";
+      case "in_progress": return "bg-amber-500/10 text-amber-600";
       case "resolved":
-      case "closed":
-        return "bg-green-500/10 text-green-700 dark:text-green-400";
-      default:
-        return "bg-gray-500/10 text-gray-700 dark:text-gray-400";
+      case "closed": return "bg-green-500/10 text-green-600";
+      default: return "bg-muted text-muted-foreground";
     }
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-background to-muted/20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2" data-testid="text-support-title">
-            Support & Help Center
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Get answers to your questions or contact our support team
-          </p>
+        {/* Hero Header */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-accent/5 to-transparent rounded-2xl p-6 sm:p-8 mb-8">
+          <div className="absolute -right-16 -top-16 w-48 h-48 bg-primary/10 rounded-full blur-3xl" />
+          <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-2xl" />
+          
+          <div className="relative text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Headphones className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold mb-2" data-testid="text-support-title">
+              Support & Help Center
+            </h1>
+            <p className="text-muted-foreground text-lg max-w-lg mx-auto">
+              Get answers to your questions or contact our friendly support team
+            </p>
+            
+            {/* Quick Contact */}
+            <div className="flex flex-wrap justify-center gap-4 mt-6">
+              <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm px-4 py-2 rounded-full border">
+                <Mail className="w-4 h-4 text-primary" />
+                <span className="text-sm">support@lervit.com</span>
+              </div>
+              <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm px-4 py-2 rounded-full border">
+                <Phone className="w-4 h-4 text-primary" />
+                <span className="text-sm">1-800-LERVIT</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <Tabs defaultValue="faq" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
-          <TabsTrigger value="faq" data-testid="tab-faq">
-            <Book className="w-4 h-4 mr-2" />
-            FAQ
-          </TabsTrigger>
-          <TabsTrigger value="contact" data-testid="tab-contact">
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Contact Support
-          </TabsTrigger>
-          <TabsTrigger value="tickets" data-testid="tab-my-tickets" disabled={!user}>
-            <HelpCircle className="w-4 h-4 mr-2" />
-            My Tickets
-          </TabsTrigger>
-        </TabsList>
+          <TabsList className="grid w-full grid-cols-3 max-w-lg mx-auto bg-muted/50 p-1">
+            <TabsTrigger value="faq" className="gap-2" data-testid="tab-faq">
+              <Book className="w-4 h-4" />
+              <span className="hidden sm:inline">FAQ</span>
+            </TabsTrigger>
+            <TabsTrigger value="contact" className="gap-2" data-testid="tab-contact">
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Contact</span>
+            </TabsTrigger>
+            <TabsTrigger value="tickets" className="gap-2" data-testid="tab-my-tickets" disabled={!user}>
+              <HelpCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">My Tickets</span>
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="faq" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Search className="w-5 h-5" />
-                Search FAQs
-              </CardTitle>
-              <CardDescription>
-                Find quick answers to common questions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          <TabsContent value="faq" className="space-y-6">
+            {/* Search */}
+            <div className="relative max-w-xl mx-auto">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <Input
                 placeholder="Search for questions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="mb-6"
+                className="pl-12 h-12 text-base bg-card"
                 data-testid="input-faq-search"
               />
+            </div>
 
-              <div className="space-y-6">
-                {filteredFaq.map((category, idx) => (
-                  <div key={idx}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <category.icon className="w-5 h-5 text-primary" />
-                      <h3 className="text-lg font-semibold">{category.category}</h3>
+            {/* FAQ Categories */}
+            <div className="space-y-6">
+              {filteredFaq.map((category, idx) => (
+                <Card key={idx} className="overflow-hidden">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg ${category.bgColor} flex items-center justify-center`}>
+                        <category.icon className={`w-5 h-5 ${category.color}`} />
+                      </div>
+                      <CardTitle className="text-lg">{category.category}</CardTitle>
                     </div>
-                    <Accordion type="single" collapsible>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Accordion type="single" collapsible className="space-y-2">
                       {category.questions.map((item, qIdx) => (
-                        <AccordionItem key={qIdx} value={`${idx}-${qIdx}`}>
-                          <AccordionTrigger data-testid={`accordion-faq-${idx}-${qIdx}`}>
-                            {item.q}
+                        <AccordionItem key={qIdx} value={`${idx}-${qIdx}`} className="border rounded-lg px-4">
+                          <AccordionTrigger className="text-left hover:no-underline py-4" data-testid={`accordion-faq-${idx}-${qIdx}`}>
+                            <span className="font-medium pr-4">{item.q}</span>
                           </AccordionTrigger>
-                          <AccordionContent className="text-muted-foreground">
+                          <AccordionContent className="text-muted-foreground pb-4">
                             {item.a}
                           </AccordionContent>
                         </AccordionItem>
                       ))}
                     </Accordion>
-                  </div>
-                ))}
+                  </CardContent>
+                </Card>
+              ))}
 
-                {filteredFaq.length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No FAQs found matching "{searchQuery}"</p>
-                    <p className="text-sm mt-2">Try different keywords or contact support</p>
+              {filteredFaq.length === 0 && (
+                <Card className="border-dashed">
+                  <CardContent className="pt-12 pb-12 text-center">
+                    <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2">No results found</h3>
+                    <p className="text-muted-foreground">
+                      No FAQs match "{searchQuery}". Try different keywords or contact support.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="contact" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Send className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Create Support Ticket</CardTitle>
+                    <CardDescription>
+                      {user 
+                        ? "Describe your issue and we'll respond within 24 hours"
+                        : "Please log in to create a support ticket"
+                      }
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {user ? (
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                      <FormField
+                        control={form.control}
+                        name="subject"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Subject</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="Brief description of your issue" 
+                                className="h-11"
+                                {...field} 
+                                data-testid="input-ticket-subject"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="category"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Category</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger className="h-11" data-testid="select-ticket-category">
+                                    <SelectValue placeholder="Select category" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="general">General Inquiry</SelectItem>
+                                  <SelectItem value="booking">Booking Issue</SelectItem>
+                                  <SelectItem value="billing">Billing & Payment</SelectItem>
+                                  <SelectItem value="technical">Technical Problem</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="priority"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Priority</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger className="h-11" data-testid="select-ticket-priority">
+                                    <SelectValue placeholder="Select priority" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="low">Low - General question</SelectItem>
+                                  <SelectItem value="normal">Normal - Need help soon</SelectItem>
+                                  <SelectItem value="high">High - Urgent issue</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="message"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Message</FormLabel>
+                            <FormControl>
+                              <Textarea 
+                                placeholder="Please describe your issue in detail. Include any relevant booking IDs, dates, or screenshots if applicable..."
+                                className="min-h-32 resize-none"
+                                {...field}
+                                data-testid="textarea-ticket-message"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <Button 
+                        type="submit" 
+                        size="lg"
+                        className="w-full"
+                        disabled={createTicketMutation.isPending}
+                        data-testid="button-submit-ticket"
+                      >
+                        {createTicketMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Creating Ticket...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" />
+                            Submit Ticket
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </Form>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                      <HelpCircle className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <p className="text-muted-foreground mb-4">
+                      You need to be logged in to create a support ticket
+                    </p>
+                    <Button asChild data-testid="button-login-to-support">
+                      <a href="/login">
+                        Log In to Continue
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </a>
+                    </Button>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="contact" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create Support Ticket</CardTitle>
-              <CardDescription>
-                {user 
-                  ? "Describe your issue and we'll get back to you as soon as possible"
-                  : "Please log in to create a support ticket"
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {user ? (
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="subject"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Subject</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="Brief description of your issue" 
-                              {...field} 
-                              data-testid="input-ticket-subject"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="category"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Category</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-ticket-category">
-                                  <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="general">General</SelectItem>
-                                <SelectItem value="booking">Booking</SelectItem>
-                                <SelectItem value="billing">Billing</SelectItem>
-                                <SelectItem value="technical">Technical</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="priority"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Priority</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-ticket-priority">
-                                  <SelectValue placeholder="Select priority" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="normal">Normal</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="message"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Message</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Provide detailed information about your issue..."
-                              className="min-h-32"
-                              {...field}
-                              data-testid="textarea-ticket-message"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button 
-                      type="submit" 
-                      className="w-full"
-                      disabled={createTicketMutation.isPending}
-                      data-testid="button-submit-ticket"
-                    >
-                      {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
-                    </Button>
-                  </form>
-                </Form>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">
-                    You need to be logged in to create a support ticket
-                  </p>
-                  <Button asChild data-testid="button-login-to-support">
-                    <a href="/login">Log In</a>
-                  </Button>
+          <TabsContent value="tickets" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <HelpCircle className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>My Support Tickets</CardTitle>
+                    <CardDescription>
+                      View and track your support requests
+                    </CardDescription>
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="tickets" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>My Support Tickets</CardTitle>
-              <CardDescription>
-                View and track your support requests
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {myTickets && myTickets.length > 0 ? (
-                <div className="space-y-3">
-                  {myTickets.map((ticket) => (
-                    <Card key={ticket.id} className="hover-elevate">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <CardTitle className="text-lg mb-1" data-testid={`text-ticket-subject-${ticket.id}`}>
-                              {ticket.subject}
-                            </CardTitle>
-                            <CardDescription className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="capitalize">
-                                {ticket.category}
-                              </Badge>
-                              <Badge variant="outline" className="capitalize">
-                                {ticket.priority}
-                              </Badge>
-                              <span className="text-xs">
-                                Created {new Date(ticket.createdAt).toLocaleDateString()}
-                              </span>
-                            </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {myTickets && myTickets.length > 0 ? (
+                  <div className="space-y-3">
+                    {myTickets.map((ticket) => (
+                      <Card key={ticket.id} className="hover-elevate">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold truncate" data-testid={`text-ticket-subject-${ticket.id}`}>
+                                  {ticket.subject}
+                                </h3>
+                                <Badge className={`${getStatusColor(ticket.status)} flex items-center gap-1 shrink-0`}>
+                                  {getStatusIcon(ticket.status)}
+                                  <span className="capitalize">{ticket.status.replace('_', ' ')}</span>
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                                {ticket.message}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline" className="capitalize">
+                                  {ticket.category}
+                                </Badge>
+                                <Badge variant="outline" className="capitalize">
+                                  {ticket.priority}
+                                </Badge>
+                                <span>Created {new Date(ticket.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
                           </div>
-                          <Badge className={`capitalize flex items-center gap-1 ${getStatusColor(ticket.status)}`}>
-                            {getStatusIcon(ticket.status)}
-                            {ticket.status.replace('_', ' ')}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {ticket.message}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-muted-foreground">
-                  <HelpCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>You haven't created any support tickets yet</p>
-                  <p className="text-sm mt-2">Click the "Contact Support" tab to get help</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                      <CheckCircle2 className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">No tickets yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      You haven't created any support tickets yet
+                    </p>
+                    <Button variant="outline" onClick={() => {
+                      const tabsList = document.querySelector('[role="tablist"]');
+                      const contactTab = tabsList?.querySelector('[data-testid="tab-contact"]') as HTMLButtonElement;
+                      contactTab?.click();
+                    }}>
+                      Create Your First Ticket
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
     </div>
