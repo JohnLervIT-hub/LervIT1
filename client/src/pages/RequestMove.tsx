@@ -17,7 +17,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -28,6 +28,8 @@ import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type Dr
 
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
+import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
+import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -841,91 +843,237 @@ export default function RequestMove() {
               <CardContent className="space-y-6">
                 {step === 1 && (
                   <>
-                    <div>
-                      <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
-                        Pickup Address
-                      </Label>
-                      <CustomAddressInput
-                        id="pickup"
-                        placeholder="123 Main St SW, Calgary, AB"
-                        value={pickupAddress}
-                        onChange={(address) => setPickupAddress(address)}
-                        data-testid="input-pickup-address"
-                      />
+                    {/* Grand Location Selector */}
+                    <div className="relative">
+                      {/* Visual Route Line */}
+                      <div className="absolute left-[23px] top-[72px] bottom-[72px] w-0.5 bg-gradient-to-b from-green-500 via-primary/30 to-primary hidden sm:block" />
+                      
+                      {/* Pickup Section */}
+                      <div className="relative bg-gradient-to-r from-green-500/5 to-transparent border border-green-500/20 rounded-xl p-5 mb-4">
+                        <div className="flex items-start gap-4">
+                          {/* Pickup Icon */}
+                          <div className="relative z-10 flex-shrink-0">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+                              <MapPin className="w-6 h-6 text-white" />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-card border-2 border-green-500 flex items-center justify-center">
+                              <span className="text-[10px] font-bold text-green-600">A</span>
+                            </div>
+                          </div>
+                          
+                          {/* Pickup Fields */}
+                          <div className="flex-1 space-y-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Label htmlFor="pickup" className="text-base font-semibold">
+                                  Pickup Location
+                                </Label>
+                                <span className="text-[10px] font-medium bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">FROM</span>
+                              </div>
+                              <CustomAddressInput
+                                id="pickup"
+                                placeholder="Enter pickup address in Calgary"
+                                value={pickupAddress}
+                                onChange={(address) => setPickupAddress(address)}
+                                data-testid="input-pickup-address"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="pickup-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
+                                Access Type
+                              </Label>
+                              <Select value={pickupDifficulty} onValueChange={setPickupDifficulty}>
+                                <SelectTrigger id="pickup-difficulty" className="h-11 bg-card" data-testid="select-pickup-difficulty">
+                                  <SelectValue placeholder="Select access type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ground">
+                                    <div className="flex items-center gap-2">
+                                      <span>Ground Floor</span>
+                                      <span className="text-xs text-green-600 font-medium">Free</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="basement">
+                                    <div className="flex items-center gap-2">
+                                      <span>Basement</span>
+                                      <span className="text-xs text-muted-foreground">+$10</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="stairs">
+                                    <div className="flex items-center gap-2">
+                                      <span>Stairs</span>
+                                      <span className="text-xs text-muted-foreground">+$5</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="elevator">
+                                    <div className="flex items-center gap-2">
+                                      <span>Elevator Available</span>
+                                      <span className="text-xs text-muted-foreground">+$8</span>
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Route Arrow Connector - Mobile */}
+                      <div className="flex justify-center py-2 sm:hidden">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-0.5 h-4 bg-gradient-to-b from-green-500 to-primary/50" />
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                            <TrendingUp className="w-4 h-4 text-muted-foreground rotate-90" />
+                          </div>
+                          <div className="w-0.5 h-4 bg-gradient-to-b from-primary/50 to-primary" />
+                        </div>
+                      </div>
+
+                      {/* Dropoff Section */}
+                      <div className="relative bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-xl p-5">
+                        <div className="flex items-start gap-4">
+                          {/* Dropoff Icon */}
+                          <div className="relative z-10 flex-shrink-0">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+                              <MapPin className="w-6 h-6 text-primary-foreground" />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-card border-2 border-primary flex items-center justify-center">
+                              <span className="text-[10px] font-bold text-primary">B</span>
+                            </div>
+                          </div>
+                          
+                          {/* Dropoff Fields */}
+                          <div className="flex-1 space-y-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Label htmlFor="dropoff" className="text-base font-semibold">
+                                  Dropoff Location
+                                </Label>
+                                <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">TO</span>
+                              </div>
+                              <CustomAddressInput
+                                id="dropoff"
+                                placeholder="Enter dropoff address in Calgary"
+                                value={dropoffAddress}
+                                onChange={(address) => setDropoffAddress(address)}
+                                data-testid="input-dropoff-address"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="dropoff-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
+                                Access Type
+                              </Label>
+                              <Select value={dropoffDifficulty} onValueChange={setDropoffDifficulty}>
+                                <SelectTrigger id="dropoff-difficulty" className="h-11 bg-card" data-testid="select-dropoff-difficulty">
+                                  <SelectValue placeholder="Select access type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ground">
+                                    <div className="flex items-center gap-2">
+                                      <span>Ground Floor</span>
+                                      <span className="text-xs text-green-600 font-medium">Free</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="basement">
+                                    <div className="flex items-center gap-2">
+                                      <span>Basement</span>
+                                      <span className="text-xs text-muted-foreground">+$10</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="stairs">
+                                    <div className="flex items-center gap-2">
+                                      <span>Stairs</span>
+                                      <span className="text-xs text-muted-foreground">+$5</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="elevator">
+                                    <div className="flex items-center gap-2">
+                                      <span>Elevator Available</span>
+                                      <span className="text-xs text-muted-foreground">+$8</span>
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <Label htmlFor="pickup-difficulty" className="text-base font-semibold mb-2 block">
-                        Pickup Difficulty
-                      </Label>
-                      <Select value={pickupDifficulty} onValueChange={setPickupDifficulty}>
-                        <SelectTrigger id="pickup-difficulty" className="h-12" data-testid="select-pickup-difficulty">
-                          <SelectValue placeholder="Select pickup difficulty" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ground">Ground Floor - $0</SelectItem>
-                          <SelectItem value="basement">Basement - +$10</SelectItem>
-                          <SelectItem value="stairs">Stairs - +$5</SelectItem>
-                          <SelectItem value="elevator">Elevator Available - +$8</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
-                        Dropoff Address
-                      </Label>
-                      <CustomAddressInput
-                        id="dropoff"
-                        placeholder="456 Oak Ave NW, Calgary, AB"
-                        value={dropoffAddress}
-                        onChange={(address) => setDropoffAddress(address)}
-                        data-testid="input-dropoff-address"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dropoff-difficulty" className="text-base font-semibold mb-2 block">
-                        Dropoff Difficulty
-                      </Label>
-                      <Select value={dropoffDifficulty} onValueChange={setDropoffDifficulty}>
-                        <SelectTrigger id="dropoff-difficulty" className="h-12" data-testid="select-dropoff-difficulty">
-                          <SelectValue placeholder="Select dropoff difficulty" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ground">Ground Floor - $0</SelectItem>
-                          <SelectItem value="basement">Basement - +$10</SelectItem>
-                          <SelectItem value="stairs">Stairs - +$5</SelectItem>
-                          <SelectItem value="elevator">Elevator Available - +$8</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* Distance Indicator */}
+                    {estimateDistance > 0 && (
+                      <div className="flex items-center justify-center gap-3 py-4">
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+                        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-full">
+                          <Truck className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{estimateDistance.toFixed(1)} km</span>
+                          <span className="text-xs text-muted-foreground">estimated</span>
+                        </div>
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+                      </div>
+                    )}
 
                     {/* AI Feature 1: Auto-Quote Predictor */}
                     {aiEstimate && (
-                      <div className="bg-gradient-to-r from-accent/10 to-primary/10 border border-accent/30 rounded-lg p-5 mt-6">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
-                            <Sparkles className="w-5 h-5 text-accent-foreground" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-lg">AI Estimated Cost</h3>
-                            <p className="text-xs text-muted-foreground">Early prediction based on your inputs</p>
-                          </div>
-                        </div>
+                      <div className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 border border-primary/20 rounded-xl p-5 mt-6">
+                        {/* Decorative background element */}
+                        <div className="absolute -right-8 -top-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl" />
                         
-                        <div className="space-y-2">
-                          <div className="flex items-baseline justify-between">
-                            <span className="text-2xl font-bold text-accent-foreground">
-                              ${aiEstimate.minPrice.toFixed(2)} - ${aiEstimate.maxPrice.toFixed(2)}
-                            </span>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Info className="w-3 h-3" />
-                              {aiEstimate.confidence}% confidence
+                        <div className="relative">
+                          <div className="flex items-start gap-3 mb-4">
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+                              <Sparkles className="w-5 h-5 text-primary-foreground" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-base">AI Price Estimate</h3>
+                                <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">BETA</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">Smart prediction based on route & load</p>
                             </div>
                           </div>
-                          <Progress value={aiEstimate.confidence} className="h-1" />
-                          <p className="text-xs text-muted-foreground">{aiEstimate.explanation}</p>
+                          
+                          <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50">
+                            <div className="flex items-end justify-between mb-3">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Estimated Range</p>
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-2xl sm:text-3xl font-bold tracking-tight">
+                                    ${aiEstimate.minPrice.toFixed(0)}
+                                  </span>
+                                  <span className="text-lg text-muted-foreground mx-1">-</span>
+                                  <span className="text-2xl sm:text-3xl font-bold tracking-tight">
+                                    ${aiEstimate.maxPrice.toFixed(0)}
+                                  </span>
+                                  <span className="text-sm font-medium text-muted-foreground ml-1">CAD</span>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="flex items-center justify-end gap-1 mb-1">
+                                  <div className={`w-2 h-2 rounded-full ${aiEstimate.confidence >= 80 ? 'bg-green-500' : aiEstimate.confidence >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                                  <span className="text-sm font-semibold">{aiEstimate.confidence}%</span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">confidence</p>
+                              </div>
+                            </div>
+                            
+                            <div className="relative h-2 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${
+                                  aiEstimate.confidence >= 80 ? 'bg-gradient-to-r from-green-500 to-green-400' : 
+                                  aiEstimate.confidence >= 60 ? 'bg-gradient-to-r from-amber-500 to-amber-400' : 
+                                  'bg-gradient-to-r from-red-500 to-red-400'
+                                }`}
+                                style={{ width: `${aiEstimate.confidence}%` }}
+                              />
+                            </div>
+                            
+                            <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                              {aiEstimate.explanation}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1126,10 +1274,12 @@ export default function RequestMove() {
                               <div className="relative w-full h-28 sm:h-36 flex items-center justify-center bg-muted/30 rounded-t-lg overflow-hidden">
                                 <video
                                   src={singleMoverVideo}
+                                  poster={singleMoverPoster}
                                   autoPlay
                                   loop
                                   muted
                                   playsInline
+                                  preload="metadata"
                                   className="max-w-full max-h-full object-contain"
                                   style={{ maxWidth: '100%', maxHeight: '100%' }}
                                 />
@@ -1164,10 +1314,12 @@ export default function RequestMove() {
                               <div className="relative w-full h-28 sm:h-36 flex items-center justify-center bg-muted/30 rounded-t-lg overflow-hidden">
                                 <video
                                   src={twoMoversVideo}
+                                  poster={twoMoversPoster}
                                   autoPlay
                                   loop
                                   muted
                                   playsInline
+                                  preload="metadata"
                                   className="max-w-full max-h-full object-contain"
                                   style={{ maxWidth: '100%', maxHeight: '100%' }}
                                 />
@@ -1202,56 +1354,160 @@ export default function RequestMove() {
 
                 {step === 3 && (
                   <>
-                    <div>
-                      <Label htmlFor="date" className="text-base font-semibold mb-2 block">
-                        Preferred Date & Time
-                      </Label>
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    {/* Schedule Section - Grand Design */}
+                    <div className="relative bg-gradient-to-br from-primary/5 via-accent/5 to-transparent border border-primary/20 rounded-xl p-5">
+                      {/* Decorative element */}
+                      <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary/10 rounded-full blur-2xl" />
+                      
+                      <div className="relative">
+                        <div className="flex items-start gap-4 mb-5">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 flex-shrink-0">
+                            <Calendar className="w-6 h-6 text-primary-foreground" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold">Schedule Your Move</h3>
+                            <p className="text-sm text-muted-foreground mt-0.5">Choose your preferred date and time</p>
+                          </div>
+                        </div>
+
+                        {/* Date & Time Input */}
+                        <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50 mb-4">
+                          <Label htmlFor="date" className="text-sm font-medium text-muted-foreground mb-2 block">
+                            Date & Time
+                          </Label>
                           <Input
                             id="date"
                             type="datetime-local"
-                            className="pl-10 h-12"
+                            className="h-12 text-base"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
                             data-testid="input-move-date"
                           />
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const tomorrow = new Date();
-                            tomorrow.setDate(tomorrow.getDate() + 1);
-                            tomorrow.setHours(9, 0, 0, 0);
-                            const localDateTime = tomorrow.toISOString().slice(0, 16);
-                            setDate(localDateTime);
-                          }}
-                          data-testid="button-quick-schedule"
-                          className="w-full"
-                        >
-                          <Clock className="w-4 h-4 mr-2" />
-                          Quick Schedule: Tomorrow at 9:00 AM
-                        </Button>
+
+                        {/* Quick Schedule Options */}
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick Schedule</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                tomorrow.setHours(9, 0, 0, 0);
+                                setDate(tomorrow.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-tomorrow-morning"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Clock className="w-4 h-4" />
+                              <span className="text-xs font-medium">Tomorrow</span>
+                              <span className="text-[10px] text-muted-foreground">9:00 AM</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                tomorrow.setHours(14, 0, 0, 0);
+                                setDate(tomorrow.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-tomorrow-afternoon"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Clock className="w-4 h-4" />
+                              <span className="text-xs font-medium">Tomorrow</span>
+                              <span className="text-[10px] text-muted-foreground">2:00 PM</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const nextWeek = new Date();
+                                nextWeek.setDate(nextWeek.getDate() + 7);
+                                nextWeek.setHours(9, 0, 0, 0);
+                                setDate(nextWeek.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-next-week"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Calendar className="w-4 h-4" />
+                              <span className="text-xs font-medium">Next Week</span>
+                              <span className="text-[10px] text-muted-foreground">9:00 AM</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const weekend = new Date();
+                                const daysUntilSaturday = (6 - weekend.getDay() + 7) % 7 || 7;
+                                weekend.setDate(weekend.getDate() + daysUntilSaturday);
+                                weekend.setHours(10, 0, 0, 0);
+                                setDate(weekend.toISOString().slice(0, 16));
+                              }}
+                              data-testid="button-quick-weekend"
+                              className="h-auto py-3 flex-col gap-1"
+                            >
+                              <Calendar className="w-4 h-4" />
+                              <span className="text-xs font-medium">This Weekend</span>
+                              <span className="text-[10px] text-muted-foreground">Saturday 10 AM</span>
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <Label htmlFor="description" className="text-base font-semibold mb-2 block">
-                        Item Description (Optional)
-                      </Label>
-                      <div className="relative">
-                        <FileText className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
-                        <Textarea
-                          id="description"
-                          placeholder="Describe your items (e.g., 2-bedroom apartment furniture, 1 sofa, 2 beds, boxes...)"
-                          className="pl-10 min-h-32"
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                          data-testid="input-description"
-                        />
+                    {/* Notes Section */}
+                    <div className="relative bg-gradient-to-r from-muted/30 to-transparent border border-border/50 rounded-xl p-5">
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">Additional Notes</h3>
+                            <span className="text-[10px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">OPTIONAL</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5">Help your mover prepare for the job</p>
+                        </div>
+                      </div>
+                      
+                      <Textarea
+                        id="description"
+                        placeholder="Examples:&#10;• 3rd floor apartment, elevator available&#10;• Need help disassembling bed frame&#10;• Fragile antique furniture - handle with care&#10;• Access code for building: 1234"
+                        className="min-h-32 bg-card/50 resize-none"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        data-testid="input-description"
+                      />
+                      
+                      <div className="flex items-start gap-2 mt-3 p-3 bg-primary/5 rounded-lg">
+                        <Info className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-muted-foreground">
+                          Detailed notes help movers come prepared with the right equipment and plan their time efficiently.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Ready to Submit Summary */}
+                    <div className="relative overflow-hidden bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/20 rounded-xl p-5">
+                      <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-green-500/10 rounded-full blur-2xl" />
+                      <div className="relative flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+                          <CheckCircle className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-green-700 dark:text-green-400">Ready to Find Movers</h3>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            Click "Find Movers" to see available professionals in your area
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </>
@@ -1288,16 +1544,35 @@ export default function RequestMove() {
                 className="mb-6"
               />
               
-              {/* Show load size info below pricing */}
+              {/* Show current selections summary below pricing */}
               {priceBreakdown && (
-                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                  <p className="text-sm font-semibold text-primary">
-                    Selected Load Size: {loadSize.charAt(0).toUpperCase() + loadSize.slice(1)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Price updates automatically as you fill the form
-                  </p>
-                </div>
+                <Card className="overflow-hidden">
+                  <div className="bg-muted/30 px-4 py-3 border-b">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your Selections</p>
+                  </div>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Load Size</span>
+                      <span className="text-sm font-medium">{loadSize.charAt(0).toUpperCase() + loadSize.slice(1)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Movers</span>
+                      <span className="text-sm font-medium">{numberOfMovers}</span>
+                    </div>
+                    {heavyItem && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Heavy Items</span>
+                        <span className="text-sm font-medium text-amber-600">Yes</span>
+                      </div>
+                    )}
+                    {estimateDistance > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Distance</span>
+                        <span className="text-sm font-medium">{estimateDistance.toFixed(1)} km</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
             </div>
           </div>
