@@ -1334,10 +1334,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             mover: mover && moverUser ? {
               id: mover.id,
               userId: moverUser.id,
+              name: moverUser.name,
+              phone: moverUser.phone,
               moverImage: mover.moverImage,
-              user: { id: moverUser.id, name: moverUser.name },
               vehicleType: mover.vehicleType,
-              rating: mover.rating
+              vehicleColor: mover.vehicleColor,
+              vehicleModel: mover.vehicleModel,
+              licensePlate: mover.licensePlate,
+              rating: mover.rating,
+              completedTrips: mover.completedTrips,
+              isVerified: mover.isVerified
             } : null
           };
         })
@@ -1367,8 +1373,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: mover.id,
           name: moverUser.name,
           phone: moverUser.phone,
+          moverImage: mover.moverImage,
           vehicleType: mover.vehicleType,
-          rating: mover.rating
+          vehicleColor: mover.vehicleColor,
+          vehicleModel: mover.vehicleModel,
+          licensePlate: mover.licensePlate,
+          rating: mover.rating,
+          completedTrips: mover.completedTrips,
+          isVerified: mover.isVerified
         } : null
       });
     } catch (error) {

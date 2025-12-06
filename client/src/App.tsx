@@ -38,6 +38,7 @@ import Payment from "@/pages/Payment";
 import TrackTrip from "@/pages/TrackTrip";
 import LandingPage from "@/pages/LandingPage";
 import CustomerProfile from "@/pages/CustomerProfile";
+import MoverProfile from "@/pages/MoverProfile";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -94,6 +95,11 @@ function Router() {
       <Route path="/mover-profile">
         <ProtectedRoute allowedRoles={["mover"]}>
           <MoverProfileSetup />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/mover-settings">
+        <ProtectedRoute allowedRoles={["mover"]}>
+          <MoverProfile />
         </ProtectedRoute>
       </Route>
 

@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -40,8 +41,15 @@ type Booking = {
   mover: {
     id: string;
     name: string;
+    phone?: string;
+    moverImage?: string;
     vehicleType: string;
+    vehicleColor?: string;
+    vehicleModel?: string;
+    licensePlate?: string;
     rating: string;
+    completedTrips?: number;
+    isVerified?: boolean;
   } | null;
 };
 
@@ -253,18 +261,101 @@ export default function MyBookings() {
                           <p className="font-medium" data-testid={`text-distance-${booking.id}`}>{parseFloat(booking.distance).toFixed(1)} km</p>
                         </div>
                       )}
-                      {booking.mover && (
-                        <div className="bg-muted/30 rounded-lg p-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Star className="w-4 h-4 text-muted-foreground" />
-                            <p className="text-xs text-muted-foreground">Mover</p>
-                          </div>
-                          <p className="font-medium" data-testid={`text-mover-${booking.id}`}>{booking.mover.name}</p>
-                          <p className="text-sm text-muted-foreground">{parseFloat(booking.mover.rating).toFixed(1)} rating</p>
-                        </div>
-                      )}
                     </div>
                   </div>
+
+                  {/* Uber-Style Driver Card */}
+                  {booking.mover && (
+                    <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl p-5 mb-4 border border-primary/20" data-testid={`card-mover-${booking.id}`}>
+                      <div className="flex items-center gap-1 mb-3">
+                        <User className="w-4 h-4 text-primary" />
+                        <h4 className="font-semibold text-sm text-primary">Your Mover</h4>
+                        {booking.mover.isVerified && (
+                          <Badge className="ml-2 bg-green-500 text-xs">
+                            <Shield className="w-3 h-3 mr-1" />
+                            Verified
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-4">
+                        <Avatar className="w-16 h-16 border-2 border-primary/30">
+                          <AvatarImage src={booking.mover.moverImage || undefined} alt={booking.mover.name} />
+                          <AvatarFallback className="bg-primary/20 text-primary text-lg font-bold">
+                            {booking.mover.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'M'}
+                          </AvatarFallback>
+                        </Avatar>
+                        
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-bold text-lg" data-testid={`text-mover-name-${booking.id}`}>{booking.mover.name}</h3>
+                            <div className="flex items-center gap-1 bg-yellow-500/10 px-2 py-0.5 rounded-full">
+                              <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                              <span className="text-sm font-semibold" data-testid={`text-mover-rating-${booking.id}`}>
+                                {parseFloat(booking.mover.rating).toFixed(1)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {booking.mover.completedTrips !== undefined && (
+                            <p className="text-sm text-muted-foreground" data-testid={`text-mover-trips-${booking.id}`}>
+                              {booking.mover.completedTrips} completed moves
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <Separator className="my-4" />
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Truck className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Vehicle</p>
+                            <p className="font-medium text-sm" data-testid={`text-mover-vehicle-${booking.id}`}>
+                              {booking.mover.vehicleColor && `${booking.mover.vehicleColor} `}
+                              {booking.mover.vehicleType}
+                            </p>
+                            {booking.mover.vehicleModel && (
+                              <p className="text-xs text-muted-foreground">{booking.mover.vehicleModel}</p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {booking.mover.licensePlate && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center border-2 border-dashed">
+                              <span className="text-xs font-bold">LP</span>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">License Plate</p>
+                              <p className="font-bold text-sm tracking-wider" data-testid={`text-mover-plate-${booking.id}`}>
+                                {booking.mover.licensePlate}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {booking.mover.phone && (
+                        <>
+                          <Separator className="my-4" />
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full"
+                            onClick={() => window.open(`tel:${booking.mover?.phone}`, '_self')}
+                            data-testid={`button-call-mover-${booking.id}`}
+                          >
+                            <Phone className="w-4 h-4 mr-2" />
+                            Call {booking.mover.name?.split(' ')[0]}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* Price Breakdown */}
                   {booking.price != null && booking.price !== '' && booking.baseFee != null && booking.baseFee !== '' && (

@@ -812,9 +812,20 @@ export default function MoverDashboard() {
               <Button
                 variant="outline"
                 size="icon"
+                onClick={() => setLocation("/mover-settings")}
+                data-testid="button-mover-settings"
+                className="rounded-full"
+                title="Account Settings"
+              >
+                <Users className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
                 onClick={() => setLocation("/mover-profile")}
                 data-testid="button-edit-profile"
                 className="rounded-full"
+                title="Vehicle & Business Profile"
               >
                 <Settings className="w-4 h-4" />
               </Button>
