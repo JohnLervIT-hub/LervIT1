@@ -28,22 +28,26 @@ export default function Home() {
 
   const features = [
     {
-      icon: <img src={truckIcon} alt="Moving truck" className="w-14 h-14" />,
+      icon: truckIcon,
+      alt: "Moving truck",
       title: "500+ Verified Movers",
       description: "Connect with licensed, insured movers in Calgary instantly",
     },
     {
-      icon: <img src={dollarIcon} alt="Pricing" className="w-14 h-14" />,
+      icon: dollarIcon,
+      alt: "Pricing",
       title: "Transparent Pricing",
       description: "Get instant quotes based on distance and load size—no hidden fees",
     },
     {
-      icon: <img src={clockIcon} alt="Schedule" className="w-14 h-14" />,
+      icon: clockIcon,
+      alt: "Schedule",
       title: "Flexible Scheduling",
       description: "Book on-demand or schedule for later at your convenience",
     },
     {
-      icon: <img src={shieldIcon} alt="Security" className="w-14 h-14" />,
+      icon: shieldIcon,
+      alt: "Security",
       title: "Secure Payments",
       description: "Pay securely through Stripe with buyer protection",
     },
@@ -54,22 +58,26 @@ export default function Home() {
       <HeroSection />
 
       <section className="py-12 md:py-16 lg:py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
-            <h2 className="mb-3 md:mb-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-8 md:mb-12 space-y-2">
+            <h2 className="text-2xl md:text-3xl font-bold">
               Why Choose LervIT?
             </h2>
-            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
-              The smartest, safest, and most affordable way to move in Calgary
+            <p className="text-muted-foreground max-w-lg mx-auto">
+              The smartest way to move in Calgary
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 lg:gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {features.map((feature, index) => (
-              <Card key={index} className="hover-elevate" data-testid={`card-feature-${index}`}>
-                <CardContent className="p-5 md:p-6 text-center">
-                  <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-primary/10 text-primary mb-3 md:mb-4">
-                    {feature.icon}
+              <Card key={index} className="hover-elevate overflow-visible" data-testid={`card-feature-${index}`}>
+                <CardContent className="p-5 md:p-6 text-center pt-8">
+                  <div className="mb-4 flex justify-center">
+                    <img 
+                      src={feature.icon} 
+                      alt={feature.alt} 
+                      className="w-20 h-20 md:w-24 md:h-24 object-contain drop-shadow-lg" 
+                    />
                   </div>
                   <h3 className="font-semibold text-base md:text-lg mb-2">{feature.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
@@ -80,38 +88,41 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-12 md:py-16 lg:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
-            <h2 className="mb-0">
+      <section id="how-it-works" className="py-12 md:py-16 lg:py-20 bg-background">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 md:mb-12 space-y-2">
+            <h2 className="text-2xl md:text-3xl font-bold">
               How It Works
             </h2>
+            <p className="text-muted-foreground">Three simple steps to get moving</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8 lg:gap-10">
+          <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-3 md:gap-8">
             {[
               {
                 step: "1",
                 title: "Request a Move",
-                description: "Enter your pickup and dropoff locations, select load size, and get instant quotes",
+                description: "Enter locations, upload photos, and get instant AI-powered quotes",
               },
               {
                 step: "2",
                 title: "Choose Your Mover",
-                description: "Browse verified movers, compare prices and ratings, and select the best fit",
+                description: "Compare verified movers by price, ratings, and availability",
               },
               {
                 step: "3",
                 title: "Get Moving!",
-                description: "Pay securely, communicate with your mover, and track your move in real-time",
+                description: "Pay securely and track your move in real-time",
               },
             ].map((step, index) => (
-              <div key={index} className="text-center" data-testid={`step-${index}`}>
-                <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-accent text-accent-foreground font-bold text-xl md:text-2xl mb-3 md:mb-4">
+              <div key={index} className="flex md:flex-col items-start md:items-center gap-4 md:gap-3 md:text-center" data-testid={`step-${index}`}>
+                <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary text-primary-foreground font-bold text-lg md:text-xl flex items-center justify-center shadow-md">
                   {step.step}
                 </div>
-                <h3 className="font-semibold text-lg md:text-xl mb-2 md:mb-3">{step.title}</h3>
-                <p className="text-sm md:text-base text-muted-foreground leading-relaxed">{step.description}</p>
+                <div className="flex-1 md:flex-none">
+                  <h3 className="font-semibold text-base md:text-lg mb-1">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
+                </div>
               </div>
             ))}
           </div>
