@@ -93,7 +93,7 @@ const storage_multer = multer.diskStorage({
 const upload = multer({
   storage: storage_multer,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit - client compresses to ~1MB before upload
+    fileSize: 10 * 1024 * 1024, // 10MB limit for mobile photos
   },
   fileFilter: (req, file, cb) => {
     // Support mobile formats including HEIC/HEIF from iOS
