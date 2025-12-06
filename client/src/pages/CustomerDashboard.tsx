@@ -2,11 +2,30 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, AlertTriangle, MapPin, Calendar, Package, ArrowRight, MessageCircle, Clock, CheckCircle2, XCircle, TrendingUp, Sparkles } from "lucide-react";
+import { 
+  Plus, 
+  Loader2, 
+  AlertTriangle, 
+  MapPin, 
+  Calendar, 
+  Package, 
+  ArrowRight, 
+  MessageCircle, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  TrendingUp, 
+  Sparkles,
+  HelpCircle,
+  Phone,
+  ChevronRight,
+  Truck,
+  Star
+} from "lucide-react";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
+import { format, isToday, isTomorrow, formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -94,6 +113,11 @@ export default function CustomerDashboard() {
     b.status === "completed" || b.status === "cancelled"
   ) || [];
 
+  // Get the next upcoming booking (soonest date)
+  const upcomingBooking = activeBookings
+    .filter(b => new Date(b.preferredDate) >= new Date())
+    .sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime())[0];
+
   const handleMessage = (id: string) => {
     setLocation(`/messages/${id}`);
   };
@@ -121,286 +145,313 @@ export default function CustomerDashboard() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusLabel = (status: string) => {
     switch (status) {
-      case "pending": return <Clock className="w-4 h-4" />;
-      case "confirmed": return <CheckCircle2 className="w-4 h-4" />;
-      case "in_transit": return <TrendingUp className="w-4 h-4" />;
-      case "completed": return <CheckCircle2 className="w-4 h-4" />;
-      case "cancelled": return <XCircle className="w-4 h-4" />;
-      default: return <Clock className="w-4 h-4" />;
+      case "pending": return "Finding your mover";
+      case "confirmed": return "Mover confirmed";
+      case "in_transit": return "Move in progress";
+      case "completed": return "Completed";
+      case "cancelled": return "Cancelled";
+      default: return status;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
-      case "confirmed": return "bg-blue-500/10 text-blue-600 border-blue-500/20";
-      case "in_transit": return "bg-primary/10 text-primary border-primary/20";
-      case "completed": return "bg-green-500/10 text-green-600 border-green-500/20";
-      case "cancelled": return "bg-red-500/10 text-red-600 border-red-500/20";
+      case "pending": return "bg-amber-500/10 text-amber-600";
+      case "confirmed": return "bg-blue-500/10 text-blue-600";
+      case "in_transit": return "bg-primary/10 text-primary";
+      case "completed": return "bg-green-500/10 text-green-600";
+      case "cancelled": return "bg-red-500/10 text-red-600";
       default: return "bg-muted text-muted-foreground";
     }
   };
+
+  const getNextAction = (booking: Booking) => {
+    switch (booking.status) {
+      case "pending":
+        return { text: "We're finding nearby movers", icon: Clock, action: null };
+      case "confirmed":
+        return { text: "Message your mover", icon: MessageCircle, action: () => handleMessage(booking.id) };
+      case "in_transit":
+        return { text: "Track your move", icon: TrendingUp, action: () => handleViewDetails(booking.id) };
+      default:
+        return null;
+    }
+  };
+
+  const getDateLabel = (dateStr: string) => {
+    const date = new Date(dateStr);
+    if (isToday(date)) return "Today";
+    if (isTomorrow(date)) return "Tomorrow";
+    return format(date, "EEEE, MMM d");
+  };
+
+  const firstName = user?.name?.split(' ')[0] || 'there';
 
   if (isLoading) {
     return (
       <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-10 h-10 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading your bookings...</p>
+          <p className="text-muted-foreground">Loading your moves...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-background to-muted/20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Hero Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-accent/5 to-transparent rounded-2xl p-6 sm:p-8 mb-8">
-          <div className="absolute -right-16 -top-16 w-48 h-48 bg-primary/10 rounded-full blur-3xl" />
-          <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-2xl" />
-          
-          <div className="relative flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-                  <Package className="w-6 h-6 text-primary-foreground" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold">
-                    Welcome back, {user?.name?.split(' ')[0] || 'there'}!
-                  </h1>
-                  <p className="text-muted-foreground">
-                    Manage your moving requests
-                  </p>
-                </div>
-              </div>
-            </div>
-            <Button 
-              onClick={() => setLocation("/request-move")} 
-              size="lg"
-              className="shadow-lg shadow-primary/20"
-              data-testid="button-new-booking"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              New Booking
-            </Button>
-          </div>
-          
-          {/* Quick Stats */}
-          <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-            <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Active</p>
-              <p className="text-2xl font-bold text-primary">{activeBookings.length}</p>
-            </div>
-            <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Completed</p>
-              <p className="text-2xl font-bold text-green-600">{pastBookings.filter(b => b.status === 'completed').length}</p>
-            </div>
-            <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Moves</p>
-              <p className="text-2xl font-bold">{bookings?.length || 0}</p>
-            </div>
-            <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending</p>
-              <p className="text-2xl font-bold text-amber-600">{activeBookings.filter(b => b.status === 'pending').length}</p>
-            </div>
-          </div>
+    <div className="min-h-screen pt-20 pb-12 bg-background">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+        
+        {/* Friendly Greeting */}
+        <div className="py-6 sm:py-8">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1" data-testid="text-greeting">
+            Hey {firstName}!
+          </h1>
+          <p className="text-muted-foreground">
+            {activeBookings.length > 0 
+              ? "Here's what's happening with your moves."
+              : "Ready to make your next move stress-free?"
+            }
+          </p>
         </div>
 
+        {/* Upcoming Move Highlight */}
+        {upcomingBooking && (
+          <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Truck className="w-5 h-5 text-primary" />
+                <span className="text-sm font-medium text-primary">Your next move</span>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-xl font-bold mb-1">
+                  {getDateLabel(upcomingBooking.preferredDate)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {format(new Date(upcomingBooking.preferredDate), "h:mm a")} - {upcomingBooking.loadSize} load
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3 mb-4 p-3 bg-card rounded-lg">
+                <div className="flex flex-col items-center pt-1">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <div className="w-0.5 h-6 bg-border my-1" />
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                </div>
+                <div className="flex-1 space-y-3 text-sm">
+                  <p className="line-clamp-1">{upcomingBooking.pickupAddress}</p>
+                  <p className="line-clamp-1">{upcomingBooking.dropoffAddress}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Badge className={getStatusColor(upcomingBooking.status)}>
+                  {getStatusLabel(upcomingBooking.status)}
+                </Badge>
+                
+                {getNextAction(upcomingBooking)?.action && (
+                  <Button 
+                    size="sm" 
+                    onClick={getNextAction(upcomingBooking)!.action!}
+                    data-testid="button-next-action"
+                  >
+                    {getNextAction(upcomingBooking)!.text}
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <Button 
+            onClick={() => setLocation("/request-move")} 
+            className="h-auto py-4 flex-col gap-2"
+            data-testid="button-new-booking"
+          >
+            <Plus className="w-6 h-6" />
+            <span>New Move</span>
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => setLocation("/support")} 
+            className="h-auto py-4 flex-col gap-2"
+            data-testid="button-get-help"
+          >
+            <HelpCircle className="w-6 h-6" />
+            <span>Get Help</span>
+          </Button>
+        </div>
+
+        {/* All Bookings */}
         <Tabs defaultValue="active" className="w-full">
-          <TabsList className="mb-6 bg-muted/50 p-1">
-            <TabsTrigger value="active" className="gap-2" data-testid="tab-active">
+          <TabsList className="w-full mb-4 bg-muted/50 p-1">
+            <TabsTrigger value="active" className="flex-1 gap-2" data-testid="tab-active">
               <Clock className="w-4 h-4" />
               Active ({activeBookings.length})
             </TabsTrigger>
-            <TabsTrigger value="past" className="gap-2" data-testid="tab-past">
+            <TabsTrigger value="past" className="flex-1 gap-2" data-testid="tab-past">
               <CheckCircle2 className="w-4 h-4" />
-              Completed ({pastBookings.length})
+              Past ({pastBookings.length})
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="active" className="space-y-4">
+          <TabsContent value="active" className="space-y-3 mt-0">
             {activeBookings.length === 0 ? (
               <Card className="border-dashed">
-                <CardContent className="pt-12 pb-12 text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                    <Package className="w-8 h-8 text-muted-foreground" />
+                <CardContent className="py-12 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Package className="w-8 h-8 text-primary" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">No active bookings</h3>
+                  <h3 className="text-lg font-semibold mb-2">No moves scheduled</h3>
                   <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-                    Ready to move? Book your first move and get matched with professional movers nearby.
+                    Moving soon? We'll match you with trusted local movers in minutes.
                   </p>
                   <Button onClick={() => setLocation("/request-move")} size="lg">
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Book Your First Move
+                    Plan Your Move
                   </Button>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4">
-                {activeBookings.map((booking) => (
-                  <Card key={booking.id} className="overflow-hidden hover-elevate" data-testid={`card-booking-${booking.id}`}>
-                    <div className="flex flex-col sm:flex-row">
-                      {/* Status Indicator */}
-                      <div className={`sm:w-2 h-2 sm:h-auto ${
-                        booking.status === 'pending' ? 'bg-amber-500' :
-                        booking.status === 'confirmed' ? 'bg-blue-500' :
-                        booking.status === 'in_transit' ? 'bg-primary' : 'bg-muted'
-                      }`} />
-                      
-                      <div className="flex-1 p-5">
-                        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-                          <div className="flex items-center gap-3">
-                            <Badge className={`${getStatusColor(booking.status)} flex items-center gap-1.5`}>
-                              {getStatusIcon(booking.status)}
-                              <span className="capitalize">{booking.status.replace('_', ' ')}</span>
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              #{booking.id.slice(0, 8)}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xl font-bold text-primary">
-                              ${parseFloat(booking.price || "0").toFixed(2)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">CAD</p>
-                          </div>
-                        </div>
-
-                        {/* Route Display */}
-                        <div className="relative flex items-start gap-3 mb-4">
-                          <div className="flex flex-col items-center">
-                            <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
-                              <MapPin className="w-4 h-4 text-green-600" />
-                            </div>
-                            <div className="w-0.5 h-8 bg-gradient-to-b from-green-500 to-primary my-1" />
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <MapPin className="w-4 h-4 text-primary" />
-                            </div>
-                          </div>
-                          <div className="flex-1 space-y-4">
-                            <div>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wide">Pickup</p>
-                              <p className="font-medium line-clamp-1">{booking.pickupAddress}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wide">Dropoff</p>
-                              <p className="font-medium line-clamp-1">{booking.dropoffAddress}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Date & Mover Info */}
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-4">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-4 h-4" />
-                            <span>{format(new Date(booking.preferredDate), "MMM dd, yyyy 'at' h:mm a")}</span>
-                          </div>
-                          {booking.mover && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                              <span>Mover: {booking.mover.user.name}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex flex-wrap gap-2 pt-4 border-t">
-                          <Button variant="outline" size="sm" onClick={() => handleViewDetails(booking.id)} data-testid={`button-view-${booking.id}`}>
-                            View Details
-                            <ArrowRight className="w-4 h-4 ml-1" />
-                          </Button>
-                          {booking.moverId && (
-                            <>
-                              <Button variant="ghost" size="sm" onClick={() => handleMessage(booking.id)} data-testid={`button-message-${booking.id}`}>
-                                <MessageCircle className="w-4 h-4 mr-1" />
-                                Message
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleReportMover(booking)}
-                                className="text-destructive hover:text-destructive"
-                                data-testid={`button-report-${booking.id}`}
-                              >
-                                <AlertTriangle className="w-4 h-4 mr-1" />
-                                Report
-                              </Button>
-                            </>
-                          )}
-                        </div>
+              activeBookings.map((booking) => (
+                <Card key={booking.id} className="overflow-hidden" data-testid={`card-booking-${booking.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <p className="font-semibold">{getDateLabel(booking.preferredDate)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(booking.preferredDate), "h:mm a")}
+                        </p>
                       </div>
+                      <Badge className={getStatusColor(booking.status)}>
+                        {getStatusLabel(booking.status)}
+                      </Badge>
                     </div>
-                  </Card>
-                ))}
-              </div>
+
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                      <MapPin className="w-4 h-4 flex-shrink-0 text-green-600" />
+                      <span className="line-clamp-1 flex-1">{booking.pickupAddress}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                      <MapPin className="w-4 h-4 flex-shrink-0 text-primary" />
+                      <span className="line-clamp-1 flex-1">{booking.dropoffAddress}</span>
+                    </div>
+
+                    {booking.mover && (
+                      <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg mb-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Truck className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{booking.mover.user.name}</p>
+                          <p className="text-xs text-muted-foreground">Your mover</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleMessage(booking.id)}
+                          data-testid={`button-message-${booking.id}`}
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-3 border-t">
+                      <p className="font-bold text-lg">
+                        ${parseFloat(booking.price || "0").toFixed(2)} <span className="text-sm font-normal text-muted-foreground">CAD</span>
+                      </p>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDetails(booking.id)}
+                        data-testid={`button-view-${booking.id}`}
+                      >
+                        Details
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
             )}
           </TabsContent>
 
-          <TabsContent value="past" className="space-y-4">
+          <TabsContent value="past" className="space-y-3 mt-0">
             {pastBookings.length === 0 ? (
               <Card className="border-dashed">
-                <CardContent className="pt-12 pb-12 text-center">
+                <CardContent className="py-12 text-center">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                    <CheckCircle2 className="w-8 h-8 text-muted-foreground" />
+                    <Star className="w-8 h-8 text-muted-foreground" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">No completed bookings yet</h3>
-                  <p className="text-muted-foreground">Your completed moves will appear here.</p>
+                  <h3 className="text-lg font-semibold mb-2">No past moves yet</h3>
+                  <p className="text-muted-foreground">
+                    Your completed moves will show up here.
+                  </p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4">
-                {pastBookings.map((booking) => (
-                  <Card key={booking.id} className="overflow-hidden opacity-80 hover:opacity-100 transition-opacity" data-testid={`card-booking-${booking.id}`}>
-                    <div className="flex flex-col sm:flex-row">
-                      <div className={`sm:w-2 h-2 sm:h-auto ${
-                        booking.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
-                      
-                      <div className="flex-1 p-5">
-                        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-                          <div className="flex items-center gap-3">
-                            <Badge className={`${getStatusColor(booking.status)} flex items-center gap-1.5`}>
-                              {getStatusIcon(booking.status)}
-                              <span className="capitalize">{booking.status}</span>
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              #{booking.id.slice(0, 8)}
-                            </span>
-                          </div>
-                          <p className="text-lg font-bold">
-                            ${parseFloat(booking.price || "0").toFixed(2)} CAD
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                          <MapPin className="w-4 h-4 flex-shrink-0" />
-                          <span className="line-clamp-1">{booking.pickupAddress}</span>
-                          <ArrowRight className="w-4 h-4 flex-shrink-0" />
-                          <span className="line-clamp-1">{booking.dropoffAddress}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="w-4 h-4" />
-                          <span>{format(new Date(booking.preferredDate), "MMM dd, yyyy")}</span>
-                          {booking.mover && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                              <span>Mover: {booking.mover.user.name}</span>
-                            </>
-                          )}
-                        </div>
+              pastBookings.map((booking) => (
+                <Card key={booking.id} className="overflow-hidden" data-testid={`card-booking-${booking.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <p className="font-medium">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
+                        <p className="text-sm text-muted-foreground">{booking.loadSize} load</p>
                       </div>
+                      <Badge className={getStatusColor(booking.status)}>
+                        {booking.status === "completed" ? (
+                          <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
+                        ) : (
+                          <><XCircle className="w-3 h-3 mr-1" /> Cancelled</>
+                        )}
+                      </Badge>
                     </div>
-                  </Card>
-                ))}
-              </div>
+
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="line-clamp-1">{booking.pickupAddress}</span>
+                      <ArrowRight className="w-4 h-4 flex-shrink-0" />
+                      <span className="line-clamp-1">{booking.dropoffAddress}</span>
+                    </div>
+
+                    {booking.mover && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Moved by {booking.mover.user.name}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Help Strip */}
+        <Card className="mt-8 bg-muted/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Phone className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Need help?</p>
+                  <p className="text-xs text-muted-foreground">We're here for you</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/support")}>
+                Contact Us
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Report Mover Dialog */}
         <AlertDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
@@ -408,15 +459,15 @@ export default function CustomerDashboard() {
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-destructive" />
-                Report Safety Concern
+                Report a Concern
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {selectedBooking && selectedBooking.mover && (
                   <>
-                    You're about to report mover <strong>{selectedBooking.mover.user.name}</strong> for booking <strong>#{selectedBooking.id.slice(0, 8)}</strong>.
+                    You're reporting an issue with <strong>{selectedBooking.mover.user.name}</strong>.
                     <br /><br />
-                    Our support team will investigate this report immediately and contact you via email. 
-                    If you're in immediate danger, please call emergency services.
+                    Our team will review this right away and reach out to you by email. 
+                    If you're in immediate danger, please call 911.
                   </>
                 )}
               </AlertDialogDescription>
@@ -432,10 +483,10 @@ export default function CustomerDashboard() {
                 {reportMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Submitting...
+                    Sending...
                   </>
                 ) : (
-                  "Submit Report"
+                  "Send Report"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>
