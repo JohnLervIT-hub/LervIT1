@@ -323,10 +323,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
+      // Check if account is locked by admin
+      if (user.lockedByAdmin) {
+        return res.status(423).json({ 
+          error: "Account suspended",
+          message: user.lockReason || "Your account has been suspended. Please contact support.",
+          locked: true,
+          lockedByAdmin: true
+        });
+      }
+      
+      // Check if account is temporarily locked due to failed attempts
+      if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+        const remainingMinutes = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60000);
+        return res.status(423).json({ 
+          error: "Account temporarily locked",
+          message: `Too many failed login attempts. Please try again in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}.`,
+          locked: true,
+          lockedUntil: user.lockedUntil,
+          remainingMinutes
+        });
+      }
+      
       const isValid = verifyPassword(password, user.password);
       
       if (!isValid) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        // Increment failed login attempts
+        const newAttempts = (user.failedLoginAttempts || 0) + 1;
+        const MAX_ATTEMPTS = 4;
+        const LOCKOUT_MINUTES = 30;
+        
+        if (newAttempts >= MAX_ATTEMPTS) {
+          // Lock the account for 30 minutes
+          const lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
+          await db.update(usersTable)
+            .set({ 
+              failedLoginAttempts: newAttempts,
+              lockedUntil: lockedUntil,
+              lockReason: `Automatically locked after ${MAX_ATTEMPTS} failed login attempts`
+            })
+            .where(eq(usersTable.id, user.id));
+          
+          return res.status(423).json({ 
+            error: "Account locked",
+            message: `Too many failed login attempts. Your account has been locked for ${LOCKOUT_MINUTES} minutes.`,
+            locked: true,
+            lockedUntil: lockedUntil,
+            remainingMinutes: LOCKOUT_MINUTES
+          });
+        } else {
+          // Just increment the counter
+          await db.update(usersTable)
+            .set({ failedLoginAttempts: newAttempts })
+            .where(eq(usersTable.id, user.id));
+          
+          const remainingAttempts = MAX_ATTEMPTS - newAttempts;
+          return res.status(401).json({ 
+            error: "Invalid credentials",
+            message: `Invalid email or password. ${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining before account lockout.`,
+            remainingAttempts
+          });
+        }
+      }
+      
+      // Successful login - reset failed attempts counter
+      if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+        await db.update(usersTable)
+          .set({ 
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+            lockReason: null
+          })
+          .where(eq(usersTable.id, user.id));
       }
       
       // Regenerate session to prevent session fixation attacks
