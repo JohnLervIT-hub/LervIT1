@@ -294,7 +294,9 @@ class NotificationService {
 
   // Password reset email
   async sendPasswordReset(email: string, name: string, resetToken: string): Promise<void> {
-    const resetUrl = `${process.env.BASE_URL || 'https://lervit.com'}/reset-password?token=${resetToken}`;
+    const baseUrl = process.env.BASE_URL || 
+      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://lervit.com');
+    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
     const subject = 'Reset Your LervIT Password';
     const body = `
 <!DOCTYPE html>
