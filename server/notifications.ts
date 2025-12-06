@@ -13,7 +13,7 @@ export interface EmailNotification {
 }
 
 class NotificationService {
-  private fromEmail = 'LervIT <onboarding@resend.dev>';
+  private fromEmail = 'LervIT <support@lervit.com>';
   
   async sendEmail(notification: EmailNotification): Promise<void> {
     // Log for debugging
