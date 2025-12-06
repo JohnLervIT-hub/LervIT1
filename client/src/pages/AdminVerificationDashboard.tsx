@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -281,18 +280,28 @@ export default function AdminVerificationDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Drivers ({driversData?.total || 0})</CardTitle>
-            <CardDescription>Click on a driver to review their verification documents</CardDescription>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl">Drivers ({driversData?.total || 0})</CardTitle>
+                <CardDescription>Click on a driver to review their verification documents</CardDescription>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading drivers...</div>
+              <div className="text-center py-12 text-muted-foreground">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p>Loading drivers...</p>
+              </div>
             ) : isDriversError ? (
-              <div className="text-center py-8">
+              <div className="text-center py-12 px-4">
+                <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="w-8 h-8 text-destructive" />
+                </div>
                 <div className="text-destructive font-medium mb-2">Failed to load drivers</div>
-                <p className="text-muted-foreground mb-4">
+                <p className="text-muted-foreground mb-4 max-w-md mx-auto">
                   {driversError instanceof Error ? driversError.message : "An error occurred"}
                 </p>
                 <Button
@@ -304,83 +313,122 @@ export default function AdminVerificationDashboard() {
                 </Button>
               </div>
             ) : driversData?.drivers?.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No drivers found</div>
+              <div className="text-center py-12 px-4">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                  <FileCheck className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground">No drivers found matching your criteria</p>
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Driver</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Progress</TableHead>
-                      <TableHead>Flags</TableHead>
-                      <TableHead>Last Updated</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {driversData?.drivers?.map((driver: Driver) => (
-                      <TableRow key={driver.driverId} data-testid={`row-driver-${driver.driverId}`}>
-                        <TableCell className="font-medium">
-                          <div>
-                            <div>{driver.name}</div>
-                            <div className="text-sm text-muted-foreground">⭐ {driver.rating}</div>
+              <div className="divide-y">
+                {driversData?.drivers?.map((driver: Driver) => {
+                  const progressPercent = driver.totalRequired > 0 ? (driver.approvedCount / driver.totalRequired) * 100 : 0;
+                  const progressColor = progressPercent === 100 ? "bg-green-500" : progressPercent >= 50 ? "bg-blue-500" : "bg-amber-500";
+                  
+                  return (
+                    <div
+                      key={driver.driverId}
+                      className="group p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => setSelectedDriverId(driver.driverId)}
+                      data-testid={`row-driver-${driver.driverId}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        {/* Avatar & Name */}
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-lg shrink-0">
+                          {driver.name?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                        
+                        {/* Driver Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold truncate">{driver.name}</h3>
+                            {driver.isAvailable && (
+                              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" title="Online" />
+                            )}
+                            <span className="text-sm text-muted-foreground">
+                              {parseFloat(driver.rating).toFixed(1)}★
+                            </span>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            <div>{driver.email}</div>
-                            {driver.phone && <div className="text-muted-foreground">{driver.phone}</div>}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span className="truncate max-w-[200px]">{driver.email}</span>
+                            {driver.phone && <span>{driver.phone}</span>}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(driver.overallStatus)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium">
-                              {driver.approvedCount} / {driver.totalRequired}
+                        </div>
+
+                        {/* Progress & Status - Desktop */}
+                        <div className="hidden md:flex items-center gap-6">
+                          {/* Progress */}
+                          <div className="w-32">
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <span className="text-muted-foreground">Progress</span>
+                              <span className="font-medium">{driver.approvedCount}/{driver.totalRequired}</span>
                             </div>
-                            <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-primary transition-all"
-                                style={{ width: `${(driver.approvedCount / driver.totalRequired) * 100}%` }}
+                                className={`h-full ${progressColor} transition-all duration-300`}
+                                style={{ width: `${progressPercent}%` }}
                               />
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
+
+                          {/* Status Badge */}
+                          <div className="w-28">
+                            {getStatusBadge(driver.overallStatus)}
+                          </div>
+
+                          {/* Flags */}
+                          <div className="flex gap-1 w-24">
                             {driver.hasExpired && (
                               <Badge variant="destructive" className="text-xs">Expired</Badge>
                             )}
                             {driver.hasRejected && (
                               <Badge variant="destructive" className="text-xs">Rejected</Badge>
                             )}
-                            {driver.isAvailable && (
-                              <Badge variant="default" className="bg-green-500 text-xs">Online</Badge>
+                            {!driver.hasExpired && !driver.hasRejected && driver.overallStatus === "APPROVED" && (
+                              <Badge className="bg-green-500 text-xs">Complete</Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {format(new Date(driver.lastUpdated), "MMM d, yyyy")}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedDriverId(driver.driverId)}
-                            data-testid={`button-view-${driver.driverId}`}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            View Details
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+
+                          {/* Last Updated */}
+                          <div className="text-sm text-muted-foreground w-24">
+                            {format(new Date(driver.lastUpdated), "MMM d, yyyy")}
+                          </div>
+                        </div>
+
+                        {/* Action Button */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          data-testid={`button-view-${driver.driverId}`}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          <span className="hidden sm:inline">Review</span>
+                        </Button>
+                      </div>
+
+                      {/* Mobile: Progress & Status */}
+                      <div className="md:hidden mt-3 flex flex-wrap items-center gap-2">
+                        {getStatusBadge(driver.overallStatus)}
+                        {driver.hasExpired && (
+                          <Badge variant="destructive" className="text-xs">Expired</Badge>
+                        )}
+                        {driver.hasRejected && (
+                          <Badge variant="destructive" className="text-xs">Rejected</Badge>
+                        )}
+                        <div className="ml-auto flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${progressColor}`}
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">{driver.approvedCount}/{driver.totalRequired}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

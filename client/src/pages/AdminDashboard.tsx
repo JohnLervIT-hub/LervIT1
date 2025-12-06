@@ -1,16 +1,22 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle } from "lucide-react";
+import { format } from "date-fns";
 
 type User = {
   id: string;
   email: string;
   name: string;
   role: string;
+  phone?: string;
   createdAt: string;
 };
 
@@ -31,16 +37,38 @@ type Booking = {
   status: string;
   price: string | null;
   createdAt: string;
+  preferredDate?: string | null;
+  pickupAddress?: string | null;
+  dropoffAddress?: string | null;
+  loadSize?: string | null;
+  description?: string | null;
+  distance?: string | null;
+  numberOfMovers?: number | null;
+  pickupDifficulty?: string | null;
+  dropoffDifficulty?: string | null;
+  heavyItem?: boolean | null;
+  paymentStatus?: string | null;
   customer: {
-    name: string;
+    id?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
   } | null;
   mover: {
-    name: string;
+    id?: string;
+    name?: string;
+    vehicleType?: string;
+    rating?: string;
+    user?: {
+      id?: string;
+      name?: string;
+    };
   } | null;
 };
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   const { data: users } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -53,6 +81,47 @@ export default function AdminDashboard() {
   const { data: bookings } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
+
+  // Helper functions
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      pending: "bg-amber-500",
+      accepted: "bg-blue-500",
+      in_progress: "bg-indigo-500",
+      completed: "bg-green-500",
+      cancelled: "bg-red-500",
+    };
+    return colors[status] || "bg-gray-500";
+  };
+
+  const getPaymentBadge = (status?: string | null) => {
+    if (!status || status === "pending") return <Badge variant="secondary">Unpaid</Badge>;
+    if (status === "paid") return <Badge className="bg-green-500">Paid</Badge>;
+    if (status === "refunded") return <Badge variant="destructive">Refunded</Badge>;
+    return <Badge variant="secondary">{status}</Badge>;
+  };
+
+  const getLoadSizeLabel = (size?: string | null) => {
+    if (!size) return "Unknown";
+    const labels: Record<string, string> = {
+      boxes: "Boxes Only (1-10 ft³)",
+      medium: "Medium Load (11-50 ft³)",
+      large: "Large Load (50-170 ft³)",
+      apartment: "Full Apartment (170+ ft³)",
+    };
+    return labels[size] || size;
+  };
+
+  const getDifficultyLabel = (difficulty?: string | null) => {
+    if (!difficulty) return "Ground Floor";
+    const labels: Record<string, string> = {
+      ground: "Ground Floor",
+      basement: "Basement",
+      stairs: "Stairs",
+      elevator: "Elevator",
+    };
+    return labels[difficulty] || difficulty;
+  };
 
   if (!user || user.role !== "admin") {
     return (
@@ -192,37 +261,87 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>All Bookings</CardTitle>
-                <CardDescription>Recent booking activity</CardDescription>
+                <CardDescription>Click on a booking to view full itinerary details</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {!bookings || bookings.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No bookings yet
-                    </p>
+                    <div className="text-center py-8">
+                      <Package className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+                      <p className="text-muted-foreground">No bookings yet</p>
+                    </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {bookings.map((booking) => (
                         <div
                           key={booking.id}
-                          className="flex items-center justify-between p-3 border rounded-md"
+                          className="group p-4 border rounded-lg hover-elevate cursor-pointer transition-all"
+                          onClick={() => setSelectedBooking(booking)}
                           data-testid={`booking-row-${booking.id}`}
                         >
-                          <div>
-                            <p className="text-sm font-medium">
-                              {booking.customer?.name || "Unknown"} → {booking.mover?.name || "Unassigned"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(booking.createdAt).toLocaleDateString()}
-                            </p>
+                          {/* Header Row: Booker & Status */}
+                          <div className="flex items-start justify-between gap-4 mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                <UserIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-foreground">
+                                  {booking.customer?.name || "Unknown Customer"}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {booking.customer?.email || "No email"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge className={`${getStatusColor(booking.status)} text-white`}>
+                                {booking.status.replace("_", " ")}
+                              </Badge>
+                              {getPaymentBadge(booking.paymentStatus)}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{booking.status}</Badge>
-                            {booking.price && (
-                              <span className="text-sm font-medium">
-                                ${parseFloat(booking.price).toFixed(2)}
-                              </span>
+
+                          {/* Route Summary */}
+                          <div className="flex items-center gap-2 mb-3 text-sm">
+                            <MapPin className="w-4 h-4 text-green-500 shrink-0" />
+                            <span className="truncate max-w-[180px]">{booking.pickupAddress?.split(",")[0] || "Pickup"}</span>
+                            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <MapPin className="w-4 h-4 text-red-500 shrink-0" />
+                            <span className="truncate max-w-[180px]">{booking.dropoffAddress?.split(",")[0] || "Dropoff"}</span>
+                          </div>
+
+                          {/* Details Row */}
+                          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              <span>{booking.preferredDate ? format(new Date(booking.preferredDate), "MMM d, yyyy") : "No date"}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Box className="w-4 h-4" />
+                              <span className="capitalize">{booking.loadSize || "Unknown"}</span>
+                            </div>
+                            {booking.mover && (
+                              <div className="flex items-center gap-1">
+                                <Truck className="w-4 h-4 text-blue-500" />
+                                <span>{booking.mover.user?.name || booking.mover.name || "Assigned"}</span>
+                              </div>
                             )}
+                            {!booking.mover && (
+                              <div className="flex items-center gap-1 text-amber-600">
+                                <AlertCircle className="w-4 h-4" />
+                                <span>Awaiting mover</span>
+                              </div>
+                            )}
+                            <div className="ml-auto flex items-center gap-2">
+                              <span className="font-semibold text-foreground">
+                                ${booking.price ? parseFloat(booking.price).toFixed(2) : "0.00"}
+                              </span>
+                              <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -314,6 +433,196 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Booking Detail Dialog */}
+        <Dialog open={!!selectedBooking} onOpenChange={(open) => !open && setSelectedBooking(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                Booking Details
+              </DialogTitle>
+              <DialogDescription>
+                Full itinerary and booking information
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedBooking && (
+              <div className="space-y-6">
+                {/* Status & Payment */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge className={`${getStatusColor(selectedBooking.status)} text-white`}>
+                      {selectedBooking.status.replace("_", " ")}
+                    </Badge>
+                    {getPaymentBadge(selectedBooking.paymentStatus)}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-primary">
+                      ${selectedBooking.price ? parseFloat(selectedBooking.price).toFixed(2) : "0.00"} CAD
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Created {format(new Date(selectedBooking.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                    </p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Customer Info */}
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Customer</h3>
+                  <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <UserIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold">{selectedBooking.customer?.name || "Unknown"}</p>
+                      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mt-1">
+                        {selectedBooking.customer?.email && (
+                          <div className="flex items-center gap-1">
+                            <Mail className="w-4 h-4" />
+                            <span>{selectedBooking.customer.email}</span>
+                          </div>
+                        )}
+                        {selectedBooking.customer?.phone && (
+                          <div className="flex items-center gap-1">
+                            <Phone className="w-4 h-4" />
+                            <span>{selectedBooking.customer.phone}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Itinerary */}
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Itinerary</h3>
+                  <div className="space-y-3">
+                    {/* Pickup */}
+                    <div className="flex gap-3 p-4 border rounded-lg">
+                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-muted-foreground">Pickup Location</p>
+                        <p className="font-medium">{selectedBooking.pickupAddress || "Not specified"}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Access: {getDifficultyLabel(selectedBooking.pickupDifficulty)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="flex justify-center">
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <ArrowRight className="w-4 h-4 text-muted-foreground rotate-90" />
+                      </div>
+                    </div>
+
+                    {/* Dropoff */}
+                    <div className="flex gap-3 p-4 border rounded-lg">
+                      <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5 text-red-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-muted-foreground">Dropoff Location</p>
+                        <p className="font-medium">{selectedBooking.dropoffAddress || "Not specified"}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Access: {getDifficultyLabel(selectedBooking.dropoffDifficulty)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Move Details */}
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Move Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Scheduled Date</span>
+                      </div>
+                      <p className="font-medium">
+                        {selectedBooking.preferredDate 
+                          ? format(new Date(selectedBooking.preferredDate), "EEEE, MMM d, yyyy")
+                          : "Not scheduled"}
+                      </p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Box className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Load Size</span>
+                      </div>
+                      <p className="font-medium">{getLoadSizeLabel(selectedBooking.loadSize)}</p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Movers Required</span>
+                      </div>
+                      <p className="font-medium">{selectedBooking.numberOfMovers} mover(s)</p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Distance</span>
+                      </div>
+                      <p className="font-medium">
+                        {selectedBooking.distance ? `${parseFloat(selectedBooking.distance).toFixed(1)} km` : "Calculating..."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedBooking.heavyItem && (
+                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="font-medium">Heavy items included</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Assigned Mover */}
+                {selectedBooking.mover && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Assigned Mover</h3>
+                    <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+                      <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <Truck className="w-6 h-6 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold">{selectedBooking.mover.user?.name || selectedBooking.mover.name || "Assigned"}</p>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                          {selectedBooking.mover.vehicleType && (
+                            <span>{selectedBooking.mover.vehicleType}</span>
+                          )}
+                          {selectedBooking.mover.rating && (
+                            <span>{parseFloat(selectedBooking.mover.rating).toFixed(1)}★</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Description */}
+                {selectedBooking.description && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Additional Notes</h3>
+                    <div className="p-4 border rounded-lg bg-muted/30">
+                      <p className="text-sm">{selectedBooking.description}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
