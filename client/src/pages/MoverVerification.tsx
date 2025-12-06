@@ -226,7 +226,7 @@ function UploadDocumentDialog({
           <DialogDescription>{itemConfig.description}</DialogDescription>
         </DialogHeader>
 
-        {existingItem?.status === 'rejected' && existingItem.rejectionReason && (
+        {existingItem?.status?.toLowerCase() === 'rejected' && existingItem.rejectionReason && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -422,7 +422,7 @@ export default function MoverVerification() {
                     {existingItem.expiryDate && (
                       <p>Expires: {format(new Date(existingItem.expiryDate), 'PP')}</p>
                     )}
-                    {existingItem.status === 'rejected' && existingItem.rejectionReason && (
+                    {existingItem.status?.toLowerCase() === 'rejected' && existingItem.rejectionReason && (
                       <Alert variant="destructive" className="mt-2">
                         <AlertDescription>
                           <strong>Reason:</strong> {existingItem.rejectionReason}

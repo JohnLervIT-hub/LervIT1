@@ -673,7 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const now = new Date();
       const itemsWithExpiry = items.map(item => {
-        if (item.expiryDate && item.expiryDate < now && item.status === 'approved') {
+        if (item.expiryDate && item.expiryDate < now && item.status?.toLowerCase() === 'approved') {
           return { ...item, status: 'expired' };
         }
         return item;
@@ -819,14 +819,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { status, rejectionReason } = req.body;
       
-      if (!['approved', 'rejected'].includes(status)) {
+      const normalizedStatus = status?.toLowerCase();
+      if (!['approved', 'rejected'].includes(normalizedStatus)) {
         return res.status(400).json({ error: "Status must be 'approved' or 'rejected'" });
       }
       
+      // Capitalize status for consistency with admin endpoint
+      const capitalizedStatus = normalizedStatus === 'approved' ? 'Approved' : 'Rejected';
+      
       const result = await db.update(verificationItems)
         .set({
-          status,
-          rejectionReason: status === 'rejected' ? rejectionReason : null,
+          status: capitalizedStatus,
+          rejectionReason: normalizedStatus === 'rejected' ? rejectionReason : null,
           reviewedAt: new Date(),
           reviewedBy: user.id,
           updatedAt: new Date()
