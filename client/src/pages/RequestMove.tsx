@@ -26,6 +26,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
+import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
+import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
+
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
 
@@ -1112,37 +1115,78 @@ export default function RequestMove() {
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(1)}
-                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                              className={`relative overflow-hidden rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
                                 numberOfMovers === 1
-                                  ? "border-primary bg-primary/10"
-                                  : "border-border bg-card"
+                                  ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                                  : "border-border bg-card hover:border-primary/50"
                               }`}
                               data-testid="button-1-mover"
                             >
-                              <div className="text-center">
+                              <div className="relative">
+                                <video
+                                  src={singleMoverVideo}
+                                  autoPlay
+                                  loop
+                                  muted
+                                  playsInline
+                                  className="w-full h-32 object-cover rounded-t-lg"
+                                />
+                                {numberOfMovers === 1 && (
+                                  <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
+                                    Selected
+                                  </div>
+                                )}
+                              </div>
+                              <div className="p-4 text-center">
                                 <p className="font-bold text-lg">1 Mover</p>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  Customer helps with carry
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Customer assists with carrying
                                 </p>
-                                <p className="text-sm font-semibold mt-2">Standard Price</p>
+                                <div className="mt-3 inline-flex items-center gap-1 bg-muted/50 px-3 py-1 rounded-full">
+                                  <DollarSign className="w-3 h-3" />
+                                  <span className="text-sm font-semibold">Standard Rate</span>
+                                </div>
                               </div>
                             </button>
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(2)}
-                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                              className={`relative overflow-hidden rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
                                 numberOfMovers === 2
-                                  ? "border-primary bg-primary/10"
-                                  : "border-border bg-card"
+                                  ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                                  : "border-border bg-card hover:border-primary/50"
                               }`}
                               data-testid="button-2-movers"
                             >
-                              <div className="text-center">
+                              <div className="relative">
+                                <video
+                                  src={twoMoversVideo}
+                                  autoPlay
+                                  loop
+                                  muted
+                                  playsInline
+                                  className="w-full h-32 object-cover rounded-t-lg"
+                                />
+                                {numberOfMovers === 2 && (
+                                  <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
+                                    Selected
+                                  </div>
+                                )}
+                                {requiresTwoMovers(loadSize, heavyItem) && numberOfMovers !== 2 && (
+                                  <div className="absolute top-2 left-2 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                                    Recommended
+                                  </div>
+                                )}
+                              </div>
+                              <div className="p-4 text-center">
                                 <p className="font-bold text-lg">2 Movers</p>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  Movers handle everything
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Full-service, no assistance needed
                                 </p>
-                                <p className="text-sm font-semibold mt-2 text-primary">×1.30 Price</p>
+                                <div className="mt-3 inline-flex items-center gap-1 bg-primary/10 text-primary px-3 py-1 rounded-full">
+                                  <TrendingUp className="w-3 h-3" />
+                                  <span className="text-sm font-semibold">+30% Premium</span>
+                                </div>
                               </div>
                             </button>
                           </div>
