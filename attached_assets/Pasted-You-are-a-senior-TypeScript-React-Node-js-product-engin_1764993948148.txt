@@ -1,0 +1,118 @@
+You are a senior TypeScript/React/Node.js product engineer.
+I have a modern full-stack JavaScript/TypeScript monorepo with:
+
+Shared types between frontend and backend
+
+Express-session authentication
+
+PostgreSQL session store
+
+Google Maps API (autocomplete, distance, live tracking)
+
+Stripe (CAD)
+
+OpenAI Vision API
+
+SerpAPI
+
+Resend for transactional emails
+
+Your task is to optimize the entire UI/UX of the frontend to global startup standards while keeping all business logic, APIs, and shared types intact.
+
+✅ Your UI/UX goals:
+
+Make the interface clean, modern, investor-friendly, and visually consistent
+
+Improve layout spacing, typography, button styles, card components, and form inputs
+
+Use a standardized color palette and design system suitable for a logistics/tech brand
+
+Ensure the main user flows feel polished:
+
+Upload → Price → Booking → Payment → Tracking
+
+Driver onboarding (license/insurance upload, profile completion)
+
+Admin dashboard (analytics cards, driver verification, request logs)
+
+✅ Your frontend responsibilities:
+
+Audit the entire frontend codebase
+
+Identify messy or inconsistent UI code
+
+Remove unused styles, duplicate components, or inline CSS
+
+Improve component structure without touching backend logic
+
+Standardize UI components
+
+Buttons (primary, secondary, disabled, loading state)
+
+Inputs (labels, error states, focus states)
+
+Cards (rounded, shadow, consistent padding)
+
+Navigation bar + footer
+
+Form layouts
+
+Modernize the visual theme
+
+Clean typography (consistent font sizes & weights)
+
+Balanced spacing system
+
+Soft gradients or solid colors
+
+Professional white/blue/gray palette (or the app’s current theme refined)
+
+Add missing UX improvements
+
+Progress indicators for multi-step flows
+
+Loading skeletons for slow pages
+
+Error + success toast notifications
+
+Clean modal designs
+
+Better layout for Google Maps components
+
+Smoother transitions between steps
+
+Mobile Responsiveness
+
+Ensure all pages scale cleanly on mobile
+
+Fix overlapping elements
+
+Ensure buttons/touch targets meet accessibility sizes
+
+Do NOT modify:
+
+Backend logic
+
+API endpoints
+
+Shared TypeScript types
+
+Stripe logic
+
+Session/authentication logic
+
+OpenAI or Google Maps integrations
+
+Only adjust UI, component structure, styling, and presentation logic.
+
+✅ Deliverables:
+
+Clean, professional, globally polished UI across all routes
+
+Refactored components that follow a consistent design system
+
+Inline comments explaining major improvements (short and clear)
+
+No breaking changes to backend or shared types
+
+Begin by scanning the main entry file in the frontend and identify visual inconsistencies. Then proceed screen by screen to create a cohesive, investor-ready interface.

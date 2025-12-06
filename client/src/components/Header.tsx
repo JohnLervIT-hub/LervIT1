@@ -71,41 +71,26 @@ export default function Header() {
               </>
             ) : (
               <nav className="flex items-center gap-1">
-                <Link href="/demo" data-testid="link-demo">
-                  <Button variant="outline" size="sm">
-                    🗺️ Map
-                  </Button>
-                </Link>
-                <Link href="/lifecycle" data-testid="link-lifecycle">
-                  <Button variant="outline" size="sm">
-                    🎬 Customer
-                  </Button>
-                </Link>
-                <Link href="/mover-lifecycle" data-testid="link-mover-lifecycle">
-                  <Button variant="default" size="sm" className="bg-gradient-to-r from-primary to-green-500">
-                    🚚 Mover
-                  </Button>
-                </Link>
                 <Link href="/browse-movers" data-testid="link-browse-movers">
-                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                  <Button variant="ghost" size="sm">
                     Find Movers
                   </Button>
                 </Link>
                 <Button 
-                  variant="ghost" 
-                  className="hover-elevate active-elevate-2"
+                  variant="ghost"
+                  size="sm"
                   onClick={handleHowItWorks}
                   data-testid="link-how-it-works"
                 >
                   How It Works
                 </Button>
                 <Link href="/signup" data-testid="link-become-mover">
-                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                  <Button variant="ghost" size="sm">
                     Become a Mover
                   </Button>
                 </Link>
                 <Link href="/support" data-testid="link-support">
-                  <Button variant="ghost" className="hover-elevate active-elevate-2">
+                  <Button variant="ghost" size="sm">
                     Support
                   </Button>
                 </Link>
@@ -172,17 +157,17 @@ export default function Header() {
                 {user.role === "customer" && (
                   <>
                     <Link href="/request-move" data-testid="link-mobile-request-move" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                      <Button variant="ghost" className="w-full justify-start">
                         Request Move
                       </Button>
                     </Link>
                     <Link href="/my-bookings" data-testid="link-mobile-my-bookings" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                      <Button variant="ghost" className="w-full justify-start">
                         My Bookings
                       </Button>
                     </Link>
                     <Link href="/dashboard" data-testid="link-mobile-dashboard" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                      <Button variant="ghost" className="w-full justify-start">
                         Dashboard
                       </Button>
                     </Link>
@@ -191,7 +176,7 @@ export default function Header() {
                 {user.role === "mover" && (
                   <>
                     <Link href="/mover-dashboard" data-testid="link-mobile-mover-dashboard" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                      <Button variant="ghost" className="w-full justify-start">
                         Mover Dashboard
                       </Button>
                     </Link>
@@ -200,66 +185,61 @@ export default function Header() {
                 {user.role === "admin" && (
                   <>
                     <Link href="/admin" data-testid="link-mobile-admin" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                      <Button variant="ghost" className="w-full justify-start">
                         Admin Dashboard
                       </Button>
                     </Link>
                   </>
                 )}
-                <Button 
-                  variant="outline" 
-                  className="w-full hover-elevate active-elevate-2"
-                  onClick={handleLogout}
-                  data-testid="button-mobile-logout"
-                >
-                  Log Out
-                </Button>
+                <div className="pt-2 border-t">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={handleLogout}
+                    data-testid="button-mobile-logout"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Log Out
+                  </Button>
+                </div>
               </>
             ) : (
               <>
-                <Link href="/demo" data-testid="link-mobile-demo" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
-                    🗺️ Map Demo
-                  </Button>
-                </Link>
-                <Link href="/lifecycle" data-testid="link-mobile-lifecycle" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
-                    🎬 Customer Lifecycle
-                  </Button>
-                </Link>
-                <Link href="/mover-lifecycle" data-testid="link-mobile-mover-lifecycle" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
-                    🚚 Mover Lifecycle
-                  </Button>
-                </Link>
                 <Link href="/browse-movers" data-testid="link-mobile-browse" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                  <Button variant="ghost" className="w-full justify-start">
                     Find Movers
                   </Button>
                 </Link>
                 <Button 
                   variant="ghost" 
-                  className="w-full justify-start hover-elevate active-elevate-2"
+                  className="w-full justify-start"
                   onClick={handleHowItWorks}
                   data-testid="link-mobile-how"
                 >
                   How It Works
                 </Button>
                 <Link href="/signup" data-testid="link-mobile-become" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start hover-elevate active-elevate-2">
+                  <Button variant="ghost" className="w-full justify-start">
                     Become a Mover
                   </Button>
                 </Link>
-                <Link href="/login" data-testid="link-mobile-login" onClick={closeMobileMenu}>
-                  <Button variant="outline" className="w-full hover-elevate active-elevate-2">
-                    Sign In
+                <Link href="/support" data-testid="link-mobile-support" onClick={closeMobileMenu}>
+                  <Button variant="ghost" className="w-full justify-start">
+                    Support
                   </Button>
                 </Link>
-                <Link href="/request-move" data-testid="link-mobile-request" onClick={closeMobileMenu}>
-                  <Button className="w-full">
-                    Book a Move
-                  </Button>
-                </Link>
+                <div className="pt-4 space-y-2 border-t">
+                  <Link href="/login" data-testid="link-mobile-login" onClick={closeMobileMenu}>
+                    <Button variant="outline" className="w-full">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/request-move" data-testid="link-mobile-request" onClick={closeMobileMenu}>
+                    <Button className="w-full">
+                      Book a Move
+                    </Button>
+                  </Link>
+                </div>
               </>
             )}
           </div>

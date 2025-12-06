@@ -4,12 +4,43 @@ import MoverCard from "@/components/MoverCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Search, SlidersHorizontal, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+
 import moverPhoto1 from "@assets/generated_images/male_mover_profile_photo.png";
 import moverPhoto2 from "@assets/generated_images/female_mover_profile_photo.png";
 import moverPhoto3 from "@assets/generated_images/young_mover_headshot.png";
+
+function MoverCardSkeleton() {
+  return (
+    <Card className="p-6">
+      <div className="flex flex-col h-full">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-start gap-3 flex-1">
+            <Skeleton className="w-12 h-12 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </div>
+          <div className="text-right">
+            <Skeleton className="h-6 w-16" />
+            <Skeleton className="h-3 w-12 mt-1" />
+          </div>
+        </div>
+        <div className="space-y-2.5 mb-6">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <Skeleton className="h-10 w-full mt-auto" />
+      </div>
+    </Card>
+  );
+}
 
 const moverPhotos = [moverPhoto1, moverPhoto2, moverPhoto3];
 
@@ -98,8 +129,10 @@ export default function BrowseMovers() {
         </div>
 
         {isLoading ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Loading movers...</p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <MoverCardSkeleton key={i} />
+            ))}
           </div>
         ) : filteredMovers.length === 0 ? (
           <div className="text-center py-12">

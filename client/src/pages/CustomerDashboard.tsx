@@ -62,17 +62,11 @@ export default function CustomerDashboard() {
         throw new Error("Booking or mover details not found");
       }
 
-      return await apiRequest("/api/support-tickets", {
-        method: "POST",
-        body: JSON.stringify({
-          subject: `Report: Mover ${booking.mover.user.name} (Booking #${bookingId.slice(0, 8)})`,
-          category: "mover_concern",
-          priority: "high",
-          description: `Customer ${user?.name} is reporting a concern about mover ${booking.mover.user.name} for booking #${bookingId}. Please investigate.`,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
+      return await apiRequest("POST", "/api/support-tickets", {
+        subject: `Report: Mover ${booking.mover.user.name} (Booking #${bookingId.slice(0, 8)})`,
+        category: "mover_concern",
+        priority: "high",
+        description: `Customer ${user?.name} is reporting a concern about mover ${booking.mover.user.name} for booking #${bookingId}. Please investigate.`,
       });
     },
     onSuccess: () => {

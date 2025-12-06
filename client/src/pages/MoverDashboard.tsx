@@ -269,7 +269,8 @@ export default function MoverDashboard() {
 
   const toggleAvailabilityMutation = useMutation({
     mutationFn: async (isAvailable: boolean) => {
-      return apiRequest("PATCH", `/api/movers/${mover?.id}`, { isAvailable });
+      const response = await apiRequest("PATCH", `/api/movers/${mover?.id}`, { isAvailable });
+      return response.json();
     },
     onSuccess: async (data, variables) => {
       await queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
@@ -762,9 +763,9 @@ export default function MoverDashboard() {
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
                   Complete verification to go online and accept jobs.{" "}
-                  <Button 
-                    variant="link" 
-                    className="h-auto p-0 text-primary"
+                  <button 
+                    type="button"
+                    className="text-primary hover:underline font-medium"
                     onClick={() => {
                       const tabsElement = document.querySelector('[value="verification"]');
                       if (tabsElement instanceof HTMLElement) {
@@ -773,7 +774,7 @@ export default function MoverDashboard() {
                     }}
                   >
                     Go to Verification
-                  </Button>
+                  </button>
                 </AlertDescription>
               </Alert>
             )}

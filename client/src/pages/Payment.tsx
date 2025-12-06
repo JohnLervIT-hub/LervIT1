@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2 } from "lucide-react";
+import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield } from "lucide-react";
 import type { Booking } from "@shared/schema";
 
 // Initialize Stripe
@@ -299,8 +299,9 @@ export default function Payment() {
           </CardContent>
         </Card>
 
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          <p>🔒 Payments are securely processed by Stripe</p>
+        <div className="mt-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+          <Shield className="w-4 h-4" />
+          <p>Payments are securely processed by Stripe</p>
         </div>
       </div>
     </div>
