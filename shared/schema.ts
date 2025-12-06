@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   address: text("address"),
   avatarUrl: text("avatar_url"),
   role: text("role").notNull().default("customer"),
+  stripeCustomerId: text("stripe_customer_id"),
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

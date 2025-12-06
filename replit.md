@@ -39,7 +39,7 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **Image Upload:** Supports frontend drag-and-drop with validation and Multer-based API handling. Photo upload is **mandatory** in Step 2, positioned below load size selector. Customers must upload at least one photo before proceeding.
 *   **Role-Specific User Experience:** Implements `ProtectedRoute` for access control, dynamic navigation, and protected login/signup redirects based on user roles.
 *   **Customer Support System:** Features a ticketing system with FAQ, contact forms, and an admin dashboard.
-*   **Payment Processing:** Integrated with Stripe for secure payment intent creation, status tracking, webhook handling, and CAD currency support.
+*   **Payment Processing:** Integrated with Stripe for secure payment intent creation, status tracking, webhook handling, and CAD currency support. Includes **Saved Card Feature** allowing customers to save payment methods to their profile for faster checkout. Customers can add new cards, set a default card, and delete saved cards via the CustomerProfile page. Backend uses Stripe Setup Intents for secure card tokenization and Stripe Customer objects for card management. The `stripeCustomerId` field on users table links to the Stripe customer.
 *   **Email Notification System:** Comprehensive email templates for booking confirmations, job assignments, payment receipts, and status updates.
 *   **Mover Earnings Dashboard:** Provides movers with a detailed overview of their earnings.
 *   **Real-Time Vehicle Tracking:** Allows movers to share their location, which customers can track live on Google Maps.

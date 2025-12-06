@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, User } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -1790,6 +1790,232 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch payment status" });
+    }
+  });
+
+  // === SAVED PAYMENT METHODS ===
+  
+  // Helper to get or create Stripe customer
+  async function getOrCreateStripeCustomer(user: User): Promise<string> {
+    if (user.stripeCustomerId) {
+      return user.stripeCustomerId;
+    }
+    
+    // Create new Stripe customer
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: user.name || undefined,
+      metadata: {
+        userId: user.id,
+      },
+    });
+    
+    // Save Stripe customer ID to user
+    await db.update(usersTable).set({ stripeCustomerId: customer.id }).where(eq(usersTable.id, user.id));
+    
+    return customer.id;
+  }
+
+  // Create setup intent for saving a card
+  app.post("/api/payment-methods/setup-intent", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user as User;
+      
+      const stripeCustomerId = await getOrCreateStripeCustomer(user);
+      
+      const setupIntent = await stripe.setupIntents.create({
+        customer: stripeCustomerId,
+        payment_method_types: ['card'],
+        metadata: {
+          userId: user.id,
+        },
+      });
+      
+      res.json({ clientSecret: setupIntent.client_secret });
+    } catch (error: any) {
+      console.error("Error creating setup intent:", error);
+      res.status(500).json({ error: "Failed to create setup intent" });
+    }
+  });
+
+  // Get saved payment methods
+  app.get("/api/payment-methods", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user as User;
+      
+      if (!user.stripeCustomerId) {
+        return res.json({ paymentMethods: [] });
+      }
+      
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: user.stripeCustomerId,
+        type: 'card',
+      });
+      
+      // Get default payment method
+      const customer = await stripe.customers.retrieve(user.stripeCustomerId);
+      const defaultPaymentMethodId = (customer as any).invoice_settings?.default_payment_method;
+      
+      const cards = paymentMethods.data.map((pm) => ({
+        id: pm.id,
+        brand: pm.card?.brand,
+        last4: pm.card?.last4,
+        expMonth: pm.card?.exp_month,
+        expYear: pm.card?.exp_year,
+        isDefault: pm.id === defaultPaymentMethodId,
+      }));
+      
+      res.json({ paymentMethods: cards });
+    } catch (error: any) {
+      console.error("Error fetching payment methods:", error);
+      res.status(500).json({ error: "Failed to fetch payment methods" });
+    }
+  });
+
+  // Delete a saved payment method
+  app.delete("/api/payment-methods/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user as User;
+      const paymentMethodId = req.params.id;
+      
+      // Verify the payment method belongs to this user
+      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (paymentMethod.customer !== user.stripeCustomerId) {
+        return res.status(403).json({ error: "Payment method does not belong to you" });
+      }
+      
+      await stripe.paymentMethods.detach(paymentMethodId);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting payment method:", error);
+      res.status(500).json({ error: "Failed to delete payment method" });
+    }
+  });
+
+  // Set default payment method
+  app.post("/api/payment-methods/:id/set-default", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user as User;
+      const paymentMethodId = req.params.id;
+      
+      if (!user.stripeCustomerId) {
+        return res.status(400).json({ error: "No Stripe customer found" });
+      }
+      
+      // Verify the payment method belongs to this user
+      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (paymentMethod.customer !== user.stripeCustomerId) {
+        return res.status(403).json({ error: "Payment method does not belong to you" });
+      }
+      
+      await stripe.customers.update(user.stripeCustomerId, {
+        invoice_settings: {
+          default_payment_method: paymentMethodId,
+        },
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error setting default payment method:", error);
+      res.status(500).json({ error: "Failed to set default payment method" });
+    }
+  });
+
+  // Pay with saved card
+  app.post("/api/bookings/:id/pay-with-saved-card", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user as User;
+      const bookingId = req.params.id;
+      const { paymentMethodId } = validateBody(z.object({
+        paymentMethodId: z.string(),
+      }), req.body);
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      if (booking.customerId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      if (booking.paymentStatus === 'succeeded') {
+        return res.status(400).json({ error: "Booking already paid" });
+      }
+      
+      if (!user.stripeCustomerId) {
+        return res.status(400).json({ error: "No saved payment methods" });
+      }
+      
+      const amountInCents = Math.round(parseFloat(booking.price || '0') * 100);
+      
+      // Create payment intent with saved card
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: 'cad',
+        customer: user.stripeCustomerId,
+        payment_method: paymentMethodId,
+        off_session: false,
+        confirm: true,
+        metadata: {
+          bookingId: booking.id,
+          customerId: user.id,
+        },
+      });
+      
+      if (paymentIntent.status === 'succeeded') {
+        // Update booking
+        await storage.updateBooking(bookingId, {
+          paymentStatus: 'succeeded',
+          status: 'confirmed',
+          stripePaymentIntentId: paymentIntent.id,
+        });
+        
+        // Send confirmation emails
+        const customer = await storage.getUser(booking.customerId);
+        if (customer) {
+          try {
+            await notificationService.sendBookingConfirmation(customer, booking);
+            await notificationService.sendPaymentReceipt(customer, booking, booking.price || '0');
+          } catch (emailErr) {
+            console.error("Failed to send emails:", emailErr);
+          }
+        }
+        
+        // Notify movers
+        const allMovers = await storage.getMovers();
+        const availableMovers = allMovers.filter(m => m.isAvailable);
+        const moversToNotify = availableMovers.slice(0, 5);
+        for (const mover of moversToNotify) {
+          await storage.createJobNotification({
+            moverId: mover.userId,
+            bookingId: booking.id,
+            status: 'pending',
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+            distanceToPickup: '0',
+            estimatedEarnings: booking.price || '0',
+          });
+        }
+        
+        res.json({ success: true, status: 'succeeded' });
+      } else if (paymentIntent.status === 'requires_action') {
+        // Card requires 3D Secure
+        res.json({
+          requiresAction: true,
+          clientSecret: paymentIntent.client_secret,
+        });
+      } else {
+        res.status(400).json({ error: "Payment failed", status: paymentIntent.status });
+      }
+    } catch (error: any) {
+      console.error("Error paying with saved card:", error);
+      res.status(500).json({ error: error.message || "Payment failed" });
     }
   });
   
