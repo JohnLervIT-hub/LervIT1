@@ -1248,6 +1248,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/admin/users/:id/lock - Admin lock/suspend a user account
+  app.post("/api/admin/users/:id/lock", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { reason } = req.body;
+      const userId = req.params.id;
+      
+      if (!reason || reason.trim().length === 0) {
+        return res.status(400).json({ error: "Lock reason is required" });
+      }
+      
+      const result = await db.update(usersTable)
+        .set({
+          lockedByAdmin: true,
+          lockReason: reason.trim(),
+          lockedUntil: null, // Clear any timed lockout
+        })
+        .where(eq(usersTable.id, userId))
+        .returning();
+      
+      if (result.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      console.log(`[Admin] User ${userId} locked by admin. Reason: ${reason}`);
+      
+      const { password: _, ...userWithoutPassword } = result[0];
+      res.json({ message: "Account suspended", user: userWithoutPassword });
+    } catch (error) {
+      console.error('Admin lock user error:', error);
+      res.status(500).json({ error: "Failed to lock account" });
+    }
+  });
+
+  // POST /api/admin/users/:id/unlock - Admin unlock a user account
+  app.post("/api/admin/users/:id/unlock", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const userId = req.params.id;
+      
+      const result = await db.update(usersTable)
+        .set({
+          lockedByAdmin: false,
+          lockedUntil: null,
+          lockReason: null,
+          failedLoginAttempts: 0,
+        })
+        .where(eq(usersTable.id, userId))
+        .returning();
+      
+      if (result.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      console.log(`[Admin] User ${userId} unlocked by admin`);
+      
+      const { password: _, ...userWithoutPassword } = result[0];
+      res.json({ message: "Account unlocked", user: userWithoutPassword });
+    } catch (error) {
+      console.error('Admin unlock user error:', error);
+      res.status(500).json({ error: "Failed to unlock account" });
+    }
+  });
+
+  // GET /api/admin/users - Get all users with lock status
+  app.get("/api/admin/users", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const allUsers = await db.select({
+        id: usersTable.id,
+        email: usersTable.email,
+        name: usersTable.name,
+        phone: usersTable.phone,
+        role: usersTable.role,
+        avatarUrl: usersTable.avatarUrl,
+        failedLoginAttempts: usersTable.failedLoginAttempts,
+        lockedUntil: usersTable.lockedUntil,
+        lockedByAdmin: usersTable.lockedByAdmin,
+        lockReason: usersTable.lockReason,
+        createdAt: usersTable.createdAt,
+      }).from(usersTable).orderBy(usersTable.createdAt);
+      
+      res.json(allUsers);
+    } catch (error) {
+      console.error('Admin get users error:', error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
   // ===== BOOKING ROUTES =====
   app.post("/api/bookings", async (req: Request, res: Response) => {
     try {
