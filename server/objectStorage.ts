@@ -211,6 +211,56 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  /**
+   * Upload a buffer directly to Object Storage
+   * @param buffer - The file buffer to upload
+   * @param filename - Original filename (for extension)
+   * @param contentType - MIME type of the file
+   * @param ownerId - User ID who owns the file
+   * @returns The path to access the uploaded object (e.g., /objects/uploads/uuid)
+   */
+  async uploadBuffer(
+    buffer: Buffer,
+    filename: string,
+    contentType: string,
+    ownerId: string
+  ): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error(
+        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
+          "tool and set PRIVATE_OBJECT_DIR env var."
+      );
+    }
+
+    // Generate unique filename with extension
+    const ext = filename.includes('.') ? filename.split('.').pop() : 'jpg';
+    const objectId = `${randomUUID()}.${ext}`;
+    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    // Upload the buffer
+    await file.save(buffer, {
+      contentType,
+      metadata: {
+        originalName: filename,
+      },
+    });
+
+    // Set ACL to public so images can be viewed by everyone
+    const aclPolicy: ObjectAclPolicy = {
+      owner: ownerId,
+      visibility: "public",
+    };
+    await setObjectAclPolicy(file, aclPolicy);
+
+    // Return the normalized path
+    return `/objects/uploads/${objectId}`;
+  }
 }
 
 function parseObjectPath(path: string): {
