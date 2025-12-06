@@ -17,7 +17,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -843,65 +843,177 @@ export default function RequestMove() {
               <CardContent className="space-y-6">
                 {step === 1 && (
                   <>
-                    <div>
-                      <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
-                        Pickup Address
-                      </Label>
-                      <CustomAddressInput
-                        id="pickup"
-                        placeholder="123 Main St SW, Calgary, AB"
-                        value={pickupAddress}
-                        onChange={(address) => setPickupAddress(address)}
-                        data-testid="input-pickup-address"
-                      />
+                    {/* Grand Location Selector */}
+                    <div className="relative">
+                      {/* Visual Route Line */}
+                      <div className="absolute left-[23px] top-[72px] bottom-[72px] w-0.5 bg-gradient-to-b from-green-500 via-primary/30 to-primary hidden sm:block" />
+                      
+                      {/* Pickup Section */}
+                      <div className="relative bg-gradient-to-r from-green-500/5 to-transparent border border-green-500/20 rounded-xl p-5 mb-4">
+                        <div className="flex items-start gap-4">
+                          {/* Pickup Icon */}
+                          <div className="relative z-10 flex-shrink-0">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+                              <MapPin className="w-6 h-6 text-white" />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-card border-2 border-green-500 flex items-center justify-center">
+                              <span className="text-[10px] font-bold text-green-600">A</span>
+                            </div>
+                          </div>
+                          
+                          {/* Pickup Fields */}
+                          <div className="flex-1 space-y-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Label htmlFor="pickup" className="text-base font-semibold">
+                                  Pickup Location
+                                </Label>
+                                <span className="text-[10px] font-medium bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">FROM</span>
+                              </div>
+                              <CustomAddressInput
+                                id="pickup"
+                                placeholder="Enter pickup address in Calgary"
+                                value={pickupAddress}
+                                onChange={(address) => setPickupAddress(address)}
+                                data-testid="input-pickup-address"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="pickup-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
+                                Access Type
+                              </Label>
+                              <Select value={pickupDifficulty} onValueChange={setPickupDifficulty}>
+                                <SelectTrigger id="pickup-difficulty" className="h-11 bg-card" data-testid="select-pickup-difficulty">
+                                  <SelectValue placeholder="Select access type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ground">
+                                    <div className="flex items-center gap-2">
+                                      <span>Ground Floor</span>
+                                      <span className="text-xs text-green-600 font-medium">Free</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="basement">
+                                    <div className="flex items-center gap-2">
+                                      <span>Basement</span>
+                                      <span className="text-xs text-muted-foreground">+$10</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="stairs">
+                                    <div className="flex items-center gap-2">
+                                      <span>Stairs</span>
+                                      <span className="text-xs text-muted-foreground">+$5</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="elevator">
+                                    <div className="flex items-center gap-2">
+                                      <span>Elevator Available</span>
+                                      <span className="text-xs text-muted-foreground">+$8</span>
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Route Arrow Connector - Mobile */}
+                      <div className="flex justify-center py-2 sm:hidden">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-0.5 h-4 bg-gradient-to-b from-green-500 to-primary/50" />
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                            <TrendingUp className="w-4 h-4 text-muted-foreground rotate-90" />
+                          </div>
+                          <div className="w-0.5 h-4 bg-gradient-to-b from-primary/50 to-primary" />
+                        </div>
+                      </div>
+
+                      {/* Dropoff Section */}
+                      <div className="relative bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-xl p-5">
+                        <div className="flex items-start gap-4">
+                          {/* Dropoff Icon */}
+                          <div className="relative z-10 flex-shrink-0">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+                              <MapPin className="w-6 h-6 text-primary-foreground" />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-card border-2 border-primary flex items-center justify-center">
+                              <span className="text-[10px] font-bold text-primary">B</span>
+                            </div>
+                          </div>
+                          
+                          {/* Dropoff Fields */}
+                          <div className="flex-1 space-y-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Label htmlFor="dropoff" className="text-base font-semibold">
+                                  Dropoff Location
+                                </Label>
+                                <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">TO</span>
+                              </div>
+                              <CustomAddressInput
+                                id="dropoff"
+                                placeholder="Enter dropoff address in Calgary"
+                                value={dropoffAddress}
+                                onChange={(address) => setDropoffAddress(address)}
+                                data-testid="input-dropoff-address"
+                              />
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="dropoff-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
+                                Access Type
+                              </Label>
+                              <Select value={dropoffDifficulty} onValueChange={setDropoffDifficulty}>
+                                <SelectTrigger id="dropoff-difficulty" className="h-11 bg-card" data-testid="select-dropoff-difficulty">
+                                  <SelectValue placeholder="Select access type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ground">
+                                    <div className="flex items-center gap-2">
+                                      <span>Ground Floor</span>
+                                      <span className="text-xs text-green-600 font-medium">Free</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="basement">
+                                    <div className="flex items-center gap-2">
+                                      <span>Basement</span>
+                                      <span className="text-xs text-muted-foreground">+$10</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="stairs">
+                                    <div className="flex items-center gap-2">
+                                      <span>Stairs</span>
+                                      <span className="text-xs text-muted-foreground">+$5</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="elevator">
+                                    <div className="flex items-center gap-2">
+                                      <span>Elevator Available</span>
+                                      <span className="text-xs text-muted-foreground">+$8</span>
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <Label htmlFor="pickup-difficulty" className="text-base font-semibold mb-2 block">
-                        Pickup Difficulty
-                      </Label>
-                      <Select value={pickupDifficulty} onValueChange={setPickupDifficulty}>
-                        <SelectTrigger id="pickup-difficulty" className="h-12" data-testid="select-pickup-difficulty">
-                          <SelectValue placeholder="Select pickup difficulty" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ground">Ground Floor - $0</SelectItem>
-                          <SelectItem value="basement">Basement - +$10</SelectItem>
-                          <SelectItem value="stairs">Stairs - +$5</SelectItem>
-                          <SelectItem value="elevator">Elevator Available - +$8</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
-                        Dropoff Address
-                      </Label>
-                      <CustomAddressInput
-                        id="dropoff"
-                        placeholder="456 Oak Ave NW, Calgary, AB"
-                        value={dropoffAddress}
-                        onChange={(address) => setDropoffAddress(address)}
-                        data-testid="input-dropoff-address"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dropoff-difficulty" className="text-base font-semibold mb-2 block">
-                        Dropoff Difficulty
-                      </Label>
-                      <Select value={dropoffDifficulty} onValueChange={setDropoffDifficulty}>
-                        <SelectTrigger id="dropoff-difficulty" className="h-12" data-testid="select-dropoff-difficulty">
-                          <SelectValue placeholder="Select dropoff difficulty" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ground">Ground Floor - $0</SelectItem>
-                          <SelectItem value="basement">Basement - +$10</SelectItem>
-                          <SelectItem value="stairs">Stairs - +$5</SelectItem>
-                          <SelectItem value="elevator">Elevator Available - +$8</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* Distance Indicator */}
+                    {estimateDistance > 0 && (
+                      <div className="flex items-center justify-center gap-3 py-4">
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+                        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-full">
+                          <Truck className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{estimateDistance.toFixed(1)} km</span>
+                          <span className="text-xs text-muted-foreground">estimated</span>
+                        </div>
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+                      </div>
+                    )}
 
                     {/* AI Feature 1: Auto-Quote Predictor */}
                     {aiEstimate && (
