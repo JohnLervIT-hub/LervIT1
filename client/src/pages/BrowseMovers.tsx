@@ -6,7 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, SlidersHorizontal, MapPin } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, SlidersHorizontal, MapPin, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -44,12 +58,39 @@ function MoverCardSkeleton() {
 
 const moverPhotos = [moverPhoto1, moverPhoto2, moverPhoto3];
 
+const VEHICLE_TYPES = ["Pickup Truck", "Cargo Van", "Box Truck", "SUV"];
+
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedVehicleTypes, setSelectedVehicleTypes] = useState<string[]>([]);
+  const [minRating, setMinRating] = useState<string>("all");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<string>("distance");
   const { toast } = useToast();
+  
+  const activeFilterCount = 
+    selectedVehicleTypes.length + 
+    (minRating !== "all" ? 1 : 0) + 
+    (verifiedOnly ? 1 : 0);
+
+  const clearFilters = () => {
+    setSelectedVehicleTypes([]);
+    setMinRating("all");
+    setVerifiedOnly(false);
+    setSortBy("distance");
+  };
+
+  const toggleVehicleType = (type: string) => {
+    setSelectedVehicleTypes(prev => 
+      prev.includes(type) 
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -79,13 +120,38 @@ export default function BrowseMovers() {
   const filteredMovers = useMemo(() => {
     if (!movers || !Array.isArray(movers)) return [];
     
-    return movers.filter((mover: any) => {
+    let result = movers.filter((mover: any) => {
       const searchLower = searchQuery.toLowerCase();
       const nameMatch = mover.user?.name?.toLowerCase().includes(searchLower);
       const vehicleMatch = mover.vehicleType?.toLowerCase().includes(searchLower);
-      return nameMatch || vehicleMatch;
+      if (!nameMatch && !vehicleMatch) return false;
+      
+      if (selectedVehicleTypes.length > 0) {
+        const moverVehicle = mover.vehicleType?.toLowerCase() || "";
+        const matchesVehicle = selectedVehicleTypes.some(type => 
+          moverVehicle.includes(type.toLowerCase())
+        );
+        if (!matchesVehicle) return false;
+      }
+      
+      if (minRating !== "all") {
+        const rating = parseFloat(mover.rating) || 0;
+        if (rating < parseFloat(minRating)) return false;
+      }
+      
+      if (verifiedOnly && !mover.isVerified) return false;
+      
+      return true;
     });
-  }, [movers, searchQuery]);
+    
+    if (sortBy === "rating") {
+      result.sort((a: any, b: any) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
+    } else if (sortBy === "moves") {
+      result.sort((a: any, b: any) => (b.totalMoves || 0) - (a.totalMoves || 0));
+    }
+    
+    return result;
+  }, [movers, searchQuery, selectedVehicleTypes, minRating, verifiedOnly, sortBy]);
 
   const handleSelectMover = (id: string) => {
     console.log("Selected mover:", id);
@@ -115,10 +181,111 @@ export default function BrowseMovers() {
               data-testid="input-search"
             />
           </div>
-          <Button variant="outline" className="hover-elevate active-elevate-2" data-testid="button-filters">
-            <SlidersHorizontal className="w-4 h-4 mr-2" />
-            Filters
-          </Button>
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="hover-elevate active-elevate-2 relative" data-testid="button-filters">
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80" align="end">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Filter Movers</h4>
+                  {activeFilterCount > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={clearFilters}
+                      className="h-auto py-1 px-2 text-xs"
+                      data-testid="button-clear-filters"
+                    >
+                      Clear all
+                    </Button>
+                  )}
+                </div>
+                
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Vehicle Type</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {VEHICLE_TYPES.map((type) => (
+                      <div key={type} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`vehicle-${type}`}
+                          checked={selectedVehicleTypes.includes(type)}
+                          onCheckedChange={() => toggleVehicleType(type)}
+                          data-testid={`checkbox-vehicle-${type.toLowerCase().replace(/\s+/g, '-')}`}
+                        />
+                        <Label 
+                          htmlFor={`vehicle-${type}`} 
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {type}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Minimum Rating</Label>
+                  <Select value={minRating} onValueChange={setMinRating}>
+                    <SelectTrigger data-testid="select-min-rating">
+                      <SelectValue placeholder="Any rating" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Any rating</SelectItem>
+                      <SelectItem value="4">4+ stars</SelectItem>
+                      <SelectItem value="4.5">4.5+ stars</SelectItem>
+                      <SelectItem value="5">5 stars only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="verified-only"
+                    checked={verifiedOnly}
+                    onCheckedChange={(checked) => setVerifiedOnly(checked === true)}
+                    data-testid="checkbox-verified-only"
+                  />
+                  <Label 
+                    htmlFor="verified-only" 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Verified movers only
+                  </Label>
+                </div>
+                
+                <div className="space-y-2 pt-2 border-t">
+                  <Label className="text-sm font-medium">Sort By</Label>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger data-testid="select-sort-by">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="distance">Distance (nearest)</SelectItem>
+                      <SelectItem value="rating">Rating (highest)</SelectItem>
+                      <SelectItem value="moves">Experience (most moves)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <Button 
+                  className="w-full" 
+                  onClick={() => setFiltersOpen(false)}
+                  data-testid="button-apply-filters"
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="mb-6 flex items-center gap-2">
