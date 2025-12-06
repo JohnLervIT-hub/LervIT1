@@ -1,10 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-import boxesImage from "@assets/generated_images/mover_with_small_boxes.png";
-import mediumImage from "@assets/generated_images/mover_with_furniture_dolly.png";
-import largeImage from "@assets/generated_images/two_movers_carrying_sofa.png";
-import apartmentImage from "@assets/generated_images/moving_crew_apartment.png";
+import boxesImage from "@assets/generated_images/3d_boxes_floating_isolated.png";
+import mediumImage from "@assets/generated_images/3d_chair_table_floating.png";
+import largeImage from "@assets/generated_images/3d_sofa_floating_isolated.png";
+import apartmentImage from "@assets/generated_images/3d_apartment_model_floating.png";
 
 interface LoadSize {
   id: string;

@@ -24,10 +24,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
-
-// 3D mover images for number of movers selection
-import singleMoverImage from "@assets/generated_images/3d_single_mover_with_box.png";
-import twoMoversImage from "@assets/generated_images/3d_two_movers_with_sofa.png";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 // Helper functions for load size validation
@@ -1100,7 +1096,6 @@ export default function RequestMove() {
                           </div>
                         )}
 
-                        {/* Number of Movers Section with Animated Person Visuals */}
                         <div className="border-t pt-6">
                           <Label className="text-base font-semibold mb-2 block flex items-center gap-2">
                             <Users className="w-5 h-5" />
@@ -1113,86 +1108,42 @@ export default function RequestMove() {
                               </AlertDescription>
                             </Alert>
                           )}
-                          {/* Animated Mover Selection Cards with 3D Images */}
                           <div className="grid grid-cols-2 gap-4">
-                            {/* 1 Mover Card with 3D image */}
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(1)}
-                              className={`group relative p-4 rounded-lg border-2 transition-all duration-300 ease-out
-                                ${numberOfMovers === 1
-                                  ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
-                                  : "border-border bg-card hover:border-primary/50 hover:shadow-md"
-                                }
-                                transform hover:scale-[1.03] active:scale-[0.98]
-                                animate-in fade-in slide-in-from-bottom-2 duration-500
-                              `}
-                              style={{ animationDelay: '0ms' }}
+                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                                numberOfMovers === 1
+                                  ? "border-primary bg-primary/10"
+                                  : "border-border bg-card"
+                              }`}
                               data-testid="button-1-mover"
                             >
-                              <div className="flex flex-col items-center text-center">
-                                {/* 3D Single Mover Image */}
-                                <div className={`mb-2 transition-all duration-300 ${numberOfMovers === 1 ? 'scale-105' : 'group-hover:scale-105'}`}>
-                                  <img 
-                                    src={singleMoverImage} 
-                                    alt="Single mover carrying box" 
-                                    className="w-20 h-20 object-contain"
-                                  />
-                                </div>
+                              <div className="text-center">
                                 <p className="font-bold text-lg">1 Mover</p>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                   Customer helps with carry
                                 </p>
-                                <p className={`text-sm font-semibold mt-2 ${numberOfMovers === 1 ? 'text-primary' : ''}`}>
-                                  Standard Price
-                                </p>
+                                <p className="text-sm font-semibold mt-2">Standard Price</p>
                               </div>
-                              {/* Selection indicator */}
-                              {numberOfMovers === 1 && (
-                                <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center animate-in zoom-in duration-200">
-                                  <CheckCircle className="w-4 h-4 text-primary-foreground" />
-                                </div>
-                              )}
                             </button>
-
-                            {/* 2 Movers Card with 3D image */}
                             <button
                               type="button"
                               onClick={() => setNumberOfMovers(2)}
-                              className={`group relative p-4 rounded-lg border-2 transition-all duration-300 ease-out
-                                ${numberOfMovers === 2
-                                  ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
-                                  : "border-border bg-card hover:border-primary/50 hover:shadow-md"
-                                }
-                                transform hover:scale-[1.03] active:scale-[0.98]
-                                animate-in fade-in slide-in-from-bottom-2 duration-500
-                              `}
-                              style={{ animationDelay: '100ms' }}
+                              className={`p-4 rounded-lg border-2 transition-all hover-elevate active-elevate-2 ${
+                                numberOfMovers === 2
+                                  ? "border-primary bg-primary/10"
+                                  : "border-border bg-card"
+                              }`}
                               data-testid="button-2-movers"
                             >
-                              <div className="flex flex-col items-center text-center">
-                                {/* 3D Two Movers Image */}
-                                <div className={`mb-2 transition-all duration-300 ${numberOfMovers === 2 ? 'scale-105' : 'group-hover:scale-105'}`}>
-                                  <img 
-                                    src={twoMoversImage} 
-                                    alt="Two movers carrying sofa" 
-                                    className="w-20 h-20 object-contain"
-                                  />
-                                </div>
+                              <div className="text-center">
                                 <p className="font-bold text-lg">2 Movers</p>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                   Movers handle everything
                                 </p>
-                                <p className={`text-sm font-semibold mt-2 ${numberOfMovers === 2 ? 'text-primary' : 'text-primary/80'}`}>
-                                  ×1.30 Price
-                                </p>
+                                <p className="text-sm font-semibold mt-2 text-primary">×1.30 Price</p>
                               </div>
-                              {/* Selection indicator */}
-                              {numberOfMovers === 2 && (
-                                <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center animate-in zoom-in duration-200">
-                                  <CheckCircle className="w-4 h-4 text-primary-foreground" />
-                                </div>
-                              )}
                             </button>
                           </div>
                         </div>
