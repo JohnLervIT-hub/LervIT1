@@ -603,11 +603,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   async function getDriverVerificationSummary(moverId: string) {
     const REQUIRED_TYPES = [
-      'GOVERNMENT_ID_SELFIE',
+      'ID',
       'DRIVERS_LICENSE',
       'VEHICLE_REGISTRATION',
       'VEHICLE_PHOTOS',
-      'INSURANCE_PROOF',
+      'INSURANCE',
       'BACKGROUND_CHECK',
       'PAYOUT_SETUP'
     ];
@@ -623,14 +623,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const item = items.find(i => i.type === type);
       if (item) {
         if (item.status === 'Approved') {
-          if (item.expiresAt && new Date(item.expiresAt) < now) {
+          if (item.expiryDate && new Date(item.expiryDate) < now) {
             hasExpired = true;
           } else {
             approvedCount++;
           }
         } else if (item.status === 'Rejected') {
           hasRejected = true;
-        } else if (item.expiresAt && new Date(item.expiresAt) < now) {
+        } else if (item.expiryDate && new Date(item.expiryDate) < now) {
           hasExpired = true;
         }
       }
@@ -1003,7 +1003,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reviewedBy: user.id,
           updatedAt: new Date()
         })
-        .where(eq(verificationItems.id, parseInt(req.params.id)))
+        .where(eq(verificationItems.id, req.params.id))
         .returning();
       
       if (result.length === 0) {

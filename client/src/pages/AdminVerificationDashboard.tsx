@@ -30,13 +30,13 @@ interface Driver {
 }
 
 interface VerificationItem {
-  id: number;
+  id: string;
   type: string;
   status: string;
-  documentUrl: string | null;
+  fileUrls: string[] | null;
   rejectionReason: string | null;
-  expiresAt: string | null;
-  submittedAt: string;
+  expiryDate: string | null;
+  submittedAt: string | null;
   reviewedAt: string | null;
   updatedAt: string;
 }
@@ -134,7 +134,7 @@ export default function AdminVerificationDashboard() {
 
   // Review mutation
   const reviewMutation = useMutation({
-    mutationFn: async ({ itemId, status, reason }: { itemId: number; status: string; reason?: string }) => {
+    mutationFn: async ({ itemId, status, reason }: { itemId: string; status: string; reason?: string }) => {
       return apiRequest("PATCH", `/api/admin/verification/item/${itemId}`, {
         status,
         rejectionReason: reason,
@@ -452,9 +452,9 @@ export default function AdminVerificationDashboard() {
                               <div className="font-medium">{formatType(item.type)}</div>
                               <div className="flex items-center gap-2 mt-1">
                                 {getStatusBadge(item.status)}
-                                {item.expiresAt && (
+                                {item.expiryDate && (
                                   <span className="text-sm text-muted-foreground">
-                                    Expires: {format(new Date(item.expiresAt), "MMM d, yyyy")}
+                                    Expires: {format(new Date(item.expiryDate), "MMM d, yyyy")}
                                   </span>
                                 )}
                               </div>
@@ -495,19 +495,26 @@ export default function AdminVerificationDashboard() {
                   {getStatusBadge(selectedItem.status)}
                 </div>
 
-                {selectedItem.documentUrl && (
+                {selectedItem.fileUrls && selectedItem.fileUrls.length > 0 && (
                   <div>
-                    <div className="text-sm text-muted-foreground mb-2">Document</div>
-                    <img
-                      src={selectedItem.documentUrl}
-                      alt="Verification document"
-                      className="w-full rounded-lg border"
-                    />
+                    <div className="text-sm text-muted-foreground mb-2">Documents ({selectedItem.fileUrls.length})</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {selectedItem.fileUrls.map((url, idx) => (
+                        <div key={idx} className="relative">
+                          <img
+                            src={url}
+                            alt={`Verification document ${idx + 1}`}
+                            className="w-full rounded-lg border cursor-pointer hover:opacity-90"
+                            onClick={() => window.open(url, '_blank')}
+                          />
+                        </div>
+                      ))}
+                    </div>
                     <Button
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      onClick={() => window.open(selectedItem.documentUrl!, '_blank')}
+                      onClick={() => window.open(selectedItem.fileUrls![0], '_blank')}
                     >
                       <FileText className="w-4 h-4 mr-1" />
                       Open Full Size
@@ -552,9 +559,11 @@ export default function AdminVerificationDashboard() {
                   </div>
                 )}
 
-                <div className="text-sm text-muted-foreground">
-                  Submitted: {format(new Date(selectedItem.submittedAt), "MMM d, yyyy 'at' h:mm a")}
-                </div>
+                {selectedItem.submittedAt && (
+                  <div className="text-sm text-muted-foreground">
+                    Submitted: {format(new Date(selectedItem.submittedAt), "MMM d, yyyy 'at' h:mm a")}
+                  </div>
+                )}
               </div>
             )}
 
