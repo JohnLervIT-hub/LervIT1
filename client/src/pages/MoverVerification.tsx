@@ -116,17 +116,17 @@ function getStatusBadge(status: string) {
   // Normalize status to lowercase for comparison
   const normalizedStatus = status.toLowerCase();
   
-  const statusConfig = {
-    pending: { label: 'Pending', variant: 'secondary' as const, icon: Clock },
-    under_review: { label: 'Under Review', variant: 'default' as const, icon: FileText },
-    'under review': { label: 'Under Review', variant: 'default' as const, icon: FileText },
-    approved: { label: 'Approved', variant: 'default' as const, icon: CheckCircle, className: 'bg-green-500 hover:bg-green-600' },
-    rejected: { label: 'Rejected', variant: 'destructive' as const, icon: XCircle },
-    expired: { label: 'Expired', variant: 'destructive' as const, icon: AlertTriangle },
-    missing: { label: 'Not Submitted', variant: 'outline' as const, icon: Upload },
+  const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; className?: string }> = {
+    pending: { label: 'Pending', variant: 'secondary', icon: Clock },
+    under_review: { label: 'Under Review', variant: 'default', icon: FileText },
+    'under review': { label: 'Under Review', variant: 'default', icon: FileText },
+    approved: { label: 'Approved', variant: 'default', icon: CheckCircle, className: 'bg-green-500 hover:bg-green-600 text-white' },
+    rejected: { label: 'Rejected', variant: 'destructive', icon: XCircle },
+    expired: { label: 'Expired', variant: 'destructive', icon: AlertTriangle },
+    missing: { label: 'Not Submitted', variant: 'outline', icon: Upload },
   };
 
-  const config = statusConfig[normalizedStatus as keyof typeof statusConfig] || statusConfig.pending;
+  const config = statusConfig[normalizedStatus] || statusConfig.pending;
   const Icon = config.icon;
 
   return (
