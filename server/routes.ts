@@ -3214,9 +3214,13 @@ Respond with VALID JSON only:
         isStaff: user.role === "admin",
       }).returning();
       
-      // Update ticket's updatedAt
+      // Update ticket's updatedAt and set lastStaffReplyAt if admin replied
+      const updateData: any = { updatedAt: new Date() };
+      if (user.role === "admin") {
+        updateData.lastStaffReplyAt = new Date();
+      }
       await db.update(supportTickets)
-        .set({ updatedAt: new Date() })
+        .set(updateData)
         .where(eq(supportTickets.id, req.params.id));
       
       res.status(201).json(reply[0]);
@@ -3262,6 +3266,64 @@ Respond with VALID JSON only:
       res.json(ticket[0]);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update ticket" });
+    }
+  });
+
+  // Get unread ticket count for customer notifications
+  app.get("/api/support/tickets/unread-count", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const user = (req as any).user;
+      
+      // Get all tickets for this user where lastStaffReplyAt > customerLastReadAt
+      // or where lastStaffReplyAt exists but customerLastReadAt is null
+      const tickets = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.userId, user.id));
+      
+      // Count tickets with unread staff replies
+      const unreadCount = tickets.filter(ticket => {
+        if (!ticket.lastStaffReplyAt) return false;
+        if (!ticket.customerLastReadAt) return true;
+        return ticket.lastStaffReplyAt > ticket.customerLastReadAt;
+      }).length;
+      
+      res.json({ unreadCount });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get unread count" });
+    }
+  });
+
+  // Mark a ticket as read by customer
+  app.post("/api/support/tickets/:id/mark-read", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const user = (req as any).user;
+      
+      // Verify user owns this ticket
+      const ticket = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.id, req.params.id))
+        .limit(1);
+      
+      if (!ticket.length) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+      
+      if (ticket[0].userId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Update customerLastReadAt
+      await db.update(supportTickets)
+        .set({ customerLastReadAt: new Date() })
+        .where(eq(supportTickets.id, req.params.id));
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark ticket as read" });
     }
   });
 

@@ -225,6 +225,10 @@ export const supportTickets = pgTable("support_tickets", {
   priority: text("priority").notNull().default("normal"),
   assignedTo: varchar("assigned_to").references(() => users.id),
   resolvedAt: timestamp("resolved_at"),
+  // Track when customer last read the ticket to show unread notifications
+  customerLastReadAt: timestamp("customer_last_read_at"),
+  // Track when staff last replied (for notification purposes)
+  lastStaffReplyAt: timestamp("last_staff_reply_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
