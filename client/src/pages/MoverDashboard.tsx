@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet } from "lucide-react";
+import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -923,7 +924,7 @@ export default function MoverDashboard() {
         </AlertDialog>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="w-full grid grid-cols-4 bg-card border shadow-sm p-1.5 rounded-xl h-auto">
+          <TabsList className="w-full grid grid-cols-5 bg-card border shadow-sm p-1.5 rounded-xl h-auto">
             <TabsTrigger value="available" data-testid="tab-available" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">Jobs</span>
@@ -949,6 +950,10 @@ export default function MoverDashboard() {
             <TabsTrigger value="earnings" data-testid="tab-earnings" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <DollarSign className="w-4 h-4" />
               <span className="hidden sm:inline">Earnings</span>
+            </TabsTrigger>
+            <TabsTrigger value="payouts" data-testid="tab-payouts" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+              <Wallet className="w-4 h-4" />
+              <span className="hidden sm:inline">Payouts</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1181,6 +1186,10 @@ export default function MoverDashboard() {
                 )}
               </>
             )}
+          </TabsContent>
+
+          <TabsContent value="payouts" className="space-y-6">
+            <MoverPayoutCenter />
           </TabsContent>
         </Tabs>
       </div>
