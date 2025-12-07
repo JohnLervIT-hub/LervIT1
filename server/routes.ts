@@ -3746,9 +3746,13 @@ Respond with VALID JSON only:
   });
 
   // Record earnings when job is completed (called internally when booking is completed)
-  async function recordMoverEarnings(bookingId: string, moverId: string, grossAmount: number) {
-    const platformFeeAmount = grossAmount * (PLATFORM_COMMISSION_PERCENT / 100);
-    const netAmount = grossAmount - platformFeeAmount;
+  // Uses the commission data stored on the booking for auditability
+  async function recordMoverEarnings(bookingId: string, moverId: string, booking: any) {
+    // Get commission data from booking (persisted for audit trail)
+    const grossAmount = parseFloat(booking.price || '0');
+    const platformFeePercent = parseFloat(booking.platformFeePercent || PLATFORM_COMMISSION_PERCENT.toString());
+    const platformFeeAmount = parseFloat(booking.platformFeeAmount || (grossAmount * platformFeePercent / 100).toString());
+    const netAmount = parseFloat(booking.moverNetAmount || (grossAmount - platformFeeAmount).toString());
     
     // Check if earnings already recorded
     const existing = await db.select()
@@ -3764,7 +3768,7 @@ Respond with VALID JSON only:
       moverId,
       bookingId,
       grossAmount: grossAmount.toFixed(2),
-      platformFeePercent: PLATFORM_COMMISSION_PERCENT.toFixed(2),
+      platformFeePercent: platformFeePercent.toFixed(2),
       platformFeeAmount: platformFeeAmount.toFixed(2),
       netAmount: netAmount.toFixed(2),
       status: 'pending',
@@ -3772,6 +3776,33 @@ Respond with VALID JSON only:
     }).returning();
     
     return earnings;
+  }
+  
+  // Calculate and set commission on booking before completion
+  async function calculateBookingCommission(bookingId: string) {
+    const booking = await storage.getBooking(bookingId);
+    if (!booking) return null;
+    
+    const grossAmount = parseFloat(booking.price || '0');
+    const platformFeePercent = PLATFORM_COMMISSION_PERCENT;
+    const platformFeeAmount = grossAmount * (platformFeePercent / 100);
+    const moverNetAmount = grossAmount - platformFeeAmount;
+    
+    // Update booking with commission data for audit trail
+    await db.update(bookings)
+      .set({
+        platformFeePercent: platformFeePercent.toFixed(2),
+        platformFeeAmount: platformFeeAmount.toFixed(2),
+        moverNetAmount: moverNetAmount.toFixed(2),
+      })
+      .where(eq(bookings.id, bookingId));
+    
+    return {
+      grossAmount,
+      platformFeePercent,
+      platformFeeAmount,
+      moverNetAmount,
+    };
   }
 
   // Complete a booking and record earnings (mover action)
@@ -3801,12 +3832,20 @@ Respond with VALID JSON only:
         return res.status(400).json({ error: "Payment must be completed before marking job as done" });
       }
       
-      // Update booking status
+      // Calculate and persist commission on booking for audit trail
+      const commission = await calculateBookingCommission(bookingId);
+      if (!commission) {
+        return res.status(500).json({ error: "Failed to calculate commission" });
+      }
+      
+      // Update booking status to completed
       await storage.updateBooking(bookingId, { status: 'completed' });
       
-      // Record earnings
-      const grossAmount = parseFloat(booking.price || '0');
-      const earnings = await recordMoverEarnings(bookingId, booking.moverId!, grossAmount);
+      // Get updated booking with commission data for earnings record
+      const updatedBooking = await storage.getBooking(bookingId);
+      
+      // Record earnings using persisted commission data from booking
+      const earnings = await recordMoverEarnings(bookingId, booking.moverId!, updatedBooking);
       
       // Increment mover's completed trips
       const mover = movers[0];

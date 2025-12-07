@@ -100,6 +100,11 @@ export const bookings = pgTable("bookings", {
   notifiedAt: timestamp("notified_at"),
   acceptedAt: timestamp("accepted_at"),
   
+  // Platform commission tracking for mover payouts
+  platformFeePercent: decimal("platform_fee_percent", { precision: 5, scale: 2 }).notNull().default("15.00"),
+  platformFeeAmount: decimal("platform_fee_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  moverNetAmount: decimal("mover_net_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  
   // Real-time location tracking for active trips
   currentLatitude: doublePrecision("current_latitude"),
   currentLongitude: doublePrecision("current_longitude"),

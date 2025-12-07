@@ -43,6 +43,12 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **Payment Processing:** Integrated with Stripe for secure payment intent creation, status tracking, webhook handling, and CAD currency support. Includes **Saved Card Feature** allowing customers to save payment methods to their profile for faster checkout. Customers can add new cards, set a default card, and delete saved cards via the CustomerProfile page. Backend uses Stripe Setup Intents for secure card tokenization and Stripe Customer objects for card management. The `stripeCustomerId` field on users table links to the Stripe customer.
 *   **Email Notification System:** Comprehensive email templates for booking confirmations, job assignments, payment receipts, and status updates.
 *   **Mover Earnings Dashboard:** Provides movers with a detailed overview of their earnings.
+*   **Uber-Style Mover Payout System:** Full Stripe Connect integration for mover payouts. Movers onboard via Stripe Express accounts, platform collects customer payments and deducts 15% commission, remaining 85% is tracked in `mover_earnings` table and transferred to mover bank accounts. Features include:
+    *   **Stripe Connect Onboarding:** Movers can set up payout accounts via `/api/movers/payouts/onboarding-link`
+    *   **Commission Persistence:** Booking completion stores `platformFeePercent`, `platformFeeAmount`, and `moverNetAmount` on bookings for audit trail
+    *   **Earnings Tracking:** `mover_earnings` table records each job's gross amount, platform fee, and net payout
+    *   **Payout Center UI:** New "Payouts" tab in Mover Dashboard (`MoverPayoutCenter.tsx`) shows account status, earnings overview, and history
+    *   **Database Schema:** Three new tables: `mover_stripe_accounts`, `mover_earnings`, `mover_payouts`
 *   **Real-Time Vehicle Tracking:** Allows movers to share their location, which customers can track live on Google Maps.
 *   **Mover Profile Management:** Movers can manage their profile, including photos, bio, vehicle details, with robust validation and authentication.
 *   **Driver Verification & Compliance System:** A `verificationItems` table tracks 7 types of verification with statuses and expiry dates, implementing blocking logic until all required verifications are approved.
