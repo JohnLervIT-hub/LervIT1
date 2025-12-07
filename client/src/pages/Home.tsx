@@ -2,19 +2,22 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import HeroSection from "@/components/HeroSection";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import truckIcon from "@assets/generated_images/borderless_3d_truck_icon.png";
-import dollarIcon from "@assets/generated_images/borderless_3d_dollar_icon.png";
-import clockIcon from "@assets/generated_images/borderless_3d_clock_icon.png";
-import shieldIcon from "@assets/generated_images/borderless_3d_shield_icon.png";
+import { Card, CardContent } from "@/components/ui/card";
+import { 
+  Brain, 
+  MapPin, 
+  CreditCard, 
+  ShieldCheck,
+  Camera,
+  Users,
+  Navigation
+} from "lucide-react";
 
 export default function Home() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Redirect authenticated users to their role-specific dashboard
   useEffect(() => {
-    // Wait for auth to finish loading before redirecting
     if (!isLoading && user) {
       if (user.role === "customer") {
         setLocation("/dashboard");
@@ -28,24 +31,28 @@ export default function Home() {
 
   const features = [
     {
-      icon: <img src={truckIcon} alt="Moving truck" className="w-14 h-14" />,
-      title: "500+ Verified Movers",
-      description: "Connect with licensed, insured movers in Calgary instantly",
+      icon: <Brain className="w-7 h-7" />,
+      title: "AI-Powered Quotes",
+      description: "Snap a photo of your items and our AI instantly identifies them, recommends the right vehicle, and gives you an accurate price",
+      gradient: "from-violet-500 to-purple-600",
     },
     {
-      icon: <img src={dollarIcon} alt="Pricing" className="w-14 h-14" />,
-      title: "Transparent Pricing",
-      description: "Get instant quotes based on distance and load size—no hidden fees",
+      icon: <MapPin className="w-7 h-7" />,
+      title: "Smart Mover Matching",
+      description: "Get matched with the nearest verified movers in real-time, just like Uber—see ETAs and choose your perfect fit",
+      gradient: "from-blue-500 to-cyan-500",
     },
     {
-      icon: <img src={clockIcon} alt="Schedule" className="w-14 h-14" />,
-      title: "Flexible Scheduling",
-      description: "Book on-demand or schedule for later at your convenience",
+      icon: <CreditCard className="w-7 h-7" />,
+      title: "Secure & Simple Payments",
+      description: "Pay safely with Stripe, save your cards for faster checkout, and enjoy transparent pricing with no hidden fees",
+      gradient: "from-emerald-500 to-teal-500",
     },
     {
-      icon: <img src={shieldIcon} alt="Security" className="w-14 h-14" />,
-      title: "Secure Payments",
-      description: "Pay securely through Stripe with buyer protection",
+      icon: <ShieldCheck className="w-7 h-7" />,
+      title: "Verified & Insured",
+      description: "Every mover is background-checked with verified licenses, insurance, and real customer reviews you can trust",
+      gradient: "from-orange-500 to-amber-500",
     },
   ];
 
@@ -53,25 +60,28 @@ export default function Home() {
     <div className="min-h-screen">
       <HeroSection />
 
-      <section className="py-12 md:py-16 lg:py-20 bg-muted/30">
+      <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
-            <h2 className="mb-3 md:mb-4">
+          <div className="text-center mb-12 md:mb-16 space-y-4">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
+              Why Customers Love Us
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold">
               Why Choose LervIT?
             </h2>
-            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
-              The smartest, safest, and most affordable way to move in Calgary
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Calgary's smartest moving platform—powered by AI, backed by trust
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 lg:gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
             {features.map((feature, index) => (
-              <Card key={index} className="hover-elevate" data-testid={`card-feature-${index}`}>
-                <CardContent className="p-5 md:p-6 text-center">
-                  <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-primary/10 text-primary mb-3 md:mb-4">
+              <Card key={index} className="hover-elevate group overflow-visible border-0 shadow-md" data-testid={`card-feature-${index}`}>
+                <CardContent className="p-6 text-center">
+                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br ${feature.gradient} text-white mb-5 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
                     {feature.icon}
                   </div>
-                  <h3 className="font-semibold text-base md:text-lg mb-2">{feature.title}</h3>
+                  <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
                 </CardContent>
               </Card>
@@ -80,38 +90,59 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-12 md:py-16 lg:py-20">
+      <section id="how-it-works" className="py-16 md:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
-            <h2 className="mb-0">
+          <div className="text-center mb-12 md:mb-16 space-y-4">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-accent/80 text-accent-foreground text-sm font-medium">
+              Simple 3-Step Process
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold">
               How It Works
             </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Book your move in minutes—our AI and smart matching do the heavy lifting
+            </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8 lg:gap-10">
+          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {[
               {
                 step: "1",
-                title: "Request a Move",
-                description: "Enter your pickup and dropoff locations, select load size, and get instant quotes",
+                icon: <Camera className="w-6 h-6" />,
+                title: "Snap & Describe",
+                description: "Upload photos of your items and our AI identifies them, estimates weight, and recommends the perfect vehicle size",
+                gradient: "from-violet-500 to-purple-600",
               },
               {
                 step: "2",
-                title: "Choose Your Mover",
-                description: "Browse verified movers, compare prices and ratings, and select the best fit",
+                icon: <Users className="w-6 h-6" />,
+                title: "Get Matched",
+                description: "We find the nearest verified movers instantly—see their ratings, ETAs, and transparent pricing before you book",
+                gradient: "from-blue-500 to-cyan-500",
               },
               {
                 step: "3",
-                title: "Get Moving!",
-                description: "Pay securely, communicate with your mover, and track your move in real-time",
+                icon: <Navigation className="w-6 h-6" />,
+                title: "Track & Relax",
+                description: "Pay securely, track your mover in real-time on GPS, and enjoy peace of mind with our protection guarantee",
+                gradient: "from-emerald-500 to-teal-500",
               },
             ].map((step, index) => (
-              <div key={index} className="text-center" data-testid={`step-${index}`}>
-                <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-accent text-accent-foreground font-bold text-xl md:text-2xl mb-3 md:mb-4">
-                  {step.step}
+              <div key={index} className="relative text-center group" data-testid={`step-${index}`}>
+                <div className="relative inline-block mb-6">
+                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${step.gradient} text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    {step.icon}
+                  </div>
+                  <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-sm font-bold text-primary shadow-sm">
+                    {step.step}
+                  </div>
                 </div>
-                <h3 className="font-semibold text-lg md:text-xl mb-2 md:mb-3">{step.title}</h3>
-                <p className="text-sm md:text-base text-muted-foreground leading-relaxed">{step.description}</p>
+                <h3 className="font-semibold text-xl mb-3">{step.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+                
+                {index < 2 && (
+                  <div className="hidden md:block absolute top-8 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-muted-foreground/20 to-transparent" />
+                )}
               </div>
             ))}
           </div>
