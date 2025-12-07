@@ -104,14 +104,14 @@ export default function Home() {
                 step: "2",
                 icon: <Users className="w-6 h-6" />,
                 title: "Pay & Book",
-                description: "Pay securely upfront, then get matched with nearby verified movers—compare ratings, ETAs, and book with one tap",
+                description: "Review your AI-powered quote, pay securely with Stripe, and confirm your booking in one tap",
                 gradient: "from-blue-500 to-cyan-500",
               },
               {
                 step: "3",
                 icon: <Navigation className="w-6 h-6" />,
-                title: "Track & Move",
-                description: "Follow your mover live on GPS, get real-time updates, and rate your experience when complete",
+                title: "Match & Track",
+                description: "We match you with verified movers, track them live on GPS, and rate your experience when complete",
                 gradient: "from-emerald-500 to-teal-500",
               },
             ].map((step, index) => (
