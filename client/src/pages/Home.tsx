@@ -87,7 +87,7 @@ export default function Home() {
               How It Works
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Book your move in three simple steps
+              From photo to mover at your door—in minutes, not hours
             </p>
           </div>
 
