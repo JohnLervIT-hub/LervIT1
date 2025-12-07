@@ -2,7 +2,8 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, User } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User } from "@shared/schema";
+import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
@@ -3261,6 +3262,121 @@ Respond with VALID JSON only:
       res.json(ticket[0]);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update ticket" });
+    }
+  });
+
+  // AI-powered ticket analysis (admin only)
+  app.post("/api/support/tickets/:id/ai-analyze", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const ticketId = req.params.id;
+      
+      // Get ticket details
+      const ticketResult = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.id, ticketId))
+        .limit(1);
+      
+      if (!ticketResult.length) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+      
+      const ticket = ticketResult[0];
+      
+      // Get ticket replies
+      const replies = await db.select()
+        .from(supportTicketReplies)
+        .where(eq(supportTicketReplies.ticketId, ticketId))
+        .orderBy(supportTicketReplies.createdAt);
+      
+      // Get user details
+      const userResult = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.id, ticket.userId))
+        .limit(1);
+      
+      // Check for cached analysis (less than 1 hour old)
+      const existingInsight = await db.select()
+        .from(aiSupportInsights)
+        .where(eq(aiSupportInsights.ticketId, ticketId))
+        .orderBy(aiSupportInsights.createdAt)
+        .limit(1);
+      
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (existingInsight.length && existingInsight[0].createdAt > oneHourAgo) {
+        return res.json({
+          ...existingInsight[0],
+          cached: true
+        });
+      }
+      
+      const startTime = Date.now();
+      
+      // Run AI analysis
+      const analysis = await analyzeTicket({
+        ticket,
+        replies,
+        user: userResult[0]
+      });
+      
+      const processingTime = Date.now() - startTime;
+      
+      // Store the insight
+      const insight = await db.insert(aiSupportInsights).values({
+        ticketId,
+        summary: analysis.summary,
+        category: analysis.category,
+        suggestedPriority: analysis.suggestedPriority,
+        rootCause: analysis.rootCause,
+        recommendations: analysis.recommendations,
+        suggestedResponse: analysis.suggestedResponse,
+        similarCases: analysis.similarCases,
+        confidence: analysis.confidence,
+        processingTimeMs: processingTime,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      }).returning();
+      
+      res.json({
+        ...insight[0],
+        cached: false
+      });
+    } catch (error) {
+      console.error("AI analysis error:", error);
+      res.status(500).json({ error: "Failed to analyze ticket" });
+    }
+  });
+
+  // Get cached AI insight for a ticket (admin only)
+  app.get("/api/support/tickets/:id/ai-insight", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const insight = await db.select()
+        .from(aiSupportInsights)
+        .where(eq(aiSupportInsights.ticketId, req.params.id))
+        .orderBy(aiSupportInsights.createdAt)
+        .limit(1);
+      
+      if (!insight.length) {
+        return res.status(404).json({ error: "No AI insight available. Click 'Analyze with AI' to generate one." });
+      }
+      
+      res.json(insight[0]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve AI insight" });
+    }
+  });
+
+  // Get quick response templates for a category
+  app.get("/api/support/quick-responses/:category", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const responses = getQuickResponses(req.params.category);
+      res.json(responses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get quick responses" });
     }
   });
 

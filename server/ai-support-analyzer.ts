@@ -88,7 +88,7 @@ export async function analyzeTicket(context: TicketContext): Promise<AiAnalysisR
       : '';
 
     const bookingContext = context.relatedBooking
-      ? `Booking ID: ${context.relatedBooking.id}, Status: ${context.relatedBooking.status}, Amount: $${context.relatedBooking.estimatedPrice || 'N/A'}`
+      ? `Booking ID: ${context.relatedBooking.id}, Status: ${context.relatedBooking.status}, Amount: $${context.relatedBooking.price || 'N/A'}`
       : '';
 
     const prompt = ANALYSIS_PROMPT
