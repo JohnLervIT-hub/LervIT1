@@ -357,6 +357,30 @@ export const insertAiRunSchema = createInsertSchema(aiRuns).omit({
   status: z.enum(['success', 'failed', 'timeout']).optional(),
 });
 
+export const aiSupportInsights = pgTable("ai_support_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").references(() => supportTickets.id).notNull(),
+  summary: text("summary").notNull(),
+  category: text("category").notNull(),
+  suggestedPriority: text("suggested_priority").notNull(),
+  rootCause: text("root_cause"),
+  recommendations: text("recommendations").array().notNull(),
+  suggestedResponse: text("suggested_response"),
+  similarCases: text("similar_cases").array(),
+  confidence: integer("confidence").notNull().default(80),
+  processingTimeMs: integer("processing_time_ms"),
+  modelUsed: text("model_used").default("gpt-4o"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => ({
+  ticketIdIdx: index("ai_support_insights_ticket_id_idx").on(table.ticketId),
+}));
+
+export const insertAiSupportInsightSchema = createInsertSchema(aiSupportInsights).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertMover = z.infer<typeof insertMoverSchema>;
@@ -379,3 +403,5 @@ export type InsertIdentifiedItem = z.infer<typeof insertIdentifiedItemSchema>;
 export type IdentifiedItem = typeof identifiedItems.$inferSelect;
 export type InsertAiRun = z.infer<typeof insertAiRunSchema>;
 export type AiRun = typeof aiRuns.$inferSelect;
+export type InsertAiSupportInsight = z.infer<typeof insertAiSupportInsightSchema>;
+export type AiSupportInsight = typeof aiSupportInsights.$inferSelect;
