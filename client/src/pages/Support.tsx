@@ -600,8 +600,8 @@ export default function Support() {
                             </CardContent>
                           </Card>
                         </DialogTrigger>
-                        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
-                          <DialogHeader className="shrink-0">
+                        <DialogContent className="max-w-lg">
+                          <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
                               <MessageSquare className="w-5 h-5 text-primary" />
                               {ticket.subject}
@@ -611,7 +611,7 @@ export default function Support() {
                             </DialogDescription>
                           </DialogHeader>
                           
-                          <div className="flex flex-wrap gap-2 mt-2 shrink-0">
+                          <div className="flex flex-wrap gap-2">
                             <Badge className={`${getStatusColor(ticket.status)} capitalize`}>
                               {getStatusIcon(ticket.status)}
                               <span className="ml-1">{ticket.status.replace('_', ' ')}</span>
@@ -620,8 +620,8 @@ export default function Support() {
                             <Badge variant="outline" className="capitalize">{ticket.priority}</Badge>
                           </div>
 
-                          <div className="flex-1 min-h-0 mt-4 overflow-y-auto">
-                            <div className="space-y-4 pr-2">
+                          <div className="max-h-[40vh] overflow-y-auto border rounded-lg p-1">
+                            <div className="space-y-4 p-3">
                               {/* Original Message */}
                               <div className="bg-muted/50 rounded-lg p-4">
                                 <div className="flex items-center gap-2 mb-2">
@@ -689,7 +689,7 @@ export default function Support() {
 
                           {/* Reply Form */}
                           {ticket.status !== "resolved" && (
-                            <div className="border-t pt-4 mt-4">
+                            <div className="border-t pt-4">
                               <div className="flex gap-2">
                                 <Textarea
                                   placeholder="Type your reply..."
