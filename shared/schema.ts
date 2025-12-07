@@ -387,6 +387,87 @@ export const insertAiSupportInsightSchema = createInsertSchema(aiSupportInsights
   createdAt: true,
 });
 
+// ===== MOVER PAYOUT SYSTEM (Uber-style) =====
+
+// Mover Stripe Connect accounts for receiving payouts
+export const moverStripeAccounts = pgTable("mover_stripe_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull().unique(),
+  stripeAccountId: text("stripe_account_id").notNull().unique(),
+  accountType: text("account_type").notNull().default("express"), // express, standard, custom
+  onboardingStatus: text("onboarding_status").notNull().default("pending"), // pending, in_progress, complete, restricted
+  chargesEnabled: boolean("charges_enabled").default(false).notNull(),
+  payoutsEnabled: boolean("payouts_enabled").default(false).notNull(),
+  detailsSubmitted: boolean("details_submitted").default(false).notNull(),
+  requirementsDue: text("requirements_due").array(),
+  currentlyDue: text("currently_due").array(),
+  defaultCurrency: text("default_currency").default("cad"),
+  country: text("country").default("CA"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  moverIdIdx: index("mover_stripe_accounts_mover_id_idx").on(table.moverId),
+  stripeAccountIdx: index("mover_stripe_accounts_stripe_account_idx").on(table.stripeAccountId),
+}));
+
+// Mover earnings per completed booking
+export const moverEarnings = pgTable("mover_earnings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull().unique(),
+  grossAmount: decimal("gross_amount", { precision: 10, scale: 2 }).notNull(), // Total customer paid
+  platformFeePercent: decimal("platform_fee_percent", { precision: 5, scale: 2 }).notNull().default("15.00"), // Platform commission %
+  platformFeeAmount: decimal("platform_fee_amount", { precision: 10, scale: 2 }).notNull(), // Platform's cut
+  netAmount: decimal("net_amount", { precision: 10, scale: 2 }).notNull(), // Mover's earnings
+  stripeTransferId: text("stripe_transfer_id"),
+  status: text("status").notNull().default("pending"), // pending, available, paid, failed
+  availableAt: timestamp("available_at"), // When funds become available for payout
+  paidAt: timestamp("paid_at"), // When actually paid out
+  payoutId: varchar("payout_id").references(() => moverPayouts.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  moverIdIdx: index("mover_earnings_mover_id_idx").on(table.moverId),
+  bookingIdIdx: index("mover_earnings_booking_id_idx").on(table.bookingId),
+  statusIdx: index("mover_earnings_status_idx").on(table.status),
+}));
+
+// Mover payout history
+export const moverPayouts = pgTable("mover_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  stripePayoutId: text("stripe_payout_id"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("cad"),
+  status: text("status").notNull().default("pending"), // pending, in_transit, paid, failed, canceled
+  payoutType: text("payout_type").notNull().default("standard"), // standard, instant
+  arrivalDate: timestamp("arrival_date"),
+  failureCode: text("failure_code"),
+  failureMessage: text("failure_message"),
+  initiatedAt: timestamp("initiated_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  moverIdIdx: index("mover_payouts_mover_id_idx").on(table.moverId),
+  statusIdx: index("mover_payouts_status_idx").on(table.status),
+  stripePayoutIdx: index("mover_payouts_stripe_payout_idx").on(table.stripePayoutId),
+}));
+
+export const insertMoverStripeAccountSchema = createInsertSchema(moverStripeAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMoverEarningsSchema = createInsertSchema(moverEarnings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMoverPayoutSchema = createInsertSchema(moverPayouts).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertMover = z.infer<typeof insertMoverSchema>;
@@ -411,3 +492,9 @@ export type InsertAiRun = z.infer<typeof insertAiRunSchema>;
 export type AiRun = typeof aiRuns.$inferSelect;
 export type InsertAiSupportInsight = z.infer<typeof insertAiSupportInsightSchema>;
 export type AiSupportInsight = typeof aiSupportInsights.$inferSelect;
+export type InsertMoverStripeAccount = z.infer<typeof insertMoverStripeAccountSchema>;
+export type MoverStripeAccount = typeof moverStripeAccounts.$inferSelect;
+export type InsertMoverEarnings = z.infer<typeof insertMoverEarningsSchema>;
+export type MoverEarnings = typeof moverEarnings.$inferSelect;
+export type InsertMoverPayout = z.infer<typeof insertMoverPayoutSchema>;
+export type MoverPayout = typeof moverPayouts.$inferSelect;

@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
@@ -3442,6 +3442,390 @@ Respond with VALID JSON only:
       res.json(responses);
     } catch (error) {
       res.status(500).json({ error: "Failed to get quick responses" });
+    }
+  });
+
+  // ===== MOVER PAYOUT SYSTEM (Uber-style) =====
+  
+  // Platform commission rate (15% default, can be configured)
+  const PLATFORM_COMMISSION_PERCENT = 15.00;
+
+  // Get mover's Stripe Connect account status
+  app.get("/api/movers/payouts/account", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // Get mover profile
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      
+      // Get Stripe Connect account
+      const accounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, mover.id))
+        .limit(1);
+      
+      if (!accounts.length) {
+        return res.json({
+          hasAccount: false,
+          onboardingStatus: 'not_started',
+          chargesEnabled: false,
+          payoutsEnabled: false,
+        });
+      }
+      
+      const account = accounts[0];
+      
+      res.json({
+        hasAccount: true,
+        stripeAccountId: account.stripeAccountId,
+        onboardingStatus: account.onboardingStatus,
+        chargesEnabled: account.chargesEnabled,
+        payoutsEnabled: account.payoutsEnabled,
+        detailsSubmitted: account.detailsSubmitted,
+        requirementsDue: account.requirementsDue || [],
+        currentlyDue: account.currentlyDue || [],
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get payout account status" });
+    }
+  });
+
+  // Create Stripe Connect onboarding link for mover
+  app.post("/api/movers/payouts/onboarding-link", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // Get mover profile
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      
+      // Check if account already exists
+      let stripeAccount;
+      const existingAccounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, mover.id))
+        .limit(1);
+      
+      if (existingAccounts.length) {
+        stripeAccount = existingAccounts[0];
+      } else {
+        // Create new Stripe Express account
+        const account = await stripe.accounts.create({
+          type: 'express',
+          country: 'CA',
+          email: user.email,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+          business_type: 'individual',
+          metadata: {
+            moverId: mover.id,
+            userId: user.id,
+          },
+        });
+        
+        // Save to database
+        const [newAccount] = await db.insert(moverStripeAccounts).values({
+          moverId: mover.id,
+          stripeAccountId: account.id,
+          accountType: 'express',
+          onboardingStatus: 'pending',
+        }).returning();
+        
+        stripeAccount = newAccount;
+      }
+      
+      // Create account link for onboarding
+      const baseUrl = req.headers.origin || `https://${req.headers.host}`;
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccount.stripeAccountId,
+        refresh_url: `${baseUrl}/mover-dashboard?payout_refresh=true`,
+        return_url: `${baseUrl}/mover-dashboard?payout_success=true`,
+        type: 'account_onboarding',
+      });
+      
+      // Update onboarding status
+      await db.update(moverStripeAccounts)
+        .set({ 
+          onboardingStatus: 'in_progress',
+          updatedAt: new Date(),
+        })
+        .where(eq(moverStripeAccounts.id, stripeAccount.id));
+      
+      res.json({ url: accountLink.url });
+    } catch (error: any) {
+      console.error("Stripe Connect error:", error);
+      res.status(500).json({ error: error.message || "Failed to create onboarding link" });
+    }
+  });
+
+  // Refresh Stripe account status (sync from Stripe)
+  app.post("/api/movers/payouts/refresh-status", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      
+      const accounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, mover.id))
+        .limit(1);
+      
+      if (!accounts.length) {
+        return res.status(404).json({ error: "No payout account found" });
+      }
+      
+      const account = accounts[0];
+      
+      // Fetch latest status from Stripe
+      const stripeAccount = await stripe.accounts.retrieve(account.stripeAccountId);
+      
+      // Update database with latest status
+      await db.update(moverStripeAccounts)
+        .set({
+          chargesEnabled: stripeAccount.charges_enabled,
+          payoutsEnabled: stripeAccount.payouts_enabled,
+          detailsSubmitted: stripeAccount.details_submitted,
+          onboardingStatus: stripeAccount.details_submitted ? 'complete' : 
+                           (stripeAccount.requirements?.currently_due?.length ? 'restricted' : 'in_progress'),
+          requirementsDue: stripeAccount.requirements?.eventually_due || [],
+          currentlyDue: stripeAccount.requirements?.currently_due || [],
+          updatedAt: new Date(),
+        })
+        .where(eq(moverStripeAccounts.id, account.id));
+      
+      res.json({ 
+        success: true,
+        chargesEnabled: stripeAccount.charges_enabled,
+        payoutsEnabled: stripeAccount.payouts_enabled,
+        detailsSubmitted: stripeAccount.details_submitted,
+      });
+    } catch (error: any) {
+      console.error("Stripe refresh error:", error);
+      res.status(500).json({ error: error.message || "Failed to refresh status" });
+    }
+  });
+
+  // Get mover's payout summary (Uber-style dashboard)
+  app.get("/api/movers/payouts/summary", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      
+      // Get all earnings
+      const earnings = await db.select()
+        .from(moverEarnings)
+        .where(eq(moverEarnings.moverId, mover.id));
+      
+      // Calculate totals
+      const pendingEarnings = earnings
+        .filter(e => e.status === 'pending')
+        .reduce((sum, e) => sum + parseFloat(e.netAmount), 0);
+      
+      const availableBalance = earnings
+        .filter(e => e.status === 'available')
+        .reduce((sum, e) => sum + parseFloat(e.netAmount), 0);
+      
+      const totalPaidOut = earnings
+        .filter(e => e.status === 'paid')
+        .reduce((sum, e) => sum + parseFloat(e.netAmount), 0);
+      
+      const totalEarnings = earnings
+        .reduce((sum, e) => sum + parseFloat(e.netAmount), 0);
+      
+      // Get recent payouts
+      const recentPayouts = await db.select()
+        .from(moverPayouts)
+        .where(eq(moverPayouts.moverId, mover.id))
+        .orderBy(moverPayouts.createdAt)
+        .limit(10);
+      
+      // Get Stripe account status
+      const accounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, mover.id))
+        .limit(1);
+      
+      const payoutAccount = accounts[0];
+      
+      res.json({
+        pendingEarnings: pendingEarnings.toFixed(2),
+        availableBalance: availableBalance.toFixed(2),
+        totalPaidOut: totalPaidOut.toFixed(2),
+        totalEarnings: totalEarnings.toFixed(2),
+        completedJobs: earnings.length,
+        platformFeePercent: PLATFORM_COMMISSION_PERCENT,
+        payoutAccount: payoutAccount ? {
+          hasAccount: true,
+          payoutsEnabled: payoutAccount.payoutsEnabled,
+          onboardingStatus: payoutAccount.onboardingStatus,
+        } : { hasAccount: false },
+        recentPayouts: recentPayouts.map(p => ({
+          id: p.id,
+          amount: p.amount,
+          status: p.status,
+          payoutType: p.payoutType,
+          arrivalDate: p.arrivalDate,
+          initiatedAt: p.initiatedAt,
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get payout summary" });
+    }
+  });
+
+  // Get mover's earnings history
+  app.get("/api/movers/payouts/earnings", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      
+      // Get all earnings with booking details
+      const earnings = await db.select()
+        .from(moverEarnings)
+        .where(eq(moverEarnings.moverId, mover.id))
+        .orderBy(moverEarnings.createdAt);
+      
+      // Enrich with booking data
+      const enrichedEarnings = await Promise.all(
+        earnings.map(async (earning) => {
+          const booking = await storage.getBooking(earning.bookingId);
+          const customer = booking ? await storage.getUser(booking.customerId) : null;
+          
+          return {
+            id: earning.id,
+            bookingId: earning.bookingId,
+            grossAmount: earning.grossAmount,
+            platformFeePercent: earning.platformFeePercent,
+            platformFeeAmount: earning.platformFeeAmount,
+            netAmount: earning.netAmount,
+            status: earning.status,
+            createdAt: earning.createdAt,
+            booking: booking ? {
+              pickupAddress: booking.pickupAddress,
+              dropoffAddress: booking.dropoffAddress,
+              preferredDate: booking.preferredDate,
+              loadSize: booking.loadSize,
+            } : null,
+            customerName: customer?.name || 'Unknown',
+          };
+        })
+      );
+      
+      res.json(enrichedEarnings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get earnings history" });
+    }
+  });
+
+  // Record earnings when job is completed (called internally when booking is completed)
+  async function recordMoverEarnings(bookingId: string, moverId: string, grossAmount: number) {
+    const platformFeeAmount = grossAmount * (PLATFORM_COMMISSION_PERCENT / 100);
+    const netAmount = grossAmount - platformFeeAmount;
+    
+    // Check if earnings already recorded
+    const existing = await db.select()
+      .from(moverEarnings)
+      .where(eq(moverEarnings.bookingId, bookingId))
+      .limit(1);
+    
+    if (existing.length) {
+      return existing[0];
+    }
+    
+    const [earnings] = await db.insert(moverEarnings).values({
+      moverId,
+      bookingId,
+      grossAmount: grossAmount.toFixed(2),
+      platformFeePercent: PLATFORM_COMMISSION_PERCENT.toFixed(2),
+      platformFeeAmount: platformFeeAmount.toFixed(2),
+      netAmount: netAmount.toFixed(2),
+      status: 'pending',
+      availableAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // Available after 2 days
+    }).returning();
+    
+    return earnings;
+  }
+
+  // Complete a booking and record earnings (mover action)
+  app.post("/api/bookings/:id/complete", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      
+      // Get booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Verify mover owns this booking
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length || booking.moverId !== movers[0].id) {
+        return res.status(403).json({ error: "Only the assigned mover can complete this booking" });
+      }
+      
+      if (booking.status === 'completed') {
+        return res.status(400).json({ error: "Booking already completed" });
+      }
+      
+      if (booking.paymentStatus !== 'succeeded') {
+        return res.status(400).json({ error: "Payment must be completed before marking job as done" });
+      }
+      
+      // Update booking status
+      await storage.updateBooking(bookingId, { status: 'completed' });
+      
+      // Record earnings
+      const grossAmount = parseFloat(booking.price || '0');
+      const earnings = await recordMoverEarnings(bookingId, booking.moverId!, grossAmount);
+      
+      // Increment mover's completed trips
+      const mover = movers[0];
+      await db.update(moversTable)
+        .set({ completedTrips: (mover.completedTrips || 0) + 1 })
+        .where(eq(moversTable.id, mover.id));
+      
+      res.json({
+        success: true,
+        message: "Job completed! Earnings recorded.",
+        earnings: {
+          gross: earnings.grossAmount,
+          platformFee: earnings.platformFeeAmount,
+          net: earnings.netAmount,
+          availableAt: earnings.availableAt,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to complete booking" });
     }
   });
 
