@@ -8,6 +8,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertCircle,
   CheckCircle2,
@@ -15,13 +16,24 @@ import {
   MessageSquare,
   Search,
   Filter,
+  Sparkles,
+  Brain,
+  Lightbulb,
+  Copy,
+  ArrowRight,
+  RefreshCw,
+  Target,
+  Zap,
 } from "lucide-react";
-import type { SupportTicket, SupportTicketReply, User } from "@shared/schema";
+import type { SupportTicket, SupportTicketReply, User, AiSupportInsight } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type TicketWithUser = SupportTicket & { userName?: string; userEmail?: string };
 type ReplyWithUser = SupportTicketReply & { userName?: string };
+
+type AiInsightWithCached = AiSupportInsight & { cached?: boolean };
 
 export default function AdminSupportDashboard() {
   const { toast } = useToast();
@@ -30,6 +42,8 @@ export default function AdminSupportDashboard() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [aiInsight, setAiInsight] = useState<AiInsightWithCached | null>(null);
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(true);
 
   const { data: allTickets, isLoading } = useQuery<SupportTicket[]>({
     queryKey: ["/api/support/tickets/all"],
@@ -109,6 +123,50 @@ export default function AdminSupportDashboard() {
       });
     },
   });
+
+  const aiAnalyzeMutation = useMutation({
+    mutationFn: async (ticketId: string) => {
+      const res = await fetch(`/api/support/tickets/${ticketId}/ai-analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to analyze ticket");
+      return res.json() as Promise<AiInsightWithCached>;
+    },
+    onSuccess: (data) => {
+      setAiInsight(data);
+      toast({
+        title: data.cached ? "AI Insights Loaded" : "AI Analysis Complete",
+        description: data.cached 
+          ? "Showing cached analysis from earlier." 
+          : `Analysis completed with ${data.confidence}% confidence.`,
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Analysis Failed",
+        description: "Could not analyze this ticket. Please try again.",
+      });
+    },
+  });
+
+  const handleCopyResponse = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copied!",
+      description: "Response copied to clipboard.",
+    });
+  };
+
+  const handleUseResponse = (text: string) => {
+    setReplyMessage(text);
+    toast({
+      title: "Response Added",
+      description: "AI suggestion added to reply box. Feel free to customize it.",
+    });
+  };
 
   const filteredTickets = allTickets?.filter((ticket) => {
     const matchesStatus = filterStatus === "all" || ticket.status === filterStatus;
@@ -270,7 +328,10 @@ export default function AdminSupportDashboard() {
                   <DialogTrigger asChild>
                     <Card 
                       className="hover-elevate cursor-pointer"
-                      onClick={() => setSelectedTicket(ticket)}
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setAiInsight(null);
+                      }}
                       data-testid={`card-admin-ticket-${ticket.id}`}
                     >
                       <CardHeader className="pb-3">
@@ -327,6 +388,173 @@ export default function AdminSupportDashboard() {
                       <div className="bg-muted p-4 rounded-md">
                         <p className="text-sm">{ticket.message}</p>
                       </div>
+
+                      {/* AI Support Copilot Panel */}
+                      <Collapsible open={isAiPanelOpen} onOpenChange={setIsAiPanelOpen}>
+                        <div className="border rounded-lg bg-gradient-to-br from-violet-50/50 to-indigo-50/50 dark:from-violet-950/20 dark:to-indigo-950/20">
+                          <CollapsibleTrigger asChild>
+                            <div className="flex items-center justify-between p-4 cursor-pointer hover-elevate rounded-t-lg">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+                                  <Brain className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-sm flex items-center gap-2">
+                                    AI Support Copilot
+                                    <Badge variant="secondary" className="text-xs font-normal">
+                                      <Sparkles className="w-3 h-3 mr-1" />
+                                      Powered by GPT-4o
+                                    </Badge>
+                                  </h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    {aiInsight ? "Analysis ready" : "Click to analyze this ticket"}
+                                  </p>
+                                </div>
+                              </div>
+                              <ArrowRight className={`w-4 h-4 transition-transform ${isAiPanelOpen ? "rotate-90" : ""}`} />
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="px-4 pb-4 space-y-4">
+                              {!aiInsight && !aiAnalyzeMutation.isPending && (
+                                <Button
+                                  onClick={() => aiAnalyzeMutation.mutate(ticket.id)}
+                                  className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                                  data-testid="button-ai-analyze"
+                                >
+                                  <Sparkles className="w-4 h-4 mr-2" />
+                                  Analyze with AI
+                                </Button>
+                              )}
+
+                              {aiAnalyzeMutation.isPending && (
+                                <div className="text-center py-6">
+                                  <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-violet-600" />
+                                  <p className="text-sm font-medium">Analyzing ticket...</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Our AI is reviewing the issue and preparing recommendations
+                                  </p>
+                                </div>
+                              )}
+
+                              {aiInsight && (
+                                <div className="space-y-4">
+                                  {/* Confidence Score */}
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div className="flex-1">
+                                      <div className="flex items-center justify-between text-xs mb-1">
+                                        <span className="text-muted-foreground">Confidence</span>
+                                        <span className="font-medium">{aiInsight.confidence}%</span>
+                                      </div>
+                                      <Progress value={aiInsight.confidence} className="h-2" />
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => aiAnalyzeMutation.mutate(ticket.id)}
+                                      disabled={aiAnalyzeMutation.isPending}
+                                      data-testid="button-ai-refresh"
+                                    >
+                                      <RefreshCw className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+
+                                  {/* Summary */}
+                                  <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                      <Target className="w-3 h-3" /> Summary
+                                    </h4>
+                                    <p className="text-sm">{aiInsight.summary}</p>
+                                  </div>
+
+                                  {/* Category & Priority Suggestions */}
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">Category</h4>
+                                      <Badge variant="outline" className="capitalize">{aiInsight.category}</Badge>
+                                    </div>
+                                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">Suggested Priority</h4>
+                                      <Badge className={`capitalize ${
+                                        aiInsight.suggestedPriority === 'urgent' ? 'bg-red-500/10 text-red-700 dark:text-red-400' :
+                                        aiInsight.suggestedPriority === 'high' ? 'bg-orange-500/10 text-orange-700 dark:text-orange-400' :
+                                        aiInsight.suggestedPriority === 'normal' ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400' :
+                                        'bg-gray-500/10 text-gray-700 dark:text-gray-400'
+                                      }`}>
+                                        {aiInsight.suggestedPriority}
+                                      </Badge>
+                                    </div>
+                                  </div>
+
+                                  {/* Root Cause */}
+                                  {aiInsight.rootCause && (
+                                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                        <Zap className="w-3 h-3" /> Root Cause
+                                      </h4>
+                                      <p className="text-sm">{aiInsight.rootCause}</p>
+                                    </div>
+                                  )}
+
+                                  {/* Recommendations */}
+                                  <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                      <Lightbulb className="w-3 h-3" /> Recommended Actions
+                                    </h4>
+                                    <ul className="space-y-2">
+                                      {aiInsight.recommendations?.map((rec, i) => (
+                                        <li key={i} className="flex items-start gap-2 text-sm">
+                                          <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                                          <span>{rec}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+
+                                  {/* Suggested Response */}
+                                  {aiInsight.suggestedResponse && (
+                                    <div className="bg-gradient-to-br from-violet-100/50 to-indigo-100/50 dark:from-violet-900/20 dark:to-indigo-900/20 rounded-lg p-3 border border-violet-200/50 dark:border-violet-700/30">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase flex items-center gap-1">
+                                          <MessageSquare className="w-3 h-3" /> Suggested Response
+                                        </h4>
+                                        <div className="flex gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={() => handleCopyResponse(aiInsight.suggestedResponse || "")}
+                                            data-testid="button-ai-copy-response"
+                                          >
+                                            <Copy className="w-3 h-3 mr-1" /> Copy
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+                                            onClick={() => handleUseResponse(aiInsight.suggestedResponse || "")}
+                                            data-testid="button-ai-use-response"
+                                          >
+                                            Use This
+                                          </Button>
+                                        </div>
+                                      </div>
+                                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                                        {aiInsight.suggestedResponse}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {aiInsight.cached && (
+                                    <p className="text-xs text-muted-foreground text-center">
+                                      Cached analysis • Click refresh for new analysis
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </CollapsibleContent>
+                        </div>
+                      </Collapsible>
 
                       {/* Replies */}
                       {ticketDetails?.replies && ticketDetails.replies.length > 0 && (
