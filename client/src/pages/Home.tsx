@@ -68,15 +68,13 @@ export default function Home() {
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
             {features.map((feature, index) => (
-              <Card key={index} className="hover-elevate group overflow-visible border-0 shadow-md" data-testid={`card-feature-${index}`}>
-                <CardContent className="p-6 text-center">
-                  <div className="inline-flex items-center justify-center w-20 h-20 mb-5 group-hover:scale-110 transition-transform duration-300">
-                    <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain drop-shadow-lg" />
-                  </div>
-                  <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
-                </CardContent>
-              </Card>
+              <div key={index} className="group text-center p-6" data-testid={`card-feature-${index}`}>
+                <div className="inline-flex items-center justify-center w-24 h-24 mb-5 group-hover:scale-110 transition-transform duration-300">
+                  <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain" style={{ background: 'none' }} />
+                </div>
+                <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+              </div>
             ))}
           </div>
         </div>
