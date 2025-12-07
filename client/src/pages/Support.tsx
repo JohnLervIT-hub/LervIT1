@@ -149,7 +149,9 @@ export default function Support() {
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate both the unread count and the tickets list to update the UI
       queryClient.invalidateQueries({ queryKey: ["/api/support/tickets/unread-count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/tickets"] });
     },
   });
 

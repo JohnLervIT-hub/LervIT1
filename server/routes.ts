@@ -3149,6 +3149,33 @@ Respond with VALID JSON only:
       res.status(500).json({ error: "Failed to fetch tickets" });
     }
   });
+
+  // Get unread ticket count for customer notifications
+  // NOTE: Must be defined BEFORE /api/support/tickets/:id to avoid route conflict
+  app.get("/api/support/tickets/unread-count", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const user = (req as any).user;
+      
+      // Get all tickets for this user where lastStaffReplyAt > customerLastReadAt
+      // or where lastStaffReplyAt exists but customerLastReadAt is null
+      const tickets = await db.select()
+        .from(supportTickets)
+        .where(eq(supportTickets.userId, user.id));
+      
+      // Count tickets with unread staff replies
+      const unreadCount = tickets.filter(ticket => {
+        if (!ticket.lastStaffReplyAt) return false;
+        if (!ticket.customerLastReadAt) return true;
+        return ticket.lastStaffReplyAt > ticket.customerLastReadAt;
+      }).length;
+      
+      res.json({ unreadCount });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get unread count" });
+    }
+  });
   
   // Get a specific ticket with replies
   app.get("/api/support/tickets/:id", async (req: Request, res: Response) => {
@@ -3266,32 +3293,6 @@ Respond with VALID JSON only:
       res.json(ticket[0]);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update ticket" });
-    }
-  });
-
-  // Get unread ticket count for customer notifications
-  app.get("/api/support/tickets/unread-count", async (req: Request, res: Response) => {
-    try {
-      if (!requireUser(req, res)) return;
-      
-      const user = (req as any).user;
-      
-      // Get all tickets for this user where lastStaffReplyAt > customerLastReadAt
-      // or where lastStaffReplyAt exists but customerLastReadAt is null
-      const tickets = await db.select()
-        .from(supportTickets)
-        .where(eq(supportTickets.userId, user.id));
-      
-      // Count tickets with unread staff replies
-      const unreadCount = tickets.filter(ticket => {
-        if (!ticket.lastStaffReplyAt) return false;
-        if (!ticket.customerLastReadAt) return true;
-        return ticket.lastStaffReplyAt > ticket.customerLastReadAt;
-      }).length;
-      
-      res.json({ unreadCount });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get unread count" });
     }
   });
 
