@@ -600,8 +600,8 @@ export default function Support() {
                             </CardContent>
                           </Card>
                         </DialogTrigger>
-                        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-                          <DialogHeader>
+                        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+                          <DialogHeader className="shrink-0">
                             <DialogTitle className="flex items-center gap-2">
                               <MessageSquare className="w-5 h-5 text-primary" />
                               {ticket.subject}
@@ -611,7 +611,7 @@ export default function Support() {
                             </DialogDescription>
                           </DialogHeader>
                           
-                          <div className="flex flex-wrap gap-2 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2 shrink-0">
                             <Badge className={`${getStatusColor(ticket.status)} capitalize`}>
                               {getStatusIcon(ticket.status)}
                               <span className="ml-1">{ticket.status.replace('_', ' ')}</span>
@@ -620,8 +620,8 @@ export default function Support() {
                             <Badge variant="outline" className="capitalize">{ticket.priority}</Badge>
                           </div>
 
-                          <ScrollArea className="flex-1 mt-4 max-h-[50vh]">
-                            <div className="space-y-4 pr-4">
+                          <div className="flex-1 min-h-0 mt-4 overflow-y-auto">
+                            <div className="space-y-4 pr-2">
                               {/* Original Message */}
                               <div className="bg-muted/50 rounded-lg p-4">
                                 <div className="flex items-center gap-2 mb-2">
@@ -685,7 +685,7 @@ export default function Support() {
                                 </div>
                               )}
                             </div>
-                          </ScrollArea>
+                          </div>
 
                           {/* Reply Form */}
                           {ticket.status !== "resolved" && (
