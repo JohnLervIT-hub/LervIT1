@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   HelpCircle, 
   MessageSquare, 
@@ -34,10 +35,70 @@ import {
   ChevronRight,
   Loader2,
   User,
-  Headphones
+  Headphones,
+  Bell,
+  X
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { SupportTicket, SupportTicketReply } from "@shared/schema";
+
+// Uber-style notification alert component
+function UberNotification({ 
+  show, 
+  message, 
+  onClose, 
+  type = "info" 
+}: { 
+  show: boolean; 
+  message: string; 
+  onClose: () => void;
+  type?: "info" | "success" | "warning";
+}) {
+  useEffect(() => {
+    if (show) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [show, onClose]);
+
+  const bgColors = {
+    info: "bg-black dark:bg-white",
+    success: "bg-emerald-600",
+    warning: "bg-amber-500"
+  };
+
+  const textColors = {
+    info: "text-white dark:text-black",
+    success: "text-white",
+    warning: "text-black"
+  };
+
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0, y: -50, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, x: "-50%" }}
+          exit={{ opacity: 0, y: -50, x: "-50%" }}
+          className={`fixed top-20 left-1/2 z-50 flex items-center gap-3 px-4 py-3 rounded-full shadow-xl ${bgColors[type]} ${textColors[type]}`}
+          data-testid="uber-notification"
+        >
+          <Bell className="w-4 h-4" />
+          <span className="text-sm font-medium whitespace-nowrap">{message}</span>
+          <button
+            onClick={onClose}
+            className="ml-2 hover:opacity-70 transition-opacity"
+            data-testid="button-close-notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 const ticketSchema = z.object({
   subject: z.string().min(5, "Subject must be at least 5 characters"),
@@ -55,6 +116,42 @@ export default function Support() {
   const [activeTab, setActiveTab] = useState("faq");
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [hasShownNotification, setHasShownNotification] = useState(false);
+
+  // Query for unread ticket count
+  const { data: unreadData } = useQuery<{ unreadCount: number }>({
+    queryKey: ["/api/support/tickets/unread-count"],
+    enabled: !!user,
+    refetchInterval: 30000, // Poll every 30 seconds for new messages
+  });
+
+  const unreadCount = unreadData?.unreadCount || 0;
+
+  // Show notification when there are unread messages and user hasn't seen it yet
+  useEffect(() => {
+    if (unreadCount > 0 && !hasShownNotification && activeTab !== "tickets") {
+      setNotificationMessage(`You have ${unreadCount} new support message${unreadCount > 1 ? 's' : ''}`);
+      setShowNotification(true);
+      setHasShownNotification(true);
+    }
+  }, [unreadCount, hasShownNotification, activeTab]);
+
+  // Mark ticket as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: async (ticketId: string) => {
+      const res = await fetch(`/api/support/tickets/${ticketId}/mark-read`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to mark as read");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/tickets/unread-count"] });
+    },
+  });
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -296,6 +393,14 @@ export default function Support() {
 
   return (
     <div className="min-h-screen pt-20 pb-12 bg-background">
+      {/* Uber-style notification */}
+      <UberNotification
+        show={showNotification}
+        message={notificationMessage}
+        onClose={() => setShowNotification(false)}
+        type="info"
+      />
+      
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         {/* Page Header */}
         <div className="py-6 mb-2">
@@ -329,9 +434,18 @@ export default function Support() {
               <MessageSquare className="w-4 h-4" />
               <span className="hidden sm:inline">Contact</span>
             </TabsTrigger>
-            <TabsTrigger value="tickets" className="gap-2" data-testid="tab-my-tickets" disabled={!user}>
+            <TabsTrigger value="tickets" className="gap-2 relative" data-testid="tab-my-tickets" disabled={!user}>
               <HelpCircle className="w-4 h-4" />
               <span className="hidden sm:inline">My Tickets</span>
+              {/* Red notification badge */}
+              {unreadCount > 0 && (
+                <span 
+                  className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full px-1"
+                  data-testid="badge-unread-count"
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -567,6 +681,8 @@ export default function Support() {
                             onClick={() => {
                               setSelectedTicket(ticket);
                               setReplyMessage("");
+                              // Mark the ticket as read when opened
+                              markAsReadMutation.mutate(ticket.id);
                             }}
                             data-testid={`card-ticket-${ticket.id}`}
                           >
@@ -577,6 +693,12 @@ export default function Support() {
                                     <h3 className="font-semibold truncate" data-testid={`text-ticket-subject-${ticket.id}`}>
                                       {ticket.subject}
                                     </h3>
+                                    {/* Show NEW badge if ticket has unread staff replies */}
+                                    {ticket.lastStaffReplyAt && (!ticket.customerLastReadAt || new Date(ticket.lastStaffReplyAt) > new Date(ticket.customerLastReadAt)) && (
+                                      <Badge className="bg-red-500 text-white shrink-0 animate-pulse" data-testid={`badge-new-${ticket.id}`}>
+                                        NEW
+                                      </Badge>
+                                    )}
                                     <Badge className={`${getStatusColor(ticket.status)} flex items-center gap-1 shrink-0`}>
                                       {getStatusIcon(ticket.status)}
                                       <span className="capitalize">{ticket.status.replace('_', ' ')}</span>
