@@ -369,7 +369,9 @@ export const aiSupportInsights = pgTable("ai_support_insights", {
   suggestedPriority: text("suggested_priority").notNull(),
   rootCause: text("root_cause"),
   recommendations: text("recommendations").array().notNull(),
-  suggestedResponse: text("suggested_response"),
+  suggestedResponse: text("suggested_response"), // Legacy field for backwards compatibility
+  customerResponse: text("customer_response"),   // Customer-friendly response (OK to send)
+  internalNotes: text("internal_notes"),         // Staff-only technical details (NEVER send to customers)
   similarCases: text("similar_cases").array(),
   confidence: integer("confidence").notNull().default(80),
   processingTimeMs: integer("processing_time_ms"),

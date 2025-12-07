@@ -3393,7 +3393,9 @@ Respond with VALID JSON only:
         suggestedPriority: analysis.suggestedPriority,
         rootCause: analysis.rootCause,
         recommendations: analysis.recommendations,
-        suggestedResponse: analysis.suggestedResponse,
+        suggestedResponse: analysis.suggestedResponse, // Legacy field
+        customerResponse: analysis.customerResponse,   // Customer-friendly response
+        internalNotes: analysis.internalNotes,         // Staff-only technical notes
         similarCases: analysis.similarCases,
         confidence: analysis.confidence,
         processingTimeMs: processingTime,

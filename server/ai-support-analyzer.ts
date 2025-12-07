@@ -16,9 +16,12 @@ interface AiAnalysisResult {
   suggestedPriority: "low" | "normal" | "high" | "urgent";
   rootCause: string;
   recommendations: string[];
-  suggestedResponse: string;
+  customerResponse: string;  // Professional, empathetic response for customers (NO technical details)
+  internalNotes: string;     // Technical analysis for support staff only (NOT sent to customers)
   similarCases: string[];
   confidence: number;
+  // Legacy field for backwards compatibility
+  suggestedResponse?: string;
 }
 
 const SYSTEM_PROMPT = `You are an expert customer support analyst for LervIT, a premium moving marketplace platform in Calgary, Alberta. Your role is to analyze support tickets and provide actionable insights to help support staff resolve issues quickly and effectively.
@@ -32,9 +35,26 @@ LervIT Platform Context:
 Your analysis should:
 1. Understand the core issue from the customer's perspective
 2. Identify the root cause based on platform knowledge
-3. Provide specific, actionable recommendations
-4. Suggest a professional, empathetic response
+3. Provide specific, actionable recommendations for STAFF
+4. Generate TWO separate response outputs:
+   - customerResponse: A professional, warm, empathetic response to send to the customer
+   - internalNotes: Technical analysis and debugging details for support staff ONLY
 5. Estimate confidence in your analysis (0-100)
+
+CRITICAL RULES FOR customerResponse:
+- NEVER include API routes, endpoints, database details, or technical jargon
+- NEVER mention error codes, JSON, logs, console warnings, or stack traces
+- NEVER reference internal systems, session IDs, or technical infrastructure
+- DO use warm, empathetic language that acknowledges the customer's frustration
+- DO provide clear next steps in plain language
+- DO apologize for any inconvenience and assure them the issue is being resolved
+- Keep it professional but friendly - like a 5-star hotel concierge
+
+CRITICAL RULES FOR internalNotes:
+- Include all technical details: API routes, error codes, database issues, etc.
+- Document the root cause analysis with technical specifics
+- List debugging steps and system checks performed
+- This is NEVER shown to customers - it's for staff reference only
 
 Respond in JSON format only.`;
 
@@ -65,9 +85,10 @@ Provide your analysis in this exact JSON structure:
   "summary": "2-3 sentence summary of the issue",
   "category": "booking|payment|mover|technical|account|general",
   "suggestedPriority": "low|normal|high|urgent",
-  "rootCause": "Brief explanation of likely root cause",
-  "recommendations": ["Action 1", "Action 2", "Action 3"],
-  "suggestedResponse": "Professional response template the support agent can customize",
+  "rootCause": "Brief non-technical explanation of likely root cause",
+  "recommendations": ["Staff Action 1", "Staff Action 2", "Staff Action 3"],
+  "customerResponse": "Warm, empathetic response for the customer - NO technical details, API routes, or error codes. Write like a 5-star hotel concierge.",
+  "internalNotes": "Technical details for staff only: API routes, error codes, database issues, debugging steps. NEVER send this to customers.",
   "similarCases": ["Similar issue type 1 and typical resolution", "Similar issue type 2 and typical resolution"],
   "confidence": 85
 }`;
@@ -165,13 +186,14 @@ function getFallbackAnalysis(ticket: SupportTicket): AiAnalysisResult {
     summary: `Customer reported an issue regarding: ${ticket.subject}. The ticket requires review and response from support staff.`,
     category: categoryMap[ticket.category] || "general",
     suggestedPriority,
-    rootCause: "Analysis unavailable - AI service temporarily offline. Manual review required.",
+    rootCause: "Manual review required to determine root cause.",
     recommendations: [
       "Review the customer's message carefully",
       "Check for any related bookings or transactions",
       "Respond within 24 hours with next steps"
     ],
-    suggestedResponse: `Hi there,\n\nThank you for reaching out to LervIT support. We've received your message regarding "${ticket.subject}" and our team is reviewing it.\n\nWe'll get back to you with a solution as soon as possible.\n\nBest regards,\nLervIT Support Team`,
+    customerResponse: `Hi there,\n\nThank you for reaching out to LervIT support. We've received your message regarding "${ticket.subject}" and our team is reviewing it carefully.\n\nWe understand how important this is to you, and we're working to resolve it as quickly as possible. You can expect an update from us within 24 hours.\n\nIf you have any additional information that might help, please don't hesitate to reply to this message.\n\nWarm regards,\nThe LervIT Support Team`,
+    internalNotes: "AI analysis unavailable - manual review required. Check system logs, database records, and related bookings for this customer.",
     similarCases: [
       "Standard customer inquiry - typical resolution time: 24-48 hours"
     ],

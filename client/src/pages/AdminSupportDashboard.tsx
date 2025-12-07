@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   MessageSquare,
@@ -511,27 +512,28 @@ export default function AdminSupportDashboard() {
                                     </ul>
                                   </div>
 
-                                  {/* Suggested Response */}
-                                  {aiInsight.suggestedResponse && (
-                                    <div className="bg-gradient-to-br from-violet-100/50 to-indigo-100/50 dark:from-violet-900/20 dark:to-indigo-900/20 rounded-lg p-3 border border-violet-200/50 dark:border-violet-700/30">
+                                  {/* Customer Response - OK to send */}
+                                  {(aiInsight.customerResponse || aiInsight.suggestedResponse) && (
+                                    <div className="bg-gradient-to-br from-green-100/50 to-emerald-100/50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-3 border border-green-200/50 dark:border-green-700/30">
                                       <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase flex items-center gap-1">
-                                          <MessageSquare className="w-3 h-3" /> Suggested Response
+                                        <h4 className="text-xs font-semibold text-green-700 dark:text-green-300 uppercase flex items-center gap-1">
+                                          <MessageSquare className="w-3 h-3" /> Customer Response
+                                          <Badge className="ml-2 bg-green-600 text-white text-[10px] px-1.5 py-0">OK TO SEND</Badge>
                                         </h4>
                                         <div className="flex gap-1">
                                           <Button
                                             variant="ghost"
                                             size="sm"
                                             className="h-7 text-xs"
-                                            onClick={() => handleCopyResponse(aiInsight.suggestedResponse || "")}
+                                            onClick={() => handleCopyResponse(aiInsight.customerResponse || aiInsight.suggestedResponse || "")}
                                             data-testid="button-ai-copy-response"
                                           >
                                             <Copy className="w-3 h-3 mr-1" /> Copy
                                           </Button>
                                           <Button
                                             size="sm"
-                                            className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
-                                            onClick={() => handleUseResponse(aiInsight.suggestedResponse || "")}
+                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                            onClick={() => handleUseResponse(aiInsight.customerResponse || aiInsight.suggestedResponse || "")}
                                             data-testid="button-ai-use-response"
                                           >
                                             Use This
@@ -539,7 +541,22 @@ export default function AdminSupportDashboard() {
                                         </div>
                                       </div>
                                       <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-                                        {aiInsight.suggestedResponse}
+                                        {aiInsight.customerResponse || aiInsight.suggestedResponse}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Internal Notes - Staff Only */}
+                                  {aiInsight.internalNotes && (
+                                    <div className="bg-gradient-to-br from-amber-100/50 to-orange-100/50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-3 border border-amber-200/50 dark:border-amber-700/30">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase flex items-center gap-1">
+                                          <AlertTriangle className="w-3 h-3" /> Internal Notes
+                                        </h4>
+                                        <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0">STAFF ONLY - DO NOT SEND</Badge>
+                                      </div>
+                                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                                        {aiInsight.internalNotes}
                                       </p>
                                     </div>
                                   )}
