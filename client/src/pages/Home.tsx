@@ -3,10 +3,11 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
-import visionEngineIcon from "@assets/generated_images/3d_ai_vision_eye_icon.png";
-import matchLogicIcon from "@assets/generated_images/3d_matching_network_icon.png";
-import securePayIcon from "@assets/generated_images/3d_secure_payment_icon.png";
-import trustShieldIcon from "@assets/generated_images/3d_trust_shield_icon.png";
+import { Camera, Users, Navigation } from "lucide-react";
+import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
+import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
+import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
+import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_background.png";
 
 export default function Home() {
   const { user, isLoading } = useAuth();
@@ -81,38 +82,56 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-12 md:py-16 lg:py-20">
+      <section id="how-it-works" className="py-16 md:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 md:mb-12 lg:mb-16 space-y-3 md:space-y-4">
-            <h2 className="mb-0">
+          <div className="text-center mb-12 md:mb-16 space-y-4">
+            <h2 className="text-3xl md:text-4xl font-bold">
               How It Works
             </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Book your move in three simple steps
+            </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8 lg:gap-10">
+          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {[
               {
                 step: "1",
-                title: "Request a Move",
-                description: "Enter your pickup and dropoff locations, select load size, and get instant quotes",
+                icon: <Camera className="w-6 h-6" />,
+                title: "Snap & Quote",
+                description: "Upload photos of your items, enter your locations, and get an instant AI-powered price estimate",
+                gradient: "from-violet-500 to-purple-600",
               },
               {
                 step: "2",
-                title: "Choose Your Mover",
-                description: "Browse verified movers, compare prices and ratings, and select the best fit",
+                icon: <Users className="w-6 h-6" />,
+                title: "Match & Book",
+                description: "We find nearby verified movers for you—compare ratings, ETAs, and prices, then book with one tap",
+                gradient: "from-blue-500 to-cyan-500",
               },
               {
                 step: "3",
-                title: "Get Moving!",
-                description: "Pay securely, communicate with your mover, and track your move in real-time",
+                icon: <Navigation className="w-6 h-6" />,
+                title: "Track & Pay",
+                description: "Track your mover live on GPS, pay securely when complete, and rate your experience",
+                gradient: "from-emerald-500 to-teal-500",
               },
             ].map((step, index) => (
-              <div key={index} className="text-center" data-testid={`step-${index}`}>
-                <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-accent text-accent-foreground font-bold text-xl md:text-2xl mb-3 md:mb-4">
-                  {step.step}
+              <div key={index} className="relative text-center group" data-testid={`step-${index}`}>
+                <div className="relative inline-block mb-6">
+                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${step.gradient} text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    {step.icon}
+                  </div>
+                  <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-sm font-bold text-primary shadow-sm">
+                    {step.step}
+                  </div>
                 </div>
-                <h3 className="font-semibold text-lg md:text-xl mb-2 md:mb-3">{step.title}</h3>
-                <p className="text-sm md:text-base text-muted-foreground leading-relaxed">{step.description}</p>
+                <h3 className="font-semibold text-xl mb-3">{step.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+                
+                {index < 2 && (
+                  <div className="hidden md:block absolute top-8 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-muted-foreground/20 to-transparent" />
+                )}
               </div>
             ))}
           </div>
