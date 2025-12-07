@@ -4,9 +4,17 @@ import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert } from "lucide-react";
+
+type LockoutError = {
+  locked: boolean;
+  lockedByAdmin: boolean;
+  message: string;
+  remainingMinutes?: number;
+};
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -16,6 +24,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [lockoutError, setLockoutError] = useState<LockoutError | null>(null);
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
 
   useEffect(() => {
     if (user && !isLoading) {
@@ -39,6 +49,8 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setLockoutError(null);
+    setRemainingAttempts(null);
 
     try {
       await login(email, password);
@@ -47,13 +59,32 @@ export default function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Login failed",
-        description: error instanceof Error ? error.message : "Please try again.",
-      });
+    } catch (error: any) {
       setIsLoading(false);
+      
+      // Check if this is a lockout error
+      if (error.locked) {
+        setLockoutError({
+          locked: true,
+          lockedByAdmin: error.lockedByAdmin || false,
+          message: error.message,
+          remainingMinutes: error.remainingMinutes,
+        });
+      } else if (error.remainingAttempts !== undefined) {
+        // Show remaining attempts warning
+        setRemainingAttempts(error.remainingAttempts);
+        toast({
+          variant: "destructive",
+          title: "Incorrect password",
+          description: error.message,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description: error.message || "Please try again.",
+        });
+      }
     }
   };
 
@@ -71,6 +102,65 @@ export default function Login() {
             Sign in to continue to LervIT
           </p>
         </CardHeader>
+
+        {/* Account Lockout Alert */}
+        {lockoutError && (
+          <div className="px-6 pb-2">
+            <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+              {lockoutError.lockedByAdmin ? (
+                <ShieldAlert className="h-4 w-4" />
+              ) : (
+                <Lock className="h-4 w-4" />
+              )}
+              <AlertTitle className="font-semibold">
+                {lockoutError.lockedByAdmin ? "Account Suspended" : "Account Temporarily Locked"}
+              </AlertTitle>
+              <AlertDescription className="mt-1 text-sm">
+                {lockoutError.message}
+                {!lockoutError.lockedByAdmin && (
+                  <p className="mt-2 text-xs">
+                    You can try again after the lockout period expires, or{" "}
+                    <button
+                      type="button"
+                      onClick={() => setLocation("/forgot-password")}
+                      className="underline font-medium"
+                    >
+                      reset your password
+                    </button>.
+                  </p>
+                )}
+                {lockoutError.lockedByAdmin && (
+                  <p className="mt-2 text-xs">
+                    Please contact support at{" "}
+                    <a href="mailto:support@lervit.com" className="underline font-medium">
+                      support@lervit.com
+                    </a>{" "}
+                    for assistance.
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {/* Remaining Attempts Warning */}
+        {remainingAttempts !== null && remainingAttempts <= 2 && !lockoutError && (
+          <div className="px-6 pb-2">
+            <Alert variant="default" className="border-amber-500/50 bg-amber-500/10">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="font-semibold text-amber-700 dark:text-amber-400">
+                Warning
+              </AlertTitle>
+              <AlertDescription className="text-sm text-amber-700 dark:text-amber-400">
+                {remainingAttempts === 1 
+                  ? "This is your last attempt before your account is locked."
+                  : `${remainingAttempts} attempts remaining before account lockout.`
+                }
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4 pt-4">
             <div className="space-y-2">

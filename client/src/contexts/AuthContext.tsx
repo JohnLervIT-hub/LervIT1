@@ -69,8 +69,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Login failed");
+      const errorData = await response.json();
+      // Create error with detailed message for lockout scenarios
+      const errorMessage = errorData.message || errorData.error || "Login failed";
+      const error = new Error(errorMessage) as Error & { 
+        locked?: boolean; 
+        lockedByAdmin?: boolean;
+        remainingMinutes?: number;
+        remainingAttempts?: number;
+      };
+      // Attach lockout metadata to error
+      if (errorData.locked) {
+        (error as any).locked = true;
+        (error as any).lockedByAdmin = errorData.lockedByAdmin;
+        (error as any).remainingMinutes = errorData.remainingMinutes;
+      }
+      if (errorData.remainingAttempts !== undefined) {
+        (error as any).remainingAttempts = errorData.remainingAttempts;
+      }
+      throw error;
     }
     
     const userData = await response.json();
