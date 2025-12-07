@@ -14,6 +14,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   HelpCircle, 
   MessageSquare, 
@@ -30,10 +32,12 @@ import {
   Phone,
   Mail,
   ChevronRight,
-  Loader2
+  Loader2,
+  User,
+  Headphones
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import type { SupportTicket } from "@shared/schema";
+import type { SupportTicket, SupportTicketReply } from "@shared/schema";
 
 const ticketSchema = z.object({
   subject: z.string().min(5, "Subject must be at least 5 characters"),
@@ -49,6 +53,8 @@ export default function Support() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("faq");
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [replyMessage, setReplyMessage] = useState("");
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -102,6 +108,50 @@ export default function Support() {
   const { data: myTickets } = useQuery<SupportTicket[]>({
     queryKey: ["/api/support/tickets"],
     enabled: !!user,
+  });
+
+  const { data: ticketDetails, isLoading: isLoadingDetails } = useQuery<{ ticket: SupportTicket; replies: SupportTicketReply[] }>({
+    queryKey: ["/api/support/tickets", selectedTicket?.id],
+    enabled: !!selectedTicket,
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: async ({ ticketId, message }: { ticketId: string; message: string }) => {
+      const storedUser = localStorage.getItem("moveit_user");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (storedUser) {
+        try {
+          const userData = JSON.parse(storedUser);
+          if (userData.id) {
+            headers["Authorization"] = `Bearer ${userData.id}`;
+          }
+        } catch (e) {}
+      }
+      
+      const res = await fetch(`/api/support/tickets/${ticketId}/replies`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) throw new Error("Failed to send reply");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/tickets", selectedTicket?.id] });
+      setReplyMessage("");
+      toast({
+        title: "Reply sent",
+        description: "Your message has been sent to our support team.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send reply. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const onSubmit = (data: TicketFormData) => {
@@ -510,35 +560,171 @@ export default function Support() {
                 {myTickets && myTickets.length > 0 ? (
                   <div className="space-y-3">
                     {myTickets.map((ticket) => (
-                      <Card key={ticket.id} className="hover-elevate">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <h3 className="font-semibold truncate" data-testid={`text-ticket-subject-${ticket.id}`}>
-                                  {ticket.subject}
-                                </h3>
-                                <Badge className={`${getStatusColor(ticket.status)} flex items-center gap-1 shrink-0`}>
-                                  {getStatusIcon(ticket.status)}
-                                  <span className="capitalize">{ticket.status.replace('_', ' ')}</span>
-                                </Badge>
+                      <Dialog key={ticket.id}>
+                        <DialogTrigger asChild>
+                          <Card 
+                            className="hover-elevate cursor-pointer"
+                            onClick={() => {
+                              setSelectedTicket(ticket);
+                              setReplyMessage("");
+                            }}
+                            data-testid={`card-ticket-${ticket.id}`}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h3 className="font-semibold truncate" data-testid={`text-ticket-subject-${ticket.id}`}>
+                                      {ticket.subject}
+                                    </h3>
+                                    <Badge className={`${getStatusColor(ticket.status)} flex items-center gap-1 shrink-0`}>
+                                      {getStatusIcon(ticket.status)}
+                                      <span className="capitalize">{ticket.status.replace('_', ' ')}</span>
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                                    {ticket.message}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <Badge variant="outline" className="capitalize">
+                                      {ticket.category}
+                                    </Badge>
+                                    <Badge variant="outline" className="capitalize">
+                                      {ticket.priority}
+                                    </Badge>
+                                    <span>Created {new Date(ticket.createdAt).toLocaleDateString()}</span>
+                                  </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
                               </div>
-                              <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                                {ticket.message}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                <Badge variant="outline" className="capitalize">
-                                  {ticket.category}
-                                </Badge>
-                                <Badge variant="outline" className="capitalize">
-                                  {ticket.priority}
-                                </Badge>
-                                <span>Created {new Date(ticket.createdAt).toLocaleDateString()}</span>
-                              </div>
-                            </div>
+                            </CardContent>
+                          </Card>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <MessageSquare className="w-5 h-5 text-primary" />
+                              {ticket.subject}
+                            </DialogTitle>
+                            <DialogDescription>
+                              Ticket #{ticket.id.slice(0, 8)} • Created {new Date(ticket.createdAt).toLocaleDateString()}
+                            </DialogDescription>
+                          </DialogHeader>
+                          
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Badge className={`${getStatusColor(ticket.status)} capitalize`}>
+                              {getStatusIcon(ticket.status)}
+                              <span className="ml-1">{ticket.status.replace('_', ' ')}</span>
+                            </Badge>
+                            <Badge variant="outline" className="capitalize">{ticket.category}</Badge>
+                            <Badge variant="outline" className="capitalize">{ticket.priority}</Badge>
                           </div>
-                        </CardContent>
-                      </Card>
+
+                          <ScrollArea className="flex-1 mt-4 max-h-[50vh]">
+                            <div className="space-y-4 pr-4">
+                              {/* Original Message */}
+                              <div className="bg-muted/50 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <User className="w-4 h-4 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">You</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(ticket.createdAt).toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                <p className="text-sm">{ticket.message}</p>
+                              </div>
+
+                              {/* Replies */}
+                              {isLoadingDetails ? (
+                                <div className="text-center py-4">
+                                  <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
+                                  <p className="text-sm text-muted-foreground mt-2">Loading conversation...</p>
+                                </div>
+                              ) : ticketDetails?.replies && ticketDetails.replies.length > 0 ? (
+                                ticketDetails.replies.map((reply) => (
+                                  <div 
+                                    key={reply.id} 
+                                    className={`rounded-lg p-4 ${
+                                      reply.isStaff 
+                                        ? "bg-primary/5 border border-primary/20" 
+                                        : "bg-muted/50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                        reply.isStaff 
+                                          ? "bg-primary/20" 
+                                          : "bg-muted"
+                                      }`}>
+                                        {reply.isStaff ? (
+                                          <Headphones className="w-4 h-4 text-primary" />
+                                        ) : (
+                                          <User className="w-4 h-4 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium">
+                                          {reply.isStaff ? "LervIT Support" : "You"}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {new Date(reply.createdAt).toLocaleString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <p className="text-sm">{reply.message}</p>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-center py-4 text-muted-foreground">
+                                  <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                  <p className="text-sm">Awaiting response from support team</p>
+                                </div>
+                              )}
+                            </div>
+                          </ScrollArea>
+
+                          {/* Reply Form */}
+                          {ticket.status !== "resolved" && (
+                            <div className="border-t pt-4 mt-4">
+                              <div className="flex gap-2">
+                                <Textarea
+                                  placeholder="Type your reply..."
+                                  value={replyMessage}
+                                  onChange={(e) => setReplyMessage(e.target.value)}
+                                  className="flex-1 min-h-[80px]"
+                                  data-testid="textarea-customer-reply"
+                                />
+                              </div>
+                              <Button
+                                className="w-full mt-2"
+                                disabled={!replyMessage.trim() || replyMutation.isPending}
+                                onClick={() => {
+                                  if (replyMessage.trim()) {
+                                    replyMutation.mutate({ ticketId: ticket.id, message: replyMessage.trim() });
+                                  }
+                                }}
+                                data-testid="button-send-reply"
+                              >
+                                {replyMutation.isPending ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Sending...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="w-4 h-4 mr-2" />
+                                    Send Reply
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
                     ))}
                   </div>
                 ) : (
