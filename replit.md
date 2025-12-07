@@ -63,6 +63,7 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 ## Security Notes
 
 *   **Session-Based Authentication:** Uses express-session with connect-pg-simple PostgreSQL store. Sessions are regenerated on login/signup to prevent session fixation attacks. Cookies are HTTP-only with secure settings.
+*   **Account Lockout Protection:** After 4 consecutive failed login attempts, accounts are automatically locked for 30 minutes. The login page displays remaining attempts warnings (when ≤2 attempts left) and clear lockout messages with time remaining. Admins can manually lock/unlock accounts via `/api/admin/users/:id/lock` and `/api/admin/users/:id/unlock` endpoints. Database tracks `failedLoginAttempts`, `lockedUntil`, `lockedByAdmin`, and `lockReason` fields on users table.
 *   **API Key Protection:** OpenAI and SerpAPI services fail gracefully when keys are missing, returning fallback values instead of crashing.
 
 ## Known Technical Debt
