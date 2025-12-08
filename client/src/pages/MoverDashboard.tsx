@@ -196,7 +196,7 @@ export default function MoverDashboard() {
   const [activeTab, setActiveTab] = useState("available");
 
   // First get the mover profile
-  const { data: mover } = useQuery<any>({
+  const { data: mover, isLoading: isMoverLoading, isFetched: isMoverFetched } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
     enabled: !!user?.id,
     select: (data) => Array.isArray(data) ? data[0] : data,
@@ -396,8 +396,26 @@ export default function MoverDashboard() {
     );
   }
 
-  if (isLoading || !mover) {
+  // Show skeleton while loading mover profile
+  if (isMoverLoading || isLoading) {
     return <MoverDashboardSkeleton />;
+  }
+
+  // If mover profile doesn't exist, redirect to setup
+  if (isMoverFetched && !mover) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h2 className="text-2xl font-bold mb-4">Complete Your Mover Profile</h2>
+          <p className="text-muted-foreground mb-6">
+            You need to set up your mover profile before you can access the dashboard.
+          </p>
+          <Button onClick={() => setLocation("/mover-profile-setup")} data-testid="button-setup-profile">
+            Set Up Profile
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (
