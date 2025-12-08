@@ -760,12 +760,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         licensePlate: true,
         vehiclePhoto: true,
         moverImage: true,
-        emailJobAlerts: true,
-        emailBookingUpdates: true,
-        emailEarningsReports: true,
-        smsJobAlerts: true,
-        smsBookingUpdates: true,
-        pushNotifications: true,
       });
       const updates = validateBody(updateSchema, req.body);
       
@@ -1462,11 +1456,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Movers can see:
         // 1. Bookings assigned to them
         // 2. Available/unassigned bookings (pending status, moverId = null)
-        const mover = await storage.getMoverByUserId(user.id);
-        if (!mover) {
+        const movers = await storage.getMoversByUserId(user.id);
+        if (movers.length === 0) {
           return res.json([]); // Mover profile not set up yet
         }
-        const moverId = mover.id;
+        const moverId = movers[0].id;
         
         // Get assigned bookings
         const assignedBookings = await storage.getBookingsByMover(moverId);
@@ -1527,7 +1521,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(enrichedBookings);
     } catch (error) {
-      console.error("Error fetching bookings:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1701,9 +1694,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
-      // Validate allowed update fields
+      // Validate allowed update fields (removed moverId - must use /accept endpoint)
       const updateSchema = z.object({
-        moverId: z.string().optional(),
         status: z.string().optional(),
         preferredDate: z.union([z.string(), z.date()]).optional(),
         distance: z.string().optional(),
@@ -3646,18 +3638,7 @@ Respond with VALID JSON only:
       
       const movers = await storage.getMovers({ userId: user.id });
       if (!movers.length) {
-        // Return response with profileMissing flag so frontend can show appropriate UI
-        return res.json({
-          profileMissing: true,
-          pendingEarnings: "0.00",
-          availableBalance: "0.00",
-          totalPaidOut: "0.00",
-          totalEarnings: "0.00",
-          completedJobs: 0,
-          platformFeePercent: PLATFORM_COMMISSION_PERCENT,
-          payoutAccount: { hasAccount: false },
-          recentPayouts: [],
-        });
+        return res.status(404).json({ error: "Mover profile not found" });
       }
       const mover = movers[0];
       
@@ -3698,7 +3679,6 @@ Respond with VALID JSON only:
       const payoutAccount = accounts[0];
       
       res.json({
-        profileMissing: false,
         pendingEarnings: pendingEarnings.toFixed(2),
         availableBalance: availableBalance.toFixed(2),
         totalPaidOut: totalPaidOut.toFixed(2),
@@ -3732,8 +3712,7 @@ Respond with VALID JSON only:
       
       const movers = await storage.getMovers({ userId: user.id });
       if (!movers.length) {
-        // Return response with profileMissing flag
-        return res.json({ profileMissing: true, earnings: [] });
+        return res.status(404).json({ error: "Mover profile not found" });
       }
       const mover = movers[0];
       
@@ -3769,7 +3748,7 @@ Respond with VALID JSON only:
         })
       );
       
-      res.json({ profileMissing: false, earnings: enrichedEarnings });
+      res.json(enrichedEarnings);
     } catch (error) {
       res.status(500).json({ error: "Failed to get earnings history" });
     }

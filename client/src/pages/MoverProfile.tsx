@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -43,12 +43,6 @@ type Mover = {
   profileVerified: boolean;
   documentsVerified: boolean;
   moverImage?: string;
-  emailJobAlerts: boolean;
-  emailBookingUpdates: boolean;
-  emailEarningsReports: boolean;
-  smsJobAlerts: boolean;
-  smsBookingUpdates: boolean;
-  pushNotifications: boolean;
 };
 
 type NotificationSettings = {
@@ -70,11 +64,6 @@ export default function MoverProfile() {
   const [address, setAddress] = useState(user?.address || "");
   const [isUploading, setIsUploading] = useState(false);
   
-  const { data: moverData } = useQuery<Mover>({
-    queryKey: ["/api/movers/me"],
-    enabled: !!user,
-  });
-
   const [notifications, setNotifications] = useState<NotificationSettings>({
     emailJobAlerts: true,
     emailBookingUpdates: true,
@@ -84,18 +73,10 @@ export default function MoverProfile() {
     pushNotifications: true,
   });
 
-  useEffect(() => {
-    if (moverData) {
-      setNotifications({
-        emailJobAlerts: moverData.emailJobAlerts ?? true,
-        emailBookingUpdates: moverData.emailBookingUpdates ?? true,
-        emailEarningsReports: moverData.emailEarningsReports ?? true,
-        smsJobAlerts: moverData.smsJobAlerts ?? true,
-        smsBookingUpdates: moverData.smsBookingUpdates ?? false,
-        pushNotifications: moverData.pushNotifications ?? true,
-      });
-    }
-  }, [moverData]);
+  const { data: moverData } = useQuery<Mover>({
+    queryKey: ["/api/movers/me"],
+    enabled: !!user,
+  });
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { name: string; phone: string; address: string }) => {
@@ -175,33 +156,15 @@ export default function MoverProfile() {
     updateProfileMutation.mutate({ name, phone, address });
   };
 
-  const updateNotificationsMutation = useMutation({
-    mutationFn: async (settings: Partial<NotificationSettings>) => {
-      return apiRequest("PATCH", `/api/movers/${moverData?.id}`, settings);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/movers/me"] });
-      toast({
-        title: "Preference Updated",
-        description: "Your notification preference has been saved.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Update Failed",
-        description: "Could not save your preference. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const toggleNotification = (key: keyof NotificationSettings) => {
-    const newValue = !notifications[key];
     setNotifications(prev => ({
       ...prev,
-      [key]: newValue,
+      [key]: !prev[key],
     }));
-    updateNotificationsMutation.mutate({ [key]: newValue });
+    toast({
+      title: "Preference Updated",
+      description: "Your notification preference has been saved.",
+    });
   };
 
   if (!user) {

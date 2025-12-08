@@ -440,9 +440,9 @@ export default function MoverVerification() {
                   
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex-1">
-                        <h4 className="font-semibold flex flex-wrap items-center gap-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold flex items-center gap-2">
                           {itemConfig.label}
                           {itemConfig.required && (
                             <Badge variant="outline" className="text-xs font-normal">Required</Badge>
@@ -451,7 +451,7 @@ export default function MoverVerification() {
                         <p className="text-sm text-muted-foreground mt-0.5">{itemConfig.description}</p>
                         
                         {existingItem && (
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                             {existingItem.submittedAt && (
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
@@ -472,7 +472,7 @@ export default function MoverVerification() {
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                      <div className="flex items-center gap-2 shrink-0">
                         {getStatusBadge(itemStatus)}
                         <UploadDocumentDialog
                           itemConfig={itemConfig}

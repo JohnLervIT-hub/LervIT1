@@ -196,7 +196,7 @@ export default function MoverDashboard() {
   const [activeTab, setActiveTab] = useState("available");
 
   // First get the mover profile
-  const { data: mover, isLoading: isMoverLoading, isFetched: isMoverFetched, isSuccess: isMoverSuccess } = useQuery<any>({
+  const { data: mover } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
     enabled: !!user?.id,
     select: (data) => Array.isArray(data) ? data[0] : data,
@@ -212,7 +212,6 @@ export default function MoverDashboard() {
   const { data: allBookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
-    refetchInterval: 30000,
   });
 
   // Client-side filtering: separate assigned from available bookings
@@ -232,9 +231,8 @@ export default function MoverDashboard() {
         status: "confirmed",
       });
     },
-    onSuccess: (_, bookingId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       toast({
         title: "Booking accepted",
         description: "You've successfully accepted this booking.",
@@ -248,7 +246,6 @@ export default function MoverDashboard() {
     },
     onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       // Stop location sharing when trip is completed
       if (locationSharing === bookingId) {
         setLocationSharing(null);
@@ -266,7 +263,6 @@ export default function MoverDashboard() {
     },
     onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       setLocationSharing(bookingId);
       toast({
         title: "Trip started",
@@ -396,14 +392,9 @@ export default function MoverDashboard() {
     );
   }
 
-  // Show skeleton while loading mover profile
-  if (isMoverLoading || isLoading) {
+  if (isLoading || !mover) {
     return <MoverDashboardSkeleton />;
   }
-
-  // Flag for missing mover profile - only true when query succeeded and profile is actually missing
-  // This ensures we don't disable actions during loading or on query errors
-  const moverProfileMissing = isMoverFetched && isMoverSuccess && !mover;
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (
     <Card key={booking.id} className="hover-elevate" data-testid={`card-booking-${booking.id}`}>
@@ -698,13 +689,8 @@ export default function MoverDashboard() {
           </>
         )}
 
-        {/* Only show AI items for bookings assigned to this mover */}
-        {booking.moverId === mover?.id && (
-          <>
-            <Separator />
-            <IdentifiedItemsDisplay bookingId={booking.id} />
-          </>
-        )}
+        <Separator />
+        <IdentifiedItemsDisplay bookingId={booking.id} />
 
         {(showActions || booking.status === "confirmed" || (booking.status !== "cancelled" && booking.status !== "pending")) && (
           <>
@@ -714,10 +700,9 @@ export default function MoverDashboard() {
                 <Button
                   variant="default"
                   onClick={() => acceptBookingMutation.mutate(booking.id)}
-                  disabled={moverProfileMissing || acceptBookingMutation.isPending}
+                  disabled={acceptBookingMutation.isPending}
                   data-testid={`button-accept-${booking.id}`}
                   className="flex-1 sm:flex-none"
-                  title={moverProfileMissing ? "Complete your profile to accept bookings" : undefined}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   {acceptBookingMutation.isPending ? "Accepting..." : "Accept Booking"}
@@ -826,7 +811,7 @@ export default function MoverDashboard() {
                 <Switch 
                   checked={mover?.isAvailable || false}
                   onCheckedChange={handleAvailabilityToggle}
-                  disabled={moverProfileMissing || isVerificationLoading || toggleAvailabilityMutation.isPending}
+                  disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
                   data-testid="switch-online-status"
                 />
               </div>
@@ -881,29 +866,7 @@ export default function MoverDashboard() {
             </div>
           </div>
           
-          {moverProfileMissing && (
-            <div className="mt-4 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                  <Truck className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Complete Your Profile</p>
-                  <p className="text-xs text-muted-foreground">Set up your mover profile to start accepting jobs</p>
-                </div>
-              </div>
-              <Button 
-                size="sm"
-                onClick={() => setLocation("/mover-profile")}
-                data-testid="button-setup-profile-banner"
-                className="rounded-full"
-              >
-                Set Up Profile
-              </Button>
-            </div>
-          )}
-
-          {!moverProfileMissing && !verificationStatus?.isComplete && (
+          {!verificationStatus?.isComplete && (
             <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer } from "@react-google-maps/api";
+import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer, useJsApiLoader } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,9 +50,9 @@ export default function TrackTrip() {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
 
-  // Google Maps is loaded at the App level, check if it's available
-  const isLoaded = typeof window !== 'undefined' && !!window.google?.maps;
-  const loadError = null;
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
 
   const { data: locationData, isLoading } = useQuery<LocationData>({
     queryKey: ["/api/bookings", bookingId, "location"],
