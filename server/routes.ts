@@ -2415,11 +2415,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get unread message notifications for current user
   app.get("/api/messages/notifications", async (req: Request, res: Response) => {
     try {
-      if (!req.isAuthenticated() || !req.user) {
+      if (!req.session?.userId) {
         return res.status(401).json({ error: "Not authenticated" });
       }
       
-      const userId = (req.user as any).id;
+      const userId = req.session.userId;
       const unreadMessages = await storage.getUnreadMessagesForUser(userId);
       
       // Calculate total unread count
