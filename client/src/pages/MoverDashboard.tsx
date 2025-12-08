@@ -190,12 +190,44 @@ function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
 
 export default function MoverDashboard() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [locationSharing, setLocationSharing] = useState<string | null>(null);
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState("available");
+  
+  // Sync tabs with URL query params for mobile bottom nav integration
+  const getTabFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    // Map URL param values to actual tab values
+    if (tab === 'active') return 'my-bookings';
+    if (tab === 'payouts') return 'payouts';
+    return 'available';
+  };
+  
+  const [activeTab, setActiveTab] = useState(getTabFromUrl);
+  
+  // Sync tab state with URL changes (for mobile nav clicks)
+  useEffect(() => {
+    const newTab = getTabFromUrl();
+    if (newTab !== activeTab) {
+      setActiveTab(newTab);
+    }
+  }, [location]);
+  
+  // Update URL when tab changes (for deep linking)
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    // Update URL without full navigation
+    if (tab === 'my-bookings') {
+      window.history.replaceState(null, '', '/mover-dashboard?tab=active');
+    } else if (tab === 'payouts') {
+      window.history.replaceState(null, '', '/mover-dashboard?tab=payouts');
+    } else {
+      window.history.replaceState(null, '', '/mover-dashboard');
+    }
+  };
   
   // Image preview state
   const [previewImages, setPreviewImages] = useState<string[]>([]);
@@ -979,7 +1011,7 @@ export default function MoverDashboard() {
               </div>
               <Button 
                 size="sm"
-                onClick={() => setActiveTab("verification")}
+                onClick={() => handleTabChange("verification")}
                 data-testid="button-go-to-verification-alert"
                 className="rounded-full"
               >
@@ -1021,7 +1053,7 @@ export default function MoverDashboard() {
               <AlertDialogAction 
                 onClick={() => {
                   setShowVerificationAlert(false);
-                  setActiveTab("verification");
+                  handleTabChange("verification");
                 }}
                 data-testid="button-go-to-verification"
               >
@@ -1031,7 +1063,7 @@ export default function MoverDashboard() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList className="w-full grid grid-cols-5 bg-card border shadow-sm p-1.5 rounded-xl h-auto">
             <TabsTrigger value="available" data-testid="tab-available" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <Package className="w-4 h-4" />
@@ -1116,7 +1148,7 @@ export default function MoverDashboard() {
                   <p className="text-muted-foreground max-w-sm mx-auto mb-6">
                     Accept jobs from the Jobs tab to start earning. Your active and completed bookings will appear here.
                   </p>
-                  <Button variant="outline" onClick={() => setActiveTab("available")} className="rounded-full">
+                  <Button variant="outline" onClick={() => handleTabChange("available")} className="rounded-full">
                     Browse Available Jobs
                   </Button>
                 </CardContent>
