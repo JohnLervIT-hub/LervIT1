@@ -1373,18 +1373,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { ...req.body, customerId: user.id }
       );
       
-      // Geocode addresses to get coordinates
-      const { geocodeAddress } = await import("@shared/geocoding");
+      // Geocode addresses using Google Maps API for accurate coordinates
+      const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
       const { calculatePrice } = await import("@shared/pricing");
       const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
       const { toDecimalString } = await import("@shared/utils");
-      const { getDrivingDistance } = await import("./google-maps");
       
-      const pickupGeo = geocodeAddress(bookingData.pickupAddress);
-      const dropoffGeo = geocodeAddress(bookingData.dropoffAddress);
+      // Use Google Maps Geocoding API for real coordinates (not mock)
+      const pickupGeo = await geocodeAddress(bookingData.pickupAddress);
+      const dropoffGeo = await geocodeAddress(bookingData.dropoffAddress);
+      
+      console.log(`[Booking] Geocoded pickup: "${bookingData.pickupAddress}" → ${pickupGeo.coordinates.lat}, ${pickupGeo.coordinates.lng} (${pickupGeo.success ? 'Google Maps' : 'fallback'})`);
+      console.log(`[Booking] Geocoded dropoff: "${bookingData.dropoffAddress}" → ${dropoffGeo.coordinates.lat}, ${dropoffGeo.coordinates.lng} (${dropoffGeo.success ? 'Google Maps' : 'fallback'})`);
       
       // Calculate driving distance and duration using Google Distance Matrix API
       const drivingDistanceResult = await getDrivingDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
+      
+      console.log(`[Booking] Distance: ${drivingDistanceResult.distanceKm} km, Duration: ${drivingDistanceResult.durationMinutes} min (${drivingDistanceResult.success ? 'Google Maps' : 'Haversine fallback'})`);
       const distance = drivingDistanceResult.distanceKm;
       const priceBreakdown = calculatePrice(
         distance,
