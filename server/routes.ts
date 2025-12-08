@@ -1457,11 +1457,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Movers can see:
         // 1. Bookings assigned to them
         // 2. Available/unassigned bookings (pending status, moverId = null)
-        const movers = await storage.getMoversByUserId(user.id);
-        if (movers.length === 0) {
+        const mover = await storage.getMoverByUserId(user.id);
+        if (!mover) {
           return res.json([]); // Mover profile not set up yet
         }
-        const moverId = movers[0].id;
+        const moverId = mover.id;
         
         // Get assigned bookings
         const assignedBookings = await storage.getBookingsByMover(moverId);
@@ -1522,6 +1522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(enrichedBookings);
     } catch (error) {
+      console.error("Error fetching bookings:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
