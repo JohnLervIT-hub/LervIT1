@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2 } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
@@ -477,14 +478,36 @@ export default function MoverDashboard() {
   }, [locationSharing, toast]);
 
   const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      pending: "secondary",
-      confirmed: "default",
-      in_progress: "default",
-      completed: "default",
-      cancelled: "destructive",
-    };
-    return colors[status] || "secondary";
+    switch (status) {
+      case "pending": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+      case "confirmed": return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+      case "in_transit": return "bg-primary/10 text-primary border-primary/20";
+      case "completed": return "bg-green-500/10 text-green-600 border-green-500/20";
+      case "cancelled": return "bg-red-500/10 text-red-600 border-red-500/20";
+      default: return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "pending": return <Clock className="w-4 h-4" />;
+      case "confirmed": return <CheckCircle2 className="w-4 h-4" />;
+      case "in_transit": return <TrendingUp className="w-4 h-4" />;
+      case "completed": return <CheckCircle2 className="w-4 h-4" />;
+      case "cancelled": return <XCircle className="w-4 h-4" />;
+      default: return <Clock className="w-4 h-4" />;
+    }
+  };
+
+  const getStatusBarColor = (status: string) => {
+    switch (status) {
+      case "pending": return "bg-amber-500";
+      case "confirmed": return "bg-blue-500";
+      case "in_transit": return "bg-primary";
+      case "completed": return "bg-green-500";
+      case "cancelled": return "bg-red-500";
+      default: return "bg-muted";
+    }
   };
 
   const getStatusLabel = (status: string) => {
@@ -506,121 +529,126 @@ export default function MoverDashboard() {
   }
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (
-    <Card key={booking.id} className="hover-elevate" data-testid={`card-booking-${booking.id}`}>
-      <CardHeader className="space-y-4">
-        <div className="flex justify-between items-start gap-4">
+    <Card key={booking.id} className="overflow-hidden hover-elevate" data-testid={`card-booking-${booking.id}`}>
+      {/* Status Bar */}
+      <div className={`h-1 ${getStatusBarColor(booking.status)}`} />
+      
+      <CardContent className="p-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <CardTitle className="text-xl">
-              Move #{booking.id.slice(0, 8)}
-            </CardTitle>
-            <CardDescription>
-              Requested {format(new Date(booking.createdAt), "MMM d, yyyy")}
-            </CardDescription>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-xl font-bold">Move #{booking.id.slice(0, 8)}</h2>
+              <Badge variant="outline" className={`${getStatusColor(booking.status)} flex items-center gap-1.5`} data-testid={`badge-status-${booking.id}`}>
+                {getStatusIcon(booking.status)}
+                <span className="capitalize">{getStatusLabel(booking.status)}</span>
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Requested on {format(new Date(booking.createdAt), "MMMM d, yyyy")}
+            </p>
           </div>
-          <Badge variant={getStatusColor(booking.status) as any} data-testid={`badge-status-${booking.id}`}>
-            {getStatusLabel(booking.status)}
-          </Badge>
+          <div className="text-right">
+            {booking.price && (
+              <>
+                <p className="text-2xl font-bold text-primary">${parseFloat(booking.price).toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">CAD</p>
+              </>
+            )}
+          </div>
         </div>
-        
+
+        {/* Customer Card - Premium Uber Style */}
         {booking.customer && (
-          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <p className="text-sm font-semibold text-foreground">Customer Information</p>
-            <div className="space-y-1">
-              <p className="text-sm">
-                <span className="font-medium text-foreground">{booking.customer.name}</span>
-              </p>
-              <p className="text-sm text-muted-foreground">{booking.customer.email}</p>
+          <div className="bg-gradient-to-br from-blue-500/5 to-blue-500/10 rounded-xl p-5 mb-6 border border-blue-500/20" data-testid={`card-customer-${booking.id}`}>
+            <div className="flex items-center gap-1 mb-3">
+              <User className="w-4 h-4 text-blue-600" />
+              <h4 className="font-semibold text-sm text-blue-600">Customer</h4>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <Avatar className="w-14 h-14 border-2 border-blue-500/30">
+                <AvatarFallback className="bg-blue-500/20 text-blue-600 text-lg font-bold">
+                  {booking.customer.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'C'}
+                </AvatarFallback>
+              </Avatar>
+              
+              <div className="flex-1">
+                <h3 className="font-bold text-lg" data-testid={`text-customer-name-${booking.id}`}>{booking.customer.name}</h3>
+                <p className="text-sm text-muted-foreground">{booking.customer.email}</p>
+              </div>
+              
               {booking.customer.phone && (
-                <p className="text-sm text-muted-foreground">{booking.customer.phone}</p>
+                <Button variant="outline" size="icon" className="rounded-full" asChild data-testid={`button-call-customer-${booking.id}`}>
+                  <a href={`tel:${booking.customer.phone}`} aria-label={`Call ${booking.customer.name}`}>
+                    <Phone className="w-4 h-4" />
+                  </a>
+                </Button>
               )}
             </div>
           </div>
         )}
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3">
-            <div className="flex items-start gap-2">
-              <MapPin className="w-4 h-4 text-muted-foreground mt-1 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium">Pickup</p>
-                <p className="text-sm text-muted-foreground" data-testid={`text-pickup-${booking.id}`}>
-                  {booking.pickupAddress}
-                </p>
+
+        {/* Route Display - A/B Markers */}
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <div className="relative flex items-start gap-4">
+            <div className="flex flex-col items-center">
+              <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center border-2 border-green-500">
+                <span className="text-xs font-bold text-green-600">A</span>
+              </div>
+              <div className="w-0.5 h-12 bg-gradient-to-b from-green-500 to-primary my-1" />
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary">
+                <span className="text-xs font-bold text-primary">B</span>
               </div>
             </div>
-            <div className="flex items-start gap-2">
-              <MapPin className="w-4 h-4 text-muted-foreground mt-1 flex-shrink-0" />
+            <div className="flex-1 space-y-6">
               <div>
-                <p className="text-sm font-medium">Dropoff</p>
-                <p className="text-sm text-muted-foreground" data-testid={`text-dropoff-${booking.id}`}>
-                  {booking.dropoffAddress}
-                </p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Pickup</p>
+                <p className="font-medium" data-testid={`text-pickup-${booking.id}`}>{booking.pickupAddress}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Dropoff</p>
+                <p className="font-medium" data-testid={`text-dropoff-${booking.id}`}>{booking.dropoffAddress}</p>
               </div>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Preferred Date</p>
-                <p className="text-sm text-muted-foreground">
-                  {format(new Date(booking.preferredDate), "MMM d, yyyy 'at' h:mm a")}
-                </p>
+          {/* Info Boxes Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-muted/30 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Date & Time</p>
               </div>
+              <p className="font-medium text-sm">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
+              <p className="text-xs text-muted-foreground">{format(new Date(booking.preferredDate), "h:mm a")}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Load Size</p>
-                <p className="text-sm text-muted-foreground capitalize">
-                  {booking.loadSize}
-                </p>
+            <div className="bg-muted/30 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Package className="w-4 h-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Load Size</p>
               </div>
+              <p className="font-medium text-sm capitalize">{booking.loadSize}</p>
+              {booking.numberOfMovers && (
+                <p className="text-xs text-muted-foreground">{booking.numberOfMovers} mover{booking.numberOfMovers > 1 ? 's' : ''}</p>
+              )}
             </div>
             {booking.distance && (
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Distance</p>
-                  <p className="text-sm text-muted-foreground">
-                    {parseFloat(booking.distance).toFixed(2)} km
-                  </p>
+              <div className="bg-muted/30 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Distance</p>
                 </div>
-              </div>
-            )}
-            {booking.numberOfMovers && (
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Number of Movers</p>
-                  <p className="text-sm text-muted-foreground">
-                    {booking.numberOfMovers} Mover{booking.numberOfMovers > 1 ? 's' : ''}
-                  </p>
-                </div>
+                <p className="font-medium text-sm" data-testid={`text-distance-${booking.id}`}>{parseFloat(booking.distance).toFixed(1)} km</p>
               </div>
             )}
             {booking.heavyItem && (
-              <div className="flex items-center gap-2">
-                <Weight className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Heavy Items</p>
-                  <p className="text-sm text-muted-foreground">
-                    Yes
-                  </p>
+              <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
+                <div className="flex items-center gap-2 mb-1">
+                  <Weight className="w-4 h-4 text-amber-600" />
+                  <p className="text-xs text-amber-600">Heavy Items</p>
                 </div>
-              </div>
-            )}
-            {booking.price && (
-              <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">Price</p>
-                  <p className="text-sm text-muted-foreground">
-                    ${parseFloat(booking.price).toFixed(2)} CAD
-                  </p>
-                </div>
+                <p className="font-medium text-sm text-amber-600">Yes</p>
               </div>
             )}
           </div>
