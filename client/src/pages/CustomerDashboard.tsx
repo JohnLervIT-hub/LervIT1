@@ -55,11 +55,15 @@ type Booking = {
   mover?: {
     id: string;
     userId: string;
+    name: string;
+    phone: string | null;
     moverImage: string | null;
-    user: {
-      id: string;
-      name: string;
-    };
+    vehicleType: string;
+    vehicleColor: string | null;
+    licensePlate: string | null;
+    rating: string | null;
+    completedTrips: number | null;
+    isVerified: boolean | null;
   };
 };
 
@@ -84,10 +88,10 @@ export default function CustomerDashboard() {
       }
 
       return await apiRequest("POST", "/api/support-tickets", {
-        subject: `Report: Mover ${booking.mover.user.name} (Booking #${bookingId.slice(0, 8)})`,
+        subject: `Report: Mover ${booking.mover.name} (Booking #${bookingId.slice(0, 8)})`,
         category: "mover_concern",
         priority: "high",
-        description: `Customer ${user?.name} is reporting a concern about mover ${booking.mover.user.name} for booking #${bookingId}. Please investigate.`,
+        description: `Customer ${user?.name} is reporting a concern about mover ${booking.mover.name} for booking #${bookingId}. Please investigate.`,
       });
     },
     onSuccess: () => {
@@ -347,7 +351,7 @@ export default function CustomerDashboard() {
                           <Truck className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-sm">{booking.mover.user.name}</p>
+                          <p className="font-medium text-sm">{booking.mover.name}</p>
                           <p className="text-xs text-muted-foreground">Your mover</p>
                         </div>
                         <Button 
@@ -420,7 +424,7 @@ export default function CustomerDashboard() {
 
                     {booking.mover && (
                       <p className="text-sm text-muted-foreground mt-2">
-                        Moved by {booking.mover.user.name}
+                        Moved by {booking.mover.name}
                       </p>
                     )}
                   </CardContent>
@@ -462,7 +466,7 @@ export default function CustomerDashboard() {
               <AlertDialogDescription>
                 {selectedBooking && selectedBooking.mover && (
                   <>
-                    You're reporting an issue with <strong>{selectedBooking.mover.user.name}</strong>.
+                    You're reporting an issue with <strong>{selectedBooking.mover.name}</strong>.
                     <br /><br />
                     Our team will review this right away and reach out to you by email. 
                     If you're in immediate danger, please call 911.
