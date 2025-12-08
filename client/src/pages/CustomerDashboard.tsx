@@ -107,17 +107,31 @@ export default function CustomerDashboard() {
     },
   });
 
-  const activeBookings = bookings?.filter((b) => 
-    b.status === "pending" || b.status === "confirmed" || b.status === "in_transit"
-  ) || [];
+  const now = new Date();
+  
+  // Filter and sort active bookings: exclude expired bookings, sort by date/time
+  const activeBookings = bookings?.filter((b) => {
+    const isActiveStatus = b.status === "pending" || b.status === "confirmed" || b.status === "in_transit";
+    if (!isActiveStatus) return false;
+    
+    // Exclude any active booking where the scheduled date has passed
+    // Exception: in_transit bookings are kept since the move is actively happening
+    if (b.status !== "in_transit" && new Date(b.preferredDate) < now) {
+      return false;
+    }
+    return true;
+  })
+    .sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
 
+  // Sort past bookings by date (most recent first)
   const pastBookings = bookings?.filter((b) => 
     b.status === "completed" || b.status === "cancelled"
-  ) || [];
+  )
+    .sort((a, b) => new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime()) || [];
 
-  // Get the next upcoming booking (soonest date)
+  // Get the next upcoming booking (soonest date that hasn't passed)
   const upcomingBooking = activeBookings
-    .filter(b => new Date(b.preferredDate) >= new Date())
+    .filter(b => new Date(b.preferredDate) >= now)
     .sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime())[0];
 
   const handleMessage = (id: string) => {
@@ -125,7 +139,7 @@ export default function CustomerDashboard() {
   };
 
   const handleViewDetails = (id: string) => {
-    setLocation(`/my-bookings`);
+    setLocation(`/my-bookings?booking=${id}`);
   };
 
   const handleReportMover = (booking: Booking) => {

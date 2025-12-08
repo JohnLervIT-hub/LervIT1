@@ -14,7 +14,6 @@ import {
   HelpCircle,
   Plus
 } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface NavItem {
   href: string;
@@ -95,33 +94,24 @@ export function MobileBottomNav() {
           const active = isActive(item.href);
           return (
             <Link key={item.href} href={item.href}>
-              <motion.button
-                className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg min-w-[4rem] transition-colors ${
+              <button
+                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg min-w-[4rem] transition-colors active:scale-95 ${
                   active 
                     ? "text-primary" 
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                whileTap={{ scale: 0.95 }}
                 data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
               >
-                <motion.div
-                  initial={false}
-                  animate={active ? { scale: 1.1 } : { scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
+                <div className={`transition-transform duration-150 ${active ? 'scale-110' : 'scale-100'}`}>
                   {item.icon}
-                </motion.div>
+                </div>
                 <span className="text-[10px] font-medium leading-tight">{item.label}</span>
                 {active && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full"
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
+                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
                 )}
-              </motion.button>
+              </button>
             </Link>
           );
         })}

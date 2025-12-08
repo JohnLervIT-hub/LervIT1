@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { generatePriceExplanation } from "@shared/ai";
 
 type Booking = {
@@ -55,13 +56,85 @@ type Booking = {
 
 export default function MyBookings() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  
+  // State for image preview dialog
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  
+  // State for specific booking view from URL query param
+  const [focusedBookingId, setFocusedBookingId] = useState<string | null>(null);
+  
+  // Parse URL for specific booking
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const bookingId = params.get('booking');
+    setFocusedBookingId(bookingId);
+  }, [location]);
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: [`/api/bookings?customerId=${user?.id}`],
     enabled: !!user?.id,
   });
+  
+  // Sort and filter bookings
+  const now = new Date();
+  const sortedBookings = bookings
+    ?.filter(b => {
+      // Filter out expired pending/confirmed bookings (keep in_transit as they're active moves)
+      const isActiveStatus = ["pending", "confirmed", "in_transit"].includes(b.status);
+      if (isActiveStatus && b.status !== "in_transit" && new Date(b.preferredDate) < now) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      // Active bookings first, sorted by date ascending
+      const aIsActive = ["pending", "confirmed", "in_transit"].includes(a.status) && 
+        (a.status === "in_transit" || new Date(a.preferredDate) >= now);
+      const bIsActive = ["pending", "confirmed", "in_transit"].includes(b.status) && 
+        (b.status === "in_transit" || new Date(b.preferredDate) >= now);
+      
+      if (aIsActive && !bIsActive) return -1;
+      if (!aIsActive && bIsActive) return 1;
+      
+      // Within same group, sort by date
+      if (aIsActive && bIsActive) {
+        return new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime();
+      }
+      // Past bookings: most recent first
+      return new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime();
+    }) || [];
+    
+  // Filter to show only focused booking if URL param exists
+  const displayBookings = focusedBookingId 
+    ? sortedBookings.filter(b => b.id === focusedBookingId)
+    : sortedBookings;
+    
+  const handleImageClick = (images: string[], index: number) => {
+    setPreviewImages(images);
+    setPreviewIndex(index);
+    setPreviewImage(images[index]);
+  };
+  
+  const handlePrevImage = () => {
+    const newIndex = (previewIndex - 1 + previewImages.length) % previewImages.length;
+    setPreviewIndex(newIndex);
+    setPreviewImage(previewImages[newIndex]);
+  };
+  
+  const handleNextImage = () => {
+    const newIndex = (previewIndex + 1) % previewImages.length;
+    setPreviewIndex(newIndex);
+    setPreviewImage(previewImages[newIndex]);
+  };
+  
+  const clearFocusedBooking = () => {
+    setFocusedBookingId(null);
+    setLocation('/my-bookings');
+  };
 
   const cancelBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
@@ -150,7 +223,7 @@ export default function MyBookings() {
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
             <p className="text-muted-foreground">Loading your bookings...</p>
           </div>
-        ) : !bookings || bookings.length === 0 ? (
+        ) : !sortedBookings || sortedBookings.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-12 text-center">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
@@ -168,7 +241,19 @@ export default function MyBookings() {
           </Card>
         ) : (
           <div className="space-y-6">
-            {bookings.map((booking) => (
+            {/* Back button when viewing specific booking */}
+            {focusedBookingId && (
+              <Button 
+                variant="outline" 
+                onClick={clearFocusedBooking}
+                className="mb-4"
+                data-testid="button-back-all-bookings"
+              >
+                <ChevronLeft className="w-4 h-4 mr-2" />
+                Back to All Bookings
+              </Button>
+            )}
+            {displayBookings.map((booking) => (
               <Card key={booking.id} className="overflow-hidden" data-testid={`card-booking-${booking.id}`}>
                 {/* Status Bar */}
                 <div className={`h-1 ${
@@ -462,20 +547,28 @@ export default function MyBookings() {
                     </Collapsible>
                   )}
 
-                  {/* Images */}
+                  {/* Images - Clickable to view larger */}
                   {booking.images && booking.images.length > 0 && (
                     <div className="mb-4">
                       <p className="text-sm font-medium mb-3 flex items-center gap-2">
                         <Package className="w-4 h-4 text-muted-foreground" />
                         Item Photos ({booking.images.length})
+                        <span className="text-xs text-muted-foreground ml-1">- Click to enlarge</span>
                       </p>
                       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
                         {booking.images.map((imageUrl, index) => (
-                          <div key={index} className="relative aspect-square rounded-lg overflow-hidden border hover-elevate bg-muted">
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => handleImageClick(booking.images!, index)}
+                            className="relative aspect-square rounded-lg overflow-hidden border hover-elevate bg-muted cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                            data-testid={`button-image-${booking.id}-${index}`}
+                            aria-label={`View item photo ${index + 1} of ${booking.images!.length}`}
+                          >
                             <img
                               src={imageUrl}
                               alt={`Item ${index + 1}`}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
                               data-testid={`image-item-${booking.id}-${index}`}
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
@@ -487,7 +580,10 @@ export default function MyBookings() {
                             <div className="absolute inset-0 hidden items-center justify-center bg-muted">
                               <ImageOff className="w-6 h-6 text-muted-foreground" />
                             </div>
-                          </div>
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                              <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                            </div>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -551,6 +647,64 @@ export default function MyBookings() {
           </div>
         )}
       </div>
+      
+      {/* Image Preview Dialog */}
+      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+        <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+          <div className="relative">
+            {/* Close button */}
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              aria-label="Close preview"
+              data-testid="button-close-preview"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+            
+            {/* Navigation buttons */}
+            {previewImages.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrevImage}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  aria-label="Previous image"
+                  data-testid="button-prev-image"
+                >
+                  <ChevronLeft className="w-6 h-6 text-white" />
+                </button>
+                <button
+                  onClick={handleNextImage}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  aria-label="Next image"
+                  data-testid="button-next-image"
+                >
+                  <ChevronRightIcon className="w-6 h-6 text-white" />
+                </button>
+              </>
+            )}
+            
+            {/* Image */}
+            <div className="flex items-center justify-center min-h-[60vh] p-8">
+              {previewImage && (
+                <img
+                  src={previewImage}
+                  alt={`Preview ${previewIndex + 1} of ${previewImages.length}`}
+                  className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                  data-testid="image-preview"
+                />
+              )}
+            </div>
+            
+            {/* Image counter */}
+            {previewImages.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/10 text-white text-sm">
+                {previewIndex + 1} / {previewImages.length}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
