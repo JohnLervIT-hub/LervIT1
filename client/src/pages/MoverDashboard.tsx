@@ -416,6 +416,17 @@ export default function MoverDashboard() {
   // Mutation for advancing through status stages
   const updateStatusMutation = useMutation({
     mutationFn: async ({ bookingId, newStatus }: { bookingId: string; newStatus: BookingStatus }) => {
+      // Use dedicated complete endpoint for completion to trigger earnings recording
+      if (newStatus === BOOKING_STATUSES.COMPLETED) {
+        const response = await apiRequest("POST", `/api/bookings/${bookingId}/complete`);
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to complete booking");
+        }
+        return response.json();
+      }
+      
+      // Regular status updates for other statuses
       const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: newStatus });
       if (!response.ok) {
         const data = await response.json();
@@ -423,7 +434,7 @@ export default function MoverDashboard() {
       }
       return response.json();
     },
-    onSuccess: (_, { bookingId, newStatus }) => {
+    onSuccess: (data, { bookingId, newStatus }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       
       const statusInfo = BOOKING_STATUS_INFO[newStatus];
@@ -436,12 +447,23 @@ export default function MoverDashboard() {
       // Stop location sharing when completed
       if (newStatus === BOOKING_STATUSES.COMPLETED) {
         setLocationSharing(null);
+        // Invalidate earnings to refresh the payout dashboard (both endpoints)
+        queryClient.invalidateQueries({ queryKey: [`/api/movers/${mover?.id}/earnings`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/movers/payouts/earnings"] });
       }
       
-      toast({
-        title: `Status Updated: ${statusInfo?.label || newStatus}`,
-        description: statusInfo?.description || "Move status has been updated.",
-      });
+      // Show earnings info if completion returned earnings data
+      if (newStatus === BOOKING_STATUSES.COMPLETED && data?.earnings) {
+        toast({
+          title: "Move Completed!",
+          description: `You earned $${parseFloat(data.earnings.net).toFixed(2)} CAD (after ${data.earnings.platformFee ? `$${parseFloat(data.earnings.platformFee).toFixed(2)}` : '15%'} platform fee)`,
+        });
+      } else {
+        toast({
+          title: `Status Updated: ${statusInfo?.label || newStatus}`,
+          description: statusInfo?.description || "Move status has been updated.",
+        });
+      }
     },
     onError: (error: Error) => {
       toast({

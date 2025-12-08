@@ -3924,6 +3924,19 @@ Respond with VALID JSON only:
         return res.status(400).json({ error: "Booking already completed" });
       }
       
+      // Allow completion from any active status (including legacy in_transit)
+      const validCompletionStatuses = [
+        'in_transit', 
+        BOOKING_STATUSES.UNLOADING,
+        BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
+        BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+        BOOKING_STATUSES.LOADING,
+        'confirmed' // Allow direct completion for edge cases
+      ];
+      if (!validCompletionStatuses.includes(booking.status)) {
+        return res.status(400).json({ error: `Cannot complete booking with status "${booking.status}"` });
+      }
+      
       if (booking.paymentStatus !== 'succeeded') {
         return res.status(400).json({ error: "Payment must be completed before marking job as done" });
       }
