@@ -147,16 +147,19 @@ export default function Header() {
             )}
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden hover-elevate active-elevate-2"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            data-testid="button-mobile-menu"
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          >
-            <Menu className="w-6 h-6" />
-          </Button>
+          <div className="flex items-center gap-1 md:hidden">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover-elevate active-elevate-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              data-testid="button-mobile-menu"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            >
+              <Menu className="w-6 h-6" />
+            </Button>
+          </div>
         </div>
       </div>
 
