@@ -91,7 +91,7 @@ class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getMovers(filters?: { location?: string; isAvailable?: boolean }): Promise<Mover[]> {
+  async getMovers(filters?: { location?: string; isAvailable?: boolean; userId?: string }): Promise<Mover[]> {
     let query = db.select().from(movers);
     
     const conditions = [];
@@ -100,6 +100,9 @@ class PostgresStorage implements IStorage {
     }
     if (filters?.location) {
       conditions.push(eq(movers.location, filters.location));
+    }
+    if (filters?.userId) {
+      conditions.push(eq(movers.userId, filters.userId));
     }
     
     if (conditions.length > 0) {

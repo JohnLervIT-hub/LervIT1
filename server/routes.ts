@@ -3916,9 +3916,8 @@ Respond with VALID JSON only:
       
       // Verify mover owns this booking
       const movers = await storage.getMovers({ userId: user.id });
-      console.log('[Complete] User ID:', user.id, 'Movers found:', movers.length, 'Booking moverID:', booking.moverId, 'User moverID:', movers[0]?.id);
       if (!movers.length || booking.moverId !== movers[0].id) {
-        return res.status(403).json({ error: "Only the assigned mover can complete this booking", debug: { userId: user.id, moversFound: movers.length, bookingMoverId: booking.moverId, userMoverId: movers[0]?.id } });
+        return res.status(403).json({ error: "Only the assigned mover can complete this booking" });
       }
       
       if (booking.status === 'completed') {
