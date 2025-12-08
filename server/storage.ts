@@ -137,7 +137,7 @@ class PostgresStorage implements IStorage {
   }
 
   async getAllBookings(): Promise<Booking[]> {
-    return await db.select().from(bookings).orderBy(desc(bookings.createdAt));
+    return await db.select().from(bookings).orderBy(desc(bookings.preferredDate), desc(bookings.createdAt));
   }
 
   async createBooking(insertBooking: InsertBooking): Promise<Booking> {

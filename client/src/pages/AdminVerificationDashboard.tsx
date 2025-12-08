@@ -126,9 +126,23 @@ export default function AdminVerificationDashboard() {
   });
 
   // Fetch driver detail
-  const { data: driverDetail } = useQuery<DriverDetail>({
+  const { data: driverDetail, isLoading: detailLoading, error: detailError } = useQuery<DriverDetail>({
     queryKey: [`/api/admin/verification/driver/${selectedDriverId}`],
     enabled: !!selectedDriverId,
+    queryFn: async () => {
+      const authHeaders = getAuthHeaders();
+      if (!authHeaders["Authorization"]) {
+        throw new Error("Not authenticated");
+      }
+      const response = await fetch(`/api/admin/verification/driver/${selectedDriverId}`, {
+        credentials: "include",
+        headers: authHeaders,
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch driver details");
+      }
+      return response.json();
+    },
   });
 
   // Review mutation
