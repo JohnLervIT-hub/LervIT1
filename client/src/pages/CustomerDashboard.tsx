@@ -39,6 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
+import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 
 type Booking = {
   id: string;
@@ -190,14 +191,7 @@ export default function CustomerDashboard() {
   const firstName = user?.name?.split(' ')[0] || 'there';
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading your moves...</p>
-        </div>
-      </div>
-    );
+    return <CustomerDashboardSkeleton />;
   }
 
   return (

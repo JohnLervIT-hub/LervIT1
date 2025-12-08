@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { generatePriceExplanation } from "@shared/ai";
 import { useEffect, useState } from "react";
 import MoverVerification from "./MoverVerification";
+import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 
 type Booking = {
   id: string;
@@ -388,6 +389,10 @@ export default function MoverDashboard() {
         </div>
       </div>
     );
+  }
+
+  if (isLoading || !mover) {
+    return <MoverDashboardSkeleton />;
   }
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,17 +74,19 @@ export default function AdminDashboard() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const { toast } = useToast();
 
-  const { data: users } = useQuery<User[]>({
+  const { data: users, isLoading: usersLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
 
-  const { data: movers } = useQuery<Mover[]>({
+  const { data: movers, isLoading: moversLoading } = useQuery<Mover[]>({
     queryKey: ["/api/movers"],
   });
 
-  const { data: bookings } = useQuery<Booking[]>({
+  const { data: bookings, isLoading: bookingsLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
+
+  const isLoading = usersLoading || moversLoading || bookingsLoading;
 
   const cleanupMutation = useMutation({
     mutationFn: async () => {
@@ -154,6 +157,10 @@ export default function AdminDashboard() {
         </div>
       </div>
     );
+  }
+
+  if (isLoading) {
+    return <AdminDashboardSkeleton />;
   }
 
   const totalRevenue = bookings?.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0) || 0;
