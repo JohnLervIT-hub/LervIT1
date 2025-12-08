@@ -73,6 +73,7 @@ export default function CustomerDashboard() {
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
+    refetchInterval: 30000,
   });
 
   const reportMutation = useMutation({
