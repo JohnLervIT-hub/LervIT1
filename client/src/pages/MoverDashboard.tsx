@@ -216,7 +216,8 @@ export default function MoverDashboard() {
 
   // Client-side filtering: separate assigned from available bookings
   const bookings = allBookings?.filter((b) => b.moverId === mover?.id) || [];
-  const availableBookings = allBookings?.filter((b) => b.status === "pending" && !b.moverId) || [];
+  // Show both "pending" and "confirmed" (paid) jobs that don't have a mover assigned yet
+  const availableBookings = allBookings?.filter((b) => (b.status === "pending" || b.status === "confirmed") && !b.moverId) || [];
 
   // Get earnings data for this mover
   const { data: earnings } = useQuery<any>({

@@ -1466,10 +1466,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get assigned bookings
         const assignedBookings = await storage.getBookingsByMover(moverId);
         
-        // Get all pending bookings (available to accept)
+        // Get all pending/confirmed bookings (available to accept)
+        // Include both "pending" and "confirmed" (paid) jobs without a mover
         const allPendingBookings = await storage.getAllBookings();
         const availableBookings = allPendingBookings.filter(
-          (b) => b.status === "pending" && b.moverId === null
+          (b) => (b.status === "pending" || b.status === "confirmed") && b.moverId === null
         );
         
         // Combine both sets (remove duplicates)
