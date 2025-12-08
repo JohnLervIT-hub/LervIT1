@@ -760,6 +760,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         licensePlate: true,
         vehiclePhoto: true,
         moverImage: true,
+        emailJobAlerts: true,
+        emailBookingUpdates: true,
+        emailEarningsReports: true,
+        smsJobAlerts: true,
+        smsBookingUpdates: true,
+        pushNotifications: true,
       });
       const updates = validateBody(updateSchema, req.body);
       

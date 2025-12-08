@@ -45,6 +45,12 @@ export const movers = pgTable("movers", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   isAvailable: boolean("is_available").default(true).notNull(),
+  emailJobAlerts: boolean("email_job_alerts").default(true).notNull(),
+  emailBookingUpdates: boolean("email_booking_updates").default(true).notNull(),
+  emailEarningsReports: boolean("email_earnings_reports").default(true).notNull(),
+  smsJobAlerts: boolean("sms_job_alerts").default(true).notNull(),
+  smsBookingUpdates: boolean("sms_booking_updates").default(false).notNull(),
+  pushNotifications: boolean("push_notifications").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("movers_user_id_idx").on(table.userId),
