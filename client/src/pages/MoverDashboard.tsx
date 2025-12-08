@@ -20,6 +20,8 @@ import { useEffect, useState } from "react";
 import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 
 type Booking = {
   id: string;
@@ -194,6 +196,11 @@ export default function MoverDashboard() {
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("available");
+  
+  // Image preview state
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   // First get the mover profile
   const { data: mover } = useQuery<any>({
@@ -215,14 +222,34 @@ export default function MoverDashboard() {
   });
 
   // Client-side filtering: separate assigned from available bookings
-  // Sort by preferredDate (soonest first) to show hierarchical order
-  const bookings = allBookings
+  // Auto-filter expired bookings and sort by preferredDate (soonest first)
+  const now = new Date();
+  
+  // Active bookings: assigned to this mover, not completed/cancelled, and not expired
+  // Exception: in_transit bookings are kept since the move is actively happening
+  const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
+    ?.filter((b) => {
+      const isActiveStatus = ["confirmed", "in_transit"].includes(b.status);
+      if (!isActiveStatus) return false;
+      // Keep in_transit regardless of date, filter out expired confirmed
+      if (b.status !== "in_transit" && new Date(b.preferredDate) < now) {
+        return false;
+      }
+      return true;
+    })
     ?.sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
+  
+  // Past bookings: completed or cancelled, sorted by most recent first
+  const pastBookings = allBookings
+    ?.filter((b) => b.moverId === mover?.id && (b.status === "completed" || b.status === "cancelled"))
+    ?.sort((a, b) => new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime()) || [];
+  
+  // Combined bookings for display: active first, then past
+  const bookings = [...activeBookings, ...pastBookings];
   
   // Show both "pending" and "confirmed" (paid) jobs that don't have a mover assigned yet
   // Filter out expired pickup schedules (preferredDate is in the past)
-  const now = new Date();
   const availableBookings = allBookings
     ?.filter((b) => (b.status === "pending" || b.status === "confirmed") && !b.moverId)
     ?.filter((b) => new Date(b.preferredDate) >= now) // Hide expired pickups
@@ -725,13 +752,35 @@ export default function MoverDashboard() {
               <p className="text-sm font-medium mb-3">Item Photos ({booking.images.length})</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {booking.images.map((imageUrl, index) => (
-                  <div key={index} className="relative aspect-square rounded-md overflow-hidden border">
+                  <div 
+                    key={index} 
+                    className="relative aspect-square rounded-md overflow-hidden border cursor-pointer group"
+                    onClick={() => {
+                      setPreviewImages(booking.images || []);
+                      setPreviewIndex(index);
+                      setShowImagePreview(true);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setPreviewImages(booking.images ?? []);
+                        setPreviewIndex(index);
+                        setShowImagePreview(true);
+                      }
+                    }}
+                    aria-label={`View item photo ${index + 1} of ${booking.images?.length || 0}`}
+                    data-testid={`button-preview-image-${booking.id}-${index}`}
+                  >
                     <img
                       src={imageUrl}
                       alt={`Item ${index + 1}`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
                       data-testid={`image-item-${booking.id}-${index}`}
                     />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1252,6 +1301,55 @@ export default function MoverDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {/* Image Preview Dialog */}
+      <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
+        <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+          <div className="relative flex items-center justify-center min-h-[60vh]">
+            {previewImages.length > 0 && (
+              <>
+                <img
+                  src={previewImages[previewIndex]}
+                  alt={`Preview ${previewIndex + 1}`}
+                  className="max-w-full max-h-[80vh] object-contain"
+                  data-testid="img-preview-full"
+                />
+                
+                {/* Navigation arrows */}
+                {previewImages.length > 1 && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                      onClick={() => setPreviewIndex((prev) => (prev > 0 ? prev - 1 : previewImages.length - 1))}
+                      aria-label="Previous image"
+                      data-testid="button-prev-image"
+                    >
+                      <ChevronLeft className="w-6 h-6" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                      onClick={() => setPreviewIndex((prev) => (prev < previewImages.length - 1 ? prev + 1 : 0))}
+                      aria-label="Next image"
+                      data-testid="button-next-image"
+                    >
+                      <ChevronRight className="w-6 h-6" />
+                    </Button>
+                  </>
+                )}
+                
+                {/* Image counter */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
+                  {previewIndex + 1} / {previewImages.length}
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
