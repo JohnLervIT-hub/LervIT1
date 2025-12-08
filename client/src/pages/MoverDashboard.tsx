@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2 } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -1092,7 +1092,7 @@ export default function MoverDashboard() {
         </AlertDialog>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="w-full grid grid-cols-5 bg-card border shadow-sm p-1.5 rounded-xl h-auto">
+          <TabsList className="w-full grid grid-cols-6 bg-card border shadow-sm p-1.5 rounded-xl h-auto">
             <TabsTrigger value="available" data-testid="tab-available" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">Jobs</span>
@@ -1122,6 +1122,10 @@ export default function MoverDashboard() {
             <TabsTrigger value="payouts" data-testid="tab-payouts" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <Wallet className="w-4 h-4" />
               <span className="hidden sm:inline">Payouts</span>
+            </TabsTrigger>
+            <TabsTrigger value="support" data-testid="tab-support" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
+              <HelpCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">Support</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1358,6 +1362,24 @@ export default function MoverDashboard() {
 
           <TabsContent value="payouts" className="space-y-6">
             <MoverPayoutCenter />
+          </TabsContent>
+
+          <TabsContent value="support" className="space-y-6">
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                  <HelpCircle className="w-10 h-10 text-primary/60" />
+                </div>
+                <h3 className="font-semibold text-xl mb-2">Need Help?</h3>
+                <p className="text-muted-foreground max-w-sm mx-auto mb-6">
+                  Access our help center for FAQs, submit support tickets, or contact our team directly.
+                </p>
+                <Button onClick={() => setLocation("/support")} data-testid="button-go-to-support">
+                  <HelpCircle className="w-4 h-4 mr-2" />
+                  Go to Support Center
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
