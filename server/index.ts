@@ -82,6 +82,12 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+// Health check endpoint - responds immediately without database queries
+// This must be registered before other middleware for fastest response
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: Date.now() });
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -114,15 +120,6 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    // Test database connection before starting
-    try {
-      await pool.query('SELECT 1');
-      log("Database connection verified");
-    } catch (dbError) {
-      console.error("FATAL: Database connection failed:", dbError);
-      process.exit(1);
-    }
-
     const server = await registerRoutes(app);
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -150,8 +147,18 @@ app.use((req, res, next) => {
     
     console.log(`Starting server on port ${port} (NODE_ENV: ${process.env.NODE_ENV || 'development'})...`);
     
-    server.listen(port, "0.0.0.0", () => {
+    server.listen(port, "0.0.0.0", async () => {
       log(`serving on port ${port}`);
+      
+      // Verify database connection after server is listening (non-blocking for health checks)
+      try {
+        await pool.query('SELECT 1');
+        log("Database connection verified");
+      } catch (dbError) {
+        console.error("WARNING: Database connection failed:", dbError);
+        // Don't exit - server is running and can handle health checks
+        // Database might recover or be configured shortly
+      }
     });
 
     // Handle server errors
