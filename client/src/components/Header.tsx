@@ -14,6 +14,7 @@ import {
 import { CustomerNav } from "./CustomerNav";
 import { MoverNav } from "./MoverNav";
 import { AdminNav } from "./AdminNav";
+import { ThemeToggle } from "./ThemeToggle";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -99,6 +100,7 @@ export default function Header() {
           </div>
 
           <div className="hidden md:flex items-center gap-2">
+            <ThemeToggle />
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

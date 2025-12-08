@@ -5,8 +5,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { PageTransition } from "@/components/PageTransition";
 import { useJsApiLoader } from "@react-google-maps/api";
 import Header from "@/components/Header";
 import SplashScreen from "@/components/SplashScreen";
@@ -205,17 +208,24 @@ function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <ErrorBoundary>
-            <Header />
-            <Router />
-          </ErrorBoundary>
-          <Toaster />
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <Header />
+              <div className="pb-16 md:pb-0">
+                <PageTransition>
+                  <Router />
+                </PageTransition>
+              </div>
+              <MobileBottomNav />
+            </ErrorBoundary>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
