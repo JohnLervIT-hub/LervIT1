@@ -42,6 +42,7 @@ export function MobileBottomNav() {
           { href: "/mover-dashboard", icon: <Home className="w-5 h-5" />, label: "Jobs" },
           { href: "/mover-dashboard?tab=active", icon: <Truck className="w-5 h-5" />, label: "Active" },
           { href: "/mover-dashboard?tab=payouts", icon: <Wallet className="w-5 h-5" />, label: "Payouts" },
+          { href: "/support", icon: <HelpCircle className="w-5 h-5" />, label: "Support" },
           { href: "/mover-settings", icon: <Settings className="w-5 h-5" />, label: "Settings" },
         ];
       case "admin":
