@@ -697,8 +697,13 @@ export default function MoverDashboard() {
           </>
         )}
 
-        <Separator />
-        <IdentifiedItemsDisplay bookingId={booking.id} />
+        {/* Only show AI items for bookings assigned to this mover */}
+        {booking.moverId === mover?.id && (
+          <>
+            <Separator />
+            <IdentifiedItemsDisplay bookingId={booking.id} />
+          </>
+        )}
 
         {(showActions || booking.status === "confirmed" || (booking.status !== "cancelled" && booking.status !== "pending")) && (
           <>
