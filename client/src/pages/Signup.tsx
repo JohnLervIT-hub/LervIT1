@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { FormFieldError } from "@/components/FormFieldError";
 import { Truck, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function Signup() {
@@ -26,6 +27,35 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("customer");
   const [isLoading, setIsLoading] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+  
+  const validatePassword = (password: string) => {
+    return password.length >= 6;
+  };
+  
+  const getFieldError = (field: string): string | undefined => {
+    if (!touched[field]) return undefined;
+    
+    switch (field) {
+      case 'name':
+        return name.length < 2 ? 'Name must be at least 2 characters' : undefined;
+      case 'email':
+        return !validateEmail(email) ? 'Please enter a valid email address' : undefined;
+      case 'password':
+        return !validatePassword(password) ? 'Password must be at least 6 characters' : undefined;
+      default:
+        return undefined;
+    }
+  };
+  
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
 
   useEffect(() => {
     if (user && !isLoading) {
@@ -83,10 +113,14 @@ export default function Signup() {
                 placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onBlur={() => handleBlur('name')}
                 required
-                className="h-11"
+                className={`h-11 ${getFieldError('name') ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                 data-testid="input-name"
+                aria-invalid={!!getFieldError('name')}
+                aria-describedby={getFieldError('name') ? 'name-error' : undefined}
               />
+              <FormFieldError message={getFieldError('name')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -96,10 +130,14 @@ export default function Signup() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => handleBlur('email')}
                 required
-                className="h-11"
+                className={`h-11 ${getFieldError('email') ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                 data-testid="input-email"
+                aria-invalid={!!getFieldError('email')}
+                aria-describedby={getFieldError('email') ? 'email-error' : undefined}
               />
+              <FormFieldError message={getFieldError('email')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone (optional)</Label>
@@ -122,9 +160,12 @@ export default function Signup() {
                   placeholder="Create a password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => handleBlur('password')}
                   required
-                  className="h-11 pr-10"
+                  className={`h-11 pr-10 ${getFieldError('password') ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                   data-testid="input-password"
+                  aria-invalid={!!getFieldError('password')}
+                  aria-describedby={getFieldError('password') ? 'password-error' : undefined}
                 />
                 <button
                   type="button"
@@ -136,6 +177,7 @@ export default function Signup() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <FormFieldError message={getFieldError('password')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">I want to</Label>
