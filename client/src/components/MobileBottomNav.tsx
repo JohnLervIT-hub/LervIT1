@@ -1,6 +1,6 @@
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   Home, 
   Calendar, 
@@ -24,7 +24,7 @@ interface NavItem {
 
 export function MobileBottomNav() {
   const { user } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   
   // Track full URL including query params for proper active state detection
   const [currentSearch, setCurrentSearch] = useState(window.location.search);
@@ -41,6 +41,18 @@ export function MobileBottomNav() {
     
     return () => window.removeEventListener('popstate', updateSearch);
   }, [location]);
+
+  // Handle navigation - use programmatic navigation to ensure same-path query changes work
+  const handleNavClick = useCallback((href: string) => {
+    // Always use setLocation to ensure navigation triggers properly
+    // This fixes the issue where clicking Jobs/Active on mover-dashboard
+    // wouldn't work because wouter's Link doesn't re-navigate to same path
+    setLocation(href);
+    
+    // Also update the search state immediately for instant visual feedback
+    const newSearch = href.includes('?') ? '?' + href.split('?')[1] : '';
+    setCurrentSearch(newSearch);
+  }, [setLocation]);
 
   if (!user) return null;
 
@@ -114,26 +126,26 @@ export function MobileBottomNav() {
         {navItems.map((item) => {
           const active = isActive(item.href);
           return (
-            <Link key={item.href} href={item.href}>
-              <button
-                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg min-w-[4rem] transition-colors active:scale-95 ${
-                  active 
-                    ? "text-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-                aria-label={item.label}
-                aria-current={active ? "page" : undefined}
-              >
-                <div className={`transition-transform duration-150 ${active ? 'scale-110' : 'scale-100'}`}>
-                  {item.icon}
-                </div>
-                <span className="text-[10px] font-medium leading-tight">{item.label}</span>
-                {active && (
-                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
-                )}
-              </button>
-            </Link>
+            <button
+              key={item.href}
+              onClick={() => handleNavClick(item.href)}
+              className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg min-w-[4rem] transition-colors active:scale-95 ${
+                active 
+                  ? "text-primary" 
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+              aria-label={item.label}
+              aria-current={active ? "page" : undefined}
+            >
+              <div className={`transition-transform duration-150 ${active ? 'scale-110' : 'scale-100'}`}>
+                {item.icon}
+              </div>
+              <span className="text-[10px] font-medium leading-tight">{item.label}</span>
+              {active && (
+                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+              )}
+            </button>
           );
         })}
       </div>
