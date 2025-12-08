@@ -504,3 +504,94 @@ export type InsertMoverEarnings = z.infer<typeof insertMoverEarningsSchema>;
 export type MoverEarnings = typeof moverEarnings.$inferSelect;
 export type InsertMoverPayout = z.infer<typeof insertMoverPayoutSchema>;
 export type MoverPayout = typeof moverPayouts.$inferSelect;
+
+// ===== BOOKING STATUS FLOW =====
+// Defines the granular stages of a move for real-time tracking
+
+export const BOOKING_STATUSES = {
+  PENDING: "pending",
+  CONFIRMED: "confirmed",
+  EN_ROUTE_TO_PICKUP: "en_route_to_pickup",
+  LOADING: "loading",
+  EN_ROUTE_TO_DROPOFF: "en_route_to_dropoff",
+  UNLOADING: "unloading",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
+} as const;
+
+export type BookingStatus = typeof BOOKING_STATUSES[keyof typeof BOOKING_STATUSES];
+
+// Valid status transitions - each status can only move to specific next statuses
+export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
+  [BOOKING_STATUSES.PENDING]: [BOOKING_STATUSES.CONFIRMED, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.CONFIRMED]: [BOOKING_STATUSES.EN_ROUTE_TO_PICKUP, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.EN_ROUTE_TO_PICKUP]: [BOOKING_STATUSES.LOADING, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.LOADING]: [BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF]: [BOOKING_STATUSES.UNLOADING, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.UNLOADING]: [BOOKING_STATUSES.COMPLETED, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.COMPLETED]: [],
+  [BOOKING_STATUSES.CANCELLED]: [],
+};
+
+// Statuses that count as "active" (mover is working on the job)
+export const ACTIVE_STATUSES: BookingStatus[] = [
+  BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+  BOOKING_STATUSES.LOADING,
+  BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
+  BOOKING_STATUSES.UNLOADING,
+];
+
+// Helper to check if status transition is valid
+export function isValidStatusTransition(from: string, to: string): boolean {
+  const validTransitions = BOOKING_STATUS_TRANSITIONS[from as BookingStatus];
+  return validTransitions?.includes(to as BookingStatus) ?? false;
+}
+
+// Get next valid status(es) for a booking
+export function getNextValidStatuses(currentStatus: string): BookingStatus[] {
+  return BOOKING_STATUS_TRANSITIONS[currentStatus as BookingStatus] || [];
+}
+
+// Status display info for UI
+export const BOOKING_STATUS_INFO: Record<BookingStatus, { label: string; description: string; color: string }> = {
+  [BOOKING_STATUSES.PENDING]: { 
+    label: "Pending", 
+    description: "Waiting for mover assignment",
+    color: "yellow"
+  },
+  [BOOKING_STATUSES.CONFIRMED]: { 
+    label: "Confirmed", 
+    description: "Mover assigned, waiting to start",
+    color: "blue"
+  },
+  [BOOKING_STATUSES.EN_ROUTE_TO_PICKUP]: { 
+    label: "En Route to Pickup", 
+    description: "Mover is heading to pickup location",
+    color: "orange"
+  },
+  [BOOKING_STATUSES.LOADING]: { 
+    label: "Loading", 
+    description: "Mover arrived, loading items",
+    color: "purple"
+  },
+  [BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF]: { 
+    label: "En Route to Dropoff", 
+    description: "Mover departed with your items",
+    color: "indigo"
+  },
+  [BOOKING_STATUSES.UNLOADING]: { 
+    label: "Unloading", 
+    description: "Mover arrived at destination, unloading",
+    color: "teal"
+  },
+  [BOOKING_STATUSES.COMPLETED]: { 
+    label: "Completed", 
+    description: "Move successfully finished",
+    color: "green"
+  },
+  [BOOKING_STATUSES.CANCELLED]: { 
+    label: "Cancelled", 
+    description: "Move was cancelled",
+    color: "red"
+  },
+};

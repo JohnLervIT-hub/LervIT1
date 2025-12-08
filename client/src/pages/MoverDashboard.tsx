@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -23,6 +23,8 @@ import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
+import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidStatuses, type BookingStatus } from "@shared/schema";
+import MoveProgressIndicator from "@/components/MoveProgressIndicator";
 
 type Booking = {
   id: string;
@@ -287,14 +289,15 @@ export default function MoverDashboard() {
   const now = new Date();
   
   // Active bookings: assigned to this mover, not completed/cancelled, and not expired
-  // Exception: in_transit bookings are kept since the move is actively happening
+  // Exception: active status bookings are kept since the move is actively happening
   const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
     ?.filter((b) => {
-      const isActiveStatus = ["confirmed", "in_transit"].includes(b.status);
+      const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
       if (!isActiveStatus) return false;
-      // Keep in_transit regardless of date, filter out expired confirmed
-      if (b.status !== "in_transit" && new Date(b.preferredDate) < now) {
+      // Keep active statuses regardless of date, filter out expired confirmed
+      const isCurrentlyActive = ACTIVE_STATUSES.includes(b.status as BookingStatus) || b.status === "in_transit";
+      if (!isCurrentlyActive && new Date(b.preferredDate) < now) {
         return false;
       }
       return true;
@@ -317,7 +320,9 @@ export default function MoverDashboard() {
     ?.sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
   
   // Check if mover already has a trip in progress (to block starting multiple trips)
-  const hasActiveTrip = bookings.some((b) => b.status === "in_transit");
+  const hasActiveTrip = bookings.some((b) => 
+    b.status === "in_transit" || ACTIVE_STATUSES.includes(b.status as BookingStatus)
+  );
 
   // Get earnings data for this mover
   const { data: earnings } = useQuery<any>({
@@ -384,7 +389,7 @@ export default function MoverDashboard() {
 
   const startTripMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "in_transit" });
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: BOOKING_STATUSES.EN_ROUTE_TO_PICKUP });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to start trip");
@@ -402,6 +407,45 @@ export default function MoverDashboard() {
     onError: (error: Error) => {
       toast({
         title: "Failed to start trip",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for advancing through status stages
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ bookingId, newStatus }: { bookingId: string; newStatus: BookingStatus }) => {
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: newStatus });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update status");
+      }
+      return response.json();
+    },
+    onSuccess: (_, { bookingId, newStatus }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      
+      const statusInfo = BOOKING_STATUS_INFO[newStatus];
+      
+      // Start location sharing for active statuses
+      if (ACTIVE_STATUSES.includes(newStatus)) {
+        setLocationSharing(bookingId);
+      }
+      
+      // Stop location sharing when completed
+      if (newStatus === BOOKING_STATUSES.COMPLETED) {
+        setLocationSharing(null);
+      }
+      
+      toast({
+        title: `Status Updated: ${statusInfo?.label || newStatus}`,
+        description: statusInfo?.description || "Move status has been updated.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update status",
         description: error.message,
         variant: "destructive",
       });
@@ -509,7 +553,11 @@ export default function MoverDashboard() {
     switch (status) {
       case "pending": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
       case "confirmed": return "bg-blue-500/10 text-blue-600 border-blue-500/20";
-      case "in_transit": return "bg-primary/10 text-primary border-primary/20";
+      case "in_transit": 
+      case BOOKING_STATUSES.EN_ROUTE_TO_PICKUP: return "bg-orange-500/10 text-orange-600 border-orange-500/20";
+      case BOOKING_STATUSES.LOADING: return "bg-purple-500/10 text-purple-600 border-purple-500/20";
+      case BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF: return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+      case BOOKING_STATUSES.UNLOADING: return "bg-teal-500/10 text-teal-600 border-teal-500/20";
       case "completed": return "bg-green-500/10 text-green-600 border-green-500/20";
       case "cancelled": return "bg-red-500/10 text-red-600 border-red-500/20";
       default: return "bg-muted text-muted-foreground";
@@ -520,7 +568,11 @@ export default function MoverDashboard() {
     switch (status) {
       case "pending": return <Clock className="w-4 h-4" />;
       case "confirmed": return <CheckCircle2 className="w-4 h-4" />;
-      case "in_transit": return <TrendingUp className="w-4 h-4" />;
+      case "in_transit":
+      case BOOKING_STATUSES.EN_ROUTE_TO_PICKUP: return <Truck className="w-4 h-4" />;
+      case BOOKING_STATUSES.LOADING: return <Package className="w-4 h-4" />;
+      case BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF: return <Navigation className="w-4 h-4" />;
+      case BOOKING_STATUSES.UNLOADING: return <Package className="w-4 h-4" />;
       case "completed": return <CheckCircle2 className="w-4 h-4" />;
       case "cancelled": return <XCircle className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
@@ -531,7 +583,11 @@ export default function MoverDashboard() {
     switch (status) {
       case "pending": return "bg-amber-500";
       case "confirmed": return "bg-blue-500";
-      case "in_transit": return "bg-primary";
+      case "in_transit":
+      case BOOKING_STATUSES.EN_ROUTE_TO_PICKUP: return "bg-orange-500";
+      case BOOKING_STATUSES.LOADING: return "bg-purple-500";
+      case BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF: return "bg-blue-500";
+      case BOOKING_STATUSES.UNLOADING: return "bg-teal-500";
       case "completed": return "bg-green-500";
       case "cancelled": return "bg-red-500";
       default: return "bg-muted";
@@ -539,6 +595,8 @@ export default function MoverDashboard() {
   };
 
   const getStatusLabel = (status: string) => {
+    const info = BOOKING_STATUS_INFO[status as BookingStatus];
+    if (info) return info.label;
     return status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   };
 
@@ -879,7 +937,15 @@ export default function MoverDashboard() {
         <Separator />
         <IdentifiedItemsDisplay bookingId={booking.id} />
 
-        {(showActions || booking.status === "confirmed" || (booking.status !== "cancelled" && booking.status !== "pending")) && (
+        {/* Move Progress Indicator for active bookings */}
+        {(ACTIVE_STATUSES.includes(booking.status as BookingStatus) || booking.status === "in_transit") && (
+          <>
+            <Separator />
+            <MoveProgressIndicator currentStatus={booking.status} className="py-2" />
+          </>
+        )}
+
+        {(showActions || booking.status === "confirmed" || (booking.status !== "cancelled" && booking.status !== "pending" && booking.status !== "completed")) && (
           <>
             <Separator />
             <div className="flex flex-wrap gap-3">
@@ -895,39 +961,87 @@ export default function MoverDashboard() {
                   {acceptBookingMutation.isPending ? "Accepting..." : "Accept Booking"}
                 </Button>
               )}
+              
+              {/* Start Trip - Confirmed status */}
               {booking.status === "confirmed" && (
                 <Button
                   variant="default"
                   onClick={() => startTripMutation.mutate(booking.id)}
                   disabled={startTripMutation.isPending || hasActiveTrip}
                   data-testid={`button-start-trip-${booking.id}`}
-                  className="flex-1 sm:flex-none"
+                  className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
                   title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
                 >
-                  <Navigation className="w-4 h-4 mr-2" />
-                  {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Start Trip"}
+                  <Truck className="w-4 h-4 mr-2" />
+                  {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
                 </Button>
               )}
-              {booking.status === "in_transit" && (
-                <>
-                  <Button
-                    variant="default"
-                    onClick={() => completeBookingMutation.mutate(booking.id)}
-                    disabled={completeBookingMutation.isPending}
-                    data-testid={`button-complete-${booking.id}`}
-                    className="flex-1 sm:flex-none"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    {completeBookingMutation.isPending ? "Completing..." : "Mark Complete"}
-                  </Button>
-                  {locationSharing === booking.id && (
-                    <Badge variant="default" className="flex items-center gap-1" data-testid={`badge-sharing-location-${booking.id}`}>
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                      Sharing Location
-                    </Badge>
-                  )}
-                </>
+              
+              {/* En Route to Pickup → Loading */}
+              {(booking.status === BOOKING_STATUSES.EN_ROUTE_TO_PICKUP || booking.status === "in_transit") && (
+                <Button
+                  variant="default"
+                  onClick={() => updateStatusMutation.mutate({ bookingId: booking.id, newStatus: BOOKING_STATUSES.LOADING })}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-arrived-pickup-${booking.id}`}
+                  className="flex-1 sm:flex-none bg-purple-500 hover:bg-purple-600"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  {updateStatusMutation.isPending ? "Updating..." : "Arrived - Start Loading"}
+                </Button>
               )}
+              
+              {/* Loading → En Route to Dropoff */}
+              {booking.status === BOOKING_STATUSES.LOADING && (
+                <Button
+                  variant="default"
+                  onClick={() => updateStatusMutation.mutate({ bookingId: booking.id, newStatus: BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF })}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-depart-${booking.id}`}
+                  className="flex-1 sm:flex-none bg-blue-500 hover:bg-blue-600"
+                >
+                  <Navigation className="w-4 h-4 mr-2" />
+                  {updateStatusMutation.isPending ? "Updating..." : "Loading Complete - Depart"}
+                </Button>
+              )}
+              
+              {/* En Route to Dropoff → Unloading */}
+              {booking.status === BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF && (
+                <Button
+                  variant="default"
+                  onClick={() => updateStatusMutation.mutate({ bookingId: booking.id, newStatus: BOOKING_STATUSES.UNLOADING })}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-arrived-dropoff-${booking.id}`}
+                  className="flex-1 sm:flex-none bg-teal-500 hover:bg-teal-600"
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  {updateStatusMutation.isPending ? "Updating..." : "Arrived - Start Unloading"}
+                </Button>
+              )}
+              
+              {/* Unloading → Completed */}
+              {booking.status === BOOKING_STATUSES.UNLOADING && (
+                <Button
+                  variant="default"
+                  onClick={() => updateStatusMutation.mutate({ bookingId: booking.id, newStatus: BOOKING_STATUSES.COMPLETED })}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-complete-${booking.id}`}
+                  className="flex-1 sm:flex-none bg-green-500 hover:bg-green-600"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {updateStatusMutation.isPending ? "Completing..." : "Unloading Complete - Finish Move"}
+                </Button>
+              )}
+              
+              {/* Location sharing indicator */}
+              {locationSharing === booking.id && (
+                <Badge variant="default" className="flex items-center gap-1" data-testid={`badge-sharing-location-${booking.id}`}>
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  Sharing Location
+                </Badge>
+              )}
+              
+              {/* Message button for all active bookings */}
               {booking.status !== "cancelled" && booking.status !== "pending" && (
                 <Button
                   variant="outline"

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, MapPin, Package, Navigation, Clock, Route } from "lucide-react";
 import { Link } from "wouter";
+import MoveProgressIndicator from "@/components/MoveProgressIndicator";
+import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, type BookingStatus } from "@shared/schema";
 
 interface LocationData {
   bookingId: string;
@@ -185,13 +187,23 @@ export default function TrackTrip() {
             <h1 className="text-xl font-semibold">Track Your Move</h1>
             <p className="text-sm text-muted-foreground">Live location tracking</p>
           </div>
-          <Badge variant={locationData.status === "in_transit" ? "default" : "secondary"} data-testid={`badge-status-${locationData.status}`}>
-            {locationData.status === "in_transit" ? "In Transit" : locationData.status}
+          <Badge 
+            variant={ACTIVE_STATUSES.includes(locationData.status as BookingStatus) || locationData.status === "in_transit" ? "default" : "secondary"} 
+            data-testid={`badge-status-${locationData.status}`}
+          >
+            {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.label || locationData.status}
           </Badge>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto p-4 space-y-4">
+        {/* Move Progress Indicator */}
+        <Card>
+          <CardContent className="pt-6">
+            <MoveProgressIndicator currentStatus={locationData.status} />
+          </CardContent>
+        </Card>
+
         {/* Route Info Card */}
         {routeInfo && (
           <Card className="bg-primary/5 border-primary/20">
@@ -369,18 +381,12 @@ export default function TrackTrip() {
           </CardContent>
         </Card>
 
-        {/* Status Info */}
-        {locationData.status !== "in_transit" && (
+        {/* Status Info - Only show for non-active statuses */}
+        {!ACTIVE_STATUSES.includes(locationData.status as BookingStatus) && locationData.status !== "in_transit" && (
           <Card>
             <CardContent className="pt-6">
-              <p className="text-center text-muted-foreground">
-                {locationData.status === "completed" 
-                  ? "Your move has been completed!" 
-                  : locationData.status === "pending"
-                  ? "Waiting for mover to accept..."
-                  : locationData.status === "confirmed"
-                  ? "Mover has accepted. Trip will start soon."
-                  : "Trip status: " + locationData.status}
+              <p className="text-center text-muted-foreground" data-testid="text-status-info">
+                {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.description || `Status: ${locationData.status}`}
               </p>
             </CardContent>
           </Card>

@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
@@ -1743,8 +1743,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updates = { ...updates, preferredDate: new Date(updates.preferredDate) };
       }
       
-      // SECURITY: If status is being changed to in_transit, require authentication and verify authorization
-      if (updates.status === "in_transit") {
+      // SECURITY: Validate status transitions for the new granular booking flow
+      // Statuses: pending → confirmed → en_route_to_pickup → loading → en_route_to_dropoff → unloading → completed
+      if (updates.status) {
         if (!requireUser(req, res)) return;
         const user = (req as any).user;
         
@@ -1753,18 +1754,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ error: "Booking not found" });
         }
         
-        if (!booking.moverId) {
-          return res.status(403).json({ error: "No mover assigned to this booking" });
-        }
+        // Handle backward compatibility: treat old "in_transit" as "en_route_to_pickup"
+        const newStatus = updates.status === "in_transit" ? BOOKING_STATUSES.EN_ROUTE_TO_PICKUP : updates.status;
+        updates.status = newStatus;
         
-        const mover = await storage.getMover(booking.moverId);
-        if (!mover || mover.userId !== user.id) {
-          return res.status(403).json({ error: "You are not authorized to start this trip" });
-        }
-        
-        // Verify booking is in confirmed status before allowing in_transit
-        if (booking.status !== "confirmed") {
-          return res.status(400).json({ error: "Booking must be confirmed before starting trip" });
+        // Skip validation for confirmed status (handled by job acceptance flow)
+        if (newStatus !== BOOKING_STATUSES.CONFIRMED && newStatus !== BOOKING_STATUSES.CANCELLED) {
+          // Validate mover authorization for active status changes
+          if (!booking.moverId) {
+            return res.status(403).json({ error: "No mover assigned to this booking" });
+          }
+          
+          const mover = await storage.getMover(booking.moverId);
+          if (!mover || mover.userId !== user.id) {
+            return res.status(403).json({ error: "You are not authorized to update this booking status" });
+          }
+          
+          // Validate status transition (backward compat: treat "in_transit" as "en_route_to_pickup")
+          const currentStatus = booking.status === "in_transit" ? BOOKING_STATUSES.EN_ROUTE_TO_PICKUP : booking.status;
+          
+          if (!isValidStatusTransition(currentStatus, newStatus)) {
+            const validNext = getNextValidStatuses(currentStatus);
+            const validLabels = validNext.map(s => BOOKING_STATUS_INFO[s]?.label || s).join(", ");
+            return res.status(400).json({ 
+              error: `Invalid status transition from "${currentStatus}" to "${newStatus}". Valid next statuses: ${validLabels}` 
+            });
+          }
         }
       }
       
