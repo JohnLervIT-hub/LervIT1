@@ -197,9 +197,37 @@ export default function MoverDashboard() {
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<any>(null);
   
+  // Track URL search params for tab sync (wouter's location only tracks pathname)
+  const [searchParams, setSearchParams] = useState(window.location.search);
+  
+  // Listen for URL changes including query params
+  useEffect(() => {
+    const updateSearch = () => setSearchParams(window.location.search);
+    
+    // Listen for popstate (browser back/forward)
+    window.addEventListener('popstate', updateSearch);
+    
+    // Listen for custom navigation events from MobileBottomNav
+    // This is needed because wouter's setLocation doesn't trigger popstate for same-path changes
+    const handleCustomNav = (e: CustomEvent) => {
+      if (e.detail?.search !== undefined) {
+        setSearchParams(e.detail.search);
+      }
+    };
+    window.addEventListener('lervit-navigation', handleCustomNav as EventListener);
+    
+    // Check on location change from wouter
+    updateSearch();
+    
+    return () => {
+      window.removeEventListener('popstate', updateSearch);
+      window.removeEventListener('lervit-navigation', handleCustomNav as EventListener);
+    };
+  }, [location]);
+  
   // Sync tabs with URL query params for mobile bottom nav integration
   const getTabFromUrl = () => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchParams);
     const tab = params.get('tab');
     // Map URL param values to actual tab values
     if (tab === 'active') return 'my-bookings';
@@ -215,7 +243,7 @@ export default function MoverDashboard() {
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
-  }, [location]);
+  }, [searchParams]);
   
   // Update URL when tab changes (for deep linking and mobile nav sync)
   const handleTabChange = (tab: string) => {

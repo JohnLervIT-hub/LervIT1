@@ -52,6 +52,10 @@ export function MobileBottomNav() {
     // Also update the search state immediately for instant visual feedback
     const newSearch = href.includes('?') ? '?' + href.split('?')[1] : '';
     setCurrentSearch(newSearch);
+    
+    // Dispatch custom event to notify other components (like MoverDashboard) of URL change
+    // This is needed because wouter's setLocation doesn't trigger popstate for same-path changes
+    window.dispatchEvent(new CustomEvent('lervit-navigation', { detail: { href, search: newSearch } }));
   }, [setLocation]);
 
   if (!user) return null;
