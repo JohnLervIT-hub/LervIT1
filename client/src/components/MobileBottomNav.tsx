@@ -1,5 +1,6 @@
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useState, useEffect } from "react";
 import { 
   Home, 
   Calendar, 
@@ -24,6 +25,22 @@ interface NavItem {
 export function MobileBottomNav() {
   const { user } = useAuth();
   const [location] = useLocation();
+  
+  // Track full URL including query params for proper active state detection
+  const [currentSearch, setCurrentSearch] = useState(window.location.search);
+  
+  // Update search params when URL changes (handles both navigation and history.replaceState)
+  useEffect(() => {
+    const updateSearch = () => setCurrentSearch(window.location.search);
+    
+    // Listen for popstate (browser back/forward)
+    window.addEventListener('popstate', updateSearch);
+    
+    // Also check on location change from wouter
+    updateSearch();
+    
+    return () => window.removeEventListener('popstate', updateSearch);
+  }, [location]);
 
   if (!user) return null;
 
@@ -64,19 +81,22 @@ export function MobileBottomNav() {
   const isActive = (href: string) => {
     const [hrefPath, hrefQuery] = href.split("?");
     const currentPath = location.split("?")[0];
-    const currentQuery = window.location.search;
     
+    // For items with query params (e.g., ?tab=active, ?tab=payouts)
     if (hrefQuery) {
-      return currentPath === hrefPath && currentQuery.includes(hrefQuery);
+      return currentPath === hrefPath && currentSearch.includes(hrefQuery);
     }
     
+    // For items without query params (e.g., /mover-dashboard for "Jobs")
+    // Check if any other nav item with query params for the same path is currently active
     const otherTabsForThisPath = navItems
       .filter(item => item.href !== href && item.href.startsWith(hrefPath + "?"))
       .some(item => {
         const itemQuery = item.href.split("?")[1];
-        return currentQuery.includes(itemQuery);
+        return currentSearch.includes(itemQuery);
       });
     
+    // If another tab is active, this base item should not be active
     if (otherTabsForThisPath) {
       return false;
     }

@@ -217,16 +217,16 @@ export default function MoverDashboard() {
     }
   }, [location]);
   
-  // Update URL when tab changes (for deep linking)
+  // Update URL when tab changes (for deep linking and mobile nav sync)
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    // Update URL without full navigation
+    // Use setLocation to trigger wouter navigation so MobileBottomNav updates
     if (tab === 'my-bookings') {
-      window.history.replaceState(null, '', '/mover-dashboard?tab=active');
+      setLocation('/mover-dashboard?tab=active', { replace: true });
     } else if (tab === 'payouts') {
-      window.history.replaceState(null, '', '/mover-dashboard?tab=payouts');
+      setLocation('/mover-dashboard?tab=payouts', { replace: true });
     } else {
-      window.history.replaceState(null, '', '/mover-dashboard');
+      setLocation('/mover-dashboard', { replace: true });
     }
   };
   
