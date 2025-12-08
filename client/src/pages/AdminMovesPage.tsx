@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   Table, 
   TableBody, 
@@ -20,9 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type Booking = {
   id: string;
@@ -48,15 +59,58 @@ type Booking = {
 
 export default function AdminMovesPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get("status") || "all";
   
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [editPickup, setEditPickup] = useState("");
+  const [editDropoff, setEditDropoff] = useState("");
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
+
+  const updateAddressMutation = useMutation({
+    mutationFn: async ({ bookingId, pickupAddress, dropoffAddress }: { bookingId: string; pickupAddress: string; dropoffAddress: string }) => {
+      return apiRequest("PATCH", `/api/admin/bookings/${bookingId}/addresses`, {
+        pickupAddress,
+        dropoffAddress,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Addresses Updated",
+        description: "The booking addresses have been successfully updated.",
+      });
+      setEditingBooking(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const openEditDialog = (booking: Booking) => {
+    setEditingBooking(booking);
+    setEditPickup(booking.pickupAddress);
+    setEditDropoff(booking.dropoffAddress);
+  };
+
+  const handleSaveAddresses = () => {
+    if (!editingBooking) return;
+    updateAddressMutation.mutate({
+      bookingId: editingBooking.id,
+      pickupAddress: editPickup,
+      dropoffAddress: editDropoff,
+    });
+  };
 
   if (!user || user.role !== "admin") {
     return (
@@ -207,6 +261,7 @@ export default function AdminMovesPage() {
                       <TableHead>Date</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -231,6 +286,17 @@ export default function AdminMovesPage() {
                           {b.price ? `$${parseFloat(b.price).toFixed(2)}` : "N/A"}
                         </TableCell>
                         <TableCell>{getStatusBadge(b.status)}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDialog(b)}
+                            data-testid={`button-edit-booking-${b.id}`}
+                          >
+                            <Edit className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -245,6 +311,62 @@ export default function AdminMovesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Address Dialog */}
+      <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary" />
+              Edit Booking Addresses
+            </DialogTitle>
+            <DialogDescription>
+              Update the pickup and dropoff addresses for this booking. Distance will be recalculated automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="pickup-address">Pickup Address</Label>
+              <Input
+                id="pickup-address"
+                value={editPickup}
+                onChange={(e) => setEditPickup(e.target.value)}
+                placeholder="Enter pickup address"
+                data-testid="input-edit-pickup"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dropoff-address">Dropoff Address</Label>
+              <Input
+                id="dropoff-address"
+                value={editDropoff}
+                onChange={(e) => setEditDropoff(e.target.value)}
+                placeholder="Enter dropoff address"
+                data-testid="input-edit-dropoff"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingBooking(null)}
+              data-testid="button-cancel-edit"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveAddresses}
+              disabled={updateAddressMutation.isPending || !editPickup.trim() || !editDropoff.trim()}
+              data-testid="button-save-addresses"
+            >
+              {updateAddressMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

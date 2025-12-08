@@ -1793,6 +1793,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin-only endpoint to update booking addresses
+  app.patch("/api/admin/bookings/:id/addresses", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // Only admins can update addresses
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const addressSchema = z.object({
+        pickupAddress: z.string().min(1, "Pickup address is required").optional(),
+        dropoffAddress: z.string().min(1, "Dropoff address is required").optional(),
+      });
+      
+      const updates = validateBody(addressSchema, req.body);
+      
+      if (!updates.pickupAddress && !updates.dropoffAddress) {
+        return res.status(400).json({ error: "At least one address must be provided" });
+      }
+      
+      const bookingId = req.params.id;
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Build update object with geocoding for changed addresses
+      const updateData: any = {};
+      
+      if (updates.pickupAddress) {
+        updateData.pickupAddress = updates.pickupAddress;
+        // Re-geocode pickup address
+        const pickupGeo = await geocodeAddress(updates.pickupAddress);
+        if (pickupGeo.success) {
+          updateData.pickupLatitude = pickupGeo.coordinates.lat;
+          updateData.pickupLongitude = pickupGeo.coordinates.lng;
+        }
+      }
+      
+      if (updates.dropoffAddress) {
+        updateData.dropoffAddress = updates.dropoffAddress;
+        // Re-geocode dropoff address
+        const dropoffGeo = await geocodeAddress(updates.dropoffAddress);
+        if (dropoffGeo.success) {
+          updateData.dropoffLatitude = dropoffGeo.coordinates.lat;
+          updateData.dropoffLongitude = dropoffGeo.coordinates.lng;
+        }
+      }
+      
+      // Recalculate distance if both addresses are available
+      const finalPickup = updates.pickupAddress || existingBooking.pickupAddress;
+      const finalDropoff = updates.dropoffAddress || existingBooking.dropoffAddress;
+      
+      const pickupGeo = await geocodeAddress(finalPickup);
+      const dropoffGeo = await geocodeAddress(finalDropoff);
+      
+      if (pickupGeo.success && dropoffGeo.success) {
+        const distanceResult = await calculateDistance(
+          pickupGeo.coordinates.lat,
+          pickupGeo.coordinates.lng,
+          dropoffGeo.coordinates.lat,
+          dropoffGeo.coordinates.lng
+        );
+        updateData.distance = distanceResult.distanceKm.toFixed(2);
+      }
+      
+      const updatedBooking = await storage.updateBooking(bookingId, updateData);
+      
+      console.log(`[Admin] Booking ${bookingId} addresses updated by admin ${user.email}`);
+      
+      res.json(updatedBooking);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
   // ===== PAYMENT ROUTES =====
   
   // Create payment intent for a booking
