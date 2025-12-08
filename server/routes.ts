@@ -1694,8 +1694,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
-      // Validate allowed update fields (removed moverId - must use /accept endpoint)
+      // Validate allowed update fields
       const updateSchema = z.object({
+        moverId: z.string().optional(),
         status: z.string().optional(),
         preferredDate: z.union([z.string(), z.date()]).optional(),
         distance: z.string().optional(),
