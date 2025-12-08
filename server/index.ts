@@ -23,9 +23,13 @@ app.set('trust proxy', 1);
 // Session configuration with PostgreSQL store
 const PgStore = pgSession(session);
 
+// Determine if we're in production
+const isProduction = process.env.NODE_ENV === 'production';
+
 // Create session store with error handling
 let sessionStore: InstanceType<typeof PgStore>;
 try {
+  console.log("Initializing PostgreSQL session store...");
   sessionStore = new PgStore({
     pool: pool,
     tableName: 'user_sessions',
@@ -34,8 +38,13 @@ try {
       console.error("Session store error:", error);
     },
   });
+  console.log("Session store initialized successfully");
 } catch (error) {
-  console.error("Failed to create session store:", error);
+  console.error("FATAL: Failed to create session store:", error);
+  console.error("Session store initialization details:", {
+    hasPool: !!pool,
+    tableName: 'user_sessions',
+  });
   process.exit(1);
 }
 
@@ -45,10 +54,10 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: true, // Always true since Replit uses HTTPS
+    secure: isProduction, // Only secure in production (HTTPS)
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'none', // Required for cross-origin requests (mobile browser to Replit domain)
+    sameSite: 'lax', // More compatible with deployment environments
   },
   name: 'lervit.sid',
 }));
@@ -139,11 +148,9 @@ app.use((req, res, next) => {
     // It is the only port that is not firewalled.
     const port = parseInt(process.env.PORT || '5000', 10);
     
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
+    console.log(`Starting server on port ${port} (NODE_ENV: ${process.env.NODE_ENV || 'development'})...`);
+    
+    server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
 
