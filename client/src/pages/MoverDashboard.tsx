@@ -215,9 +215,21 @@ export default function MoverDashboard() {
   });
 
   // Client-side filtering: separate assigned from available bookings
-  const bookings = allBookings?.filter((b) => b.moverId === mover?.id) || [];
+  // Sort by preferredDate (soonest first) to show hierarchical order
+  const bookings = allBookings
+    ?.filter((b) => b.moverId === mover?.id)
+    ?.sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
+  
   // Show both "pending" and "confirmed" (paid) jobs that don't have a mover assigned yet
-  const availableBookings = allBookings?.filter((b) => (b.status === "pending" || b.status === "confirmed") && !b.moverId) || [];
+  // Filter out expired pickup schedules (preferredDate is in the past)
+  const now = new Date();
+  const availableBookings = allBookings
+    ?.filter((b) => (b.status === "pending" || b.status === "confirmed") && !b.moverId)
+    ?.filter((b) => new Date(b.preferredDate) >= now) // Hide expired pickups
+    ?.sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
+  
+  // Check if mover already has a trip in progress (to block starting multiple trips)
+  const hasActiveTrip = bookings.some((b) => b.status === "in_transit");
 
   // Get earnings data for this mover
   const { data: earnings } = useQuery<any>({
@@ -750,12 +762,13 @@ export default function MoverDashboard() {
                 <Button
                   variant="default"
                   onClick={() => startTripMutation.mutate(booking.id)}
-                  disabled={startTripMutation.isPending}
+                  disabled={startTripMutation.isPending || hasActiveTrip}
                   data-testid={`button-start-trip-${booking.id}`}
                   className="flex-1 sm:flex-none"
+                  title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
                 >
                   <Navigation className="w-4 h-4 mr-2" />
-                  {startTripMutation.isPending ? "Starting..." : "Start Trip"}
+                  {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Start Trip"}
                 </Button>
               )}
               {booking.status === "in_transit" && (

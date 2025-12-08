@@ -30,6 +30,7 @@ export interface IStorage {
   getMessagesByBooking(bookingId: string): Promise<Message[]>;
   createMessage(insertMessage: InsertMessage): Promise<Message>;
   getUnreadMessagesForUser(userId: string): Promise<{ bookingId: string; count: number; latestMessage: Message }[]>;
+  markMessagesAsRead(bookingId: string, userId: string): Promise<void>;
 
   // Reviews
   getReviewsByMover(moverId: string): Promise<Review[]>;
@@ -165,11 +166,12 @@ class PostgresStorage implements IStorage {
     const unreadByBooking: { bookingId: string; count: number; latestMessage: Message }[] = [];
     
     for (const booking of userBookings) {
-      // Get messages not sent by this user (these are "unread" from their perspective)
+      // Get messages not sent by this user AND not yet read (readAt is null)
       const unreadMessages = await db.select().from(messages)
         .where(and(
           eq(messages.bookingId, booking.id),
-          sql`${messages.senderId} != ${userId}`
+          sql`${messages.senderId} != ${userId}`,
+          sql`${messages.readAt} IS NULL`
         ))
         .orderBy(desc(messages.createdAt));
       
@@ -183,6 +185,17 @@ class PostgresStorage implements IStorage {
     }
     
     return unreadByBooking;
+  }
+
+  async markMessagesAsRead(bookingId: string, userId: string): Promise<void> {
+    // Mark all messages in this booking as read for the user (except their own messages)
+    await db.update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(messages.bookingId, bookingId),
+        sql`${messages.senderId} != ${userId}`,
+        sql`${messages.readAt} IS NULL`
+      ));
   }
 
   // Reviews

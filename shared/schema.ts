@@ -125,6 +125,7 @@ export const messages = pgTable("messages", {
   senderId: varchar("sender_id").references(() => users.id).notNull(),
   text: text("text").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  readAt: timestamp("read_at"),
 }, (table) => ({
   bookingIdIdx: index("messages_booking_id_idx").on(table.bookingId),
 }));

@@ -162,7 +162,7 @@ export default function CustomerDashboard() {
     switch (status) {
       case "pending": return "bg-amber-500/10 text-amber-600";
       case "confirmed": return "bg-blue-500/10 text-blue-600";
-      case "in_transit": return "bg-primary/10 text-primary";
+      case "in_transit": return "bg-green-500/10 text-green-600"; // Green for in-progress moves
       case "completed": return "bg-green-500/10 text-green-600";
       case "cancelled": return "bg-red-500/10 text-red-600";
       default: return "bg-muted text-muted-foreground";
@@ -317,7 +317,15 @@ export default function CustomerDashboard() {
               </Card>
             ) : (
               activeBookings.map((booking) => (
-                <Card key={booking.id} className="overflow-hidden" data-testid={`card-booking-${booking.id}`}>
+                <Card 
+                  key={booking.id} 
+                  className={`overflow-hidden ${
+                    booking.status === "in_transit" 
+                      ? "border-2 border-green-500/50 bg-gradient-to-br from-green-500/5 to-transparent" 
+                      : ""
+                  }`} 
+                  data-testid={`card-booking-${booking.id}`}
+                >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div>

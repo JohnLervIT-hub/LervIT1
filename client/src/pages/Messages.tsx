@@ -57,6 +57,30 @@ export default function Messages() {
     refetchInterval: 3000,
   });
 
+  // Mark messages as read when viewing the conversation
+  const markAsReadMutation = useMutation({
+    mutationFn: async (targetBookingId: string) => {
+      return apiRequest("POST", `/api/messages/${targetBookingId}/mark-read`, {});
+    },
+    onSuccess: () => {
+      // Invalidate notifications to update the badge count
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/notifications"] });
+    },
+  });
+
+  // Mark messages as read on component mount and when new messages arrive
+  useEffect(() => {
+    // Guard: only run when bookingId is defined, messages exist, and mutation isn't already pending
+    if (!bookingId || !messages || messages.length === 0 || markAsReadMutation.isPending) {
+      return;
+    }
+    // Only mark as read if there are messages from others (not self)
+    const hasOtherMessages = messages.some(m => m.senderId !== user?.id);
+    if (hasOtherMessages) {
+      markAsReadMutation.mutate(bookingId);
+    }
+  }, [bookingId, messages?.length, user?.id]);
+
   const sendMessageMutation = useMutation({
     mutationFn: async (text: string) => {
       return apiRequest("POST", "/api/messages", {

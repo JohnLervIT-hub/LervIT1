@@ -2435,6 +2435,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark messages as read for a specific booking
+  app.post("/api/messages/:bookingId/mark-read", async (req: Request, res: Response) => {
+    try {
+      if (!req.session?.userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const { bookingId } = req.params;
+      const userId = req.session.userId;
+      
+      await storage.markMessagesAsRead(bookingId, userId);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ===== EARNINGS ROUTES =====
   app.get("/api/movers/:moverId/earnings", async (req: Request, res: Response) => {
     try {
