@@ -609,6 +609,7 @@ export default function CustomerProfile() {
                         disabled={deleteCardMutation.isPending}
                         className="text-destructive hover:text-destructive"
                         data-testid={`button-delete-card-${card.id}`}
+                        aria-label="Delete payment card"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

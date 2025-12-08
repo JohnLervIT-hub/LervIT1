@@ -102,7 +102,7 @@ export default function Header() {
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="button-user-menu">
+                  <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="button-user-menu" aria-label="User menu">
                     <User className="w-5 h-5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -151,6 +151,7 @@ export default function Header() {
             className="md:hidden hover-elevate active-elevate-2"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             data-testid="button-mobile-menu"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           >
             <Menu className="w-6 h-6" />
           </Button>

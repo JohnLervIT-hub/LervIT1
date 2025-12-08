@@ -455,6 +455,7 @@ export default function AdminSupportDashboard() {
                                       onClick={() => aiAnalyzeMutation.mutate(ticket.id)}
                                       disabled={aiAnalyzeMutation.isPending}
                                       data-testid="button-ai-refresh"
+                                      aria-label="Refresh AI analysis"
                                     >
                                       <RefreshCw className="w-4 h-4" />
                                     </Button>

@@ -822,6 +822,7 @@ export default function MoverDashboard() {
                 data-testid="button-mover-settings"
                 className="rounded-full"
                 title="Account Settings"
+                aria-label="Account Settings"
               >
                 <Users className="w-4 h-4" />
               </Button>
@@ -832,6 +833,7 @@ export default function MoverDashboard() {
                 data-testid="button-edit-profile"
                 className="rounded-full"
                 title="Vehicle & Business Profile"
+                aria-label="Vehicle & Business Profile"
               >
                 <Settings className="w-4 h-4" />
               </Button>

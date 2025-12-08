@@ -103,7 +103,7 @@ export default function LandingPage() {
               </Link>
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
+                  <Button variant="ghost" size="icon" data-testid="button-mobile-menu" aria-label="Open navigation menu">
                     <Menu className="w-5 h-5" />
                   </Button>
                 </SheetTrigger>

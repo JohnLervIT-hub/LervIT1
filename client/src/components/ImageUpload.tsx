@@ -344,6 +344,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
                   className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                   onClick={() => removeImage(index)}
                   data-testid={`button-remove-image-${index}`}
+                  aria-label={`Remove image ${index + 1}`}
                 >
                   <X className="w-3 h-3" />
                 </Button>
