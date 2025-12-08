@@ -84,6 +84,15 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 *   **Account Lockout Protection:** After 4 consecutive failed login attempts, accounts are automatically locked for 30 minutes. The login page displays remaining attempts warnings (when ≤2 attempts left) and clear lockout messages with time remaining. Admins can manually lock/unlock accounts via `/api/admin/users/:id/lock` and `/api/admin/users/:id/unlock` endpoints. Database tracks `failedLoginAttempts`, `lockedUntil`, `lockedByAdmin`, and `lockReason` fields on users table.
 *   **API Key Protection:** OpenAI and SerpAPI services fail gracefully when keys are missing, returning fallback values instead of crashing.
 
+## Production Stability
+
+*   **Health Check Endpoint:** `/health` responds immediately (no DB queries) for deployment monitoring and load balancer health checks.
+*   **Graceful Shutdown:** SIGTERM/SIGINT handlers ensure clean server shutdown, closing HTTP connections and database pools properly with 30-second timeout.
+*   **Global Error Handler:** Catches unhandled Express errors, logs them with stack traces (dev only), and returns safe JSON responses without crashing the process.
+*   **Unhandled Exception Protection:** Global handlers for `unhandledRejection` and `uncaughtException` prevent process crashes from async errors.
+*   **Non-Blocking DB Verification:** Database connection is verified after server starts listening, allowing health checks to pass even during DB startup.
+*   **Mobile Navigation Sync:** URL query params properly sync between dashboard tabs and mobile bottom navigation using wouter's setLocation with state tracking.
+
 ## Known Technical Debt
 
 *   **Google Maps PlacesService Deprecation:** Browser console shows warning about migrating from `google.maps.places.PlacesService` to `google.maps.places.Place`. The current implementation works but should be updated before March 2026 deprecation deadline.

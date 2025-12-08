@@ -125,9 +125,14 @@ app.use((req, res, next) => {
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
+      
+      // Log the error for debugging (don't expose stack in production)
+      console.error(`[ERROR] ${status}: ${message}`, process.env.NODE_ENV !== 'production' ? err.stack : '');
 
-      res.status(status).json({ message });
-      throw err;
+      // Send response but don't re-throw (would crash the process)
+      if (!res.headersSent) {
+        res.status(status).json({ message });
+      }
     });
 
     // importantly only setup vite in development and after
@@ -171,8 +176,48 @@ app.use((req, res, next) => {
       process.exit(1);
     });
 
+    // Graceful shutdown handler for production stability
+    const gracefulShutdown = (signal: string) => {
+      console.log(`\n${signal} received. Initiating graceful shutdown...`);
+      
+      server.close(() => {
+        console.log('HTTP server closed');
+        
+        // Close database pool
+        pool.end().then(() => {
+          console.log('Database pool closed');
+          process.exit(0);
+        }).catch((err) => {
+          console.error('Error closing database pool:', err);
+          process.exit(1);
+        });
+      });
+      
+      // Force shutdown after 30 seconds
+      setTimeout(() => {
+        console.error('Forced shutdown after timeout');
+        process.exit(1);
+      }, 30000);
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
   } catch (error) {
     console.error("FATAL: Server initialization failed:", error);
     process.exit(1);
   }
 })();
+
+// Global handlers for unhandled errors (prevents process crashes)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL] Unhandled Promise Rejection:', reason);
+  // Don't exit - log and continue
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error);
+  // For uncaught exceptions, we should exit after logging
+  // But give time for logs to flush
+  setTimeout(() => process.exit(1), 1000);
+});
