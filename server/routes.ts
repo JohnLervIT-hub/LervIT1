@@ -3646,7 +3646,17 @@ Respond with VALID JSON only:
       
       const movers = await storage.getMovers({ userId: user.id });
       if (!movers.length) {
-        return res.status(404).json({ error: "Mover profile not found" });
+        // Return empty summary when no mover profile exists
+        return res.json({
+          pendingEarnings: "0.00",
+          availableBalance: "0.00",
+          totalPaidOut: "0.00",
+          totalEarnings: "0.00",
+          completedJobs: 0,
+          platformFeePercent: PLATFORM_COMMISSION_PERCENT,
+          payoutAccount: { hasAccount: false },
+          recentPayouts: [],
+        });
       }
       const mover = movers[0];
       
@@ -3720,7 +3730,8 @@ Respond with VALID JSON only:
       
       const movers = await storage.getMovers({ userId: user.id });
       if (!movers.length) {
-        return res.status(404).json({ error: "Mover profile not found" });
+        // Return empty array when no mover profile exists
+        return res.json([]);
       }
       const mover = movers[0];
       
