@@ -887,7 +887,7 @@ export default function MoverDashboard() {
               </div>
               <Button 
                 size="sm"
-                onClick={() => setLocation("/mover-profile-setup")}
+                onClick={() => setLocation("/mover-profile")}
                 data-testid="button-setup-profile-banner"
                 className="rounded-full"
               >
