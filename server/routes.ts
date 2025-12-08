@@ -481,13 +481,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No file uploaded" });
       }
       
+      // Read file from disk (multer saves to disk with diskStorage)
+      const fileBuffer = fs.readFileSync(file.path);
+      
       // Upload to object storage
-      const objectStorage = ObjectStorageService.getInstance();
-      const fileName = `avatars/${user.id}-${Date.now()}${path.extname(file.originalname)}`;
-      const uploadResult = await objectStorage.uploadFile(file.buffer, fileName, file.mimetype);
+      const objectStorage = new ObjectStorageService();
+      const avatarUrl = await objectStorage.uploadBuffer(
+        fileBuffer,
+        `avatar-${user.id}${path.extname(file.originalname)}`,
+        file.mimetype,
+        user.id
+      );
+      
+      // Clean up local file
+      fs.unlinkSync(file.path);
       
       // Update user with avatar URL
-      const avatarUrl = `/objects/${fileName}`;
       const updatedUser = await storage.updateUser(user.id, { avatarUrl });
       
       if (!updatedUser) {
