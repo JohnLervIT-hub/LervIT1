@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,26 +20,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, ArrowLeft, Search, Shield, Truck, User } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 
-type User = {
+type UserType = {
   id: string;
   email: string;
   name: string;
   role: string;
+  phone?: string;
   createdAt: string;
+};
+
+type Booking = {
+  id: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  preferredDate: string;
+  status: string;
+  price: string;
+  loadSize: string;
+  customerId: string;
+  moverId?: string;
+  mover?: { user?: { name: string } };
+  customer?: { name: string };
 };
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
 
-  const { data: users, isLoading } = useQuery<User[]>({
+  const { data: users, isLoading } = useQuery<UserType[]>({
     queryKey: ["/api/users"],
   });
+
+  // Fetch all bookings for admin view
+  const { data: allBookings } = useQuery<Booking[]>({
+    queryKey: ["/api/bookings"],
+  });
+
+  // Get user's bookings (as customer or mover)
+  const getUserBookings = (userId: string, role: string) => {
+    if (!allBookings) return [];
+    if (role === "customer") {
+      return allBookings.filter(b => b.customerId === userId);
+    } else if (role === "mover") {
+      return allBookings.filter(b => b.moverId === userId);
+    }
+    return [];
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { color: string; icon: any }> = {
+      pending: { color: "bg-amber-500/10 text-amber-600", icon: Clock },
+      confirmed: { color: "bg-blue-500/10 text-blue-600", icon: CheckCircle },
+      en_route_to_pickup: { color: "bg-green-500/10 text-green-600", icon: Truck },
+      loading: { color: "bg-green-500/10 text-green-600", icon: Package },
+      en_route_to_dropoff: { color: "bg-green-500/10 text-green-600", icon: Truck },
+      unloading: { color: "bg-green-500/10 text-green-600", icon: Package },
+      completed: { color: "bg-green-500/10 text-green-600", icon: CheckCircle },
+      cancelled: { color: "bg-red-500/10 text-red-600", icon: Clock },
+    };
+    const config = statusConfig[status] || { color: "bg-muted text-muted-foreground", icon: Clock };
+    const Icon = config.icon;
+    return (
+      <Badge className={`${config.color} gap-1`}>
+        <Icon className="w-3 h-3" />
+        {status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+      </Badge>
+    );
+  };
 
   if (!user || user.role !== "admin") {
     return (
@@ -182,11 +244,17 @@ export default function AdminUsersPage() {
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Joined</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.map((u) => (
-                      <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
+                      <TableRow 
+                        key={u.id} 
+                        data-testid={`row-user-${u.id}`}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setSelectedUser(u)}
+                      >
                         <TableCell className="font-medium">
                           {u.name || "Unknown User"}
                         </TableCell>
@@ -194,6 +262,20 @@ export default function AdminUsersPage() {
                         <TableCell>{getRoleBadge(u.role)}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {u.createdAt ? format(new Date(u.createdAt), "MMM d, yyyy") : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUser(u);
+                            }}
+                            data-testid={`button-view-user-${u.id}`}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            View
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -209,6 +291,134 @@ export default function AdminUsersPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* User Details Dialog */}
+      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold">
+                {selectedUser?.name?.charAt(0)?.toUpperCase() || "?"}
+              </div>
+              <div>
+                <span>{selectedUser?.name || "Unknown User"}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  {selectedUser && getRoleBadge(selectedUser.role)}
+                </div>
+              </div>
+            </DialogTitle>
+            <DialogDescription>
+              User profile and activity details
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedUser && (
+            <Tabs defaultValue="profile" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="profile" data-testid="tab-user-profile">Profile</TabsTrigger>
+                <TabsTrigger value="activity" data-testid="tab-user-activity">Activity</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="profile" className="mt-4">
+                <Card>
+                  <CardContent className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Email</p>
+                        <p className="font-medium">{selectedUser.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Phone</p>
+                        <p className="font-medium">{selectedUser.phone || "Not provided"}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Role</p>
+                        <p className="font-medium capitalize">{selectedUser.role}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Member Since</p>
+                        <p className="font-medium">
+                          {selectedUser.createdAt ? format(new Date(selectedUser.createdAt), "MMM d, yyyy") : "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">User ID</p>
+                      <p className="font-mono text-xs text-muted-foreground">{selectedUser.id}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="activity" className="mt-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">
+                      {selectedUser.role === "customer" ? "Bookings" : selectedUser.role === "mover" ? "Jobs" : "Activity"}
+                    </CardTitle>
+                    <CardDescription>
+                      {selectedUser.role === "customer" 
+                        ? "All moves requested by this customer" 
+                        : selectedUser.role === "mover" 
+                        ? "All jobs assigned to this mover"
+                        : "No activity to show for admins"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <ScrollArea className="h-[300px]">
+                      {selectedUser.role === "admin" ? (
+                        <div className="p-4 text-center text-muted-foreground">
+                          Admin users don't have booking activity
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {getUserBookings(selectedUser.id, selectedUser.role).length === 0 ? (
+                            <div className="p-4 text-center text-muted-foreground">
+                              No {selectedUser.role === "customer" ? "bookings" : "jobs"} found
+                            </div>
+                          ) : (
+                            getUserBookings(selectedUser.id, selectedUser.role)
+                              .sort((a, b) => new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime())
+                              .map((booking) => (
+                                <div key={booking.id} className="p-4 hover:bg-muted/50" data-testid={`activity-booking-${booking.id}`}>
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                                      <span className="font-medium">
+                                        {format(new Date(booking.preferredDate), "MMM d, yyyy")}
+                                      </span>
+                                    </div>
+                                    {getStatusBadge(booking.status)}
+                                  </div>
+                                  <div className="space-y-1 text-sm">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                      <MapPin className="w-3 h-3 text-green-600" />
+                                      <span className="line-clamp-1">{booking.pickupAddress}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                      <MapPin className="w-3 h-3 text-primary" />
+                                      <span className="line-clamp-1">{booking.dropoffAddress}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between mt-2 pt-2 border-t">
+                                    <span className="text-sm text-muted-foreground capitalize">{booking.loadSize} load</span>
+                                    <span className="font-semibold text-green-600">
+                                      ${parseFloat(booking.price || "0").toFixed(2)} CAD
+                                    </span>
+                                  </div>
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
