@@ -205,7 +205,7 @@ export default function CustomerDashboard() {
       case "en_route_to_dropoff":
       case "unloading":
       case "in_transit":
-        return { text: "Track your move", icon: TrendingUp, action: () => setLocation(`/track/${booking.id}`) };
+        return { text: "Track your move", icon: TrendingUp, action: () => setLocation(`/track-trip/${booking.id}`) };
       default:
         return null;
     }
