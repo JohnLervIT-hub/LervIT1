@@ -120,7 +120,7 @@ export default function Signup() {
                 aria-invalid={!!getFieldError('name')}
                 aria-describedby={getFieldError('name') ? 'name-error' : undefined}
               />
-              <FormFieldError message={getFieldError('name')} />
+              <FormFieldError id="name-error" message={getFieldError('name')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -137,7 +137,7 @@ export default function Signup() {
                 aria-invalid={!!getFieldError('email')}
                 aria-describedby={getFieldError('email') ? 'email-error' : undefined}
               />
-              <FormFieldError message={getFieldError('email')} />
+              <FormFieldError id="email-error" message={getFieldError('email')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone (optional)</Label>
@@ -177,7 +177,7 @@ export default function Signup() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <FormFieldError message={getFieldError('password')} />
+              <FormFieldError id="password-error" message={getFieldError('password')} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">I want to</Label>

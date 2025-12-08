@@ -19,6 +19,14 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 - **AdminVerificationDashboard:** Blue gradient header with stats (Total Drivers, Approved, Pending, Needs Attention)
 - **AdminSupportDashboard:** Purple gradient header with ticket stats (Total, Open, In Progress, Resolved)
 
+**UX/Accessibility Improvements:**
+- **DashboardSkeleton Component:** Reusable loading skeleton with stat cards, booking cards, and CTA pills for consistent loading states across Customer, Mover, and Admin dashboards
+- **ErrorBoundary Component:** Graceful error handling with fallback UI, "Try Again" and "Go Home" buttons, and development-mode error details
+- **FormFieldError Component:** Accessible inline form validation with proper aria-describedby linking, aria-live="polite" for screen readers, and role="alert" for error announcements
+- **Sticky Mobile Progress Bar:** Booking flow (RequestMove) shows a fixed progress indicator on mobile devices with step count and progress bar
+- **Icon Button Accessibility:** All icon-only buttons now include aria-labels for screen reader support (Header, MoverDashboard, TrackTrip, LandingPage, AdminSupportDashboard, CustomerProfile, ImageUpload)
+- **Currency Formatting Utility:** `client/src/lib/currency.ts` provides formatCurrency(), formatCurrencyCompact(), formatCurrencyWhole() for global scalability with multi-currency support (CAD, USD, EUR, GBP)
+
 ### Technical Implementations
 *   **Frontend:** Built with React 18+ (TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS). Authentication state is managed via AuthContext, and server state with React Query.
 *   **Backend:** Utilizes Express.js (Node.js, TypeScript, ESM) with a RESTful API design, Zod for validation, and custom SHA-256 hashing for authentication.
