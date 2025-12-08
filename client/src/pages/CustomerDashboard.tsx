@@ -109,14 +109,17 @@ export default function CustomerDashboard() {
 
   const now = new Date();
   
+  // 6-stage move progress statuses that indicate an active/ongoing move
+  const inProgressStatuses = ['en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'in_transit'];
+  
   // Filter and sort active bookings: exclude expired bookings, sort by date/time
   const activeBookings = bookings?.filter((b) => {
-    const isActiveStatus = b.status === "pending" || b.status === "confirmed" || b.status === "in_transit";
+    const isActiveStatus = b.status === "pending" || b.status === "confirmed" || inProgressStatuses.includes(b.status);
     if (!isActiveStatus) return false;
     
     // Exclude any active booking where the scheduled date has passed
-    // Exception: in_transit bookings are kept since the move is actively happening
-    if (b.status !== "in_transit" && new Date(b.preferredDate) < now) {
+    // Exception: in-progress bookings are kept since the move is actively happening
+    if (!inProgressStatuses.includes(b.status) && new Date(b.preferredDate) < now) {
       return false;
     }
     return true;
@@ -165,6 +168,10 @@ export default function CustomerDashboard() {
     switch (status) {
       case "pending": return "Finding your mover";
       case "confirmed": return "Mover confirmed";
+      case "en_route_to_pickup": return "Mover on the way";
+      case "loading": return "Loading items";
+      case "en_route_to_dropoff": return "In transit";
+      case "unloading": return "Unloading items";
       case "in_transit": return "Move in progress";
       case "completed": return "Completed";
       case "cancelled": return "Cancelled";
@@ -176,7 +183,11 @@ export default function CustomerDashboard() {
     switch (status) {
       case "pending": return "bg-amber-500/10 text-amber-600";
       case "confirmed": return "bg-blue-500/10 text-blue-600";
-      case "in_transit": return "bg-green-500/10 text-green-600"; // Green for in-progress moves
+      case "en_route_to_pickup": return "bg-green-500/10 text-green-600";
+      case "loading": return "bg-green-500/10 text-green-600";
+      case "en_route_to_dropoff": return "bg-green-500/10 text-green-600";
+      case "unloading": return "bg-green-500/10 text-green-600";
+      case "in_transit": return "bg-green-500/10 text-green-600";
       case "completed": return "bg-green-500/10 text-green-600";
       case "cancelled": return "bg-red-500/10 text-red-600";
       default: return "bg-muted text-muted-foreground";
@@ -189,8 +200,12 @@ export default function CustomerDashboard() {
         return { text: "We're finding nearby movers", icon: Clock, action: null };
       case "confirmed":
         return { text: "Message your mover", icon: MessageCircle, action: () => handleMessage(booking.id) };
+      case "en_route_to_pickup":
+      case "loading":
+      case "en_route_to_dropoff":
+      case "unloading":
       case "in_transit":
-        return { text: "Track your move", icon: TrendingUp, action: () => handleViewDetails(booking.id) };
+        return { text: "Track your move", icon: TrendingUp, action: () => setLocation(`/track/${booking.id}`) };
       default:
         return null;
     }
@@ -334,7 +349,7 @@ export default function CustomerDashboard() {
                 <Card 
                   key={booking.id} 
                   className={`overflow-hidden ${
-                    booking.status === "in_transit" 
+                    inProgressStatuses.includes(booking.status) 
                       ? "border-2 border-green-500/50 bg-gradient-to-br from-green-500/5 to-transparent" 
                       : ""
                   }`} 
