@@ -1697,8 +1697,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
-      // Validate allowed update fields (removed moverId - must use /accept endpoint)
+      // Validate allowed update fields - moverId allowed for direct job acceptance
       const updateSchema = z.object({
+        moverId: z.string().optional(),
         status: z.string().optional(),
         preferredDate: z.union([z.string(), z.date()]).optional(),
         distance: z.string().optional(),
@@ -1710,6 +1711,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         locationUpdatedAt: z.date().optional(),
       });
       let updates = validateBody(updateSchema, req.body);
+      
+      // If moverId is being set (direct job acceptance), verify authorization
+      if (updates.moverId) {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+        
+        // Verify the mover belongs to this user
+        const mover = await storage.getMover(updates.moverId);
+        if (!mover || mover.userId !== user.id) {
+          return res.status(403).json({ error: "You are not authorized to accept this job" });
+        }
+        
+        // Check if job is already assigned
+        const booking = await storage.getBooking(req.params.id);
+        if (!booking) {
+          return res.status(404).json({ error: "Booking not found" });
+        }
+        if (booking.moverId) {
+          return res.status(409).json({ error: "This job has already been assigned to another mover" });
+        }
+      }
       
       // Convert preferredDate to Date if it's a string
       if (updates.preferredDate && typeof updates.preferredDate === 'string') {

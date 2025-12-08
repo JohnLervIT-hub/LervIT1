@@ -227,10 +227,15 @@ export default function MoverDashboard() {
 
   const acceptBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      return apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, {
         moverId: mover?.id,
         status: "confirmed",
       });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to accept booking");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
@@ -239,11 +244,23 @@ export default function MoverDashboard() {
         description: "You've successfully accepted this booking.",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to accept booking",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const completeBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to complete booking");
+      }
+      return response.json();
     },
     onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
@@ -256,11 +273,23 @@ export default function MoverDashboard() {
         description: "The move has been marked as completed.",
       });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to complete booking",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const startTripMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "in_transit" });
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "in_transit" });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to start trip");
+      }
+      return response.json();
     },
     onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
@@ -268,6 +297,13 @@ export default function MoverDashboard() {
       toast({
         title: "Trip started",
         description: "Location sharing is now active. Your customer can track your location in real-time.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to start trip",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
