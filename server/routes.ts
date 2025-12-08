@@ -2412,6 +2412,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get unread message notifications for current user
+  app.get("/api/messages/notifications", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const userId = (req.user as any).id;
+      const unreadMessages = await storage.getUnreadMessagesForUser(userId);
+      
+      // Calculate total unread count
+      const totalUnread = unreadMessages.reduce((sum, item) => sum + item.count, 0);
+      
+      res.json({
+        totalUnread,
+        byBooking: unreadMessages
+      });
+    } catch (error) {
+      console.error("Error fetching message notifications:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ===== EARNINGS ROUTES =====
   app.get("/api/movers/:moverId/earnings", async (req: Request, res: Response) => {
     try {

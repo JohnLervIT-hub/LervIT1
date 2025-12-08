@@ -29,6 +29,7 @@ export interface IStorage {
   // Messages
   getMessagesByBooking(bookingId: string): Promise<Message[]>;
   createMessage(insertMessage: InsertMessage): Promise<Message>;
+  getUnreadMessagesForUser(userId: string): Promise<{ bookingId: string; count: number; latestMessage: Message }[]>;
 
   // Reviews
   getReviewsByMover(moverId: string): Promise<Review[]>;
@@ -153,6 +154,35 @@ class PostgresStorage implements IStorage {
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const result = await db.insert(messages).values(insertMessage).returning();
     return result[0];
+  }
+
+  async getUnreadMessagesForUser(userId: string): Promise<{ bookingId: string; count: number; latestMessage: Message }[]> {
+    // Get all bookings where user is either customer or mover
+    const userBookings = await db.select().from(bookings).where(
+      sql`${bookings.customerId} = ${userId} OR ${bookings.moverId} = ${userId}`
+    );
+    
+    const unreadByBooking: { bookingId: string; count: number; latestMessage: Message }[] = [];
+    
+    for (const booking of userBookings) {
+      // Get messages not sent by this user (these are "unread" from their perspective)
+      const unreadMessages = await db.select().from(messages)
+        .where(and(
+          eq(messages.bookingId, booking.id),
+          sql`${messages.senderId} != ${userId}`
+        ))
+        .orderBy(desc(messages.createdAt));
+      
+      if (unreadMessages.length > 0) {
+        unreadByBooking.push({
+          bookingId: booking.id,
+          count: unreadMessages.length,
+          latestMessage: unreadMessages[0]
+        });
+      }
+    }
+    
+    return unreadByBooking;
   }
 
   // Reviews
