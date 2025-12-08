@@ -231,8 +231,9 @@ export default function MoverDashboard() {
         status: "confirmed",
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       toast({
         title: "Booking accepted",
         description: "You've successfully accepted this booking.",
@@ -246,6 +247,7 @@ export default function MoverDashboard() {
     },
     onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       // Stop location sharing when trip is completed
       if (locationSharing === bookingId) {
         setLocationSharing(null);
@@ -263,6 +265,7 @@ export default function MoverDashboard() {
     },
     onSuccess: (_, bookingId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
       setLocationSharing(bookingId);
       toast({
         title: "Trip started",
