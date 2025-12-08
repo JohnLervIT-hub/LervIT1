@@ -19,6 +19,7 @@ import { generatePriceExplanation } from "@shared/ai";
 import { useEffect, useState } from "react";
 import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
+import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 
 type Booking = {
   id: string;

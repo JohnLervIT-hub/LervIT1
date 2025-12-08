@@ -26,6 +26,9 @@ The platform features a mobile-first design using shadcn/ui (Radix UI-based) com
 - **Sticky Mobile Progress Bar:** Booking flow (RequestMove) shows a fixed progress indicator on mobile devices with step count and progress bar
 - **Icon Button Accessibility:** All icon-only buttons now include aria-labels for screen reader support (Header, MoverDashboard, TrackTrip, LandingPage, AdminSupportDashboard, CustomerProfile, ImageUpload)
 - **Currency Formatting Utility:** `client/src/lib/currency.ts` provides formatCurrency(), formatCurrencyCompact(), formatCurrencyWhole() for global scalability with multi-currency support (CAD, USD, EUR, GBP)
+- **Dark Mode Toggle:** ThemeProvider context (`client/src/contexts/ThemeContext.tsx`) with light/dark/system options. ThemeToggle component in Header enables user preference switching with localStorage persistence and system preference detection.
+- **Mobile Bottom Tab Navigation:** Role-based bottom navigation (`client/src/components/MobileBottomNav.tsx`) for Customer, Mover, and Admin dashboards. Shows on mobile devices only with proper active state detection including query parameters.
+- **Micro-animations:** Framer Motion-powered page transitions and animation utilities (`client/src/components/PageTransition.tsx`) including FadeIn, StaggerChildren, StaggerItem, SlideIn, ScaleIn, and PulseOnHover. Applied to router for page transitions and feature cards on Home page.
 
 ### Technical Implementations
 *   **Frontend:** Built with React 18+ (TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS). Authentication state is managed via AuthContext, and server state with React Query.

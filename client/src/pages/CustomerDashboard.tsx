@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
+import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
 
 type Booking = {
   id: string;
@@ -199,17 +200,19 @@ export default function CustomerDashboard() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
         
         {/* Friendly Greeting */}
-        <div className="py-6 sm:py-8">
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1" data-testid="text-greeting">
-            Hey {firstName}!
-          </h1>
-          <p className="text-muted-foreground">
-            {activeBookings.length > 0 
-              ? "Here's what's happening with your moves."
-              : "Ready to make your next move stress-free?"
-            }
-          </p>
-        </div>
+        <FadeIn>
+          <div className="py-6 sm:py-8">
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1" data-testid="text-greeting">
+              Hey {firstName}!
+            </h1>
+            <p className="text-muted-foreground">
+              {activeBookings.length > 0 
+                ? "Here's what's happening with your moves."
+                : "Ready to make your next move stress-free?"
+              }
+            </p>
+          </div>
+        </FadeIn>
 
         {/* Upcoming Move Highlight */}
         {upcomingBooking && (

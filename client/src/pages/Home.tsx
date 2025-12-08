@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Camera, Users, Navigation } from "lucide-react";
+import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
@@ -66,17 +67,19 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
+          <StaggerChildren className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
             {features.map((feature, index) => (
-              <div key={index} className="group text-center p-6" data-testid={`card-feature-${index}`}>
-                <div className="inline-flex items-center justify-center w-24 h-24 mb-5 group-hover:scale-110 transition-transform duration-300">
-                  <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain" style={{ background: 'none' }} />
+              <StaggerItem key={index}>
+                <div className="group text-center p-6" data-testid={`card-feature-${index}`}>
+                  <div className="inline-flex items-center justify-center w-24 h-24 mb-5 group-hover:scale-110 transition-transform duration-300">
+                    <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain" style={{ background: 'none' }} />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
                 </div>
-                <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
-              </div>
+              </StaggerItem>
             ))}
-          </div>
+          </StaggerChildren>
         </div>
       </section>
 

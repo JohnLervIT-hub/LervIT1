@@ -62,10 +62,26 @@ export function MobileBottomNav() {
   if (navItems.length === 0) return null;
 
   const isActive = (href: string) => {
-    if (href.includes("?")) {
-      return location === href.split("?")[0];
+    const [hrefPath, hrefQuery] = href.split("?");
+    const currentPath = location.split("?")[0];
+    const currentQuery = window.location.search;
+    
+    if (hrefQuery) {
+      return currentPath === hrefPath && currentQuery.includes(hrefQuery);
     }
-    return location === href || location.startsWith(href + "/");
+    
+    const otherTabsForThisPath = navItems
+      .filter(item => item.href !== href && item.href.startsWith(hrefPath + "?"))
+      .some(item => {
+        const itemQuery = item.href.split("?")[1];
+        return currentQuery.includes(itemQuery);
+      });
+    
+    if (otherTabsForThisPath) {
+      return false;
+    }
+    
+    return currentPath === hrefPath || location.startsWith(hrefPath + "/");
   };
 
   return (
