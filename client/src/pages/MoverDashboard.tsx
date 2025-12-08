@@ -197,37 +197,49 @@ export default function MoverDashboard() {
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<any>(null);
   
-  // Sync tabs with URL query params for mobile bottom nav integration
-  const getTabFromUrl = () => {
-    const params = new URLSearchParams(window.location.search);
+  // Derive active tab directly from current URL search params
+  // This ensures the tab switches when navigating via footer nav
+  const getTabFromSearch = (search: string) => {
+    const params = new URLSearchParams(search);
     const tab = params.get('tab');
-    // Map URL param values to actual tab values
     if (tab === 'active') return 'my-bookings';
     if (tab === 'payouts') return 'payouts';
     return 'available';
   };
   
-  const [activeTab, setActiveTab] = useState(getTabFromUrl);
+  // Track search params in state for reactivity
+  const [currentSearch, setCurrentSearch] = useState(window.location.search);
   
-  // Sync tab state with URL changes (for mobile nav clicks)
+  // Update search state when URL changes (wouter navigation or browser navigation)
   useEffect(() => {
-    const newTab = getTabFromUrl();
-    if (newTab !== activeTab) {
-      setActiveTab(newTab);
-    }
+    const updateSearch = () => setCurrentSearch(window.location.search);
+    
+    // Listen for popstate (browser back/forward)
+    window.addEventListener('popstate', updateSearch);
+    
+    // Update immediately when location changes
+    updateSearch();
+    
+    return () => window.removeEventListener('popstate', updateSearch);
   }, [location]);
+  
+  // Derive active tab from current search params (reactive)
+  const activeTab = getTabFromSearch(currentSearch);
   
   // Update URL when tab changes (for deep linking and mobile nav sync)
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    // Use setLocation to trigger wouter navigation so MobileBottomNav updates
+    // Update URL - this will trigger the useEffect to update currentSearch
+    // which will then update the derived activeTab
+    let newUrl = '/mover-dashboard';
     if (tab === 'my-bookings') {
-      setLocation('/mover-dashboard?tab=active', { replace: true });
+      newUrl = '/mover-dashboard?tab=active';
     } else if (tab === 'payouts') {
-      setLocation('/mover-dashboard?tab=payouts', { replace: true });
-    } else {
-      setLocation('/mover-dashboard', { replace: true });
+      newUrl = '/mover-dashboard?tab=payouts';
     }
+    
+    setLocation(newUrl, { replace: true });
+    // Also immediately update the search state for instant feedback
+    setCurrentSearch(newUrl.includes('?') ? '?' + newUrl.split('?')[1] : '');
   };
   
   // Image preview state
