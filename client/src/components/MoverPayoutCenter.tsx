@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
 import { format } from "date-fns";
 
 interface PayoutSummary {
+  profileMissing?: boolean;
   pendingEarnings: string;
   availableBalance: string;
   totalPaidOut: string;
@@ -42,6 +44,11 @@ interface PayoutSummary {
     arrivalDate?: string;
     initiatedAt: string;
   }>;
+}
+
+interface EarningsResponse {
+  profileMissing?: boolean;
+  earnings: Earning[];
 }
 
 interface PayoutAccountStatus {
@@ -75,6 +82,7 @@ interface Earning {
 
 export function MoverPayoutCenter() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch payout summary
@@ -88,9 +96,12 @@ export function MoverPayoutCenter() {
   });
 
   // Fetch earnings history
-  const { data: earnings, isLoading: earningsLoading } = useQuery<Earning[]>({
+  const { data: earningsData, isLoading: earningsLoading } = useQuery<EarningsResponse>({
     queryKey: ["/api/movers/payouts/earnings"],
   });
+  
+  // Extract earnings array from response
+  const earnings = earningsData?.earnings || [];
 
   // Onboarding mutation
   const onboardingMutation = useMutation({
@@ -174,6 +185,35 @@ export function MoverPayoutCenter() {
         <Card>
           <CardContent className="p-8 flex items-center justify-center">
             <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show profile setup prompt when mover profile is missing
+  if (summary?.profileMissing) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-2 border-blue-500/30" data-testid="card-profile-missing">
+          <CardContent className="p-8">
+            <div className="text-center space-y-4">
+              <div className="mx-auto w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Wallet className="w-8 h-8 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Complete Your Mover Profile</h3>
+                <p className="text-muted-foreground mt-2">
+                  Set up your mover profile to unlock payouts and start accepting jobs.
+                </p>
+              </div>
+              <Button 
+                onClick={() => setLocation("/mover-profile")}
+                data-testid="button-setup-profile-payout"
+              >
+                Set Up Profile
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

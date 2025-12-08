@@ -3646,8 +3646,9 @@ Respond with VALID JSON only:
       
       const movers = await storage.getMovers({ userId: user.id });
       if (!movers.length) {
-        // Return empty summary when no mover profile exists
+        // Return response with profileMissing flag so frontend can show appropriate UI
         return res.json({
+          profileMissing: true,
           pendingEarnings: "0.00",
           availableBalance: "0.00",
           totalPaidOut: "0.00",
@@ -3697,6 +3698,7 @@ Respond with VALID JSON only:
       const payoutAccount = accounts[0];
       
       res.json({
+        profileMissing: false,
         pendingEarnings: pendingEarnings.toFixed(2),
         availableBalance: availableBalance.toFixed(2),
         totalPaidOut: totalPaidOut.toFixed(2),
@@ -3730,8 +3732,8 @@ Respond with VALID JSON only:
       
       const movers = await storage.getMovers({ userId: user.id });
       if (!movers.length) {
-        // Return empty array when no mover profile exists
-        return res.json([]);
+        // Return response with profileMissing flag
+        return res.json({ profileMissing: true, earnings: [] });
       }
       const mover = movers[0];
       
@@ -3767,7 +3769,7 @@ Respond with VALID JSON only:
         })
       );
       
-      res.json(enrichedEarnings);
+      res.json({ profileMissing: false, earnings: enrichedEarnings });
     } catch (error) {
       res.status(500).json({ error: "Failed to get earnings history" });
     }

@@ -196,7 +196,7 @@ export default function MoverDashboard() {
   const [activeTab, setActiveTab] = useState("available");
 
   // First get the mover profile
-  const { data: mover, isLoading: isMoverLoading, isFetched: isMoverFetched } = useQuery<any>({
+  const { data: mover, isLoading: isMoverLoading, isFetched: isMoverFetched, isSuccess: isMoverSuccess } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
     enabled: !!user?.id,
     select: (data) => Array.isArray(data) ? data[0] : data,
@@ -401,8 +401,9 @@ export default function MoverDashboard() {
     return <MoverDashboardSkeleton />;
   }
 
-  // Flag for missing mover profile - show dashboard with limited functionality
-  const moverProfileMissing = isMoverFetched && !mover;
+  // Flag for missing mover profile - only true when query succeeded and profile is actually missing
+  // This ensures we don't disable actions during loading or on query errors
+  const moverProfileMissing = isMoverFetched && isMoverSuccess && !mover;
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (
     <Card key={booking.id} className="hover-elevate" data-testid={`card-booking-${booking.id}`}>
@@ -713,9 +714,10 @@ export default function MoverDashboard() {
                 <Button
                   variant="default"
                   onClick={() => acceptBookingMutation.mutate(booking.id)}
-                  disabled={acceptBookingMutation.isPending}
+                  disabled={moverProfileMissing || acceptBookingMutation.isPending}
                   data-testid={`button-accept-${booking.id}`}
                   className="flex-1 sm:flex-none"
+                  title={moverProfileMissing ? "Complete your profile to accept bookings" : undefined}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   {acceptBookingMutation.isPending ? "Accepting..." : "Accept Booking"}
@@ -824,7 +826,7 @@ export default function MoverDashboard() {
                 <Switch 
                   checked={mover?.isAvailable || false}
                   onCheckedChange={handleAvailabilityToggle}
-                  disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
+                  disabled={moverProfileMissing || isVerificationLoading || toggleAvailabilityMutation.isPending}
                   data-testid="switch-online-status"
                 />
               </div>
