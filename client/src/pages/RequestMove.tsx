@@ -781,8 +781,26 @@ export default function RequestMove() {
         </DialogContent>
       </Dialog>
 
+      {/* Sticky Progress Bar (Mobile) */}
+      <div className="fixed top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b md:hidden" data-testid="sticky-progress-bar">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Step {step} of 3</span>
+            <span className="text-xs text-muted-foreground">
+              {step === 1 && "Locations"}
+              {step === 2 && "Load Details"}
+              {step === 3 && "Schedule"}
+            </span>
+          </div>
+          <Progress value={(step / 3) * 100} className="h-2" />
+        </div>
+      </div>
+
       <div className="min-h-screen pt-20 pb-12 bg-background">
         <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        {/* Spacer for sticky progress on mobile */}
+        <div className="h-16 md:hidden" />
+
         {/* Page Header */}
         <div className="py-6 mb-2">
           <h1 className="text-2xl sm:text-3xl font-bold mb-1">
@@ -793,7 +811,8 @@ export default function RequestMove() {
           </p>
         </div>
 
-        <div className="mb-8">
+        {/* Desktop Step Indicator - hidden on mobile */}
+        <div className="mb-8 hidden md:block">
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((stepNum) => (
               <div key={stepNum} className="flex items-center flex-1">

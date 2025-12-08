@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useJsApiLoader } from "@react-google-maps/api";
 import Header from "@/components/Header";
 import SplashScreen from "@/components/SplashScreen";
@@ -207,8 +208,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <Header />
-          <Router />
+          <ErrorBoundary>
+            <Header />
+            <Router />
+          </ErrorBoundary>
           <Toaster />
         </TooltipProvider>
       </AuthProvider>
