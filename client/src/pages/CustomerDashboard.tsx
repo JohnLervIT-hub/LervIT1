@@ -340,7 +340,7 @@ export default function CustomerDashboard() {
                       <span className="line-clamp-1 flex-1">{booking.dropoffAddress}</span>
                     </div>
 
-                    {booking.mover && (
+                    {booking.mover && booking.mover.user && (
                       <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg mb-4">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                           <Truck className="w-5 h-5 text-primary" />
@@ -417,7 +417,7 @@ export default function CustomerDashboard() {
                       <span className="line-clamp-1">{booking.dropoffAddress}</span>
                     </div>
 
-                    {booking.mover && (
+                    {booking.mover && booking.mover.user && (
                       <p className="text-sm text-muted-foreground mt-2">
                         Moved by {booking.mover.user.name}
                       </p>
@@ -459,7 +459,7 @@ export default function CustomerDashboard() {
                 Report a Concern
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {selectedBooking && selectedBooking.mover && (
+                {selectedBooking && selectedBooking.mover && selectedBooking.mover.user && (
                   <>
                     You're reporting an issue with <strong>{selectedBooking.mover.user.name}</strong>.
                     <br /><br />
