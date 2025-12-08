@@ -163,7 +163,8 @@ function Router() {
 }
 
 // CRITICAL: Libraries array MUST be defined outside component to prevent reloads
-const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "visualization")[] = ["places"];
+// Include all required libraries to avoid loader conflicts
+const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "visualization")[] = ["places", "geometry"];
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);

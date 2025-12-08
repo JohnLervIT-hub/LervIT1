@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,9 +50,8 @@ export default function TrackTrip() {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  });
+  // Google Maps API is loaded globally in App.tsx
+  // No need to load it again here
 
   const { data: locationData, isLoading } = useQuery<LocationData>({
     queryKey: ["/api/bookings", bookingId, "location"],
@@ -67,7 +66,7 @@ export default function TrackTrip() {
 
   // Calculate driving directions when location data changes
   useEffect(() => {
-    if (!isLoaded || !locationData) return;
+    if (!locationData) return;
 
     const directionsService = new google.maps.DirectionsService();
 
@@ -127,7 +126,7 @@ export default function TrackTrip() {
         }
       );
     }
-  }, [isLoaded, locationData]);
+  }, [locationData]);
 
   // Update map bounds when location changes
   useEffect(() => {
@@ -151,18 +150,9 @@ export default function TrackTrip() {
     setMap(map);
   }, []);
 
-  if (loadError) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-destructive mb-2">Failed to load Google Maps</p>
-          <p className="text-sm text-muted-foreground">Please check your API key configuration</p>
-        </div>
-      </div>
-    );
-  }
+  // Google Maps API is loaded globally in App.tsx, so no need to check loadError here
 
-  if (!isLoaded || isLoading || !locationData) {
+  if (isLoading || !locationData) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
