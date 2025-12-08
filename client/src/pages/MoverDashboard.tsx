@@ -401,22 +401,8 @@ export default function MoverDashboard() {
     return <MoverDashboardSkeleton />;
   }
 
-  // If mover profile doesn't exist, redirect to setup
-  if (isMoverFetched && !mover) {
-    return (
-      <div className="min-h-screen pt-24 pb-12">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold mb-4">Complete Your Mover Profile</h2>
-          <p className="text-muted-foreground mb-6">
-            You need to set up your mover profile before you can access the dashboard.
-          </p>
-          <Button onClick={() => setLocation("/mover-profile-setup")} data-testid="button-setup-profile">
-            Set Up Profile
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // Flag for missing mover profile - show dashboard with limited functionality
+  const moverProfileMissing = isMoverFetched && !mover;
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (
     <Card key={booking.id} className="hover-elevate" data-testid={`card-booking-${booking.id}`}>
@@ -888,7 +874,29 @@ export default function MoverDashboard() {
             </div>
           </div>
           
-          {!verificationStatus?.isComplete && (
+          {moverProfileMissing && (
+            <div className="mt-4 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <Truck className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Complete Your Profile</p>
+                  <p className="text-xs text-muted-foreground">Set up your mover profile to start accepting jobs</p>
+                </div>
+              </div>
+              <Button 
+                size="sm"
+                onClick={() => setLocation("/mover-profile-setup")}
+                data-testid="button-setup-profile-banner"
+                className="rounded-full"
+              >
+                Set Up Profile
+              </Button>
+            </div>
+          )}
+
+          {!moverProfileMissing && !verificationStatus?.isComplete && (
             <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
