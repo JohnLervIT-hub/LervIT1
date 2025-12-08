@@ -316,14 +316,15 @@ export default function MoverDashboard() {
       return;
     }
     
-    if (checked && !verificationStatus?.isComplete) {
-      setShowVerificationAlert(true);
-      setVerificationError({
-        message: "You must complete all verification requirements before going online.",
-        incompleteItems: verificationStatus?.incompleteItems || [],
-      });
-      return;
-    }
+    // TEMPORARILY DISABLED FOR TESTING - Re-enable verification check for production
+    // if (checked && !verificationStatus?.isComplete) {
+    //   setShowVerificationAlert(true);
+    //   setVerificationError({
+    //     message: "You must complete all verification requirements before going online.",
+    //     incompleteItems: verificationStatus?.incompleteItems || [],
+    //   });
+    //   return;
+    // }
     
     toggleAvailabilityMutation.mutate(checked);
   };
