@@ -56,8 +56,8 @@ export default function RequestMove() {
   const [step, setStep] = useState(1);
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
-  const [pickupDifficulty, setPickupDifficulty] = useState("ground");
-  const [dropoffDifficulty, setDropoffDifficulty] = useState("ground");
+  const [pickupDifficulty, setPickupDifficulty] = useState("");
+  const [dropoffDifficulty, setDropoffDifficulty] = useState("");
   const [loadSize, setLoadSize] = useState("medium");
   const [heavyItem, setHeavyItem] = useState(false);
   const [numberOfMovers, setNumberOfMovers] = useState(1);
@@ -104,8 +104,8 @@ export default function RequestMove() {
         const data = JSON.parse(pendingBookingData);
         setPickupAddress(data.pickupAddress || "");
         setDropoffAddress(data.dropoffAddress || "");
-        setPickupDifficulty(data.pickupDifficulty || "ground");
-        setDropoffDifficulty(data.dropoffDifficulty || "ground");
+        setPickupDifficulty(data.pickupDifficulty || "");
+        setDropoffDifficulty(data.dropoffDifficulty || "");
         setLoadSize(data.loadSize || "medium");
         setHeavyItem(data.heavyItem || false);
         setNumberOfMovers(data.numberOfMovers || 1);
@@ -519,12 +519,28 @@ export default function RequestMove() {
       }
     }
 
-    // Step 2: Validate photos (MANDATORY)
+    // Step 2: Validate photos and access types (MANDATORY)
     if (step === 2) {
       if (!images || images.length === 0) {
         toast({
           title: "Photos required",
           description: "Please upload at least one photo of your items to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!pickupDifficulty) {
+        toast({
+          title: "Pickup access type required",
+          description: "Please select how we'll access your pickup location.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!dropoffDifficulty) {
+        toast({
+          title: "Dropoff access type required",
+          description: "Please select how we'll access your dropoff location.",
           variant: "destructive",
         });
         return;
