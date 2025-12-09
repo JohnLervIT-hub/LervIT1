@@ -243,6 +243,7 @@ export default function RequestMove() {
   }, [pickupAddress, dropoffAddress]);
   
   // Calculate live pricing whenever form fields change
+  // Note: heavyItem fee is NOT included in live estimate - load size fee from Vision Engine is used instead
   useEffect(() => {
     if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
       try {
@@ -252,7 +253,7 @@ export default function RequestMove() {
           loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
           pickupDifficulty as PickupDifficultyType,
           dropoffDifficulty as DropoffDifficultyType,
-          heavyItem,
+          false, // heavyItem is NOT included in live estimate - Vision Engine determines load size fee
           numberOfMovers as 1 | 2,
           undefined // moverToPickupDistance - will be calculated after mover assignment
         );
@@ -266,7 +267,7 @@ export default function RequestMove() {
     } else {
       setPriceBreakdown(null);
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress]);
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, numberOfMovers, pickupAddress, dropoffAddress]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {

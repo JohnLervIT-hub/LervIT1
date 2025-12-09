@@ -92,13 +92,6 @@ export function PricingSummary({ breakdown, isCalculating, error, className }: P
       show: breakdown.dropoffDifficultyFee > 0
     },
     { 
-      label: "Load Size Fee", 
-      amount: breakdown.heavyItemFee, 
-      testId: "fee-loadsize-extra",
-      icon: Package,
-      show: breakdown.heavyItemFee > 0
-    },
-    { 
       label: "Mover Travel", 
       amount: breakdown.moverTravelFee, 
       testId: "fee-travel",
