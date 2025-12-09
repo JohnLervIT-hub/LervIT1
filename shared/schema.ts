@@ -502,6 +502,220 @@ export type InsertMoverStripeAccount = z.infer<typeof insertMoverStripeAccountSc
 export type MoverStripeAccount = typeof moverStripeAccounts.$inferSelect;
 export type InsertMoverEarnings = z.infer<typeof insertMoverEarningsSchema>;
 export type MoverEarnings = typeof moverEarnings.$inferSelect;
+
+// ===== LEARNING INTELLIGENCE SYSTEM (Vision Engine™ & PrecisionMatch™) =====
+
+// Vehicle class reference for learning system
+// Class A: Small Car (0-15 ft³, $15) - 1-2 boxes
+// Class B: Sedan/SUV (15-40 ft³, $20) - Small furniture  
+// Class C: Minivan/Cargo Van (40-120 ft³, $30) - Medium moves
+// Class D: Full-Size Van (120-250 ft³, $40) - Full apartment
+// Class E: Box Truck (250-450+ ft³, $50) - Full home
+
+// Booking metrics - tracks actual vs estimated values after move completion
+export const bookingMetrics = pgTable("booking_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull().unique(),
+  
+  // Estimated values (from AI/system at booking time)
+  estimatedVehicleClass: text("estimated_vehicle_class"), // A, B, C, D, E
+  estimatedVolumeCuft: decimal("estimated_volume_cuft", { precision: 8, scale: 2 }),
+  estimatedWeightKg: decimal("estimated_weight_kg", { precision: 8, scale: 2 }),
+  estimatedDurationMinutes: integer("estimated_duration_minutes"),
+  estimatedPrice: decimal("estimated_price", { precision: 10, scale: 2 }),
+  
+  // Actual values (collected after move)
+  actualVehicleClass: text("actual_vehicle_class"), // A, B, C, D, E
+  actualVolumeCuft: decimal("actual_volume_cuft", { precision: 8, scale: 2 }),
+  actualWeightKg: decimal("actual_weight_kg", { precision: 8, scale: 2 }),
+  actualDurationMinutes: integer("actual_duration_minutes"),
+  actualPrice: decimal("actual_price", { precision: 10, scale: 2 }),
+  
+  // Accuracy metrics
+  volumeAccuracyPercent: decimal("volume_accuracy_percent", { precision: 5, scale: 2 }),
+  priceAccuracyPercent: decimal("price_accuracy_percent", { precision: 5, scale: 2 }),
+  vehicleClassMatch: boolean("vehicle_class_match"),
+  
+  // Customer feedback
+  customerSatisfactionRating: integer("customer_satisfaction_rating"), // 1-5
+  estimateAccuracyRating: integer("estimate_accuracy_rating"), // 1-5 (how accurate was the quote)
+  customerNotes: text("customer_notes"),
+  
+  // Mover feedback
+  moverDifficultyRating: integer("mover_difficulty_rating"), // 1-5
+  moverNotes: text("mover_notes"),
+  loadingTimeMinutes: integer("loading_time_minutes"),
+  unloadingTimeMinutes: integer("unloading_time_minutes"),
+  
+  // Learning flags
+  usedForTraining: boolean("used_for_training").default(false).notNull(),
+  outlierFlag: boolean("outlier_flag").default(false).notNull(),
+  reviewedByAdmin: boolean("reviewed_by_admin").default(false).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("booking_metrics_booking_id_idx").on(table.bookingId),
+  usedForTrainingIdx: index("booking_metrics_training_idx").on(table.usedForTraining),
+}));
+
+// Item feedback - corrections to AI-identified items for learning
+export const itemFeedback = pgTable("item_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  identifiedItemId: varchar("identified_item_id").references(() => identifiedItems.id).notNull(),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  submittedBy: varchar("submitted_by").references(() => users.id).notNull(),
+  submitterRole: text("submitter_role").notNull(), // customer, mover, admin
+  
+  // Original AI values
+  originalItemName: text("original_item_name"),
+  originalCategory: text("original_category"),
+  originalWeightKg: decimal("original_weight_kg", { precision: 8, scale: 2 }),
+  originalVolumeCuft: decimal("original_volume_cuft", { precision: 8, scale: 2 }),
+  originalVehicleType: text("original_vehicle_type"),
+  
+  // Corrected values
+  correctedItemName: text("corrected_item_name"),
+  correctedCategory: text("corrected_category"),
+  correctedWeightKg: decimal("corrected_weight_kg", { precision: 8, scale: 2 }),
+  correctedVolumeCuft: decimal("corrected_volume_cuft", { precision: 8, scale: 2 }),
+  correctedVehicleType: text("corrected_vehicle_type"),
+  
+  // Feedback reason
+  feedbackReason: text("feedback_reason"), // wrong_item, wrong_size, wrong_category, missing_item, extra_item
+  feedbackNotes: text("feedback_notes"),
+  
+  // Learning status
+  processedForLearning: boolean("processed_for_learning").default(false).notNull(),
+  processedAt: timestamp("processed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  identifiedItemIdx: index("item_feedback_identified_item_idx").on(table.identifiedItemId),
+  bookingIdIdx: index("item_feedback_booking_id_idx").on(table.bookingId),
+  processedIdx: index("item_feedback_processed_idx").on(table.processedForLearning),
+}));
+
+// Mover performance metrics for PrecisionMatch™ learning
+export const moverPerformance = pgTable("mover_performance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  
+  // Time performance
+  acceptedAt: timestamp("accepted_at"),
+  arrivedAtPickupAt: timestamp("arrived_at_pickup_at"),
+  loadingStartedAt: timestamp("loading_started_at"),
+  loadingCompletedAt: timestamp("loading_completed_at"),
+  arrivedAtDropoffAt: timestamp("arrived_at_dropoff_at"),
+  unloadingCompletedAt: timestamp("unloading_completed_at"),
+  
+  // Time deltas (actual vs expected in minutes)
+  arrivalDelayMinutes: integer("arrival_delay_minutes"),
+  totalMoveMinutes: integer("total_move_minutes"),
+  
+  // Performance scores
+  communicationScore: integer("communication_score"), // 1-5
+  professionalismScore: integer("professionalism_score"), // 1-5
+  careWithItemsScore: integer("care_with_items_score"), // 1-5
+  
+  // Load class performance
+  loadClass: text("load_class"), // A, B, C, D, E
+  distanceKm: decimal("distance_km", { precision: 8, scale: 2 }),
+  
+  // Issues encountered
+  hadIssues: boolean("had_issues").default(false).notNull(),
+  issueDescription: text("issue_description"),
+  wasRejected: boolean("was_rejected").default(false).notNull(),
+  rejectionReason: text("rejection_reason"),
+  
+  // Matching quality metrics
+  wasGoodMatch: boolean("was_good_match"),
+  matchScore: decimal("match_score", { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  moverIdIdx: index("mover_performance_mover_id_idx").on(table.moverId),
+  bookingIdIdx: index("mover_performance_booking_id_idx").on(table.bookingId),
+  loadClassIdx: index("mover_performance_load_class_idx").on(table.loadClass),
+}));
+
+// Learning insights - aggregated learning data for Vision Engine & PrecisionMatch
+export const learningInsights = pgTable("learning_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  insightType: text("insight_type").notNull(), // vision_accuracy, price_accuracy, vehicle_match, mover_reliability
+  
+  // Time period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Metrics
+  sampleSize: integer("sample_size").notNull(),
+  accuracyPercent: decimal("accuracy_percent", { precision: 5, scale: 2 }),
+  avgErrorPercent: decimal("avg_error_percent", { precision: 5, scale: 2 }),
+  
+  // Breakdown by category
+  categoryBreakdown: text("category_breakdown"), // JSON
+  vehicleClassBreakdown: text("vehicle_class_breakdown"), // JSON
+  
+  // Recommendations
+  recommendations: text("recommendations").array(),
+  adjustmentFactors: text("adjustment_factors"), // JSON with learned weights
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  typeIdx: index("learning_insights_type_idx").on(table.insightType),
+  periodIdx: index("learning_insights_period_idx").on(table.periodStart, table.periodEnd),
+}));
+
+export const insertBookingMetricsSchema = createInsertSchema(bookingMetrics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  estimatedVehicleClass: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+  actualVehicleClass: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+  customerSatisfactionRating: z.number().int().min(1).max(5).optional(),
+  estimateAccuracyRating: z.number().int().min(1).max(5).optional(),
+  moverDifficultyRating: z.number().int().min(1).max(5).optional(),
+});
+
+export const insertItemFeedbackSchema = createInsertSchema(itemFeedback).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+}).extend({
+  submitterRole: z.enum(['customer', 'mover', 'admin']),
+  feedbackReason: z.enum(['wrong_item', 'wrong_size', 'wrong_category', 'missing_item', 'extra_item']).optional(),
+  correctedCategory: z.enum(['Furniture', 'Appliance', 'Fragile', 'Oversized', 'Bulky', 'Electronics', 'Other']).optional(),
+  correctedVehicleType: z.enum(['car', 'van', 'pickup', 'truck']).optional(),
+});
+
+export const insertMoverPerformanceSchema = createInsertSchema(moverPerformance).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  loadClass: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+  communicationScore: z.number().int().min(1).max(5).optional(),
+  professionalismScore: z.number().int().min(1).max(5).optional(),
+  careWithItemsScore: z.number().int().min(1).max(5).optional(),
+});
+
+export const insertLearningInsightSchema = createInsertSchema(learningInsights).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  insightType: z.enum(['vision_accuracy', 'price_accuracy', 'vehicle_match', 'mover_reliability']),
+});
+
+export type InsertBookingMetrics = z.infer<typeof insertBookingMetricsSchema>;
+export type BookingMetrics = typeof bookingMetrics.$inferSelect;
+export type InsertItemFeedback = z.infer<typeof insertItemFeedbackSchema>;
+export type ItemFeedback = typeof itemFeedback.$inferSelect;
+export type InsertMoverPerformance = z.infer<typeof insertMoverPerformanceSchema>;
+export type MoverPerformance = typeof moverPerformance.$inferSelect;
+export type InsertLearningInsight = z.infer<typeof insertLearningInsightSchema>;
+export type LearningInsight = typeof learningInsights.$inferSelect;
 export type InsertMoverPayout = z.infer<typeof insertMoverPayoutSchema>;
 export type MoverPayout = typeof moverPayouts.$inferSelect;
 

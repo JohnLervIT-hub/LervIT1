@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
@@ -4522,6 +4522,271 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Cleanup error:', error);
       res.status(500).json({ error: "Failed to cleanup bookings" });
+    }
+  });
+
+  // ===== LEARNING INTELLIGENCE SYSTEM (Vision Engine™ & PrecisionMatch™) =====
+  
+  // Submit post-move metrics (customer or mover)
+  app.post("/api/bookings/:bookingId/metrics", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const { bookingId } = req.params;
+      
+      // Verify booking exists and is completed
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Verify user has permission (customer, assigned mover, or admin)
+      const isCustomer = booking.customerId === user.id;
+      const isMover = booking.moverId && (await storage.getMover(booking.moverId))?.userId === user.id;
+      const isAdmin = user.role === 'admin';
+      
+      if (!isCustomer && !isMover && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized to submit metrics for this booking" });
+      }
+      
+      // Check if metrics already exist
+      const existingMetrics = await db.select().from(bookingMetricsTable).where(eq(bookingMetricsTable.bookingId, bookingId)).limit(1);
+      
+      const metricsData: Record<string, any> = {
+        bookingId,
+        // Estimated values from booking
+        estimatedPrice: booking.price,
+        estimatedVehicleClass: mapLoadSizeToClass(booking.loadSize),
+        // Actuals from request
+        actualVehicleClass: req.body.actualVehicleClass,
+        actualVolumeCuft: req.body.actualVolumeCuft,
+        actualDurationMinutes: req.body.actualDurationMinutes,
+        actualPrice: req.body.actualPrice,
+        // Customer feedback
+        customerSatisfactionRating: isCustomer ? req.body.satisfactionRating : undefined,
+        estimateAccuracyRating: isCustomer ? req.body.estimateAccuracyRating : undefined,
+        customerNotes: isCustomer ? req.body.notes : undefined,
+        // Mover feedback
+        moverDifficultyRating: isMover ? req.body.difficultyRating : undefined,
+        moverNotes: isMover ? req.body.notes : undefined,
+        loadingTimeMinutes: isMover ? req.body.loadingTimeMinutes : undefined,
+        unloadingTimeMinutes: isMover ? req.body.unloadingTimeMinutes : undefined,
+      };
+      
+      // Calculate accuracy if both estimated and actual values exist
+      if (metricsData.estimatedPrice && metricsData.actualPrice) {
+        const estimated = parseFloat(metricsData.estimatedPrice);
+        const actual = parseFloat(metricsData.actualPrice);
+        metricsData.priceAccuracyPercent = ((1 - Math.abs(estimated - actual) / estimated) * 100).toFixed(2);
+      }
+      
+      if (metricsData.estimatedVehicleClass && metricsData.actualVehicleClass) {
+        metricsData.vehicleClassMatch = metricsData.estimatedVehicleClass === metricsData.actualVehicleClass;
+      }
+      
+      let result;
+      if (existingMetrics.length > 0) {
+        // Update existing metrics
+        const updated = await db.update(bookingMetricsTable)
+          .set({ ...metricsData, updatedAt: new Date() })
+          .where(eq(bookingMetricsTable.bookingId, bookingId))
+          .returning();
+        result = updated[0];
+      } else {
+        // Create new metrics
+        const inserted = await db.insert(bookingMetricsTable).values(metricsData).returning();
+        result = inserted[0];
+      }
+      
+      console.log(`[Learning] Metrics submitted for booking ${bookingId} by ${user.role}`);
+      res.json(result);
+    } catch (error) {
+      console.error('[Learning] Metrics submission error:', error);
+      res.status(500).json({ error: "Failed to submit metrics" });
+    }
+  });
+  
+  // Helper function to map load size to vehicle class
+  function mapLoadSizeToClass(loadSize: string): string {
+    const mapping: Record<string, string> = {
+      'boxes': 'A',      // 0-15 ft³ Small Car
+      'small': 'B',      // 15-40 ft³ Sedan/SUV
+      'medium': 'C',     // 40-120 ft³ Minivan
+      'large': 'D',      // 120-250 ft³ Full-Size Van
+      'apartment': 'E',  // 250-450+ ft³ Box Truck
+    };
+    return mapping[loadSize] || 'C';
+  }
+  
+  // Submit item feedback for Vision Engine™ learning
+  app.post("/api/identified-items/:itemId/feedback", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const { itemId } = req.params;
+      
+      // Get the item
+      const items = await db.select().from(identifiedItems).where(eq(identifiedItems.id, itemId)).limit(1);
+      const item = items[0];
+      
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      // Verify booking ownership
+      const booking = await storage.getBooking(item.bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const isCustomer = booking.customerId === user.id;
+      const isMover = booking.moverId && (await storage.getMover(booking.moverId))?.userId === user.id;
+      const isAdmin = user.role === 'admin';
+      
+      if (!isCustomer && !isMover && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      // Create item feedback
+      const feedbackData = {
+        identifiedItemId: itemId,
+        bookingId: item.bookingId,
+        submittedBy: user.id,
+        submitterRole: user.role,
+        // Original values from AI
+        originalItemName: item.itemName,
+        originalCategory: item.category,
+        originalWeightKg: item.weightKg,
+        originalVolumeCuft: item.volumeCuft,
+        originalVehicleType: item.vehicleType,
+        // Corrected values from user
+        correctedItemName: req.body.correctedItemName,
+        correctedCategory: req.body.correctedCategory,
+        correctedWeightKg: req.body.correctedWeightKg,
+        correctedVolumeCuft: req.body.correctedVolumeCuft,
+        correctedVehicleType: req.body.correctedVehicleType,
+        feedbackReason: req.body.feedbackReason,
+        feedbackNotes: req.body.feedbackNotes,
+      };
+      
+      const inserted = await db.insert(itemFeedbackTable).values(feedbackData).returning();
+      
+      console.log(`[Vision Engine™ Learning] Feedback submitted for item ${itemId} by ${user.role}`);
+      res.json(inserted[0]);
+    } catch (error) {
+      console.error('[Vision Engine™] Feedback error:', error);
+      res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+  
+  // Get learning insights (admin only)
+  app.get("/api/learning/insights", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get aggregate metrics
+      const allMetrics = await db.select().from(bookingMetricsTable);
+      const allFeedback = await db.select().from(itemFeedbackTable);
+      const allPerformance = await db.select().from(moverPerformanceTable);
+      
+      // Calculate Vision Engine accuracy
+      const feedbackWithCorrections = allFeedback.filter(f => f.correctedItemName || f.correctedCategory);
+      const visionAccuracy = feedbackWithCorrections.length > 0 
+        ? ((allFeedback.length - feedbackWithCorrections.length) / allFeedback.length * 100).toFixed(1)
+        : 100;
+      
+      // Calculate price accuracy
+      const metricsWithPrice = allMetrics.filter(m => m.priceAccuracyPercent);
+      const avgPriceAccuracy = metricsWithPrice.length > 0
+        ? (metricsWithPrice.reduce((sum, m) => sum + parseFloat(m.priceAccuracyPercent || '0'), 0) / metricsWithPrice.length).toFixed(1)
+        : null;
+      
+      // Calculate vehicle class match rate
+      const metricsWithVehicle = allMetrics.filter(m => m.vehicleClassMatch !== null);
+      const vehicleMatchRate = metricsWithVehicle.length > 0
+        ? ((metricsWithVehicle.filter(m => m.vehicleClassMatch).length / metricsWithVehicle.length) * 100).toFixed(1)
+        : null;
+      
+      // Calculate average ratings
+      const customerRatings = allMetrics.filter(m => m.customerSatisfactionRating);
+      const avgSatisfaction = customerRatings.length > 0
+        ? (customerRatings.reduce((sum, m) => sum + (m.customerSatisfactionRating || 0), 0) / customerRatings.length).toFixed(1)
+        : null;
+      
+      // Get top correction reasons
+      const reasonCounts: Record<string, number> = {};
+      allFeedback.forEach(f => {
+        if (f.feedbackReason) {
+          reasonCounts[f.feedbackReason] = (reasonCounts[f.feedbackReason] || 0) + 1;
+        }
+      });
+      
+      const topCorrectionReasons = Object.entries(reasonCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([reason, count]) => ({ reason, count }));
+      
+      res.json({
+        visionEngine: {
+          totalItemsAnalyzed: allFeedback.length,
+          accuracyPercent: visionAccuracy,
+          feedbackReceived: feedbackWithCorrections.length,
+          topCorrectionReasons,
+        },
+        pricingAccuracy: {
+          totalBookingsAnalyzed: allMetrics.length,
+          avgAccuracyPercent: avgPriceAccuracy,
+          vehicleClassMatchRate: vehicleMatchRate,
+        },
+        customerSatisfaction: {
+          totalRatings: customerRatings.length,
+          avgRating: avgSatisfaction,
+        },
+        moverPerformance: {
+          totalRecords: allPerformance.length,
+          avgTotalMoveMinutes: allPerformance.length > 0
+            ? Math.round(allPerformance.reduce((sum, p) => sum + (p.totalMoveMinutes || 0), 0) / allPerformance.length)
+            : null,
+        },
+        lastUpdated: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[Learning] Insights error:', error);
+      res.status(500).json({ error: "Failed to get learning insights" });
+    }
+  });
+  
+  // Get booking metrics (for displaying on completed booking page)
+  app.get("/api/bookings/:bookingId/metrics", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const { bookingId } = req.params;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Verify access
+      const isCustomer = booking.customerId === user.id;
+      const isMover = booking.moverId && (await storage.getMover(booking.moverId))?.userId === user.id;
+      const isAdmin = user.role === 'admin';
+      
+      if (!isCustomer && !isMover && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      const metrics = await db.select().from(bookingMetricsTable).where(eq(bookingMetricsTable.bookingId, bookingId)).limit(1);
+      
+      if (metrics.length === 0) {
+        return res.json(null);
+      }
+      
+      res.json(metrics[0]);
+    } catch (error) {
+      console.error('[Learning] Get metrics error:', error);
+      res.status(500).json({ error: "Failed to get metrics" });
     }
   });
 
