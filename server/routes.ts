@@ -4606,16 +4606,11 @@ Respond with VALID JSON only:
     }
   });
   
-  // Helper function to map load size to vehicle class
+  // Helper function to map load size to vehicle class (uses global pricing config)
   function mapLoadSizeToClass(loadSize: string): string {
-    const mapping: Record<string, string> = {
-      'boxes': 'A',      // 0-15 ft³ Small Car
-      'small': 'B',      // 15-40 ft³ Sedan/SUV
-      'medium': 'C',     // 40-120 ft³ Minivan
-      'large': 'D',      // 120-250 ft³ Full-Size Van
-      'apartment': 'E',  // 250-450+ ft³ Box Truck
-    };
-    return mapping[loadSize] || 'C';
+    // Import from shared pricing module for consistency
+    const { getVehicleClassFromLoadSize } = require('@shared/pricing');
+    return getVehicleClassFromLoadSize(loadSize);
   }
   
   // Submit item feedback for Vision Engine™ learning

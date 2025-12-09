@@ -1,4 +1,5 @@
-// Uber-style dynamic pricing calculator for moving services
+// LervIT PrecisionMatch™ Dynamic Pricing Calculator
+// Vehicle class-based pricing system for moving services
 
 export interface PriceBreakdown {
   baseFee: number;
@@ -11,20 +12,123 @@ export interface PriceBreakdown {
   subtotal: number;
   numberOfMoversMultiplier: number;
   totalCost: number;
+  vehicleClass?: VehicleClass;
 }
 
-// Pricing constants
+// ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
+// This is the single source of truth for all pricing across the platform
+
+export type VehicleClass = 'A' | 'B' | 'C' | 'D' | 'E';
+
+export interface VehicleClassConfig {
+  class: VehicleClass;
+  name: string;
+  vehicleType: string;
+  volumeRangeMin: number;  // ft³
+  volumeRangeMax: number;  // ft³
+  baseFee: number;         // CAD
+  perKmRate: number;       // CAD per km
+  loadType: string;        // Description of typical loads
+  examples: string;        // Real-world examples
+}
+
+export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
+  A: {
+    class: 'A',
+    name: 'Small Car / Hatchback',
+    vehicleType: 'car',
+    volumeRangeMin: 0,
+    volumeRangeMax: 15,
+    baseFee: 15.00,
+    perKmRate: 0.80,
+    loadType: 'Lightweight items only',
+    examples: '1-2 boxes, bags, small items',
+  },
+  B: {
+    class: 'B',
+    name: 'Sedan / Small SUV',
+    vehicleType: 'car',
+    volumeRangeMin: 15,
+    volumeRangeMax: 40,
+    baseFee: 20.00,
+    perKmRate: 1.00,
+    loadType: 'Standard move for small items',
+    examples: 'Small furniture, 4-6 boxes',
+  },
+  C: {
+    class: 'C',
+    name: 'Minivan / Small Cargo Van',
+    vehicleType: 'van',
+    volumeRangeMin: 40,
+    volumeRangeMax: 120,
+    baseFee: 30.00,
+    perKmRate: 1.25,
+    loadType: 'Small moves / bedrooms',
+    examples: 'Bedroom set, medium moves',
+  },
+  D: {
+    class: 'D',
+    name: 'Cargo Van / Full-Size Van',
+    vehicleType: 'van',
+    volumeRangeMin: 120,
+    volumeRangeMax: 250,
+    baseFee: 40.00,
+    perKmRate: 1.60,
+    loadType: 'Apartment + heavy items',
+    examples: 'Full apartment, couch + mattress',
+  },
+  E: {
+    class: 'E',
+    name: 'Pickup / Box Truck',
+    vehicleType: 'truck',
+    volumeRangeMin: 250,
+    volumeRangeMax: 500,
+    baseFee: 50.00,
+    perKmRate: 2.00,
+    loadType: 'Full moving capability',
+    examples: 'Full home move, appliances, heavy loads',
+  },
+};
+
+// Map legacy loadSize values to vehicle classes
+export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
+  'boxes': 'A',        // 0-15 ft³ → Class A
+  'small': 'B',        // Legacy small → Class B
+  'medium': 'C',       // 40-120 ft³ → Class C
+  'large': 'D',        // 120-250 ft³ → Class D
+  'apartment': 'E',    // 250+ ft³ → Class E (full move)
+};
+
+// Determine vehicle class from volume
+export function getVehicleClassFromVolume(volumeCuft: number): VehicleClass {
+  if (volumeCuft <= 15) return 'A';
+  if (volumeCuft <= 40) return 'B';
+  if (volumeCuft <= 120) return 'C';
+  if (volumeCuft <= 250) return 'D';
+  return 'E';
+}
+
+// Get vehicle class from load size
+export function getVehicleClassFromLoadSize(loadSize: string): VehicleClass {
+  return LOAD_SIZE_TO_CLASS[loadSize] || 'C';
+}
+
+// Get vehicle class config
+export function getVehicleClassConfig(vehicleClass: VehicleClass): VehicleClassConfig {
+  return VEHICLE_CLASSES[vehicleClass];
+}
+
+// Get all vehicle classes as array (for UI dropdowns)
+export function getAllVehicleClasses(): VehicleClassConfig[] {
+  return Object.values(VEHICLE_CLASSES);
+}
+
+// ===== ADDITIONAL PRICING CONFIGURATION =====
+
 const PRICING_CONFIG = {
-  BASE_FEE: 30.00,
-  DISTANCE_RATE_PER_KM: 1.00,
   MOVER_TRAVEL_RATE_PER_KM: 0.75,
   MOVER_TRAVEL_FREE_RADIUS_KM: 5,
-  LOAD_FEES: {
-    boxes: 0.00,      // 1-10 ft³: No fee for smallest items
-    medium: 15.00,    // 11-50 ft³: Small furniture
-    large: 30.00,     // 50-170 ft³: Large furniture
-    apartment: 45.00, // 170+ ft³: Full room furniture
-  },
+  
   PICKUP_DIFFICULTY_FEES: {
     ground: 0.00,
     basement: 10.00,
@@ -38,15 +142,18 @@ const PRICING_CONFIG = {
     elevator: 8.00,
   },
   HEAVY_ITEM_FEE: 15.00,
-  TWO_MOVERS_MULTIPLIER: 1.30, // 1 mover gets full fee (1x) + 2nd mover gets 30%
+  TWO_MOVERS_MULTIPLIER: 1.30,
+  
+  // Platform commission (15% for Uber-style payout)
+  PLATFORM_FEE_PERCENT: 15.00,
 };
 
 export type PickupDifficultyType = keyof typeof PRICING_CONFIG.PICKUP_DIFFICULTY_FEES;
 export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES;
 
 /**
- * Calculate the total price and breakdown for a moving job
- * Following the exact formula from requirements
+ * Calculate the total price using vehicle class-based pricing
+ * Base Fee + (Distance × Per-KM Rate) + Difficulty Fees + Heavy Item Fee
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,
@@ -55,25 +162,25 @@ export function calculatePrice(
   dropoffDifficulty: DropoffDifficultyType,
   heavyItem: boolean,
   numberOfMovers: 1 | 2,
-  moverToPickupDistance?: number
+  moverToPickupDistance?: number,
+  volumeCuft?: number  // Optional: use volume directly for more accurate class determination
 ): PriceBreakdown {
-  // Base fee
-  const baseFee = PRICING_CONFIG.BASE_FEE;
+  // Determine vehicle class (prefer volume if provided, otherwise use loadSize)
+  const vehicleClass = volumeCuft 
+    ? getVehicleClassFromVolume(volumeCuft)
+    : getVehicleClassFromLoadSize(loadSize);
   
-  // Distance fee (pickup → dropoff)
-  const distanceFee = pickupToDropoffDistance * PRICING_CONFIG.DISTANCE_RATE_PER_KM;
+  const classConfig = VEHICLE_CLASSES[vehicleClass];
   
-  // Load fee based on size
-  console.log('[calculatePrice] loadSize param:', loadSize, 'type:', typeof loadSize);
-  console.log('[calculatePrice] LOAD_FEES lookup:', PRICING_CONFIG.LOAD_FEES[loadSize]);
-  console.log('[calculatePrice] All LOAD_FEES:', PRICING_CONFIG.LOAD_FEES);
+  // Base fee from vehicle class
+  const baseFee = classConfig.baseFee;
   
-  // Explicitly check if loadSize exists in LOAD_FEES
-  const loadFee = PRICING_CONFIG.LOAD_FEES.hasOwnProperty(loadSize) 
-    ? PRICING_CONFIG.LOAD_FEES[loadSize]
-    : PRICING_CONFIG.LOAD_FEES.medium;
+  // Distance fee based on vehicle class per-km rate
+  const distanceFee = pickupToDropoffDistance * classConfig.perKmRate;
   
-  console.log('[calculatePrice] Final loadFee:', loadFee);
+  // Load fee is now included in base fee (class-based pricing)
+  // Keeping loadFee = 0 for backwards compatibility in breakdown display
+  const loadFee = 0;
   
   // Pickup difficulty fee
   const pickupDifficultyFee = PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0;
@@ -91,16 +198,13 @@ export function calculatePrice(
     moverTravelFee = chargeableDistance * PRICING_CONFIG.MOVER_TRAVEL_RATE_PER_KM;
   }
   
-  // Calculate subtotal (before number of movers multiplier)
+  // Calculate subtotal
   const subtotal = baseFee + distanceFee + loadFee + pickupDifficultyFee + 
                    dropoffDifficultyFee + heavyItemFee + moverTravelFee;
   
   // Apply number of movers multiplier
   const numberOfMoversMultiplier = numberOfMovers === 2 ? PRICING_CONFIG.TWO_MOVERS_MULTIPLIER : 1;
-  const subtotalAfterMultiplier = subtotal * numberOfMoversMultiplier;
-  
-  // Total cost (no urgency fee for MVP)
-  const totalCost = subtotalAfterMultiplier;
+  const totalCost = subtotal * numberOfMoversMultiplier;
   
   return {
     baseFee: Math.round(baseFee * 100) / 100,
@@ -113,38 +217,71 @@ export function calculatePrice(
     subtotal: Math.round(subtotal * 100) / 100,
     numberOfMoversMultiplier,
     totalCost: Math.round(totalCost * 100) / 100,
+    vehicleClass,
   };
 }
 
 /**
- * Calculate estimated earnings for a mover
+ * Calculate mover earnings after platform commission
  */
-export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): number {
-  // In a real Uber-style platform, this would deduct platform commission
-  // For MVP, movers get 100% of the price
-  return priceBreakdown.totalCost;
+export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): { 
+  gross: number; 
+  platformFee: number; 
+  net: number;
+  platformFeePercent: number;
+} {
+  const gross = priceBreakdown.totalCost;
+  const platformFeePercent = PRICING_CONFIG.PLATFORM_FEE_PERCENT;
+  const platformFee = gross * (platformFeePercent / 100);
+  const net = gross - platformFee;
+  
+  return {
+    gross: Math.round(gross * 100) / 100,
+    platformFee: Math.round(platformFee * 100) / 100,
+    net: Math.round(net * 100) / 100,
+    platformFeePercent,
+  };
 }
 
 /**
- * Format price breakdown for display
+ * Format price breakdown for display (includes vehicle class)
  */
 export function formatPriceBreakdown(breakdown: PriceBreakdown): string {
+  const classConfig = breakdown.vehicleClass ? VEHICLE_CLASSES[breakdown.vehicleClass] : null;
   const lines = [
+    classConfig ? `Vehicle Class ${breakdown.vehicleClass}: ${classConfig.name}` : null,
     `Base Fee: $${breakdown.baseFee.toFixed(2)}`,
-    `Distance Fee: $${breakdown.distanceFee.toFixed(2)}`,
-    breakdown.loadFee > 0 ? `Load Fee: $${breakdown.loadFee.toFixed(2)}` : null,
+    `Distance Fee (${classConfig ? `$${classConfig.perKmRate.toFixed(2)}/km` : 'per km'}): $${breakdown.distanceFee.toFixed(2)}`,
     breakdown.pickupDifficultyFee > 0 ? `Pickup Difficulty: $${breakdown.pickupDifficultyFee.toFixed(2)}` : null,
     breakdown.dropoffDifficultyFee > 0 ? `Dropoff Difficulty: $${breakdown.dropoffDifficultyFee.toFixed(2)}` : null,
     breakdown.heavyItemFee > 0 ? `Heavy Item: $${breakdown.heavyItemFee.toFixed(2)}` : null,
     breakdown.moverTravelFee > 0 ? `Mover Travel: $${breakdown.moverTravelFee.toFixed(2)}` : null,
-    breakdown.numberOfMoversMultiplier > 1 ? `2-Movers Fee (×${breakdown.numberOfMoversMultiplier}): 1st mover full fee + 2nd mover 30%` : null,
-    `Total: $${breakdown.totalCost.toFixed(2)}`,
+    breakdown.numberOfMoversMultiplier > 1 ? `2-Movers Fee (×${breakdown.numberOfMoversMultiplier}): +30%` : null,
+    `Total: $${breakdown.totalCost.toFixed(2)} CAD`,
   ];
   
   return lines.filter(Boolean).join('\n');
 }
 
-// Helper functions to get friendly labels
+/**
+ * Get price estimate preview (for quick quotes)
+ */
+export function getQuickPriceEstimate(
+  distanceKm: number, 
+  vehicleClass: VehicleClass
+): { min: number; max: number; baseFee: number; perKmRate: number } {
+  const config = VEHICLE_CLASSES[vehicleClass];
+  const basePrice = config.baseFee + (distanceKm * config.perKmRate);
+  
+  return {
+    min: Math.round(basePrice * 0.9 * 100) / 100,  // -10% for simple moves
+    max: Math.round(basePrice * 1.3 * 100) / 100,  // +30% for complex moves
+    baseFee: config.baseFee,
+    perKmRate: config.perKmRate,
+  };
+}
+
+// Helper functions for labels
 export function getPickupDifficultyLabel(difficulty: PickupDifficultyType): string {
   const labels: Record<PickupDifficultyType, string> = {
     ground: 'Ground Floor',
@@ -163,4 +300,30 @@ export function getDropoffDifficultyLabel(difficulty: DropoffDifficultyType): st
     elevator: 'Elevator',
   };
   return labels[difficulty] || difficulty;
+}
+
+export function getVehicleClassLabel(vehicleClass: VehicleClass): string {
+  const config = VEHICLE_CLASSES[vehicleClass];
+  return `Class ${vehicleClass}: ${config.name}`;
+}
+
+export function getVehicleClassDescription(vehicleClass: VehicleClass): string {
+  const config = VEHICLE_CLASSES[vehicleClass];
+  return `${config.volumeRangeMin}-${config.volumeRangeMax} ft³ • $${config.baseFee} base + $${config.perKmRate.toFixed(2)}/km`;
+}
+
+// Export pricing config for admin/debug purposes
+export function getPricingConfig() {
+  return {
+    vehicleClasses: VEHICLE_CLASSES,
+    additionalFees: {
+      moverTravelRatePerKm: PRICING_CONFIG.MOVER_TRAVEL_RATE_PER_KM,
+      moverTravelFreeRadiusKm: PRICING_CONFIG.MOVER_TRAVEL_FREE_RADIUS_KM,
+      pickupDifficultyFees: PRICING_CONFIG.PICKUP_DIFFICULTY_FEES,
+      dropoffDifficultyFees: PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES,
+      heavyItemFee: PRICING_CONFIG.HEAVY_ITEM_FEE,
+      twoMoversMultiplier: PRICING_CONFIG.TWO_MOVERS_MULTIPLIER,
+    },
+    platformFeePercent: PRICING_CONFIG.PLATFORM_FEE_PERCENT,
+  };
 }
