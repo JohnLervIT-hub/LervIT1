@@ -17,7 +17,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -94,6 +94,10 @@ export default function RequestMove() {
   const [isIdentifyingItems, setIsIdentifyingItems] = useState(false);
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
+  
+  // Field validation error states
+  const [pickupAccessError, setPickupAccessError] = useState(false);
+  const [dropoffAccessError, setDropoffAccessError] = useState(false);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
@@ -518,18 +522,19 @@ export default function RequestMove() {
         return;
       }
       // Access types are mandatory
+      let hasAccessError = false;
       if (!pickupDifficulty) {
-        toast({
-          title: "Pickup access type required",
-          description: "Please select how we'll access your pickup location.",
-          variant: "destructive",
-        });
-        return;
+        setPickupAccessError(true);
+        hasAccessError = true;
       }
       if (!dropoffDifficulty) {
+        setDropoffAccessError(true);
+        hasAccessError = true;
+      }
+      if (hasAccessError) {
         toast({
-          title: "Dropoff access type required",
-          description: "Please select how we'll access your dropoff location.",
+          title: "Access type required",
+          description: "Please select access type for both pickup and dropoff locations.",
           variant: "destructive",
         });
         return;
@@ -918,10 +923,17 @@ export default function RequestMove() {
                             
                             <div>
                               <Label htmlFor="pickup-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
-                                Access Type
+                                Access Type <span className="text-destructive">*</span>
                               </Label>
-                              <Select value={pickupDifficulty} onValueChange={setPickupDifficulty}>
-                                <SelectTrigger id="pickup-difficulty" className="h-11 bg-card" data-testid="select-pickup-difficulty">
+                              <Select value={pickupDifficulty} onValueChange={(val) => {
+                                setPickupDifficulty(val);
+                                setPickupAccessError(false);
+                              }}>
+                                <SelectTrigger 
+                                  id="pickup-difficulty" 
+                                  className={`h-11 bg-card ${pickupAccessError ? 'border-destructive ring-1 ring-destructive' : ''}`} 
+                                  data-testid="select-pickup-difficulty"
+                                >
                                   <SelectValue placeholder="Select access type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -951,6 +963,12 @@ export default function RequestMove() {
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
+                              {pickupAccessError && (
+                                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Please select pickup access type
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1000,10 +1018,17 @@ export default function RequestMove() {
                             
                             <div>
                               <Label htmlFor="dropoff-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
-                                Access Type
+                                Access Type <span className="text-destructive">*</span>
                               </Label>
-                              <Select value={dropoffDifficulty} onValueChange={setDropoffDifficulty}>
-                                <SelectTrigger id="dropoff-difficulty" className="h-11 bg-card" data-testid="select-dropoff-difficulty">
+                              <Select value={dropoffDifficulty} onValueChange={(val) => {
+                                setDropoffDifficulty(val);
+                                setDropoffAccessError(false);
+                              }}>
+                                <SelectTrigger 
+                                  id="dropoff-difficulty" 
+                                  className={`h-11 bg-card ${dropoffAccessError ? 'border-destructive ring-1 ring-destructive' : ''}`} 
+                                  data-testid="select-dropoff-difficulty"
+                                >
                                   <SelectValue placeholder="Select access type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1033,6 +1058,12 @@ export default function RequestMove() {
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
+                              {dropoffAccessError && (
+                                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Please select dropoff access type
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
