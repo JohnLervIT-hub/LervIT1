@@ -38,6 +38,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useState } from "react";
 import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
@@ -63,12 +74,26 @@ type Booking = {
   };
 };
 
+const LOAD_SIZE_OPTIONS = [
+  { value: 'boxes', label: 'Boxes Only (0-15 ft³)', class: 'A' },
+  { value: 'medium', label: 'Medium (40-120 ft³)', class: 'C' },
+  { value: 'large', label: 'Large (120-250 ft³)', class: 'D' },
+  { value: 'apartment', label: 'Full Move (250+ ft³)', class: 'E' },
+];
+
 export default function CustomerDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [feedbackBooking, setFeedbackBooking] = useState<Booking | null>(null);
+  const [rating, setRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [actualLoadSize, setActualLoadSize] = useState('');
+  const [feedbackComment, setFeedbackComment] = useState('');
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
@@ -106,6 +131,75 @@ export default function CustomerDashboard() {
       });
     },
   });
+
+  const feedbackMutation = useMutation({
+    mutationFn: async (data: { bookingId: string; rating: number; actualLoadSize: string; comment: string }) => {
+      const booking = bookings?.find(b => b.id === data.bookingId);
+      if (!booking) throw new Error("Booking not found");
+      
+      const loadSizeChanged = data.actualLoadSize && data.actualLoadSize !== booking.loadSize;
+      
+      return await apiRequest("POST", "/api/learning/booking-metrics", {
+        bookingId: data.bookingId,
+        estimatedVehicleClass: getClassFromLoadSize(booking.loadSize),
+        actualVehicleClass: data.actualLoadSize ? getClassFromLoadSize(data.actualLoadSize) : getClassFromLoadSize(booking.loadSize),
+        customerRating: data.rating,
+        loadSizeAccurate: !loadSizeChanged,
+        feedbackNotes: data.comment || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Thank You!",
+        description: "Your feedback helps us improve our service.",
+      });
+      setFeedbackDialogOpen(false);
+      setFeedbackBooking(null);
+      resetFeedbackForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Feedback Failed",
+        description: error.message || "Unable to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getClassFromLoadSize = (loadSize: string): string => {
+    const mapping: Record<string, string> = {
+      'boxes': 'A',
+      'small': 'B', 
+      'medium': 'C',
+      'large': 'D',
+      'apartment': 'E',
+    };
+    return mapping[loadSize] || 'C';
+  };
+
+  const resetFeedbackForm = () => {
+    setRating(5);
+    setHoverRating(0);
+    setActualLoadSize('');
+    setFeedbackComment('');
+  };
+
+  const handleLeaveFeedback = (booking: Booking) => {
+    setFeedbackBooking(booking);
+    setActualLoadSize(booking.loadSize);
+    setFeedbackDialogOpen(true);
+  };
+
+  const submitFeedback = () => {
+    if (!feedbackBooking) return;
+    feedbackMutation.mutate({
+      bookingId: feedbackBooking.id,
+      rating,
+      actualLoadSize,
+      comment: feedbackComment,
+    });
+  };
 
   const now = new Date();
   
@@ -459,6 +553,20 @@ export default function CustomerDashboard() {
                         Moved by {booking.mover.user.name}
                       </p>
                     )}
+
+                    {booking.status === "completed" && (
+                      <div className="flex items-center justify-end mt-3 pt-3 border-t">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleLeaveFeedback(booking)}
+                          data-testid={`button-feedback-${booking.id}`}
+                        >
+                          <Star className="w-4 h-4 mr-1" />
+                          Leave Feedback
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))
@@ -526,6 +634,123 @@ export default function CustomerDashboard() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Post-Move Feedback Dialog */}
+        <Dialog open={feedbackDialogOpen} onOpenChange={(open) => {
+          setFeedbackDialogOpen(open);
+          if (!open) resetFeedbackForm();
+        }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                How was your move?
+              </DialogTitle>
+              <DialogDescription>
+                {feedbackBooking && (
+                  <>Your feedback helps us improve and train our matching system.</>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              <div className="space-y-2">
+                <Label>Rate your experience</Label>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(star)}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      className="p-1 transition-transform hover:scale-110 focus:outline-none"
+                      data-testid={`button-star-${star}`}
+                    >
+                      <Star 
+                        className={`w-8 h-8 transition-colors ${
+                          star <= (hoverRating || rating)
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-muted-foreground'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {rating === 5 && "Excellent!"}
+                  {rating === 4 && "Great!"}
+                  {rating === 3 && "Good"}
+                  {rating === 2 && "Fair"}
+                  {rating === 1 && "Needs improvement"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Was the load size estimate accurate?</Label>
+                <RadioGroup 
+                  value={actualLoadSize} 
+                  onValueChange={setActualLoadSize}
+                  className="grid grid-cols-1 gap-2"
+                >
+                  {LOAD_SIZE_OPTIONS.map((option) => (
+                    <div key={option.value} className="flex items-center space-x-2">
+                      <RadioGroupItem 
+                        value={option.value} 
+                        id={option.value}
+                        data-testid={`radio-loadsize-${option.value}`}
+                      />
+                      <Label htmlFor={option.value} className="text-sm cursor-pointer">
+                        {option.label}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+                {feedbackBooking && actualLoadSize && actualLoadSize !== feedbackBooking.loadSize && (
+                  <p className="text-xs text-amber-600">
+                    Thanks! This helps our AI estimate better next time.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="feedback-comment">Additional comments (optional)</Label>
+                <Textarea
+                  id="feedback-comment"
+                  placeholder="Any other feedback about your move..."
+                  value={feedbackComment}
+                  onChange={(e) => setFeedbackComment(e.target.value)}
+                  rows={3}
+                  data-testid="textarea-feedback"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setFeedbackDialogOpen(false)}
+                data-testid="button-cancel-feedback"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={submitFeedback}
+                disabled={feedbackMutation.isPending}
+                data-testid="button-submit-feedback"
+              >
+                {feedbackMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Feedback"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
