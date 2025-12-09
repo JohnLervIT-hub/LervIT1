@@ -517,18 +517,7 @@ export default function RequestMove() {
         });
         return;
       }
-    }
-
-    // Step 2: Validate photos and access types (MANDATORY)
-    if (step === 2) {
-      if (!images || images.length === 0) {
-        toast({
-          title: "Photos required",
-          description: "Please upload at least one photo of your items to continue.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Access types are mandatory
       if (!pickupDifficulty) {
         toast({
           title: "Pickup access type required",
@@ -541,6 +530,18 @@ export default function RequestMove() {
         toast({
           title: "Dropoff access type required",
           description: "Please select how we'll access your dropoff location.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Step 2: Validate photos (MANDATORY)
+    if (step === 2) {
+      if (!images || images.length === 0) {
+        toast({
+          title: "Photos required",
+          description: "Please upload at least one photo of your items to continue.",
           variant: "destructive",
         });
         return;
