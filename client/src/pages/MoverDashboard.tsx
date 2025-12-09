@@ -812,7 +812,7 @@ export default function MoverDashboard() {
                   )}
                   {parseFloat(booking.heavyItemFee || "0") > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Heavy Item Fee</span>
+                      <span className="text-muted-foreground">Load Size Fee</span>
                       <span className="font-medium">
                         ${parseFloat(booking.heavyItemFee || "0").toFixed(2)}
                       </span>
