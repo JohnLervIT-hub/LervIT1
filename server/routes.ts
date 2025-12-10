@@ -4315,24 +4315,26 @@ Respond with VALID JSON only:
         }
       }
       
-      // Import AI identifier (dynamic to avoid loading on startup)
-      const { identifyAndCategorizeItem } = await import('./ai-identifier');
+      // Import Vision Engine 2.0 (dynamic to avoid loading on startup)
+      const { identifyItemV2, toIdentificationResult } = await import('./vision-engine-v2');
       
-      console.log(`[AI Identifier] Processing ${photoUrls.length} photos in parallel...`);
+      console.log(`[Vision Engine 2.0] Processing ${photoUrls.length} photos in parallel...`);
       const startTime = Date.now();
       
-      // Process ALL photos in parallel for speed
+      // Process ALL photos in parallel for speed using Vision Engine 2.0
       const results = await Promise.allSettled(
         photoUrls.map(async (photoUrl: string, i: number) => {
-          console.log(`[AI Identifier] Starting photo ${i + 1}/${photoUrls.length}: ${photoUrl}`);
-          const result = await identifyAndCategorizeItem(photoUrl);
-          console.log(`[AI Identifier] Completed photo ${i + 1}: ${result.itemName}`);
+          console.log(`[Vision Engine 2.0] Starting photo ${i + 1}/${photoUrls.length}: ${photoUrl}`);
+          const v2Result = await identifyItemV2(photoUrl);
+          // Convert to legacy format for backward compatibility
+          const result = toIdentificationResult(v2Result);
+          console.log(`[Vision Engine 2.0] Completed photo ${i + 1}: ${result.itemName} (${v2Result.source})`);
           return { photoUrl, result, index: i };
         })
       );
       
       const processingTime = Date.now() - startTime;
-      console.log(`[AI Identifier] All ${photoUrls.length} photos processed in ${processingTime}ms`);
+      console.log(`[Vision Engine 2.0] All ${photoUrls.length} photos processed in ${processingTime}ms`);
       
       // Collect results
       const items: any[] = [];
@@ -4385,7 +4387,7 @@ Respond with VALID JSON only:
         } else {
           const error = settled.reason;
           const photoUrl = photoUrls[results.indexOf(settled)];
-          console.error(`[AI Identifier] Error processing photo:`, error);
+          console.error(`[Vision Engine 2.0] Error processing photo:`, error);
           
           items.push({
             id: `temp-${results.indexOf(settled)}`,
@@ -4412,7 +4414,7 @@ Respond with VALID JSON only:
         },
       });
     } catch (error: any) {
-      console.error('[AI Identifier] Route error:', error);
+      console.error('[Vision Engine 2.0] Route error:', error);
       res.status(500).json({ error: "Failed to identify items" });
     }
   });
