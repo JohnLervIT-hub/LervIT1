@@ -203,8 +203,8 @@ export default function LandingPage() {
                 Moving Made <span className="text-primary">Intelligent</span>
               </h1>
               <p className="text-xl text-muted-foreground mb-8 max-w-xl mx-auto lg:mx-0">
-                Just snap a photo of your items. Our AI identifies everything, calculates exact dimensions, 
-                and connects you with verified movers nearby. No guesswork, no surprises.
+                Enter your locations, snap a photo of your items, and our AI handles the rest. 
+                Instant quotes, verified movers nearby. No guesswork, no surprises.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <Link href="/request-move">
