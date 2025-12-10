@@ -2447,98 +2447,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             logEvent.payment('booking_updated', { bookingId: booking.id, status: 'succeeded' });
             
+            // ATOMICITY: All post-payment operations are wrapped in try-catch
+            // to ensure webhook success even if notifications fail.
+            // Booking status is already updated - these are non-critical follow-ups.
+            
             // Send booking confirmation and payment receipt emails
-            const customer = await storage.getUser(booking.customerId);
-            if (customer) {
-              // NOW send booking confirmation (payment completed)
-              await notificationService.sendBookingConfirmation(customer, booking);
-              
-              // Also send payment receipt
-              await notificationService.sendPaymentReceipt(
-                customer,
-                booking,
-                booking.price || '0'
-              );
+            try {
+              const customer = await storage.getUser(booking.customerId);
+              if (customer) {
+                await notificationService.sendBookingConfirmation(customer, booking);
+                await notificationService.sendPaymentReceipt(
+                  customer,
+                  booking,
+                  booking.price || '0'
+                );
+                logEvent.notification('customer_emails_sent', { bookingId: booking.id, customerId: customer.id });
+              }
+            } catch (emailErr) {
+              logEvent.error('webhook_customer_emails', emailErr, { bookingId: booking.id });
             }
             
-            // NOW find and notify movers (payment completed)
-            const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
-            const { toDecimalString } = await import("@shared/utils");
-            
-            const pickupCoords = {
-              lat: parseFloat(String(booking.pickupLatitude || '0')),
-              lng: parseFloat(String(booking.pickupLongitude || '0')),
-            };
-            const dropoffCoords = {
-              lat: parseFloat(String(booking.dropoffLatitude || '0')),
-              lng: parseFloat(String(booking.dropoffLongitude || '0')),
-            };
-            
-            // Find nearest available movers
-            const allMovers = await storage.getAvailableMoversWithCoordinates();
-            const moversWithUserData = await Promise.all(
-              allMovers.map(async (m: any) => {
-                const moverUser = await storage.getUser(m.userId);
-                if (!moverUser || m.latitude === null || m.longitude === null) {
-                  return null;
-                }
-                return {
-                  moverId: m.id,
-                  userId: m.userId,
-                  name: moverUser.name,
-                  vehicleType: m.vehicleType,
-                  rating: m.rating || '0',
-                  totalMoves: m.totalMoves,
-                  isAvailable: m.isAvailable,
-                  latitude: m.latitude as number,
-                  longitude: m.longitude as number,
-                };
-              })
-            ).then(results => results.filter((m: any): m is NonNullable<typeof m> => m !== null));
-            
-            // Use AI-recommended vehicle type for intelligent mover filtering
-            const nearestMovers = findNearestMovers(
-              pickupCoords,
-              dropoffCoords,
-              (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
-              moversWithUserData,
-              {},
-              booking.aiRecommendedVehicle || null
-            );
-            
-            // Create job notifications for top movers
-            const expiresAt = calculateExpiryTime(10); // 10 minutes
-            await Promise.all(
-              nearestMovers.map((mover: any) =>
-                storage.createJobNotification({
-                  bookingId: booking.id,
-                  moverId: mover.moverId,
-                  distanceToPickup: toDecimalString(mover.distanceToPickup),
-                  estimatedEarnings: toDecimalString(mover.estimatedEarnings),
-                  status: 'pending',
-                  expiresAt,
+            // Find and notify movers (non-blocking - booking is already confirmed)
+            try {
+              const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+              const { toDecimalString } = await import("@shared/utils");
+              
+              const pickupCoords = {
+                lat: parseFloat(String(booking.pickupLatitude || '0')),
+                lng: parseFloat(String(booking.pickupLongitude || '0')),
+              };
+              const dropoffCoords = {
+                lat: parseFloat(String(booking.dropoffLatitude || '0')),
+                lng: parseFloat(String(booking.dropoffLongitude || '0')),
+              };
+              
+              // Find nearest available movers
+              const allMovers = await storage.getAvailableMoversWithCoordinates();
+              const moversWithUserData = await Promise.all(
+                allMovers.map(async (m: any) => {
+                  const moverUser = await storage.getUser(m.userId);
+                  if (!moverUser || m.latitude === null || m.longitude === null) {
+                    return null;
+                  }
+                  return {
+                    moverId: m.id,
+                    userId: m.userId,
+                    name: moverUser.name,
+                    vehicleType: m.vehicleType,
+                    rating: m.rating || '0',
+                    totalMoves: m.totalMoves,
+                    isAvailable: m.isAvailable,
+                    latitude: m.latitude as number,
+                    longitude: m.longitude as number,
+                  };
                 })
-              )
-            );
-            
-            // Send job assignment emails to movers
-            await Promise.all(
-              nearestMovers.map(async (mover: any) => {
-                const moverUser = await storage.getUser(mover.userId);
-                if (moverUser) {
-                  await notificationService.sendJobAssignment(
-                    moverUser,
-                    booking,
-                    mover.estimatedEarnings.toFixed(2)
-                  );
-                }
-              })
-            );
-            
-            logEvent.payment('movers_notified', { 
-              bookingId: booking.id, 
-              moversNotified: nearestMovers.length 
-            });
+              ).then(results => results.filter((m: any): m is NonNullable<typeof m> => m !== null));
+              
+              // Use AI-recommended vehicle type for intelligent mover filtering
+              const nearestMovers = findNearestMovers(
+                pickupCoords,
+                dropoffCoords,
+                (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+                moversWithUserData,
+                {},
+                booking.aiRecommendedVehicle || null
+              );
+              
+              // Create job notifications for top movers
+              const expiresAt = calculateExpiryTime(10); // 10 minutes
+              await Promise.all(
+                nearestMovers.map((mover: any) =>
+                  storage.createJobNotification({
+                    bookingId: booking.id,
+                    moverId: mover.moverId,
+                    distanceToPickup: toDecimalString(mover.distanceToPickup),
+                    estimatedEarnings: toDecimalString(mover.estimatedEarnings),
+                    status: 'pending',
+                    expiresAt,
+                  })
+                )
+              );
+              
+              // Send job assignment emails to movers (wrapped separately for isolation)
+              try {
+                await Promise.all(
+                  nearestMovers.map(async (mover: any) => {
+                    const moverUser = await storage.getUser(mover.userId);
+                    if (moverUser) {
+                      await notificationService.sendJobAssignment(
+                        moverUser,
+                        booking,
+                        mover.estimatedEarnings.toFixed(2)
+                      );
+                    }
+                  })
+                );
+              } catch (moverEmailErr) {
+                logEvent.error('webhook_mover_emails', moverEmailErr, { bookingId: booking.id });
+              }
+              
+              logEvent.payment('movers_notified', { 
+                bookingId: booking.id, 
+                moversNotified: nearestMovers.length 
+              });
+            } catch (moverNotifyErr) {
+              logEvent.error('webhook_mover_notifications', moverNotifyErr, { bookingId: booking.id });
+            }
           }
           break;
           

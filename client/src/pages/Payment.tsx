@@ -256,7 +256,7 @@ export default function Payment() {
               <div>
                 <span className="font-medium">Date: </span>
                 <span className="text-muted-foreground" data-testid="text-booking-date">
-                  {booking.preferredDate}
+                  {booking.preferredDate ? new Date(booking.preferredDate).toLocaleDateString() : 'TBD'}
                 </span>
               </div>
             </div>
