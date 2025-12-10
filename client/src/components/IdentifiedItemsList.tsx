@@ -44,29 +44,31 @@ export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListPro
     item.handlingComplexity === 'high' || item.handlingComplexity === 'very_high'
   );
   
+  // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
+  // CAR_MAX: 20, VAN_MAX: 80, PICKUP_MAX: 170, >170 → Truck
   const getVehicleRecommendation = () => {
-    if (totalVolume > 150) return { 
+    if (totalVolume > 170) return { 
       vehicle: 'Moving Truck', 
       loadSize: 'Apartment Move', 
-      description: '150+ ft³',
+      description: '170+ ft³',
       gradient: 'from-red-500 to-orange-500',
       bgColor: 'bg-red-50 dark:bg-red-950/30',
       textColor: 'text-red-700 dark:text-red-400',
       borderColor: 'border-red-200 dark:border-red-800'
     };
-    if (totalVolume > 50) return { 
+    if (totalVolume > 80) return { 
       vehicle: 'Pickup Truck', 
       loadSize: 'Large Load', 
-      description: '51-150 ft³',
+      description: '81-170 ft³',
       gradient: 'from-orange-500 to-amber-500',
       bgColor: 'bg-orange-50 dark:bg-orange-950/30',
       textColor: 'text-orange-700 dark:text-orange-400',
       borderColor: 'border-orange-200 dark:border-orange-800'
     };
-    if (totalVolume > 10) return { 
+    if (totalVolume > 20) return { 
       vehicle: 'Cargo Van', 
       loadSize: 'Medium Load', 
-      description: '11-50 ft³',
+      description: '21-80 ft³',
       gradient: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-50 dark:bg-blue-950/30',
       textColor: 'text-blue-700 dark:text-blue-400',
@@ -75,7 +77,7 @@ export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListPro
     return { 
       vehicle: 'Car/SUV', 
       loadSize: 'Small Load', 
-      description: '1-10 ft³',
+      description: '0-20 ft³',
       gradient: 'from-green-500 to-emerald-500',
       bgColor: 'bg-green-50 dark:bg-green-950/30',
       textColor: 'text-green-700 dark:text-green-400',
