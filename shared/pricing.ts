@@ -5,14 +5,16 @@ export interface PriceBreakdown {
   baseFee: number;
   distanceFee: number;
   loadFee: number;
+  loadSizeFee: number;  // New: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
   moverTravelFee: number;
   pickupDifficultyFee: number;
   dropoffDifficultyFee: number;
-  heavyItemFee: number;
+  heavyItemFee: number;  // Kept for backwards compatibility
   subtotal: number;
   numberOfMoversMultiplier: number;
   totalCost: number;
   vehicleClass?: VehicleClass;
+  loadSize?: string;  // Store the load size for display
 }
 
 // ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
@@ -141,7 +143,14 @@ const PRICING_CONFIG = {
     stairs: 5.00,
     elevator: 8.00,
   },
-  HEAVY_ITEM_FEE: 15.00,
+  // Load Size Fees (replaces heavy item fee in pricing calculation)
+  LOAD_SIZE_FEES: {
+    boxes: 0.00,
+    medium: 15.00,
+    large: 30.00,
+    apartment: 45.00,
+  } as Record<string, number>,
+  HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   
   // Platform commission (15% for Uber-style payout)
@@ -153,7 +162,8 @@ export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICUL
 
 /**
  * Calculate the total price using vehicle class-based pricing
- * Base Fee + (Distance × Per-KM Rate) + Difficulty Fees + Heavy Item Fee
+ * New formula: total = baseFee + distanceFee + loadSizeFee + accessFees
+ * Load Size Fees: Boxes: $0, Medium: $15, Large: $30, Apartment: $45
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,
@@ -182,14 +192,18 @@ export function calculatePrice(
   // Keeping loadFee = 0 for backwards compatibility in breakdown display
   const loadFee = 0;
   
+  // NEW: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
+  const loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
+  
   // Pickup difficulty fee
   const pickupDifficultyFee = PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0;
   
   // Dropoff difficulty fee
   const dropoffDifficultyFee = PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES[dropoffDifficulty] || 0;
   
-  // Heavy item fee
-  const heavyItemFee = heavyItem ? PRICING_CONFIG.HEAVY_ITEM_FEE : 0;
+  // Heavy item fee - kept in form but NOT included in pricing calculation anymore
+  // (User can still toggle it but it doesn't affect the price)
+  const heavyItemFee = 0;  // Previously: heavyItem ? PRICING_CONFIG.HEAVY_ITEM_FEE : 0;
   
   // Mover travel fee (only if mover travels more than free radius)
   let moverTravelFee = 0;
@@ -198,9 +212,9 @@ export function calculatePrice(
     moverTravelFee = chargeableDistance * PRICING_CONFIG.MOVER_TRAVEL_RATE_PER_KM;
   }
   
-  // Calculate subtotal
-  const subtotal = baseFee + distanceFee + loadFee + pickupDifficultyFee + 
-                   dropoffDifficultyFee + heavyItemFee + moverTravelFee;
+  // Calculate subtotal: baseFee + distanceFee + loadSizeFee + accessFees
+  const subtotal = baseFee + distanceFee + loadSizeFee + pickupDifficultyFee + 
+                   dropoffDifficultyFee + moverTravelFee;
   
   // Apply number of movers multiplier
   const numberOfMoversMultiplier = numberOfMovers === 2 ? PRICING_CONFIG.TWO_MOVERS_MULTIPLIER : 1;
@@ -210,6 +224,7 @@ export function calculatePrice(
     baseFee: Math.round(baseFee * 100) / 100,
     distanceFee: Math.round(distanceFee * 100) / 100,
     loadFee: Math.round(loadFee * 100) / 100,
+    loadSizeFee: Math.round(loadSizeFee * 100) / 100,
     pickupDifficultyFee: Math.round(pickupDifficultyFee * 100) / 100,
     dropoffDifficultyFee: Math.round(dropoffDifficultyFee * 100) / 100,
     heavyItemFee: Math.round(heavyItemFee * 100) / 100,
@@ -218,6 +233,7 @@ export function calculatePrice(
     numberOfMoversMultiplier,
     totalCost: Math.round(totalCost * 100) / 100,
     vehicleClass,
+    loadSize,
   };
 }
 

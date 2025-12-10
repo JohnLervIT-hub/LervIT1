@@ -55,6 +55,11 @@ export function PricingSummary({ breakdown, isCalculating, error, className }: P
     );
   }
 
+  // Format load size label for display
+  const loadSizeLabel = breakdown.loadSize 
+    ? `Load Size Fee (${breakdown.loadSize.charAt(0).toUpperCase() + breakdown.loadSize.slice(1)})`
+    : "Load Size Fee";
+
   const feeItems = [
     { 
       label: "Base Fee", 
@@ -71,11 +76,11 @@ export function PricingSummary({ breakdown, isCalculating, error, className }: P
       show: true
     },
     { 
-      label: "Load Size", 
-      amount: breakdown.loadFee, 
+      label: loadSizeLabel, 
+      amount: breakdown.loadSizeFee, 
       testId: "fee-loadsize",
       icon: Package,
-      show: breakdown.loadFee > 0
+      show: true  // Always show Load Size Fee line
     },
     { 
       label: "Pickup Access", 
@@ -90,13 +95,6 @@ export function PricingSummary({ breakdown, isCalculating, error, className }: P
       testId: "fee-dropoff",
       icon: TrendingUp,
       show: breakdown.dropoffDifficultyFee > 0
-    },
-    { 
-      label: "Heavy Items", 
-      amount: breakdown.heavyItemFee, 
-      testId: "fee-heavy",
-      icon: Package,
-      show: breakdown.heavyItemFee > 0
     },
     { 
       label: "Mover Travel", 
