@@ -1821,6 +1821,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Booking not found" });
       }
       
+      // Import geocoding functions
+      const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
+      
       // Build update object with geocoding for changed addresses
       const updateData: any = {};
       
@@ -1852,12 +1855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dropoffGeo = await geocodeAddress(finalDropoff);
       
       if (pickupGeo.success && dropoffGeo.success) {
-        const distanceResult = await calculateDistance(
-          pickupGeo.coordinates.lat,
-          pickupGeo.coordinates.lng,
-          dropoffGeo.coordinates.lat,
-          dropoffGeo.coordinates.lng
-        );
+        const distanceResult = await getDrivingDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
         updateData.distance = distanceResult.distanceKm.toFixed(2);
       }
       
@@ -2036,13 +2034,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (availableMovers.length > 0) {
           // Notify up to 5 nearest movers
           const moversToNotify = availableMovers.slice(0, 5);
+          const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
           for (const mover of moversToNotify) {
             await storage.createJobNotification({
               moverId: mover.userId,
               bookingId: booking.id,
               status: 'pending',
-              estimatedDistance: 0,
+              distanceToPickup: '0',
               estimatedEarnings: booking.price || '0',
+              expiresAt,
             });
           }
           console.log(`[Payment] Notified ${moversToNotify.length} movers about job`);
@@ -2364,12 +2364,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const { toDecimalString } = await import("@shared/utils");
             
             const pickupCoords = {
-              lat: parseFloat(booking.pickupLatitude || '0'),
-              lng: parseFloat(booking.pickupLongitude || '0'),
+              lat: parseFloat(String(booking.pickupLatitude || '0')),
+              lng: parseFloat(String(booking.pickupLongitude || '0')),
             };
             const dropoffCoords = {
-              lat: parseFloat(booking.dropoffLatitude || '0'),
-              lng: parseFloat(booking.dropoffLongitude || '0'),
+              lat: parseFloat(String(booking.dropoffLatitude || '0')),
+              lng: parseFloat(String(booking.dropoffLongitude || '0')),
             };
             
             // Find nearest available movers
