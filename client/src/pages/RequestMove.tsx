@@ -117,6 +117,7 @@ export default function RequestMove() {
         setImages(data.images || []);
         setDate(data.date || "");
         setStep(3); // Jump to final step since they already filled everything
+        window.scrollTo({ top: 0, behavior: "smooth" });
         
         sessionStorage.removeItem('pendingBooking');
         
@@ -555,6 +556,7 @@ export default function RequestMove() {
 
     if (step < 3) {
       setStep(step + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       // Validate date before submission
       if (!date) {
@@ -627,6 +629,7 @@ export default function RequestMove() {
   const handleBack = () => {
     if (step > 1) {
       setStep(step - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 

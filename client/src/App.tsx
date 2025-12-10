@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import { useJsApiLoader } from "@react-google-maps/api";
 import Header from "@/components/Header";
 import SplashScreen from "@/components/SplashScreen";
@@ -214,6 +215,7 @@ function App() {
         <AuthProvider>
           <TooltipProvider>
             <ErrorBoundary>
+              <ScrollToTop />
               <Header />
               <div className="pb-16 md:pb-0">
                 <PageTransition>
