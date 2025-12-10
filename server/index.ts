@@ -6,7 +6,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { initBackgroundJobs } from "./background-jobs";
 import { logger, logEvent } from "./logger";
-import { initSentry } from "./sentry";
+import { initSentry, setupSentryErrorHandler } from "./sentry";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
@@ -142,6 +142,9 @@ app.use((req, res, next) => {
 (async () => {
   try {
     const server = await registerRoutes(app);
+
+    // Sentry error handler must be after routes but before custom error handler
+    setupSentryErrorHandler(app);
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;

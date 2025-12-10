@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { logger } from './logger';
+import type { Express } from 'express';
 
 export function initSentry() {
   const dsn = process.env.SENTRY_DSN;
@@ -12,11 +13,16 @@ export function initSentry() {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV || 'development',
-    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    integrations: [],
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
   });
   
   logger.info({ event: 'sentry' }, 'Sentry error monitoring initialized');
+}
+
+export function setupSentryErrorHandler(app: Express) {
+  if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+  }
 }
 
 export function captureException(error: Error | unknown, context?: {
