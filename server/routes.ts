@@ -2597,6 +2597,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         earningsByMonth[month].count += 1;
       });
       
+      // Fetch customer names for recent bookings
+      const recentBookingsWithCustomer = await Promise.all(
+        completedBookings.slice(0, 10).map(async (b) => {
+          const customer = await storage.getUser(b.customerId);
+          return {
+            id: b.id,
+            customerName: customer?.name || 'Customer',
+            pickupAddress: b.pickupAddress,
+            dropoffAddress: b.dropoffAddress,
+            date: b.preferredDate,
+            earnings: b.price,
+            status: b.status,
+            paymentStatus: b.paymentStatus,
+          };
+        })
+      );
+      
       res.json({
         totalEarnings: totalEarnings.toFixed(2),
         pendingEarnings: pendingEarnings.toFixed(2),
@@ -2607,16 +2624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           earnings: data.earnings.toFixed(2),
           jobCount: data.count,
         })),
-        recentBookings: completedBookings.slice(0, 10).map(b => ({
-          id: b.id,
-          customerName: (b as any).customer?.name || 'Unknown',
-          pickupAddress: b.pickupAddress,
-          dropoffAddress: b.dropoffAddress,
-          date: b.preferredDate,
-          earnings: b.price,
-          status: b.status,
-          paymentStatus: b.paymentStatus,
-        })),
+        recentBookings: recentBookingsWithCustomer,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch earnings" });
