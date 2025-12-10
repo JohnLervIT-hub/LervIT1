@@ -591,7 +591,7 @@ export default function MyBookings() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-4 border-t">
-                    {booking.status === "in_transit" && (
+                    {["en_route_to_pickup", "loading", "en_route_to_dropoff", "unloading", "in_transit"].includes(booking.status) && (
                       <Button
                         onClick={() => setLocation(`/track-trip/${booking.id}`)}
                         data-testid={`button-track-trip-${booking.id}`}
