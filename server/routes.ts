@@ -2418,9 +2418,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         case 'payment_intent.succeeded':
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
           
+          // STRIPE RADAR: Extract fraud risk data from latest charge
+          let riskLevel: string | undefined;
+          let riskScore: number | undefined;
+          let fraudFlagged = false;
+          
+          try {
+            const chargeId = paymentIntent.latest_charge;
+            if (chargeId && typeof chargeId === 'string') {
+              const charge = await stripe.charges.retrieve(chargeId);
+              riskLevel = charge.outcome?.risk_level;
+              riskScore = charge.outcome?.risk_score;
+              fraudFlagged = riskLevel === 'highest' || (riskScore !== undefined && riskScore > 75);
+            }
+          } catch (radarErr) {
+            logEvent.error('stripe_radar_fetch', radarErr, { paymentIntentId: paymentIntent.id });
+          }
+          
           logEvent.payment('intent_succeeded', { 
             bookingId: paymentIntent.metadata?.bookingId,
-            amount: String(paymentIntent.amount / 100)
+            paymentIntentId: paymentIntent.id,
+            amount: String(paymentIntent.amount / 100),
+            currency: paymentIntent.currency,
+            riskLevel: riskLevel || 'unknown',
+            riskScore: riskScore ?? null,
+            fraudFlagged
           });
           
           // Find booking by payment intent ID
@@ -2435,8 +2457,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // Idempotency check - don't process if already succeeded
             if (booking.paymentStatus === 'succeeded') {
-              logEvent.payment('already_processed', { bookingId: booking.id });
+              logEvent.payment('already_processed', { bookingId: booking.id, paymentIntentId: paymentIntent.id });
               return res.json({ received: true, status: 'already_processed' });
+            }
+            
+            // STRIPE RADAR: Log high-risk payments for manual review
+            if (fraudFlagged) {
+              logEvent.payment('high_risk_payment', {
+                bookingId: booking.id,
+                paymentIntentId: paymentIntent.id,
+                userId: booking.customerId,
+                riskLevel,
+                riskScore,
+                amount: String(paymentIntent.amount / 100),
+                action: 'logged_for_review'
+              });
             }
             
             // Update booking payment status and move to PENDING (awaiting mover)
@@ -2445,7 +2480,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               status: BOOKING_STATUSES.PENDING,
             });
             
-            logEvent.payment('booking_updated', { bookingId: booking.id, status: 'succeeded' });
+            logEvent.payment('booking_confirmed', { 
+              bookingId: booking.id, 
+              userId: booking.customerId,
+              paymentIntentId: paymentIntent.id,
+              status: 'succeeded',
+              pickupAddress: booking.pickupAddress,
+              dropoffAddress: booking.dropoffAddress,
+              amount: booking.price,
+              riskLevel: riskLevel || 'unknown'
+            });
             
             // ATOMICITY: All post-payment operations are wrapped in try-catch
             // to ensure webhook success even if notifications fail.
