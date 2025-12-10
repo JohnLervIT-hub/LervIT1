@@ -466,6 +466,81 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     handling_complexity: 'low',
     insurance_level: 'standard',
   },
+  {
+    item_id: 'CHAIR_ACCENT_001',
+    name: 'Upholstered accent chair',
+    category: 'Chair',
+    subcategory: 'Accent',
+    keywords: ['accent', 'chair', 'upholstered', 'living room', 'arm chair', 'armchair', 'lounge'],
+    dimensions_cm: { length: 75, width: 70, height: 95 },
+    volume_ft3: 15.8,  // Verified realistic volume for accent chair
+    weight_kg: 12,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'CHAIR_ACCENT_002',
+    name: 'Accent chair (wingback)',
+    category: 'Chair',
+    subcategory: 'Accent',
+    keywords: ['wingback', 'accent', 'chair', 'upholstered', 'living room', 'traditional'],
+    dimensions_cm: { length: 80, width: 75, height: 105 },
+    volume_ft3: 18.5,  // Larger wingback style
+    weight_kg: 15,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'CHAIR_LOUNGE_001',
+    name: 'Lounge chair / Club chair',
+    category: 'Chair',
+    subcategory: 'Lounge',
+    keywords: ['lounge', 'club', 'chair', 'upholstered', 'living room', 'reading'],
+    dimensions_cm: { length: 85, width: 80, height: 90 },
+    volume_ft3: 17.2,
+    weight_kg: 20,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'CHAIR_RECLINER_001',
+    name: 'Recliner chair',
+    category: 'Chair',
+    subcategory: 'Recliner',
+    keywords: ['recliner', 'chair', 'reclining', 'lazyboy', 'lazy boy', 'living room'],
+    dimensions_cm: { length: 90, width: 85, height: 100 },
+    volume_ft3: 22.0,  // Recliners are larger
+    weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'CHAIR_BARREL_001',
+    name: 'Barrel chair / Swivel chair',
+    category: 'Chair',
+    subcategory: 'Accent',
+    keywords: ['barrel', 'swivel', 'chair', 'round', 'accent', 'living room'],
+    dimensions_cm: { length: 75, width: 75, height: 80 },
+    volume_ft3: 14.8,
+    weight_kg: 14,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
   
   // ===== DRESSERS & STORAGE =====
   {
@@ -978,10 +1053,19 @@ export function searchItemsByKeywords(keywords: string[]): FurnitureItem[] {
 /**
  * Find best matching item based on item name
  * Returns match with similarity score
+ * 
+ * IMPROVED: Prevents false positives like "accent chair" → "AC (air conditioner)"
+ * by requiring longer word matches and prioritizing exact category matches.
  */
 export function findBestMatch(itemName: string): { item: FurnitureItem; similarity: number } | null {
   const nameLower = itemName.toLowerCase();
   const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
+  
+  // Extract key category hints from the input name
+  const hasChairHint = nameLower.includes('chair');
+  const hasSofaHint = nameLower.includes('sofa') || nameLower.includes('couch');
+  const hasBedHint = nameLower.includes('bed');
+  const hasTableHint = nameLower.includes('table') || nameLower.includes('desk');
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
@@ -991,33 +1075,57 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     const itemKeywords = [...item.keywords, item.subcategory.toLowerCase()];
     const allItemWords = [...itemNameLower.split(/\s+/), ...itemKeywords];
     
+    // CATEGORY MISMATCH PENALTY: If input clearly says "chair" but item is not a Chair, penalize heavily
+    let categoryMismatchPenalty = 0;
+    if (hasChairHint && item.category !== 'Chair') categoryMismatchPenalty = 0.5;
+    if (hasSofaHint && item.category !== 'Sofa') categoryMismatchPenalty = 0.5;
+    if (hasBedHint && item.category !== 'Bed') categoryMismatchPenalty = 0.5;
+    if (hasTableHint && item.category !== 'Table') categoryMismatchPenalty = 0.5;
+    
     // Calculate similarity based on word matching
     let matchCount = 0;
     let totalWeight = 0;
     
     for (const word of nameWords) {
-      // Check exact match
+      // Check exact match (highest value)
       if (allItemWords.some(iw => iw === word)) {
-        matchCount += 2;
-        totalWeight += 2;
+        matchCount += 3;
+        totalWeight += 3;
       }
-      // Check partial match
-      else if (allItemWords.some(iw => iw.includes(word) || word.includes(iw))) {
+      // Check partial match - REQUIRE minimum 4 chars for both words to prevent false positives
+      // This prevents "accent" matching "ac" 
+      else if (allItemWords.some(iw => {
+        const minLen = Math.min(iw.length, word.length);
+        const maxLen = Math.max(iw.length, word.length);
+        // Only allow partial match if shorter word is at least 4 chars AND overlap is meaningful
+        if (minLen < 4) return false;
+        return (iw.includes(word) || word.includes(iw));
+      })) {
         matchCount += 1;
-        totalWeight += 2;
+        totalWeight += 3;
       } else {
-        totalWeight += 2;
+        totalWeight += 3;
       }
     }
     
-    // Check category keywords for bonus
+    // Check category keywords for bonus (but only exact matches, not substrings)
     for (const keyword of itemKeywords) {
-      if (nameLower.includes(keyword)) {
+      // Require keyword to be at least 4 chars to avoid "ac" matching "accent"
+      if (keyword.length >= 4 && nameLower.includes(keyword)) {
         matchCount += 1;
       }
     }
     
-    const similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
+    // CATEGORY MATCH BONUS: If category explicitly matches, boost score
+    if (hasChairHint && item.category === 'Chair') matchCount += 2;
+    if (hasSofaHint && item.category === 'Sofa') matchCount += 2;
+    if (hasBedHint && item.category === 'Bed') matchCount += 2;
+    if (hasTableHint && item.category === 'Table') matchCount += 2;
+    
+    let similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
+    
+    // Apply category mismatch penalty
+    similarity = similarity * (1 - categoryMismatchPenalty);
     
     if (similarity > bestScore) {
       bestScore = similarity;

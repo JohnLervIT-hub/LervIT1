@@ -44,12 +44,13 @@ export const CATEGORY_DIMENSION_LIMITS: Record<FurnitureCategory, DimensionLimit
     weight: { min: 5, max: 100 },
   },
   
-  // Chairs: standard proportions
+  // Chairs: updated for realistic accent/upholstered chair proportions
+  // Accent chairs are typically 24-36" deep (61-91cm), 22-32" wide (56-81cm), 32-45" tall (81-114cm)
   Chair: {
-    length: { min: 40, max: 90 },
-    width: { min: 40, max: 80 },
-    height: { min: 70, max: 140 },   // Standard to gaming/office high back
-    weight: { min: 3, max: 35 },
+    length: { min: 45, max: 95 },    // 18-37" - dining chair depth to large recliner
+    width: { min: 45, max: 90 },     // 18-35" - dining chair to wide accent
+    height: { min: 70, max: 140 },   // 28-55" - Standard to gaming/office high back
+    weight: { min: 5, max: 40 },     // Upholstered chairs are heavier
   },
   
   // Dressers: typical bedroom furniture
@@ -158,6 +159,44 @@ const SUBCATEGORY_LIMITS: Record<string, Partial<DimensionLimits>> = {
   'desk': {
     height: { min: 70, max: 130 },  // Include standing desks
     length: { min: 100, max: 200 },
+  },
+  
+  // Accent/Upholstered chairs (larger than dining chairs)
+  'accent': {
+    length: { min: 61, max: 91 },   // 24-36" depth
+    width: { min: 56, max: 81 },    // 22-32" width
+    height: { min: 81, max: 114 },  // 32-45" height
+    weight: { min: 10, max: 25 },   // Upholstered = heavier
+  },
+  'upholstered': {
+    length: { min: 61, max: 91 },
+    width: { min: 56, max: 81 },
+    height: { min: 81, max: 114 },
+    weight: { min: 10, max: 25 },
+  },
+  'lounge': {
+    length: { min: 70, max: 100 },
+    width: { min: 60, max: 90 },
+    height: { min: 75, max: 100 },
+    weight: { min: 15, max: 30 },
+  },
+  'recliner': {
+    length: { min: 80, max: 110 },
+    width: { min: 70, max: 95 },
+    height: { min: 85, max: 115 },
+    weight: { min: 25, max: 50 },
+  },
+  'wingback': {
+    length: { min: 70, max: 90 },
+    width: { min: 65, max: 85 },
+    height: { min: 100, max: 120 },  // Wingbacks are taller
+    weight: { min: 12, max: 25 },
+  },
+  'armchair': {
+    length: { min: 61, max: 91 },
+    width: { min: 56, max: 81 },
+    height: { min: 81, max: 114 },
+    weight: { min: 10, max: 25 },
   },
 };
 

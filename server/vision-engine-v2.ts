@@ -110,6 +110,116 @@ function calculateVolumeFt3(lengthCm: number, widthCm: number, heightCm: number)
   return Math.round(volumeFt3 * 100) / 100;
 }
 
+/**
+ * MINIMUM VOLUME ENFORCEMENT
+ * Prevents unrealistically small volumes for specific categories
+ * E.g., Accent chairs should never be 4.2 ft³ - they're typically 15-16 ft³
+ */
+const CATEGORY_MIN_VOLUMES: Record<string, number> = {
+  'Chair': 7,        // Absolute minimum for any chair (dining chairs)
+  'Sofa': 25,        // Minimum for loveseats
+  'Bed': 20,         // Minimum for twin bed frames
+  'Dresser': 10,     // Minimum for nightstands
+  'Appliance': 5,    // Minimum for small appliances
+  'Storage': 10,     // Minimum for small shelves
+};
+
+/**
+ * Subcategory-specific minimum volumes (override category minimum)
+ */
+const SUBCATEGORY_MIN_VOLUMES: Record<string, number> = {
+  'accent': 12,       // Upholstered accent chairs ~15-16 ft³
+  'upholstered': 12,
+  'lounge': 14,
+  'recliner': 18,
+  'wingback': 14,
+  'armchair': 12,
+  'office': 14,       // Office chairs with arms ~16+ ft³
+  'gaming': 16,       // Gaming chairs are larger
+  'sectional': 100,   // Sectional sofas are huge
+  'sleeper': 60,      // Sleeper sofas with mechanisms
+};
+
+/**
+ * Enforce minimum realistic volume for a category/subcategory
+ * Returns corrected volume and whether correction was applied
+ */
+function enforceMinimumVolume(
+  category: string,
+  itemName: string,
+  calculatedVolume: number
+): { volume: number; wasEnforced: boolean; minApplied?: number } {
+  const categoryLower = category.toLowerCase();
+  const nameLower = itemName.toLowerCase();
+  
+  // First, check subcategory-specific minimums
+  for (const [subcat, minVol] of Object.entries(SUBCATEGORY_MIN_VOLUMES)) {
+    if (nameLower.includes(subcat) && calculatedVolume < minVol) {
+      console.log(`[Vision Engine 2.0] Volume enforcement: ${calculatedVolume}ft³ → ${minVol}ft³ (min for ${subcat})`);
+      return { volume: minVol, wasEnforced: true, minApplied: minVol };
+    }
+  }
+  
+  // Fall back to category minimum
+  const categoryMin = CATEGORY_MIN_VOLUMES[category] || 0;
+  if (calculatedVolume < categoryMin) {
+    console.log(`[Vision Engine 2.0] Volume enforcement: ${calculatedVolume}ft³ → ${categoryMin}ft³ (min for ${category})`);
+    return { volume: categoryMin, wasEnforced: true, minApplied: categoryMin };
+  }
+  
+  return { volume: calculatedVolume, wasEnforced: false };
+}
+
+/**
+ * CATEGORY CORRECTION
+ * Fixes AI misclassifications by detecting furniture keywords in item names
+ * E.g., "pair of accent chairs" should be Chair category, not Appliance
+ */
+function correctCategory(itemName: string, detectedCategory: string): { 
+  category: string; 
+  wasCorrected: boolean;
+  originalCategory?: string;
+} {
+  const nameLower = itemName.toLowerCase();
+  
+  // Check if item name contains chair keywords but was misclassified
+  const chairKeywords = ['chair', 'armchair', 'recliner', 'seat', 'stool'];
+  const sofaKeywords = ['sofa', 'couch', 'loveseat', 'sectional', 'futon'];
+  const bedKeywords = ['bed', 'mattress', 'bunk', 'crib'];
+  const tableKeywords = ['table', 'desk', 'stand', 'nightstand'];
+  const dresserKeywords = ['dresser', 'chest', 'drawer', 'wardrobe', 'cabinet'];
+  
+  if (chairKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Chair') {
+    console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Chair (detected "${itemName}")`);
+    return { category: 'Chair', wasCorrected: true, originalCategory: detectedCategory };
+  }
+  
+  if (sofaKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Sofa') {
+    console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Sofa (detected "${itemName}")`);
+    return { category: 'Sofa', wasCorrected: true, originalCategory: detectedCategory };
+  }
+  
+  if (bedKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Bed') {
+    console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Bed (detected "${itemName}")`);
+    return { category: 'Bed', wasCorrected: true, originalCategory: detectedCategory };
+  }
+  
+  if (tableKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Table') {
+    // Don't correct if it's actually a nightstand (which is a Dresser)
+    if (!nameLower.includes('nightstand')) {
+      console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Table (detected "${itemName}")`);
+      return { category: 'Table', wasCorrected: true, originalCategory: detectedCategory };
+    }
+  }
+  
+  if (dresserKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Dresser') {
+    console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Dresser (detected "${itemName}")`);
+    return { category: 'Dresser', wasCorrected: true, originalCategory: detectedCategory };
+  }
+  
+  return { category: detectedCategory, wasCorrected: false };
+}
+
 interface VisionDetectionResult {
   itemName: string;
   category: string;
@@ -298,6 +408,12 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     // STEP 2: Detect item using Vision API
     const visionResult = await detectItemWithVision(imageBase64);
     
+    // STEP 2.5: Apply category correction (fix AI misclassifications)
+    const categoryCorrection = correctCategory(visionResult.itemName, visionResult.category);
+    if (categoryCorrection.wasCorrected) {
+      visionResult.category = categoryCorrection.category;
+    }
+    
     // STEP 3: Attempt database match
     const dbMatch = matchWithDatabase(visionResult);
     
@@ -355,11 +471,22 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       );
       
       // Calculate volume
-      const volume = calculateVolumeFt3(
+      let volume = calculateVolumeFt3(
         corrected.length_cm,
         corrected.width_cm,
         corrected.height_cm
       );
+      
+      // Apply minimum volume enforcement to prevent unrealistic small values
+      const volumeEnforcement = enforceMinimumVolume(
+        visionResult.category,
+        visionResult.itemName,
+        volume
+      );
+      if (volumeEnforcement.wasEnforced) {
+        volume = volumeEnforcement.volume;
+        corrected.corrections.push(`Volume increased to ${volume}ft³ (minimum for category)`);
+      }
       
       // Determine load size and vehicle
       const loadSize = getLoadSizeFromVolume(volume);

@@ -1,0 +1,72 @@
+I’m building a moving app called LervIT. I have a Vision Engine that analyzes photos of furniture and estimates dimensions, volume (ft³), weight, and load size.
+
+Right now, for a pair of upholstered accent chairs (standard living-room chairs), the engine is estimating about 4.2 ft³ per chair, which is far too small. Realistic volume for one accent chair should be around 15–16 ft³, and two chairs together around 31–32 ft³. I want you to modify my code so the Vision Engine can’t output such tiny, unrealistic values for chairs anymore.
+
+Please do the following in my project:
+
+1. **Add an Accent Chair entry to the ground-truth furniture database**
+
+Create (or update) the furniture data structure so it includes a “Chair / Accent Chair” item similar to this (adjust to my existing schema):
+
+{
+  "item_id": "CHAIR_ACCENT_001",
+  "name": "Upholstered accent chair",
+  "category": "Chair",
+  "subcategory": "Accent",
+  "dimensions_cm": { "length": 75, "width": 70, "height": 95 },
+  "volume_ft3": 15.8,
+  "weight_kg": 12,
+  "load_size": "Medium",
+  "vehicle": "Cargo Van"
+}
+
+If my database is in JSON, TypeScript, or a JS array, add this object in the correct place so it can be used by the Vision Engine. If I already have a furniture list, integrate this into that list.
+
+2. **Add category-based correction rules for chairs**
+
+Locate the function that takes the raw predicted dimensions from the vision model (length, width, height) and applies corrections or clamps. If it doesn’t exist yet, create a helper like `normalizeDimensions(category, dims)`.
+
+Inside that logic, add rules for the “Chair” category, for example (in pseudocode – convert to my language):
+
+if (category === "Chair") {
+  length = clamp(length, 24, 36);   // depth
+  width  = clamp(width, 22, 32);
+  height = clamp(height, 32, 45);
+}
+
+Make sure these clamps are actually applied before volume is calculated.
+
+3. **Enforce a minimum realistic volume for chairs**
+
+After calculating the volume in cubic feet for any item classified as a “Chair” (accent, dining, office, etc.), add a safety rule:
+
+if (category === "Chair" && volumeFt3 < 12) {
+  volumeFt3 = 15; // or use the database default for accent chairs
+}
+
+This prevents impossible tiny values like 4.2 ft³.
+
+4. **Integrate with any existing similarity / database lookup**
+
+If I already have a step where the Vision Engine compares the uploaded image embedding against a furniture database:
+- Make sure “Chair / Accent Chair” is part of that searchable list.
+- When the best match is a chair with high similarity (e.g. > 0.9), use the database dimensions and volume (≈15.8 ft³) instead of estimating from scratch.
+
+5. **Update load-size classification**
+
+After fixing the chair volume, ensure the load-size classification uses the corrected volume. For example, if my rules are:
+- Medium: 11–50 ft³
+Then a single accent chair (~15 ft³) and a pair (~31 ft³) should classify as “Medium Load”.
+
+6. **Refactor and show me the key updated code**
+
+Please:
+- Find the relevant modules/components for the Vision Engine (dimension estimation, normalization, volume calculation, load-size classification, and furniture database).
+- Add or update the chair entry, the clamp logic, the min-volume rule, and any database matching.
+- Then show me the updated functions (or files) that you modified, especially:
+  - the furniture data / schema
+  - the normalize/clamp logic
+  - the volume calculation
+  - the load-size classification
+
+The end goal: for standard accent chair photos, the engine should return roughly 15–16 ft³ per chair, never as low as 4.2 ft³, and consistently classify them as Medium load.
