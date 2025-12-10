@@ -19,6 +19,7 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 *   **Production Observability:** Pino-based structured JSON logging (`server/logger.ts`) with event-specific loggers for payments, vehicle matching, cleanup, and errors.
 *   **Background Jobs:** node-cron scheduler (`server/background-jobs.ts`) running every 5 minutes to expire stale notifications and payment-failed bookings.
 *   **Payment Security:** Stripe webhook signature verification when `STRIPE_WEBHOOK_SECRET` is configured; idempotency checks prevent duplicate processing.
+*   **Stripe Connect Integration:** Full Express account onboarding for movers with separate transfer flow - funds held by platform until job completion, then transferred to mover's connected account minus platform fee.
 
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Geocoding system (Google Maps Distance Matrix API), 7-component dynamic pricing model, and an algorithm that ranks the top 5 nearest available movers within 15-50km. A `jobNotifications` system handles invitations with a 10-minute expiration.
@@ -65,4 +66,51 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 *   **Maps:** Google Maps JavaScript API via @react-google-maps/api library
 *   **Search/Data Enrichment:** SerpAPI
 *   **Email Sending:** Resend
+
+## Stripe Connect Configuration (LIVE Mode)
+
+### Required Environment Variables
+Add these to Replit Secrets for LIVE mode:
+- `STRIPE_SECRET_KEY`: Live secret key (`sk_live_...`) - Server-side only
+- `VITE_STRIPE_PUBLIC_KEY`: Live publishable key (`pk_live_...`) - Frontend
+- `STRIPE_WEBHOOK_SECRET`: Webhook signing secret for live endpoint
+
+### Payment Flow Architecture
+**Separate Transfer Approach (Option B):**
+1. Customer creates booking → PaymentIntent created
+2. Customer pays → Funds held in Lervit's Stripe account
+3. Mover accepts job → Job notification system
+4. Mover completes job → Transfer created to mover's connected account (minus platform fee)
+
+This approach is used because:
+- Mover is unknown at payment time (Uber-style matching)
+- Platform can hold funds until job completion
+- Enables refund handling before transfer occurs
+
+### Mover Onboarding Endpoints
+- `POST /api/movers/payouts/onboarding-link` - Create Stripe Express onboarding link
+- `GET /api/movers/payouts/login-link` - Access Stripe Express Dashboard
+- `POST /api/movers/payouts/refresh-status` - Sync onboarding status from Stripe
+- `GET /api/movers/payouts/account` - Get current Connect account status
+- `GET /api/movers/payouts/summary` - Earnings dashboard data
+
+### Webhook Events Handled
+- `payment_intent.succeeded` - Mark booking paid, notify movers
+- `payment_intent.payment_failed` - Mark booking as payment failed
+- `account.updated` - Sync mover Connect account status
+- `charge.refunded` - Future: Handle refunds
+
+### Platform Commission
+Default: 15% (configurable in `server/config/stripe.ts`)
+Vehicle class adjustments available:
+- Car: 12%
+- Van/Pickup: 15%
+- Truck: 18%
+
+### Manual Test Plan
+1. Create a test booking as customer
+2. Pay with real card in LIVE mode
+3. Check Stripe Dashboard → Payments → See platform receives full amount
+4. Mover completes job → Check Stripe Dashboard → Connect → Transfers
+5. Verify webhook updated booking status in database
 ```

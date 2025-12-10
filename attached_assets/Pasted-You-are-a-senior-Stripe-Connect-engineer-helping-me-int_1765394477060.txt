@@ -1,0 +1,140 @@
+You are a senior Stripe Connect engineer helping me integrate LIVE Stripe payments into my Uber-style moving marketplace called **Lervit**, running on Replit.
+
+CONTEXT
+- Lervit connects **customers (buyers)** with **movers/drivers (sellers)**.
+- Customers pay Lervit; Lervit takes a platform fee and then pays the mover.
+- Each job has ONE assigned mover.
+- Movers are independent contractors and will have **Stripe Connect Express** accounts.
+- Currency: **CAD**.
+- Business is based in **Canada (Alberta)**.
+- We have already created a LIVE Stripe account and enabled Connect with:
+  - Flow: **Buyers → Your Platform → Sellers**
+  - Payouts: **Sellers paid out individually**
+  - Onboarding: **Hosted by Stripe**
+  - Account management: **Express Dashboard**.
+
+TECH STACK
+- This Replit project uses a Node.js backend (Express) with TypeScript.
+- Frontend is a web app that can call REST APIs on the backend.
+- We are now moving from test mode to LIVE mode.
+
+YOUR TASK
+Design and implement a clean, production-ready Stripe Connect integration for Lervit in LIVE mode. Please:
+
+1. GENERAL SETUP
+   - Install and configure the official `stripe` Node.js SDK.
+   - Use environment variables only (NO hard-coded keys):
+     - `STRIPE_SECRET` → live secret key (sk_live…)
+     - `STRIPE_PUBLISHABLE` → live publishable key (pk_live…)
+     - `STRIPE_WEBHOOK_SECRET` → webhook signing secret for the live endpoint.
+   - Create a small `config/stripe.ts` helper that exports a preconfigured Stripe client.
+
+2. MOVER (SELLER) ONBOARDING – STRIPE CONNECT EXPRESS
+   - Create an API endpoint, e.g. `POST /api/stripe/create-onboarding-link`.
+   - Input: authenticated mover ID from our database.
+   - Behavior:
+     - If the mover does not yet have a `stripeAccountId`, create a new **Express** connected account for them (type: `custom: false`, `express: true`) with country CA and payouts enabled.
+     - Save the connected account ID in our `movers` table (e.g. `stripe_account_id` column).
+     - Create a Stripe **AccountLink** for hosted onboarding:
+       - `type: "account_onboarding"`
+       - `refresh_url`: our frontend URL to restart onboarding (e.g. https://app.lervit.com/mover/onboarding/refresh)
+       - `return_url`: our frontend URL on success (e.g. https://app.lervit.com/mover/onboarding/success)
+     - Return the `url` from the AccountLink to the frontend so we can redirect the mover into Stripe’s onboarding flow.
+   - Also create an endpoint `GET /api/stripe/create-login-link` that returns a Stripe Express login link for onboarded movers to manage payouts, banking info, etc.
+
+3. CUSTOMER PAYMENT FLOW (BOOKING A JOB)
+   - For now, assume each booking has:
+     - `bookingId`
+     - `customerId`
+     - `moverId`
+     - `totalPrice` in CAD cents
+     - `platformFee` in CAD cents (what Lervit earns)
+   - Create an endpoint, e.g. `POST /api/stripe/create-payment-intent` or `create-checkout-session`:
+     - Input: `bookingId`, `amount`, `moverId`, and `customerId`.
+     - Validate that:
+       - Booking exists and belongs to this customer.
+       - Booking has an assigned mover.
+       - Mover has a `stripe_account_id` and is fully onboarded.
+     - Create a PaymentIntent in **LIVE** mode with:
+       - `amount`: total job price in cents
+       - `currency`: `cad`
+       - `automatic_payment_methods: {enabled: true}`
+       - **Connect transfer**:
+         - Either using: 
+           - application_fee_amount = platformFee
+           - transfer_data[connected_account] = mover’s `stripe_account_id`
+         - Or: create a separate `transfer` after payment succeeds.
+       - Attach metadata: `bookingId`, `customerId`, `moverId`, `vehicleClass`, etc.
+     - Return `client_secret` (if using Payment Element) or a Checkout URL (if using Checkout) to the frontend.
+
+   - Document in comments which flow you implement:
+     A) Directly with `transfer_data` + `application_fee_amount`, OR
+     B) PaymentIntent → on success, create separate `transfer`.
+
+   - Use best practices:
+     - Idempotency keys for booking-related operations.
+     - Proper error handling and logging.
+
+4. WEBHOOKS (CRITICAL)
+   - Create an Express route `POST /api/stripe/webhook` that:
+     - Reads the raw request body (configure Express middleware correctly so raw body is available).
+     - Verifies the signature using `STRIPE_WEBHOOK_SECRET`.
+   - Handle at least these events:
+     - `payment_intent.succeeded`
+       - Mark the booking as paid in our database.
+       - If using post-payment transfers, create a `transfer` to the mover’s connected account with the right amount.
+     - `payment_intent.payment_failed`
+       - Mark booking as payment_failed.
+     - `charge.refunded` (future)
+       - Mark booking as refunded and adjust driver payout/transfer if needed.
+     - `account.updated`
+       - Update our mover record when Stripe marks the connected account as charges_enabled / payouts_enabled.
+   - Log all events safely for debugging (no secrets).
+
+5. BASIC BOOKING/PAYOUT LOGIC
+   - Add helper functions or services:
+     - `calculatePlatformFee(booking)` → returns platform fee in cents based on our pricing rules (base fare, per-km, vehicle class multiplier, etc.).
+     - `calculateMoverPayout(booking)` → `amount - platformFee`.
+   - Ensure that the amount sent to the mover equals `totalPrice - platformFee`.
+   - Design the code so that later we can:
+     - Adjust Lervit’s platform fee by vehicle class.
+     - Add cancellation rules and refunds.
+
+6. ENV & MODES
+   - Keep code structured so we can easily toggle between TEST and LIVE:
+     - Use `NODE_ENV` or an explicit `STRIPE_MODE` env var.
+     - But right now, actually wire everything to the **LIVE** keys I will add in the Replit Secrets panel.
+   - Provide clear comments at the top of relevant files explaining which env vars must exist.
+
+7. SECURITY & QA
+   - Do NOT log any full card numbers or secrets.
+   - Ensure CORS and auth checks are applied to our internal endpoints (`create-payment-intent`, `create-onboarding-link`, etc.).
+   - Provide simple Jest (or minimal) tests or at least pseudo-tests showing how to simulate:
+     - A successful payment.
+     - A failed payment.
+     - A webhook call.
+
+8. FINAL DELIVERABLES
+   - New or updated files you will create:
+     - `config/stripe.ts` (or similar)
+     - `routes/stripe.ts` with all endpoints:
+       - `POST /api/stripe/create-onboarding-link`
+       - `GET /api/stripe/create-login-link`
+       - `POST /api/stripe/create-payment-intent` (or checkout session)
+       - `POST /api/stripe/webhook`
+     - Any updates needed in our booking/mover models.
+   - Add clear comments in each route explaining:
+     - What it does
+     - Who calls it (frontend or Stripe)
+     - Expected request/response shapes.
+
+Please now:
+1. Inspect the current project structure in this Replit.
+2. Propose the best file locations for this integration.
+3. Implement the integration step by step.
+4. Show me exactly where to paste my live keys into Replit Secrets.
+5. Provide a short “manual test plan” describing how I can:
+   - Create a test booking,
+   - Pay for it with a real card in LIVE mode,
+   - See the platform fee and mover payout in the Stripe dashboard,
+   - Confirm that webhooks updated the booking status.

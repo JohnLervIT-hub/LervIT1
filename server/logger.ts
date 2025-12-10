@@ -25,27 +25,27 @@ export function createRequestLogger(requestId?: string) {
 }
 
 export const logEvent = {
-  payment: (action: string, data: { userId?: string; bookingId?: string; amount?: string; status?: string; error?: string }) => {
+  payment: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'payment', action, ...data }, `Payment: ${action}`);
   },
   
-  booking: (action: string, data: { userId?: string; bookingId?: string; status?: string; moverId?: string; error?: string }) => {
+  booking: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'booking', action, ...data }, `Booking: ${action}`);
   },
   
-  notification: (action: string, data: { bookingId?: string; moverId?: string; count?: number; error?: string }) => {
+  notification: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'notification', action, ...data }, `Notification: ${action}`);
   },
   
-  matching: (action: string, data: { bookingId?: string; vehicleType?: string; moversFound?: number; error?: string }) => {
+  matching: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'matching', action, ...data }, `Matching: ${action}`);
   },
   
-  cleanup: (action: string, data: { expiredNotifications?: number; staleBookings?: number; error?: string }) => {
+  cleanup: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'cleanup', action, ...data }, `Cleanup: ${action}`);
   },
   
-  auth: (action: string, data: { userId?: string; email?: string; error?: string }) => {
+  auth: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'auth', action, ...data }, `Auth: ${action}`);
   },
   

@@ -16,17 +16,7 @@ import { notificationService } from "./notifications";
 import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
-
-// Initialize Stripe
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
-}
-if (process.env.STRIPE_SECRET_KEY.startsWith('pk_')) {
-  throw new Error('STRIPE_SECRET_KEY must be a secret key (starts with sk_), not a publishable key (starts with pk_). Please update the secret.');
-}
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-10-28.acacia" as any,
-});
+import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -2497,6 +2487,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
             logEvent.payment('booking_failed', { bookingId: booking.id });
           }
           break;
+        
+        // Handle Stripe Connect account updates (mover onboarding status changes)
+        case 'account.updated':
+          const updatedAccount = event.data.object as Stripe.Account;
+          
+          logEvent.payment('connect_account_updated', { 
+            stripeAccountId: updatedAccount.id,
+            chargesEnabled: updatedAccount.charges_enabled,
+            payoutsEnabled: updatedAccount.payouts_enabled,
+          });
+          
+          // Find mover by Stripe account ID and update their status
+          const moverAccounts = await db.select()
+            .from(moverStripeAccounts)
+            .where(eq(moverStripeAccounts.stripeAccountId, updatedAccount.id))
+            .limit(1);
+          
+          if (moverAccounts.length > 0) {
+            const moverAccount = moverAccounts[0];
+            
+            const newOnboardingStatus = updatedAccount.details_submitted ? 'complete' : 
+                                        (updatedAccount.requirements?.currently_due?.length ? 'restricted' : 'in_progress');
+            
+            await db.update(moverStripeAccounts)
+              .set({
+                chargesEnabled: updatedAccount.charges_enabled,
+                payoutsEnabled: updatedAccount.payouts_enabled,
+                detailsSubmitted: updatedAccount.details_submitted,
+                onboardingStatus: newOnboardingStatus,
+                requirementsDue: updatedAccount.requirements?.eventually_due || [],
+                currentlyDue: updatedAccount.requirements?.currently_due || [],
+                updatedAt: new Date(),
+              })
+              .where(eq(moverStripeAccounts.id, moverAccount.id));
+            
+            logEvent.payment('mover_connect_status_synced', { 
+              moverId: moverAccount.moverId,
+              onboardingStatus: newOnboardingStatus,
+            });
+          }
+          break;
+        
+        // Handle charge refunds for future implementation
+        case 'charge.refunded':
+          const refundedCharge = event.data.object as Stripe.Charge;
+          
+          logEvent.payment('charge_refunded', { 
+            chargeId: refundedCharge.id,
+            amount: refundedCharge.amount_refunded / 100,
+          });
+          
+          // TODO: Implement refund handling - mark booking as refunded,
+          // adjust mover transfer if applicable
+          break;
           
         default:
           logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
@@ -3670,8 +3714,8 @@ Respond with VALID JSON only:
 
   // ===== MOVER PAYOUT SYSTEM (Uber-style) =====
   
-  // Platform commission rate (15% default, can be configured)
-  const PLATFORM_COMMISSION_PERCENT = 15.00;
+  // Use platform commission from centralized config
+  const PLATFORM_COMMISSION_PERCENT = PLATFORM_COMMISSION.DEFAULT_PERCENT;
 
   // Get mover's Stripe Connect account status
   app.get("/api/movers/payouts/account", async (req: Request, res: Response) => {
@@ -3844,6 +3888,76 @@ Respond with VALID JSON only:
     }
   });
 
+  /**
+   * Create Stripe Express Dashboard login link for movers
+   * 
+   * Allows onboarded movers to access their Stripe Express Dashboard to:
+   * - View payout history
+   * - Update banking information
+   * - Manage tax documents
+   * - View earnings reports
+   * 
+   * Called by: Frontend (mover dashboard)
+   * Returns: { url: string } - Redirect URL to Stripe Express Dashboard
+   */
+  app.get("/api/movers/payouts/login-link", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = movers[0];
+      
+      const accounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, mover.id))
+        .limit(1);
+      
+      if (!accounts.length) {
+        return res.status(404).json({ error: "No payout account found. Please complete onboarding first." });
+      }
+      
+      const account = accounts[0];
+      
+      if (!account.detailsSubmitted) {
+        return res.status(400).json({ 
+          error: "Onboarding not complete. Please finish setting up your payout account.",
+          needsOnboarding: true
+        });
+      }
+      
+      if (!account.chargesEnabled) {
+        return res.status(400).json({
+          error: "Your account is restricted. Please complete any pending requirements.",
+          needsOnboarding: true,
+          hasRestrictions: true
+        });
+      }
+      
+      try {
+        const loginLink = await stripe.accounts.createLoginLink(account.stripeAccountId);
+        
+        logEvent.payment('express_login_link_created', { moverId: mover.id });
+        
+        res.json({ url: loginLink.url });
+      } catch (stripeError: any) {
+        if (stripeError.code === 'account_invalid') {
+          return res.status(400).json({
+            error: "Your Stripe account is no longer valid. Please contact support.",
+            accountInvalid: true
+          });
+        }
+        throw stripeError;
+      }
+    } catch (error: any) {
+      console.error("Stripe login link error:", error);
+      res.status(500).json({ error: error.message || "Failed to create dashboard link" });
+    }
+  });
+
   // Get mover's payout summary (Uber-style dashboard)
   app.get("/api/movers/payouts/summary", async (req: Request, res: Response) => {
     try {
@@ -3968,8 +4082,19 @@ Respond with VALID JSON only:
     }
   });
 
-  // Record earnings when job is completed (called internally when booking is completed)
-  // Uses the commission data stored on the booking for auditability
+  /**
+   * Record earnings when job is completed and create Stripe Transfer to mover
+   * 
+   * FLOW: Separate Transfer Approach (Option B)
+   * 1. Customer pays platform via PaymentIntent
+   * 2. Funds are held in platform's Stripe account
+   * 3. When job completes, create Transfer to mover's connected account
+   * 
+   * This approach is used because:
+   * - Mover is not known at payment time
+   * - Allows platform to hold funds until job is complete
+   * - Enables refund handling before transfer occurs
+   */
   async function recordMoverEarnings(bookingId: string, moverId: string, booking: any) {
     // Get commission data from booking (persisted for audit trail)
     const grossAmount = parseFloat(booking.price || '0');
@@ -3987,6 +4112,57 @@ Respond with VALID JSON only:
       return existing[0];
     }
     
+    // Get mover's Stripe Connect account for transfer
+    const moverStripeAccountResult = await db.select()
+      .from(moverStripeAccounts)
+      .where(eq(moverStripeAccounts.moverId, moverId))
+      .limit(1);
+    
+    let stripeTransferId: string | undefined;
+    let earningsStatus = 'pending';
+    
+    // Only create transfer if mover has an onboarded Stripe Connect account
+    if (moverStripeAccountResult.length > 0 && moverStripeAccountResult[0].payoutsEnabled) {
+      const moverStripeAccount = moverStripeAccountResult[0];
+      const transferAmountCents = Math.round(netAmount * 100);
+      
+      try {
+        // Create Stripe Transfer to mover's connected account
+        const transfer = await stripe.transfers.create({
+          amount: transferAmountCents,
+          currency: 'cad',
+          destination: moverStripeAccount.stripeAccountId,
+          metadata: {
+            bookingId,
+            moverId,
+            grossAmount: grossAmount.toFixed(2),
+            platformFee: platformFeeAmount.toFixed(2),
+          },
+        }, {
+          idempotencyKey: `transfer-${bookingId}`,
+        });
+        
+        stripeTransferId = transfer.id;
+        earningsStatus = 'available';
+        
+        logEvent.payment('transfer_created', {
+          bookingId,
+          moverId,
+          transferId: transfer.id,
+          amount: netAmount,
+        });
+      } catch (transferError: any) {
+        logEvent.error('transfer_failed', transferError);
+        earningsStatus = 'pending';
+      }
+    } else {
+      logEvent.payment('transfer_skipped', {
+        bookingId,
+        moverId,
+        reason: 'No enabled Stripe Connect account',
+      });
+    }
+    
     const [earnings] = await db.insert(moverEarnings).values({
       moverId,
       bookingId,
@@ -3994,7 +4170,8 @@ Respond with VALID JSON only:
       platformFeePercent: platformFeePercent.toFixed(2),
       platformFeeAmount: platformFeeAmount.toFixed(2),
       netAmount: netAmount.toFixed(2),
-      status: 'pending',
+      stripeTransferId,
+      status: earningsStatus,
       availableAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // Available after 2 days
     }).returning();
     
