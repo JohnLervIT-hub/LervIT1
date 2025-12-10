@@ -90,7 +90,7 @@ export default function Home() {
               How It Works
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From photo to mover at your door—in minutes, not hours
+              From booking to mover at your door—in minutes, not hours
             </p>
           </div>
 
@@ -99,15 +99,15 @@ export default function Home() {
               {
                 step: "1",
                 icon: <Camera className="w-6 h-6" />,
-                title: "Snap & Quote",
-                description: "Upload photos of your items, enter your locations, and get an instant AI-powered price estimate",
+                title: "Book & Quote",
+                description: "Enter your locations, upload photos of your items, and get an instant AI-powered price estimate",
                 gradient: "from-violet-500 to-purple-600",
               },
               {
                 step: "2",
                 icon: <Users className="w-6 h-6" />,
-                title: "Pay & Book",
-                description: "Review your AI-powered quote, pay securely with Stripe, and confirm your booking in one tap",
+                title: "Pay Securely",
+                description: "Review your AI-powered quote, pay securely with SecurePay™, and confirm your booking",
                 gradient: "from-blue-500 to-cyan-500",
               },
               {
