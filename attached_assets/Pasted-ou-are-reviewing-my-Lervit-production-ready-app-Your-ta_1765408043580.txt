@@ -1,0 +1,166 @@
+ou are reviewing my Lervit production-ready app.
+Your task is to verify whether the following risks are still present or have been fully resolved in the current codebase and configuration:
+
+
+Payment → Booking → Notification atomicity
+
+
+Check the full flow from payment initiation, to booking creation, to notification dispatch.
+
+
+Confirm that there is no scenario where:
+
+
+Payment succeeds but booking is not created
+
+
+Booking is created but notification is not sent
+
+
+Notification is sent for a booking/payment that failed
+
+
+
+
+If any step can fail without a rollback or compensating action, report it and point to the exact files/functions.
+
+
+
+
+Google Places API deprecation / replacement
+
+
+Scan for any usage of the deprecated Google Places API or old endpoints.
+
+
+Tell me:
+
+
+Which files still reference deprecated Places endpoints, if any.
+
+
+Whether an upgraded API, library, or alternative service has been implemented.
+
+
+If still pending, propose a concrete migration path and the exact changes required.
+
+
+
+
+
+
+Background job for expired notifications
+
+
+Check if there is a background job / cron / worker that:
+
+
+Detects expired or stale notifications and bookings.
+
+
+Cleans them up or updates their status.
+
+
+
+
+If no background job exists, confirm it’s missing and propose an implementation pattern using the current stack.
+
+
+
+
+Structured logging (Sentry or Replit Logs)
+
+
+Check if structured logging is implemented across the critical paths:
+
+
+payment
+
+
+booking creation
+
+
+driver matching
+
+
+notifications
+
+
+Vision Engine v2 calls
+
+
+
+
+Confirm:
+
+
+Whether Sentry, Replit Logs, or an equivalent logging/monitoring solution is configured.
+
+
+Where errors and warnings are being captured.
+
+
+
+
+If logging is minimal or missing, suggest how and where to add structured logs.
+
+
+
+
+TypeScript warnings
+
+
+Run a full TypeScript check (or equivalent type analysis).
+
+
+List all current TypeScript warnings or errors, with file names and line numbers.
+
+
+Tell me if the previous “9 TypeScript warnings” are now resolved or still pending.
+
+
+
+
+Vision Engine v2 integration final check
+
+
+Verify where Vision Engine v2 is integrated in the codebase.
+
+
+Confirm:
+
+
+That the integration is actually used in production flows.
+
+
+That request/response shapes match the expected schema.
+
+
+That volume and vehicle-class outputs are correctly mapped into the booking and pricing logic.
+
+
+
+
+Report any mismatch, unused code, or fallback to older Vision Engine logic.
+
+
+
+
+Output format:
+
+
+For each item (1–6), respond with:
+
+
+Status: RESOLVED, PARTIALLY RESOLVED, or PENDING
+
+
+Evidence: files, functions, and code snippets you inspected
+
+
+Recommended fixes (if not fully resolved), with concrete code-level suggestions.
+
+
+
+
+Focus on being precise and pointing me to exact files and lines, so I can quickly fix anything that is still pending.
