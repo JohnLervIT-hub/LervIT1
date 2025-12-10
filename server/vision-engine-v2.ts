@@ -53,15 +53,18 @@ export interface VisionEngineResult {
   itemName: string;
   category: string;
   subcategory: string;
+  quantity: number;  // Number of identical items (e.g., 2 for "pair of chairs")
   dimensions: {
-    length_cm: number;
+    length_cm: number;  // Per-item dimensions
     width_cm: number;
     height_cm: number;
   };
-  volume_ft3: number;
-  weight_kg: number;
-  load_size: LoadSizeCategory;
-  vehicle: VehicleType;
+  perItemVolumeFt3: number;  // Volume for a single item
+  perItemWeightKg: number;   // Weight for a single item
+  volume_ft3: number;        // TOTAL volume (perItemVolumeFt3 * quantity)
+  weight_kg: number;         // TOTAL weight (perItemWeightKg * quantity)
+  load_size: LoadSizeCategory;  // Based on TOTAL volume
+  vehicle: VehicleType;         // Based on TOTAL volume/weight
   movers_required: 1 | 2;
   handling_complexity: 'low' | 'medium' | 'high' | 'very_high';
   insurance_level: 'standard' | 'medium' | 'high' | 'premium';
@@ -218,6 +221,96 @@ function correctCategory(itemName: string, detectedCategory: string): {
   }
   
   return { category: detectedCategory, wasCorrected: false };
+}
+
+/**
+ * QUANTITY DETECTION
+ * Detects when multiple identical items are described (e.g., "pair of chairs", "2 tables")
+ * Returns the quantity and a normalized single-item name for database matching
+ */
+function detectQuantity(itemName: string): { quantity: number; singleItemName: string } {
+  const nameLower = itemName.toLowerCase();
+  
+  // Pattern: "pair of X" or "pair X"
+  if (nameLower.includes('pair of') || nameLower.startsWith('pair ')) {
+    const singleName = itemName
+      .replace(/pair of /i, '')
+      .replace(/^pair /i, '')
+      .replace(/chairs/i, 'chair')
+      .replace(/tables/i, 'table')
+      .replace(/lamps/i, 'lamp')
+      .replace(/nightstands/i, 'nightstand')
+      .replace(/dressers/i, 'dresser');
+    console.log(`[Vision Engine 2.0] Quantity detected: 2 (pair) - "${itemName}" → "${singleName}"`);
+    return { quantity: 2, singleItemName: singleName };
+  }
+  
+  // Pattern: "two X", "2 X", "two of X"
+  const twoPattern = /^(two|2)\s+(of\s+)?(.+)/i;
+  const twoMatch = nameLower.match(twoPattern);
+  if (twoMatch) {
+    const singleName = twoMatch[3]
+      .replace(/chairs/i, 'chair')
+      .replace(/tables/i, 'table')
+      .replace(/lamps/i, 'lamp');
+    console.log(`[Vision Engine 2.0] Quantity detected: 2 - "${itemName}" → "${singleName}"`);
+    return { quantity: 2, singleItemName: singleName };
+  }
+  
+  // Pattern: "three X", "3 X"
+  const threePattern = /^(three|3)\s+(of\s+)?(.+)/i;
+  const threeMatch = nameLower.match(threePattern);
+  if (threeMatch) {
+    const singleName = threeMatch[3]
+      .replace(/chairs/i, 'chair')
+      .replace(/tables/i, 'table');
+    console.log(`[Vision Engine 2.0] Quantity detected: 3 - "${itemName}" → "${singleName}"`);
+    return { quantity: 3, singleItemName: singleName };
+  }
+  
+  // Pattern: "four X", "4 X"
+  const fourPattern = /^(four|4)\s+(of\s+)?(.+)/i;
+  const fourMatch = nameLower.match(fourPattern);
+  if (fourMatch) {
+    const singleName = fourMatch[3]
+      .replace(/chairs/i, 'chair')
+      .replace(/tables/i, 'table');
+    console.log(`[Vision Engine 2.0] Quantity detected: 4 - "${itemName}" → "${singleName}"`);
+    return { quantity: 4, singleItemName: singleName };
+  }
+  
+  // Pattern: "set of X chairs/tables" (common for dining sets)
+  const setPattern = /set of (\d+|two|three|four|five|six)\s+(.+)/i;
+  const setMatch = nameLower.match(setPattern);
+  if (setMatch) {
+    const numWords: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6 };
+    const count = numWords[setMatch[1].toLowerCase()] || parseInt(setMatch[1]) || 1;
+    const singleName = setMatch[2]
+      .replace(/chairs/i, 'chair')
+      .replace(/tables/i, 'table');
+    console.log(`[Vision Engine 2.0] Quantity detected: ${count} (set) - "${itemName}" → "${singleName}"`);
+    return { quantity: count, singleItemName: singleName };
+  }
+  
+  // Pattern: Plural form at end suggesting multiple (e.g., "upholstered accent chairs")
+  // Only apply if no explicit quantity, but name ends in plural furniture
+  const pluralEndings = [
+    { plural: /accent chairs$/i, singular: 'accent chair', qty: 2 },
+    { plural: /dining chairs$/i, singular: 'dining chair', qty: 2 },
+    { plural: /office chairs$/i, singular: 'office chair', qty: 2 },
+    { plural: /bar stools$/i, singular: 'bar stool', qty: 2 },
+  ];
+  
+  for (const { plural, singular, qty } of pluralEndings) {
+    if (plural.test(nameLower)) {
+      const singleName = itemName.replace(plural, singular);
+      console.log(`[Vision Engine 2.0] Quantity detected: ${qty} (plural) - "${itemName}" → "${singleName}"`);
+      return { quantity: qty, singleItemName: singleName };
+    }
+  }
+  
+  // Default: single item
+  return { quantity: 1, singleItemName: itemName };
 }
 
 interface VisionDetectionResult {
@@ -414,8 +507,16 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       visionResult.category = categoryCorrection.category;
     }
     
-    // STEP 3: Attempt database match
-    const dbMatch = matchWithDatabase(visionResult);
+    // STEP 2.6: Detect quantity (e.g., "pair of chairs" = 2)
+    const quantityInfo = detectQuantity(visionResult.itemName);
+    const quantity = quantityInfo.quantity;
+    
+    // Use single-item name for database matching if quantity > 1
+    const matchName = quantity > 1 ? quantityInfo.singleItemName : visionResult.itemName;
+    const modifiedVisionResult = { ...visionResult, itemName: matchName };
+    
+    // STEP 3: Attempt database match (using single-item name)
+    const dbMatch = matchWithDatabase(modifiedVisionResult);
     
     let result: VisionEngineResult;
     
@@ -427,20 +528,37 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         0.99
       );
       
+      // Calculate per-item and total values
+      const perItemVolume = item.volume_ft3;
+      const perItemWeight = item.weight_kg;
+      const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
+      const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
+      
+      // Use TOTAL volume for load size and vehicle
+      const loadSize = getLoadSizeFromVolume(totalVolume);
+      const vehicle = getVehicleRecommendation(loadSize, totalWeight);
+      
+      // Adjust movers based on total weight
+      let movers: 1 | 2 = item.movers_required;
+      if (totalWeight > 50) movers = 2;
+      
       result = {
-        itemName: visionResult.itemName,  // Keep Vision's detailed name
+        itemName: visionResult.itemName,  // Keep original name with quantity
         category: item.category,
         subcategory: item.subcategory,
+        quantity,
         dimensions: {
-          length_cm: item.dimensions_cm.length,
+          length_cm: item.dimensions_cm.length,  // Per-item dimensions
           width_cm: item.dimensions_cm.width,
           height_cm: item.dimensions_cm.height,
         },
-        volume_ft3: item.volume_ft3,
-        weight_kg: item.weight_kg,
-        load_size: item.load_size,
-        vehicle: item.vehicle,
-        movers_required: item.movers_required,
+        perItemVolumeFt3: perItemVolume,
+        perItemWeightKg: perItemWeight,
+        volume_ft3: totalVolume,  // TOTAL volume
+        weight_kg: totalWeight,   // TOTAL weight
+        load_size: loadSize,      // Based on TOTAL
+        vehicle: vehicle,         // Based on TOTAL
+        movers_required: movers,
         handling_complexity: item.handling_complexity,
         insurance_level: item.insurance_level,
         confidence,
@@ -451,8 +569,9 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       
       console.log('[Vision Engine 2.0] ✓ Database match path:',
         result.itemName,
-        `| ${result.weight_kg}kg`,
-        `| ${result.volume_ft3}ft³`,
+        `| qty: ${quantity}`,
+        `| ${perItemWeight}kg/item → ${totalWeight}kg total`,
+        `| ${perItemVolume}ft³/item → ${totalVolume}ft³ total`,
         `| ${result.load_size}`,
         `| ${result.vehicle}`);
     } else {
@@ -516,19 +635,35 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         insurance = insurance === 'standard' ? 'medium' : insurance;
       }
       
+      // Calculate per-item and total values with quantity
+      const perItemVolume = volume;
+      const perItemWeight = corrected.weight_kg;
+      const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
+      const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
+      
+      // Re-calculate load size and vehicle based on TOTAL volume/weight
+      const finalLoadSize = getLoadSizeFromVolume(totalVolume);
+      const finalVehicle = getVehicleRecommendation(finalLoadSize, totalWeight);
+      
+      // Adjust movers based on total weight
+      if (totalWeight > 50) movers = 2;
+      
       result = {
         itemName: visionResult.itemName,
         category: visionResult.category,
         subcategory: visionResult.subcategory,
+        quantity,
         dimensions: {
-          length_cm: corrected.length_cm,
+          length_cm: corrected.length_cm,  // Per-item dimensions
           width_cm: corrected.width_cm,
           height_cm: corrected.height_cm,
         },
-        volume_ft3: volume,
-        weight_kg: corrected.weight_kg,
-        load_size: loadSize,
-        vehicle,
+        perItemVolumeFt3: perItemVolume,
+        perItemWeightKg: perItemWeight,
+        volume_ft3: totalVolume,   // TOTAL volume
+        weight_kg: totalWeight,    // TOTAL weight
+        load_size: finalLoadSize,  // Based on TOTAL
+        vehicle: finalVehicle,     // Based on TOTAL
         movers_required: movers,
         handling_complexity: handling,
         insurance_level: insurance,
@@ -540,8 +675,9 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       
       console.log('[Vision Engine 2.0] ✓ Vision estimate path:',
         result.itemName,
-        `| ${result.weight_kg}kg`,
-        `| ${result.volume_ft3}ft³`,
+        `| qty: ${quantity}`,
+        `| ${perItemWeight}kg/item → ${totalWeight}kg total`,
+        `| ${perItemVolume}ft³/item → ${totalVolume}ft³ total`,
         `| ${result.load_size}`,
         `| ${result.vehicle}`,
         corrected.corrections.length > 0 ? `| ${corrected.corrections.length} corrections` : '');
@@ -554,16 +690,20 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     
     // Return fallback result
     const fallbackDims = getTypicalDimensions('Other');
+    const fallbackVolume = calculateVolumeFt3(fallbackDims.length_cm, fallbackDims.width_cm, fallbackDims.height_cm);
     return {
       itemName: 'Unidentified Item',
       category: 'Other',
       subcategory: 'Unknown',
+      quantity: 1,
       dimensions: {
         length_cm: fallbackDims.length_cm,
         width_cm: fallbackDims.width_cm,
         height_cm: fallbackDims.height_cm,
       },
-      volume_ft3: calculateVolumeFt3(fallbackDims.length_cm, fallbackDims.width_cm, fallbackDims.height_cm),
+      perItemVolumeFt3: fallbackVolume,
+      perItemWeightKg: fallbackDims.weight_kg,
+      volume_ft3: fallbackVolume,
       weight_kg: fallbackDims.weight_kg,
       load_size: 'medium',
       vehicle: 'van',
@@ -640,6 +780,9 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
       corrections: v2Result.corrections,
       processingTime: v2Result.processingTime,
       subcategory: v2Result.subcategory,
+      quantity: v2Result.quantity,
+      perItemVolumeFt3: v2Result.perItemVolumeFt3,
+      perItemWeightKg: v2Result.perItemWeightKg,
     }),
   };
 }
