@@ -32,6 +32,8 @@ import {
   findBestMatch, 
   getLoadSizeFromVolume,
   getVehicleRecommendation,
+  getVehicleRecommendationWithCategory,
+  getVehicleFromVolume,
   type FurnitureItem,
   type LoadSizeCategory,
   type VehicleType
@@ -534,9 +536,9 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
       const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
       
-      // Use TOTAL volume for load size and vehicle
+      // Use TOTAL volume for load size and vehicle with CATEGORY OVERRIDE
       const loadSize = getLoadSizeFromVolume(totalVolume);
-      const vehicle = getVehicleRecommendation(loadSize, totalWeight);
+      const vehicle = getVehicleRecommendationWithCategory(totalVolume, item.category, totalWeight);
       
       // Adjust movers based on total weight
       let movers: 1 | 2 = item.movers_required;
@@ -607,9 +609,9 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         corrected.corrections.push(`Volume increased to ${volume}ft³ (minimum for category)`);
       }
       
-      // Determine load size and vehicle
+      // Determine load size and vehicle (used for per-item, will be recalculated with total)
       const loadSize = getLoadSizeFromVolume(volume);
-      const vehicle = getVehicleRecommendation(loadSize, corrected.weight_kg);
+      // Note: vehicle calculated per-item here, will be recalculated with totalVolume below
       
       // Determine handling complexity
       let handling: 'low' | 'medium' | 'high' | 'very_high' = 'low';
@@ -641,9 +643,9 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
       const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
       
-      // Re-calculate load size and vehicle based on TOTAL volume/weight
+      // Re-calculate load size and vehicle based on TOTAL volume/weight with CATEGORY OVERRIDE
       const finalLoadSize = getLoadSizeFromVolume(totalVolume);
-      const finalVehicle = getVehicleRecommendation(finalLoadSize, totalWeight);
+      const finalVehicle = getVehicleRecommendationWithCategory(totalVolume, visionResult.category, totalWeight);
       
       // Adjust movers based on total weight
       if (totalWeight > 50) movers = 2;

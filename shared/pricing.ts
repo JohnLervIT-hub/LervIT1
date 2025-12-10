@@ -34,79 +34,97 @@ export interface VehicleClassConfig {
   examples: string;        // Real-world examples
 }
 
+/**
+ * ===== VEHICLE CLASS CONFIGURATION =====
+ * 
+ * IMPORTANT: These thresholds are synced with furniture-database.ts
+ * Volume thresholds:
+ *   0-20 ft³   → Class A (SUV/Small Vehicle)
+ *   21-80 ft³  → Class B/C (Cargo Van)
+ *   81-170 ft³ → Class D (Pickup Truck)
+ *   >170 ft³   → Class E (Moving Truck)
+ */
 export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   A: {
     class: 'A',
-    name: 'Small Car / Hatchback',
+    name: 'SUV / Small Vehicle',
     vehicleType: 'car',
     volumeRangeMin: 0,
-    volumeRangeMax: 15,
+    volumeRangeMax: 20,
     baseFee: 15.00,
     perKmRate: 0.80,
-    loadType: 'Lightweight items only',
-    examples: '1-2 boxes, bags, small items',
+    loadType: 'Small items, single chairs',
+    examples: '1-4 boxes, single chair, small items',
   },
   B: {
     class: 'B',
-    name: 'Sedan / Small SUV',
-    vehicleType: 'car',
-    volumeRangeMin: 15,
-    volumeRangeMax: 40,
-    baseFee: 20.00,
+    name: 'Large SUV / Small Cargo Van',
+    vehicleType: 'van',
+    volumeRangeMin: 20,
+    volumeRangeMax: 50,
+    baseFee: 22.00,
     perKmRate: 1.00,
-    loadType: 'Standard move for small items',
-    examples: 'Small furniture, 4-6 boxes',
+    loadType: 'Small furniture, pair of chairs',
+    examples: 'Pair of chairs, small table, 6+ boxes',
   },
   C: {
     class: 'C',
-    name: 'Minivan / Small Cargo Van',
+    name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 40,
-    volumeRangeMax: 120,
+    volumeRangeMin: 50,
+    volumeRangeMax: 80,
     baseFee: 30.00,
     perKmRate: 1.25,
-    loadType: 'Small moves / bedrooms',
-    examples: 'Bedroom set, medium moves',
+    loadType: 'Medium furniture loads',
+    examples: 'Small sofa, mattress, bedroom items',
   },
   D: {
     class: 'D',
-    name: 'Cargo Van / Full-Size Van',
-    vehicleType: 'van',
-    volumeRangeMin: 120,
-    volumeRangeMax: 250,
+    name: 'Pickup Truck / Small Moving Truck',
+    vehicleType: 'pickup',
+    volumeRangeMin: 80,
+    volumeRangeMax: 170,
     baseFee: 40.00,
     perKmRate: 1.60,
-    loadType: 'Apartment + heavy items',
-    examples: 'Full apartment, couch + mattress',
+    loadType: 'Full bedroom / large items',
+    examples: 'Bed frame + mattress, dresser, multiple furniture',
   },
   E: {
     class: 'E',
-    name: 'Pickup / Box Truck',
+    name: 'Moving Truck (Large)',
     vehicleType: 'truck',
-    volumeRangeMin: 250,
+    volumeRangeMin: 170,
     volumeRangeMax: 500,
     baseFee: 50.00,
     perKmRate: 2.00,
-    loadType: 'Full moving capability',
-    examples: 'Full home move, appliances, heavy loads',
+    loadType: 'Full apartment / home moves',
+    examples: 'Full apartment, appliances, heavy loads',
   },
 };
 
-// Map legacy loadSize values to vehicle classes
+// Map loadSize values to vehicle classes (synced with furniture-database.ts)
 export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
-  'boxes': 'A',        // 0-15 ft³ → Class A
-  'small': 'B',        // Legacy small → Class B
-  'medium': 'C',       // 40-120 ft³ → Class C
-  'large': 'D',        // 120-250 ft³ → Class D
-  'apartment': 'E',    // 250+ ft³ → Class E (full move)
+  'boxes': 'A',        // 0-20 ft³ → Class A (SUV) - boxes, small items
+  'small': 'A',        // Alias for boxes
+  'medium': 'C',       // 21-80 ft³ → Class C (Cargo Van)
+  'large': 'D',        // 81-170 ft³ → Class D (Pickup Truck)
+  'apartment': 'E',    // >170 ft³ → Class E (Moving Truck)
 };
 
-// Determine vehicle class from volume
+/**
+ * Determine vehicle class from total volume
+ * Synced with furniture-database.ts thresholds:
+ *   0-20 ft³   → A (SUV)
+ *   21-50 ft³  → B (Large SUV/Small Van)
+ *   51-80 ft³  → C (Cargo Van)
+ *   81-170 ft³ → D (Pickup Truck)
+ *   >170 ft³   → E (Moving Truck)
+ */
 export function getVehicleClassFromVolume(volumeCuft: number): VehicleClass {
-  if (volumeCuft <= 15) return 'A';
-  if (volumeCuft <= 40) return 'B';
-  if (volumeCuft <= 120) return 'C';
-  if (volumeCuft <= 250) return 'D';
+  if (volumeCuft <= 20) return 'A';
+  if (volumeCuft <= 50) return 'B';
+  if (volumeCuft <= 80) return 'C';
+  if (volumeCuft <= 170) return 'D';
   return 'E';
 }
 
@@ -145,10 +163,11 @@ const PRICING_CONFIG = {
   },
   // Load Size Fees (replaces heavy item fee in pricing calculation)
   LOAD_SIZE_FEES: {
-    boxes: 0.00,
-    medium: 15.00,
-    large: 30.00,
-    apartment: 45.00,
+    boxes: 0.00,     // SUV loads - no extra fee (boxes, small items)
+    small: 0.00,     // Alias for boxes
+    medium: 15.00,   // Cargo Van loads
+    large: 30.00,    // Pickup Truck loads
+    apartment: 45.00, // Moving Truck loads
   } as Record<string, number>,
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
@@ -167,7 +186,7 @@ export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICUL
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,
-  loadSize: 'boxes' | 'medium' | 'large' | 'apartment',
+  loadSize: 'boxes' | 'small' | 'medium' | 'large' | 'apartment',
   pickupDifficulty: PickupDifficultyType,
   dropoffDifficulty: DropoffDifficultyType,
   heavyItem: boolean,

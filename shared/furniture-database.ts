@@ -37,7 +37,15 @@ export type FurnitureCategory =
   | 'Outdoor'
   | 'Other';
 
-export type LoadSizeCategory = 'boxes' | 'medium' | 'large' | 'apartment';
+/**
+ * Load size categories for pricing and display
+ * NOTE: These map to vehicle classes in pricing.ts:
+ *   - boxes/small: 0-20 ft³   → Class A (SUV) - boxes, small items, single chair
+ *   - medium:      21-80 ft³  → Class B/C (Cargo Van) - pair of chairs, small sofa
+ *   - large:       81-170 ft³ → Class D (Pickup Truck) - bedroom set
+ *   - apartment:   >170 ft³   → Class E (Moving Truck) - full move
+ */
+export type LoadSizeCategory = 'boxes' | 'small' | 'medium' | 'large' | 'apartment';
 export type VehicleType = 'car' | 'van' | 'pickup' | 'truck';
 
 /**
@@ -353,7 +361,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 50, height: 55 },
     volume_ft3: calcVolume(50, 50, 55),
     weight_kg: 12,
-    load_size: 'boxes',
+    load_size: 'small',
     vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
@@ -430,7 +438,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 45, width: 50, height: 90 },
     volume_ft3: calcVolume(45, 50, 90),
     weight_kg: 8,
-    load_size: 'boxes',
+    load_size: 'small',
     vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
@@ -582,7 +590,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 40, height: 55 },
     volume_ft3: calcVolume(50, 40, 55),
     weight_kg: 15,
-    load_size: 'boxes',
+    load_size: 'small',
     vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
@@ -734,7 +742,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 40, height: 30 },
     volume_ft3: calcVolume(50, 40, 30),
     weight_kg: 15,
-    load_size: 'boxes',
+    load_size: 'small',
     vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
@@ -811,7 +819,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 70, width: 25, height: 50 },
     volume_ft3: calcVolume(70, 25, 50),
     weight_kg: 8,
-    load_size: 'boxes',
+    load_size: 'small',
     vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
@@ -826,7 +834,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 50, width: 25, height: 50 },
     volume_ft3: calcVolume(50, 25, 50),
     weight_kg: 15,
-    load_size: 'boxes',
+    load_size: 'small',
     vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'medium',
@@ -1141,21 +1149,112 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
 }
 
 /**
- * Get load size category from volume
+ * ===== VEHICLE SELECTION THRESHOLDS =====
+ * Single source of truth for volume-to-vehicle mapping
+ * 
+ * Updated thresholds (2025):
+ *   0-20 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes
+ *   21-80 ft³  → Cargo Van (van)             - Pair of chairs, small sofa, mattress
+ *   81-170 ft³ → Pickup Truck (pickup)       - Bedroom set, multiple furniture
+ *   >170 ft³   → Moving Truck (truck)        - Apartment move, large loads
+ */
+export const VEHICLE_VOLUME_THRESHOLDS = {
+  CAR_MAX: 20,      // 0-20 ft³ → SUV/Small Vehicle
+  VAN_MAX: 80,      // 21-80 ft³ → Cargo Van  
+  PICKUP_MAX: 170,  // 81-170 ft³ → Pickup Truck
+  // Above 170 ft³ → Moving Truck
+};
+
+/**
+ * Get load size from total volume (using new thresholds)
+ * Note: This uses TOTAL volume including quantity
  */
 export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
-  if (volumeFt3 <= 10) return 'boxes';
-  if (volumeFt3 <= 50) return 'medium';
-  if (volumeFt3 <= 170) return 'large';
-  return 'apartment';
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // 0-20 ft³ → SUV (use 'boxes' for UI compatibility)
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'medium';    // 21-80 ft³ → Cargo Van
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'large';  // 81-170 ft³ → Pickup
+  return 'apartment';  // >170 ft³ → Moving Truck
 }
 
 /**
- * Get vehicle recommendation from load size and weight
+ * Get vehicle recommendation from TOTAL volume (primary method)
+ * This is the preferred method - uses volume directly without load size
+ */
+export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // 0-20 ft³ → SUV
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // 21-80 ft³ → Cargo Van
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // 81-170 ft³ → Pickup
+  return 'truck';  // >170 ft³ → Moving Truck
+}
+
+/**
+ * Category-aware vehicle recommendation
+ * Applies category-specific overrides for more accurate recommendations
+ * 
+ * CATEGORY OVERRIDES:
+ * - Chair: If totalVolume ≤ 20 ft³ → always 'car' (SUV/Small Vehicle)
+ *          Chairs are light and compact, don't need vans
+ * - Table: If totalVolume ≤ 25 ft³ → 'car' (small dining tables fit in SUV)
+ * - Electronics: If totalVolume ≤ 15 ft³ → 'car' (TVs, monitors)
+ * 
+ * @param totalVolumeFt3 - TOTAL volume including quantity
+ * @param category - Furniture category for override rules
+ * @param totalWeightKg - Optional weight for heavy item override
+ */
+export function getVehicleRecommendationWithCategory(
+  totalVolumeFt3: number,
+  category: string,
+  totalWeightKg?: number
+): VehicleType {
+  // WEIGHT OVERRIDE: Very heavy items may need bigger vehicles
+  if (totalWeightKg && totalWeightKg > 150) return 'truck';
+  if (totalWeightKg && totalWeightKg > 100) return 'pickup';
+  
+  // CATEGORY OVERRIDES for compact/light items
+  const normalizedCategory = category.toLowerCase();
+  
+  // Chair override: Chairs up to 20 ft³ can fit in SUV
+  if (normalizedCategory === 'chair' && totalVolumeFt3 <= 20) {
+    console.log(`[Vehicle] Chair category override: ${totalVolumeFt3} ft³ → SUV`);
+    return 'car';
+  }
+  
+  // Small table override: Small tables up to 25 ft³ can fit in SUV
+  if (normalizedCategory === 'table' && totalVolumeFt3 <= 25) {
+    console.log(`[Vehicle] Table category override: ${totalVolumeFt3} ft³ → SUV`);
+    return 'car';
+  }
+  
+  // Electronics override: TVs and monitors up to 15 ft³
+  if (normalizedCategory === 'electronics' && totalVolumeFt3 <= 15) {
+    console.log(`[Vehicle] Electronics category override: ${totalVolumeFt3} ft³ → SUV`);
+    return 'car';
+  }
+  
+  // Default: Use volume-based selection
+  return getVehicleFromVolume(totalVolumeFt3);
+}
+
+/**
+ * Get vehicle recommendation from load size and weight (LEGACY)
+ * Kept for backward compatibility - prefer getVehicleRecommendationWithCategory
  */
 export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: number): VehicleType {
   if (loadSize === 'apartment' || weightKg > 150) return 'truck';
-  if (loadSize === 'large' || weightKg > 80) return 'pickup';
-  if (loadSize === 'medium' || weightKg > 30) return 'van';
+  if (loadSize === 'large' || weightKg > 100) return 'pickup';
+  if (loadSize === 'medium' || weightKg > 50) return 'van';
   return 'car';
+}
+
+/**
+ * Human-readable vehicle name for UI display
+ */
+export function getVehicleDisplayName(vehicle: VehicleType): string {
+  switch (vehicle) {
+    case 'car': return 'SUV / Small Vehicle';
+    case 'van': return 'Cargo Van';
+    case 'pickup': return 'Pickup Truck';
+    case 'truck': return 'Moving Truck (Large)';
+    default: return 'Vehicle';
+  }
 }
