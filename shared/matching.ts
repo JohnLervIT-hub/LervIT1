@@ -32,14 +32,49 @@ const DEFAULT_CONFIG: MatchingConfig = {
   maxMoversToNotify: 5,
 };
 
-// Vehicle type recommendations based on weight class
+import { VehicleType } from './furniture-database';
+
+/**
+ * Single-tier vehicle upgrade compatibility
+ * Only allows upgrade to ONE tier higher to prevent extreme mismatches
+ * 
+ * Examples:
+ * - car → [car, van] (can upgrade to van, but not pickup or truck)
+ * - van → [van, pickup] (can upgrade to pickup, but not truck)
+ * - pickup → [pickup, truck]
+ * - truck → [truck] (no higher tier)
+ */
+const VEHICLE_PRIORITY_ORDER: VehicleType[] = ['car', 'van', 'pickup', 'truck'];
+
+function getSingleTierCompatibility(baseType: VehicleType): VehicleType[] {
+  const index = VEHICLE_PRIORITY_ORDER.indexOf(baseType);
+  if (index === -1) return [VEHICLE_PRIORITY_ORDER[0]];
+  
+  // If already at largest tier, only that one
+  if (index === VEHICLE_PRIORITY_ORDER.length - 1) {
+    return [baseType];
+  }
+  
+  // Return base type + ONE tier higher
+  return [baseType, VEHICLE_PRIORITY_ORDER[index + 1]];
+}
+
+// Legacy vehicle type compatibility (kept for backward compatibility with display names)
 const VEHICLE_TYPE_COMPATIBILITY: Record<string, string[]> = {
-  'Car': ['Car', 'SUV'],
-  'SUV': ['SUV', 'Car', 'Pickup'],
-  'Pickup': ['Pickup', 'SUV', 'Cargo Van'],
-  'Cargo Van': ['Cargo Van', 'Pickup', 'Cube Truck'],
-  'Cube Truck': ['Cube Truck', 'Cargo Van', 'Flatbed'],
-  'Flatbed': ['Flatbed', 'Cube Truck'],
+  'Car': ['car', 'van'],           // Single tier: Car → Van
+  'car': ['car', 'van'],
+  'SUV': ['car', 'van'],           // SUV is treated as 'car' class
+  'Van': ['van', 'pickup'],        // Single tier: Van → Pickup
+  'van': ['van', 'pickup'],
+  'Cargo Van': ['van', 'pickup'],
+  'Pickup': ['pickup', 'truck'],   // Single tier: Pickup → Truck
+  'pickup': ['pickup', 'truck'],
+  'Pickup Truck': ['pickup', 'truck'],
+  'Truck': ['truck'],              // Largest tier, no upgrade
+  'truck': ['truck'],
+  'Moving Truck': ['truck'],
+  'Cube Truck': ['truck'],
+  'Flatbed': ['truck'],
 };
 
 /**
@@ -151,4 +186,127 @@ export function isNotificationExpired(notifiedAt: Date, timeoutMinutes: number =
  */
 export function calculateExpiryTime(timeoutMinutes: number = 10): Date {
   return new Date(Date.now() + timeoutMinutes * 60 * 1000);
+}
+
+/**
+ * Result of vehicle matching with status
+ */
+export interface VehicleMatchingResult {
+  status: 'MATCHED' | 'NO_VEHICLE_AVAILABLE';
+  movers: MoverWithDistance[];
+  requestedVehicle: string;
+  matchedVehicle?: string;
+  upgraded: boolean;
+  message: string;
+}
+
+/**
+ * Normalize vehicle type to lowercase for consistent matching
+ * Handles legacy data with various capitalizations
+ */
+function normalizeVehicleType(vehicleType: string): VehicleType {
+  const lower = vehicleType.toLowerCase().trim();
+  
+  // Map common variations to standard types
+  if (lower === 'suv' || lower === 'car' || lower === 'sedan') return 'car';
+  if (lower === 'van' || lower === 'cargo van' || lower === 'cargoVan') return 'van';
+  if (lower === 'pickup' || lower === 'pickup truck' || lower === 'pickuptruck') return 'pickup';
+  if (lower === 'truck' || lower === 'moving truck' || lower === 'cube truck' || lower === 'flatbed') return 'truck';
+  
+  // Default fallback based on partial matches
+  if (lower.includes('van')) return 'van';
+  if (lower.includes('pickup')) return 'pickup';
+  if (lower.includes('truck')) return 'truck';
+  
+  return 'car'; // Default to smallest
+}
+
+/**
+ * Find movers with single-tier upgrade logic
+ * Returns MATCHED status with movers, or NO_VEHICLE_AVAILABLE if none found
+ * 
+ * Uses case-insensitive matching to handle legacy vehicle type data
+ */
+export function findMoversWithAvailabilityCheck(
+  pickupCoords: Coordinates,
+  dropoffCoords: Coordinates,
+  loadSize: 'boxes' | 'medium' | 'large' | 'apartment',
+  availableMovers: Array<{
+    moverId: string;
+    userId: string;
+    name: string;
+    vehicleType: string;
+    rating: string;
+    totalMoves: number;
+    isAvailable: boolean;
+    latitude: number | null;
+    longitude: number | null;
+  }>,
+  recommendedVehicle: string,
+  config: Partial<MatchingConfig> = {}
+): VehicleMatchingResult {
+  // Normalize the recommended vehicle type
+  const normalizedRecommended = normalizeVehicleType(recommendedVehicle);
+  
+  // Get single-tier compatible types
+  const compatibleTypes = getSingleTierCompatibility(normalizedRecommended);
+  
+  // Normalize all mover vehicle types for comparison
+  const normalizedMovers = availableMovers.map(m => ({
+    ...m,
+    normalizedVehicleType: normalizeVehicleType(m.vehicleType),
+  }));
+  
+  // Try to find movers for each compatible type (in priority order: exact match first, then upgrade)
+  for (const vehicleType of compatibleTypes) {
+    const matchingMovers = normalizedMovers.filter(m => 
+      m.normalizedVehicleType === vehicleType && m.isAvailable
+    );
+    
+    if (matchingMovers.length > 0) {
+      // Overwrite vehicleType with normalized value for findNearestMovers compatibility check
+      const moversWithNormalizedType = matchingMovers.map(m => ({
+        ...m,
+        vehicleType: m.normalizedVehicleType, // Use normalized type for matching
+      }));
+      
+      // Use existing findNearestMovers with normalized list
+      const movers = findNearestMovers(
+        pickupCoords,
+        dropoffCoords,
+        loadSize,
+        moversWithNormalizedType,
+        config,
+        vehicleType
+      );
+      
+      if (movers.length > 0) {
+        const upgraded = vehicleType !== normalizedRecommended;
+        
+        return {
+          status: 'MATCHED',
+          movers,
+          requestedVehicle: recommendedVehicle,
+          matchedVehicle: vehicleType,
+          upgraded,
+          message: upgraded 
+            ? `Upgraded to ${vehicleType} (no ${normalizedRecommended} available nearby)`
+            : `Matched with ${vehicleType} movers`,
+        };
+      }
+    }
+  }
+  
+  // No movers available even with single-tier upgrade
+  const nextTier = compatibleTypes.length > 1 ? compatibleTypes[1] : null;
+  
+  return {
+    status: 'NO_VEHICLE_AVAILABLE',
+    movers: [],
+    requestedVehicle: recommendedVehicle,
+    upgraded: false,
+    message: nextTier
+      ? `No ${normalizedRecommended} or ${nextTier} available in your area right now`
+      : `No ${normalizedRecommended} available in your area right now`,
+  };
 }
