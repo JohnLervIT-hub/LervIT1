@@ -373,15 +373,15 @@ export default function LandingPage() {
             {[
               {
                 step: "01",
-                icon: Camera,
-                title: "Snap Photos",
-                description: "Take photos of items you need moved. Our AI identifies everything automatically.",
+                icon: MapPin,
+                title: "Enter Locations",
+                description: "Tell us your pickup and dropoff addresses in Calgary. We calculate distance instantly.",
               },
               {
                 step: "02",
-                icon: Cpu,
-                title: "AI Analysis",
-                description: "Get instant size estimates, weight calculations, and vehicle recommendations.",
+                icon: Camera,
+                title: "Snap Photos",
+                description: "Upload photos of your items. Our AI identifies furniture and calculates volume automatically.",
               },
               {
                 step: "03",
