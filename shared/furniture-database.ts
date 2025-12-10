@@ -1,0 +1,1053 @@
+/**
+ * LervIT Vision Engine 2.0 - Ground-Truth Furniture Database (Layer 1)
+ * 
+ * This database contains verified furniture specifications for stable, consistent predictions.
+ * Items with high similarity matches bypass estimation and use these exact values.
+ */
+
+export interface FurnitureItem {
+  item_id: string;
+  name: string;
+  category: FurnitureCategory;
+  subcategory: string;
+  keywords: string[];  // Keywords for matching
+  dimensions_cm: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  volume_ft3: number;
+  weight_kg: number;
+  load_size: LoadSizeCategory;
+  vehicle: VehicleType;
+  movers_required: 1 | 2;
+  handling_complexity: 'low' | 'medium' | 'high' | 'very_high';
+  insurance_level: 'standard' | 'medium' | 'high' | 'premium';
+}
+
+export type FurnitureCategory = 
+  | 'Bed'
+  | 'Sofa'
+  | 'Table'
+  | 'Chair'
+  | 'Dresser'
+  | 'Appliance'
+  | 'Electronics'
+  | 'Storage'
+  | 'Outdoor'
+  | 'Other';
+
+export type LoadSizeCategory = 'boxes' | 'medium' | 'large' | 'apartment';
+export type VehicleType = 'car' | 'van' | 'pickup' | 'truck';
+
+/**
+ * Calculate volume in cubic feet from dimensions in cm
+ */
+function calcVolume(l: number, w: number, h: number): number {
+  const volumeCm3 = l * w * h;
+  const volumeFt3 = volumeCm3 / 28316.8;
+  return Math.round(volumeFt3 * 100) / 100;
+}
+
+/**
+ * Ground-Truth Furniture Database
+ * Contains verified specifications for common furniture items
+ */
+export const FURNITURE_DATABASE: FurnitureItem[] = [
+  // ===== BEDS =====
+  {
+    item_id: 'BED_TWIN_001',
+    name: 'Twin bed frame (standard)',
+    category: 'Bed',
+    subcategory: 'Twin',
+    keywords: ['twin', 'single', 'bed', 'frame', 'mattress'],
+    dimensions_cm: { length: 191, width: 99, height: 40 },
+    volume_ft3: calcVolume(191, 99, 40),
+    weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BED_TWIN_STORAGE_001',
+    name: 'Twin bed frame with storage drawers',
+    category: 'Bed',
+    subcategory: 'Twin',
+    keywords: ['twin', 'single', 'bed', 'storage', 'drawers', 'captain'],
+    dimensions_cm: { length: 191, width: 99, height: 43 },
+    volume_ft3: calcVolume(191, 99, 43),
+    weight_kg: 55,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BED_FULL_001',
+    name: 'Full/Double bed frame',
+    category: 'Bed',
+    subcategory: 'Full',
+    keywords: ['full', 'double', 'bed', 'frame'],
+    dimensions_cm: { length: 191, width: 137, height: 40 },
+    volume_ft3: calcVolume(191, 137, 40),
+    weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BED_QUEEN_001',
+    name: 'Queen bed frame',
+    category: 'Bed',
+    subcategory: 'Queen',
+    keywords: ['queen', 'bed', 'frame'],
+    dimensions_cm: { length: 203, width: 152, height: 40 },
+    volume_ft3: calcVolume(203, 152, 40),
+    weight_kg: 55,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'BED_QUEEN_PLATFORM_001',
+    name: 'Queen platform bed with headboard',
+    category: 'Bed',
+    subcategory: 'Queen',
+    keywords: ['queen', 'platform', 'bed', 'headboard'],
+    dimensions_cm: { length: 210, width: 165, height: 110 },
+    volume_ft3: calcVolume(210, 165, 110),
+    weight_kg: 75,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'BED_KING_001',
+    name: 'King bed frame',
+    category: 'Bed',
+    subcategory: 'King',
+    keywords: ['king', 'bed', 'frame', 'california'],
+    dimensions_cm: { length: 203, width: 193, height: 40 },
+    volume_ft3: calcVolume(203, 193, 40),
+    weight_kg: 70,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'BED_BUNK_001',
+    name: 'Bunk bed (twin over twin)',
+    category: 'Bed',
+    subcategory: 'Bunk',
+    keywords: ['bunk', 'bed', 'twin', 'kids', 'children'],
+    dimensions_cm: { length: 200, width: 100, height: 170 },
+    volume_ft3: calcVolume(200, 100, 170),
+    weight_kg: 80,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  
+  // ===== SOFAS =====
+  {
+    item_id: 'SOFA_2SEAT_001',
+    name: '2-seater loveseat sofa',
+    category: 'Sofa',
+    subcategory: 'Loveseat',
+    keywords: ['loveseat', '2-seater', 'two', 'sofa', 'couch', 'small'],
+    dimensions_cm: { length: 150, width: 85, height: 85 },
+    volume_ft3: calcVolume(150, 85, 85),
+    weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'SOFA_3SEAT_001',
+    name: '3-seater sofa',
+    category: 'Sofa',
+    subcategory: '3-Seater',
+    keywords: ['3-seater', 'three', 'sofa', 'couch', 'standard'],
+    dimensions_cm: { length: 210, width: 90, height: 85 },
+    volume_ft3: calcVolume(210, 90, 85),
+    weight_kg: 70,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'SOFA_SECTIONAL_L_001',
+    name: 'L-shaped sectional sofa',
+    category: 'Sofa',
+    subcategory: 'Sectional',
+    keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise'],
+    dimensions_cm: { length: 300, width: 180, height: 85 },
+    volume_ft3: calcVolume(300, 180, 85),
+    weight_kg: 120,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'SOFA_SECTIONAL_U_001',
+    name: 'U-shaped sectional sofa',
+    category: 'Sofa',
+    subcategory: 'Sectional',
+    keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large'],
+    dimensions_cm: { length: 350, width: 250, height: 85 },
+    volume_ft3: calcVolume(350, 250, 85),
+    weight_kg: 180,
+    load_size: 'apartment',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'SOFA_SLEEPER_001',
+    name: 'Sleeper sofa / Sofa bed',
+    category: 'Sofa',
+    subcategory: 'Sleeper',
+    keywords: ['sleeper', 'sofa bed', 'pullout', 'convertible', 'futon'],
+    dimensions_cm: { length: 220, width: 95, height: 85 },
+    volume_ft3: calcVolume(220, 95, 85),
+    weight_kg: 95,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'SOFA_RECLINER_001',
+    name: 'Recliner sofa (3-seat)',
+    category: 'Sofa',
+    subcategory: 'Recliner',
+    keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'electric', 'power'],
+    dimensions_cm: { length: 230, width: 100, height: 100 },
+    volume_ft3: calcVolume(230, 100, 100),
+    weight_kg: 110,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'ARMCHAIR_001',
+    name: 'Armchair / Accent chair',
+    category: 'Sofa',
+    subcategory: 'Armchair',
+    keywords: ['armchair', 'accent', 'chair', 'single', 'living room'],
+    dimensions_cm: { length: 85, width: 85, height: 90 },
+    volume_ft3: calcVolume(85, 85, 90),
+    weight_kg: 30,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'RECLINER_SINGLE_001',
+    name: 'Single recliner chair',
+    category: 'Sofa',
+    subcategory: 'Recliner',
+    keywords: ['recliner', 'chair', 'single', 'lazy boy', 'lazyboy'],
+    dimensions_cm: { length: 90, width: 85, height: 100 },
+    volume_ft3: calcVolume(90, 85, 100),
+    weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  
+  // ===== TABLES =====
+  {
+    item_id: 'TABLE_DINING_4_001',
+    name: 'Dining table (4-person)',
+    category: 'Table',
+    subcategory: 'Dining',
+    keywords: ['dining', 'table', '4-person', 'four', 'kitchen'],
+    dimensions_cm: { length: 120, width: 75, height: 75 },
+    volume_ft3: calcVolume(120, 75, 75),
+    weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'TABLE_DINING_6_001',
+    name: 'Dining table (6-person)',
+    category: 'Table',
+    subcategory: 'Dining',
+    keywords: ['dining', 'table', '6-person', 'six', 'large'],
+    dimensions_cm: { length: 180, width: 90, height: 75 },
+    volume_ft3: calcVolume(180, 90, 75),
+    weight_kg: 50,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'TABLE_DINING_8_001',
+    name: 'Dining table (8-person)',
+    category: 'Table',
+    subcategory: 'Dining',
+    keywords: ['dining', 'table', '8-person', 'eight', 'extendable', 'extension'],
+    dimensions_cm: { length: 240, width: 100, height: 75 },
+    volume_ft3: calcVolume(240, 100, 75),
+    weight_kg: 70,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'TABLE_COFFEE_001',
+    name: 'Coffee table',
+    category: 'Table',
+    subcategory: 'Coffee',
+    keywords: ['coffee', 'table', 'living room', 'center'],
+    dimensions_cm: { length: 120, width: 60, height: 45 },
+    volume_ft3: calcVolume(120, 60, 45),
+    weight_kg: 25,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'TABLE_SIDE_001',
+    name: 'Side table / End table',
+    category: 'Table',
+    subcategory: 'Side',
+    keywords: ['side', 'end', 'table', 'nightstand', 'lamp'],
+    dimensions_cm: { length: 50, width: 50, height: 55 },
+    volume_ft3: calcVolume(50, 50, 55),
+    weight_kg: 12,
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'TABLE_CONSOLE_001',
+    name: 'Console table / Entry table',
+    category: 'Table',
+    subcategory: 'Console',
+    keywords: ['console', 'entry', 'hallway', 'table', 'narrow'],
+    dimensions_cm: { length: 120, width: 35, height: 80 },
+    volume_ft3: calcVolume(120, 35, 80),
+    weight_kg: 20,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'DESK_OFFICE_001',
+    name: 'Office desk (standard)',
+    category: 'Table',
+    subcategory: 'Desk',
+    keywords: ['desk', 'office', 'computer', 'work', 'writing'],
+    dimensions_cm: { length: 150, width: 75, height: 75 },
+    volume_ft3: calcVolume(150, 75, 75),
+    weight_kg: 40,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'DESK_LSHAPE_001',
+    name: 'L-shaped desk',
+    category: 'Table',
+    subcategory: 'Desk',
+    keywords: ['l-shaped', 'corner', 'desk', 'office', 'executive'],
+    dimensions_cm: { length: 180, width: 150, height: 75 },
+    volume_ft3: calcVolume(180, 150, 75),
+    weight_kg: 65,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'DESK_STANDING_001',
+    name: 'Standing desk (electric)',
+    category: 'Table',
+    subcategory: 'Desk',
+    keywords: ['standing', 'adjustable', 'electric', 'desk', 'sit-stand'],
+    dimensions_cm: { length: 150, width: 75, height: 125 },
+    volume_ft3: calcVolume(150, 75, 125),
+    weight_kg: 55,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'high',
+  },
+  
+  // ===== CHAIRS =====
+  {
+    item_id: 'CHAIR_DINING_001',
+    name: 'Dining chair',
+    category: 'Chair',
+    subcategory: 'Dining',
+    keywords: ['dining', 'chair', 'kitchen', 'seat'],
+    dimensions_cm: { length: 45, width: 50, height: 90 },
+    volume_ft3: calcVolume(45, 50, 90),
+    weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'CHAIR_OFFICE_001',
+    name: 'Office chair (ergonomic)',
+    category: 'Chair',
+    subcategory: 'Office',
+    keywords: ['office', 'chair', 'ergonomic', 'computer', 'swivel'],
+    dimensions_cm: { length: 65, width: 65, height: 110 },
+    volume_ft3: calcVolume(65, 65, 110),
+    weight_kg: 18,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'CHAIR_GAMING_001',
+    name: 'Gaming chair',
+    category: 'Chair',
+    subcategory: 'Gaming',
+    keywords: ['gaming', 'chair', 'racing', 'computer', 'ergonomic'],
+    dimensions_cm: { length: 70, width: 70, height: 130 },
+    volume_ft3: calcVolume(70, 70, 130),
+    weight_kg: 25,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  
+  // ===== DRESSERS & STORAGE =====
+  {
+    item_id: 'DRESSER_6DRAWER_001',
+    name: '6-drawer dresser',
+    category: 'Dresser',
+    subcategory: 'Dresser',
+    keywords: ['dresser', '6-drawer', 'bedroom', 'storage', 'chest'],
+    dimensions_cm: { length: 150, width: 50, height: 85 },
+    volume_ft3: calcVolume(150, 50, 85),
+    weight_kg: 70,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'DRESSER_TALL_001',
+    name: 'Tall dresser / Chest of drawers',
+    category: 'Dresser',
+    subcategory: 'Chest',
+    keywords: ['tall', 'dresser', 'chest', 'highboy', 'vertical'],
+    dimensions_cm: { length: 80, width: 45, height: 130 },
+    volume_ft3: calcVolume(80, 45, 130),
+    weight_kg: 55,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'NIGHTSTAND_001',
+    name: 'Nightstand / Bedside table',
+    category: 'Dresser',
+    subcategory: 'Nightstand',
+    keywords: ['nightstand', 'bedside', 'table', 'night', 'lamp'],
+    dimensions_cm: { length: 50, width: 40, height: 55 },
+    volume_ft3: calcVolume(50, 40, 55),
+    weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'WARDROBE_001',
+    name: 'Wardrobe / Armoire',
+    category: 'Storage',
+    subcategory: 'Wardrobe',
+    keywords: ['wardrobe', 'armoire', 'closet', 'clothes', 'storage'],
+    dimensions_cm: { length: 120, width: 60, height: 200 },
+    volume_ft3: calcVolume(120, 60, 200),
+    weight_kg: 100,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'BOOKSHELF_001',
+    name: 'Bookshelf (5-shelf)',
+    category: 'Storage',
+    subcategory: 'Bookshelf',
+    keywords: ['bookshelf', 'bookcase', 'shelves', 'storage', 'display'],
+    dimensions_cm: { length: 80, width: 30, height: 180 },
+    volume_ft3: calcVolume(80, 30, 180),
+    weight_kg: 40,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'TV_STAND_001',
+    name: 'TV stand / Entertainment center',
+    category: 'Storage',
+    subcategory: 'Media',
+    keywords: ['tv', 'stand', 'entertainment', 'center', 'media', 'console'],
+    dimensions_cm: { length: 150, width: 45, height: 55 },
+    volume_ft3: calcVolume(150, 45, 55),
+    weight_kg: 40,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  
+  // ===== APPLIANCES =====
+  {
+    item_id: 'FRIDGE_STANDARD_001',
+    name: 'Refrigerator (standard top-freezer)',
+    category: 'Appliance',
+    subcategory: 'Refrigerator',
+    keywords: ['refrigerator', 'fridge', 'top-freezer', 'standard'],
+    dimensions_cm: { length: 75, width: 70, height: 170 },
+    volume_ft3: calcVolume(75, 70, 170),
+    weight_kg: 90,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'FRIDGE_FRENCH_001',
+    name: 'French door refrigerator',
+    category: 'Appliance',
+    subcategory: 'Refrigerator',
+    keywords: ['refrigerator', 'fridge', 'french', 'door', 'side-by-side'],
+    dimensions_cm: { length: 90, width: 80, height: 180 },
+    volume_ft3: calcVolume(90, 80, 180),
+    weight_kg: 130,
+    load_size: 'apartment',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'WASHER_001',
+    name: 'Washing machine (front-load)',
+    category: 'Appliance',
+    subcategory: 'Washer',
+    keywords: ['washing', 'machine', 'washer', 'front-load', 'laundry'],
+    dimensions_cm: { length: 60, width: 65, height: 85 },
+    volume_ft3: calcVolume(60, 65, 85),
+    weight_kg: 75,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'DRYER_001',
+    name: 'Clothes dryer',
+    category: 'Appliance',
+    subcategory: 'Dryer',
+    keywords: ['dryer', 'clothes', 'laundry', 'tumble'],
+    dimensions_cm: { length: 60, width: 65, height: 85 },
+    volume_ft3: calcVolume(60, 65, 85),
+    weight_kg: 55,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'DISHWASHER_001',
+    name: 'Dishwasher',
+    category: 'Appliance',
+    subcategory: 'Dishwasher',
+    keywords: ['dishwasher', 'dishes', 'kitchen'],
+    dimensions_cm: { length: 60, width: 60, height: 85 },
+    volume_ft3: calcVolume(60, 60, 85),
+    weight_kg: 45,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'STOVE_001',
+    name: 'Stove / Range (electric)',
+    category: 'Appliance',
+    subcategory: 'Stove',
+    keywords: ['stove', 'range', 'oven', 'electric', 'kitchen', 'cooktop'],
+    dimensions_cm: { length: 76, width: 70, height: 115 },
+    volume_ft3: calcVolume(76, 70, 115),
+    weight_kg: 70,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'MICROWAVE_001',
+    name: 'Microwave (countertop)',
+    category: 'Appliance',
+    subcategory: 'Microwave',
+    keywords: ['microwave', 'countertop', 'kitchen', 'small'],
+    dimensions_cm: { length: 50, width: 40, height: 30 },
+    volume_ft3: calcVolume(50, 40, 30),
+    weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'AC_WINDOW_001',
+    name: 'Window air conditioner',
+    category: 'Appliance',
+    subcategory: 'AC',
+    keywords: ['air', 'conditioner', 'window', 'ac', 'cooling'],
+    dimensions_cm: { length: 60, width: 50, height: 40 },
+    volume_ft3: calcVolume(60, 50, 40),
+    weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  
+  // ===== ELECTRONICS =====
+  {
+    item_id: 'TV_55_001',
+    name: '55-inch TV',
+    category: 'Electronics',
+    subcategory: 'TV',
+    keywords: ['tv', 'television', '55', '55-inch', 'flat', 'screen'],
+    dimensions_cm: { length: 125, width: 8, height: 72 },
+    volume_ft3: calcVolume(125, 8, 72),
+    weight_kg: 18,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'TV_65_001',
+    name: '65-inch TV',
+    category: 'Electronics',
+    subcategory: 'TV',
+    keywords: ['tv', 'television', '65', '65-inch', 'large', 'screen'],
+    dimensions_cm: { length: 145, width: 10, height: 85 },
+    volume_ft3: calcVolume(145, 10, 85),
+    weight_kg: 25,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'TV_75_001',
+    name: '75-inch TV',
+    category: 'Electronics',
+    subcategory: 'TV',
+    keywords: ['tv', 'television', '75', '75-inch', 'extra large', 'screen'],
+    dimensions_cm: { length: 168, width: 10, height: 97 },
+    volume_ft3: calcVolume(168, 10, 97),
+    weight_kg: 35,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'MONITOR_LARGE_001',
+    name: 'Computer monitor (27-32 inch)',
+    category: 'Electronics',
+    subcategory: 'Monitor',
+    keywords: ['monitor', 'computer', 'screen', '27', '32', 'gaming'],
+    dimensions_cm: { length: 70, width: 25, height: 50 },
+    volume_ft3: calcVolume(70, 25, 50),
+    weight_kg: 8,
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'medium',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'DESKTOP_PC_001',
+    name: 'Desktop computer (tower)',
+    category: 'Electronics',
+    subcategory: 'Computer',
+    keywords: ['desktop', 'computer', 'tower', 'pc', 'gaming'],
+    dimensions_cm: { length: 50, width: 25, height: 50 },
+    volume_ft3: calcVolume(50, 25, 50),
+    weight_kg: 15,
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'medium',
+    insurance_level: 'high',
+  },
+  
+  // ===== OUTDOOR =====
+  {
+    item_id: 'PATIO_SET_001',
+    name: 'Patio furniture set (4-piece)',
+    category: 'Outdoor',
+    subcategory: 'Patio',
+    keywords: ['patio', 'outdoor', 'furniture', 'set', 'chairs', 'table'],
+    dimensions_cm: { length: 150, width: 80, height: 90 },
+    volume_ft3: calcVolume(150, 80, 90),
+    weight_kg: 45,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'GRILL_001',
+    name: 'BBQ grill (propane)',
+    category: 'Outdoor',
+    subcategory: 'Grill',
+    keywords: ['bbq', 'grill', 'barbecue', 'propane', 'gas', 'outdoor'],
+    dimensions_cm: { length: 140, width: 60, height: 120 },
+    volume_ft3: calcVolume(140, 60, 120),
+    weight_kg: 50,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'LAWNMOWER_001',
+    name: 'Lawn mower (push)',
+    category: 'Outdoor',
+    subcategory: 'Garden',
+    keywords: ['lawn', 'mower', 'push', 'garden', 'grass'],
+    dimensions_cm: { length: 150, width: 55, height: 100 },
+    volume_ft3: calcVolume(150, 55, 100),
+    weight_kg: 35,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BICYCLE_001',
+    name: 'Bicycle (adult)',
+    category: 'Outdoor',
+    subcategory: 'Sports',
+    keywords: ['bicycle', 'bike', 'cycling', 'sports'],
+    dimensions_cm: { length: 180, width: 60, height: 110 },
+    volume_ft3: calcVolume(180, 60, 110),
+    weight_kg: 15,
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'medium',
+    insurance_level: 'medium',
+  },
+  
+  // ===== MISC =====
+  {
+    item_id: 'PIANO_UPRIGHT_001',
+    name: 'Upright piano',
+    category: 'Other',
+    subcategory: 'Piano',
+    keywords: ['piano', 'upright', 'music', 'instrument', 'heavy'],
+    dimensions_cm: { length: 150, width: 60, height: 130 },
+    volume_ft3: calcVolume(150, 60, 130),
+    weight_kg: 250,
+    load_size: 'apartment',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'premium',
+  },
+  {
+    item_id: 'TREADMILL_001',
+    name: 'Treadmill',
+    category: 'Other',
+    subcategory: 'Fitness',
+    keywords: ['treadmill', 'exercise', 'fitness', 'gym', 'running'],
+    dimensions_cm: { length: 180, width: 80, height: 150 },
+    volume_ft3: calcVolume(180, 80, 150),
+    weight_kg: 100,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'very_high',
+    insurance_level: 'high',
+  },
+  {
+    item_id: 'EXERCISE_BIKE_001',
+    name: 'Exercise bike / Stationary bike',
+    category: 'Other',
+    subcategory: 'Fitness',
+    keywords: ['exercise', 'bike', 'stationary', 'cycling', 'peloton', 'spin'],
+    dimensions_cm: { length: 120, width: 55, height: 130 },
+    volume_ft3: calcVolume(120, 55, 130),
+    weight_kg: 55,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'MATTRESS_QUEEN_001',
+    name: 'Queen mattress',
+    category: 'Bed',
+    subcategory: 'Mattress',
+    keywords: ['mattress', 'queen', 'bed', 'foam', 'spring'],
+    dimensions_cm: { length: 203, width: 152, height: 25 },
+    volume_ft3: calcVolume(203, 152, 25),
+    weight_kg: 40,
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'MATTRESS_KING_001',
+    name: 'King mattress',
+    category: 'Bed',
+    subcategory: 'Mattress',
+    keywords: ['mattress', 'king', 'bed', 'california', 'foam'],
+    dimensions_cm: { length: 203, width: 193, height: 25 },
+    volume_ft3: calcVolume(203, 193, 25),
+    weight_kg: 50,
+    load_size: 'large',
+    vehicle: 'truck',
+    movers_required: 2,
+    handling_complexity: 'high',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BOXES_SMALL_001',
+    name: 'Moving boxes (small, set of 10)',
+    category: 'Other',
+    subcategory: 'Boxes',
+    keywords: ['boxes', 'small', 'moving', 'cardboard', 'packing'],
+    dimensions_cm: { length: 40, width: 30, height: 30 },
+    volume_ft3: calcVolume(40, 30, 30) * 10,  // 10 boxes
+    weight_kg: 50,  // Assuming filled boxes
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BOXES_MEDIUM_001',
+    name: 'Moving boxes (medium, set of 10)',
+    category: 'Other',
+    subcategory: 'Boxes',
+    keywords: ['boxes', 'medium', 'moving', 'cardboard', 'packing'],
+    dimensions_cm: { length: 50, width: 40, height: 40 },
+    volume_ft3: calcVolume(50, 40, 40) * 10,  // 10 boxes
+    weight_kg: 80,  // Assuming filled boxes
+    load_size: 'medium',
+    vehicle: 'van',
+    movers_required: 1,
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
+    item_id: 'BOXES_LARGE_001',
+    name: 'Moving boxes (large, set of 10)',
+    category: 'Other',
+    subcategory: 'Boxes',
+    keywords: ['boxes', 'large', 'moving', 'cardboard', 'packing'],
+    dimensions_cm: { length: 60, width: 50, height: 50 },
+    volume_ft3: calcVolume(60, 50, 50) * 10,  // 10 boxes
+    weight_kg: 100,  // Assuming filled boxes
+    load_size: 'large',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'medium',
+    insurance_level: 'standard',
+  },
+];
+
+/**
+ * Get all items by category
+ */
+export function getItemsByCategory(category: FurnitureCategory): FurnitureItem[] {
+  return FURNITURE_DATABASE.filter(item => item.category === category);
+}
+
+/**
+ * Get item by ID
+ */
+export function getItemById(itemId: string): FurnitureItem | undefined {
+  return FURNITURE_DATABASE.find(item => item.item_id === itemId);
+}
+
+/**
+ * Search items by keywords
+ */
+export function searchItemsByKeywords(keywords: string[]): FurnitureItem[] {
+  const normalizedKeywords = keywords.map(k => k.toLowerCase());
+  
+  return FURNITURE_DATABASE.filter(item => {
+    const itemKeywords = item.keywords.map(k => k.toLowerCase());
+    const nameWords = item.name.toLowerCase().split(' ');
+    const allItemWords = [...itemKeywords, ...nameWords];
+    
+    // Check if any search keyword matches any item keyword
+    return normalizedKeywords.some(searchKey => 
+      allItemWords.some(itemKey => itemKey.includes(searchKey) || searchKey.includes(itemKey))
+    );
+  });
+}
+
+/**
+ * Find best matching item based on item name
+ * Returns match with similarity score
+ */
+export function findBestMatch(itemName: string): { item: FurnitureItem; similarity: number } | null {
+  const nameLower = itemName.toLowerCase();
+  const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
+  
+  let bestMatch: FurnitureItem | null = null;
+  let bestScore = 0;
+  
+  for (const item of FURNITURE_DATABASE) {
+    const itemNameLower = item.name.toLowerCase();
+    const itemKeywords = [...item.keywords, item.subcategory.toLowerCase()];
+    const allItemWords = [...itemNameLower.split(/\s+/), ...itemKeywords];
+    
+    // Calculate similarity based on word matching
+    let matchCount = 0;
+    let totalWeight = 0;
+    
+    for (const word of nameWords) {
+      // Check exact match
+      if (allItemWords.some(iw => iw === word)) {
+        matchCount += 2;
+        totalWeight += 2;
+      }
+      // Check partial match
+      else if (allItemWords.some(iw => iw.includes(word) || word.includes(iw))) {
+        matchCount += 1;
+        totalWeight += 2;
+      } else {
+        totalWeight += 2;
+      }
+    }
+    
+    // Check category keywords for bonus
+    for (const keyword of itemKeywords) {
+      if (nameLower.includes(keyword)) {
+        matchCount += 1;
+      }
+    }
+    
+    const similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
+    
+    if (similarity > bestScore) {
+      bestScore = similarity;
+      bestMatch = item;
+    }
+  }
+  
+  if (bestMatch && bestScore > 0.3) {  // Minimum threshold for a match
+    return { item: bestMatch, similarity: bestScore };
+  }
+  
+  return null;
+}
+
+/**
+ * Get load size category from volume
+ */
+export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
+  if (volumeFt3 <= 10) return 'boxes';
+  if (volumeFt3 <= 50) return 'medium';
+  if (volumeFt3 <= 170) return 'large';
+  return 'apartment';
+}
+
+/**
+ * Get vehicle recommendation from load size and weight
+ */
+export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: number): VehicleType {
+  if (loadSize === 'apartment' || weightKg > 150) return 'truck';
+  if (loadSize === 'large' || weightKg > 80) return 'pickup';
+  if (loadSize === 'medium' || weightKg > 30) return 'van';
+  return 'car';
+}
