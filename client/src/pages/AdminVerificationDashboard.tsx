@@ -76,23 +76,7 @@ export default function AdminVerificationDashboard() {
   const [reviewStatus, setReviewStatus] = useState<string>("");
   const [rejectionReason, setRejectionReason] = useState("");
 
-  // Helper to get auth headers (same logic as queryClient)
-  const getAuthHeaders = (): Record<string, string> => {
-    const storedUser = localStorage.getItem("moveit_user");
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        if (user.id) {
-          return { "Authorization": `Bearer ${user.id}` };
-        }
-      } catch {
-        // Invalid stored user
-      }
-    }
-    return {};
-  };
-
-  // Fetch drivers list
+  // Build drivers URL with filters
   const buildDriversUrl = () => {
     const params = new URLSearchParams();
     if (search) params.append("search", search);
@@ -102,20 +86,18 @@ export default function AdminVerificationDashboard() {
     return `/api/admin/verification/drivers?${params}`;
   };
 
+  // Fetch drivers list - uses session cookies for auth (credentials: include)
   const { data: driversData, isLoading, error: driversError, isError: isDriversError } = useQuery<any>({
     queryKey: ["/api/admin/verification/drivers", search, statusFilter, page],
     queryFn: async () => {
       const url = buildDriversUrl();
-      const authHeaders = getAuthHeaders();
-      
-      if (!authHeaders["Authorization"]) {
-        throw new Error("Not authenticated. Please log in again.");
-      }
-      
       const response = await fetch(url, {
         credentials: "include",
-        headers: authHeaders,
       });
+      
+      if (response.status === 401) {
+        throw new Error("Not authenticated. Please log in again.");
+      }
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -125,19 +107,17 @@ export default function AdminVerificationDashboard() {
     },
   });
 
-  // Fetch driver detail
+  // Fetch driver detail - uses session cookies for auth
   const { data: driverDetail, isLoading: detailLoading, error: detailError } = useQuery<DriverDetail>({
     queryKey: [`/api/admin/verification/driver/${selectedDriverId}`],
     enabled: !!selectedDriverId,
     queryFn: async () => {
-      const authHeaders = getAuthHeaders();
-      if (!authHeaders["Authorization"]) {
-        throw new Error("Not authenticated");
-      }
       const response = await fetch(`/api/admin/verification/driver/${selectedDriverId}`, {
         credentials: "include",
-        headers: authHeaders,
       });
+      if (response.status === 401) {
+        throw new Error("Not authenticated. Please log in again.");
+      }
       if (!response.ok) {
         throw new Error("Failed to fetch driver details");
       }
