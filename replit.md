@@ -19,6 +19,12 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Geocoding system (Google Maps Distance Matrix API), 7-component dynamic pricing model, and an algorithm that ranks the top 5 nearest available movers within 15-50km. A `jobNotifications` system handles invitations with a 10-minute expiration.
+*   **Single-Tier Vehicle Upgrade Logic:** Smart vehicle matching system (`shared/matching.ts`, `shared/vehicle-availability.ts`) that:
+    - Matches customers to movers based on volume-based vehicle requirements (0-20 ft³ → car, 21-80 ft³ → van, 81-170 ft³ → pickup, >170 ft³ → truck)
+    - Allows ONE tier upgrade only (car→van, van→pickup, pickup→truck) to prevent extreme mismatches
+    - Normalizes legacy vehicle type labels (case-insensitive matching for "SUV", "Cargo Van", etc.)
+    - Returns explicit `NO_VEHICLE_AVAILABLE` status when no matching vehicle is online (including single-tier upgrade)
+    - Provides user-friendly messaging and suggestions when no match is found
 *   **Enhanced Mover Display:** `MoverCard` component provides comprehensive mover information including verification, ratings, vehicle details, ETA, and pricing.
 *   **Booking Flow Optimization:** Multi-step process for locations, load details (mandatory photo upload), and scheduling.
 *   **AI-Powered Features:**
