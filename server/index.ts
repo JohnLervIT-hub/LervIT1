@@ -6,6 +6,11 @@ import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { initBackgroundJobs } from "./background-jobs";
 import { logger, logEvent } from "./logger";
+import { 
+  corsMiddleware, 
+  generalApiLimiter, 
+  securityHeaders 
+} from "./middleware/security";
 
 // Verify required environment variables early
 if (!process.env.DATABASE_URL) {
@@ -83,6 +88,16 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+// ===== SECURITY MIDDLEWARE =====
+// CORS - restricts cross-origin requests
+app.use(corsMiddleware);
+
+// Security headers - prevents clickjacking, XSS, etc.
+app.use(securityHeaders);
+
+// Rate limiting - prevents abuse (applied to /api routes)
+app.use('/api', generalApiLimiter);
 
 // Health check endpoint - responds immediately without database queries
 // This must be registered before other middleware for fastest response

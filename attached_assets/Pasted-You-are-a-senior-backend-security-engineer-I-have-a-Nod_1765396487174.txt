@@ -1,0 +1,65 @@
+You are a senior backend security engineer. I have a Node.js/Express app on Replit called Lervit that already integrates Stripe Connect in LIVE mode (PaymentIntents, Connect Express for movers, webhooks, etc.).
+
+Your job is to HARDEN this app for production. Please:
+
+1. WEBHOOK SECURITY
+   - Confirm that the `/api/stripe/webhook` route:
+     - Uses the raw request body, not JSON-parsed body, for signature verification.
+     - Verifies the Stripe signature using `STRIPE_WEBHOOK_SECRET` and `stripe.webhooks.constructEvent`.
+     - Returns 400 immediately if verification fails.
+   - Add clear comments that ONLY Stripe should call this endpoint.
+   - Ensure the route is registered before any error handlers and that body parsing is configured correctly.
+
+2. AUTH & AUTHZ
+   - For `create-payment-intent`, `create-onboarding-link`, and `create-login-link` endpoints:
+     - Require an authenticated user.
+     - Make sure we use the user from our auth middleware instead of trusting `customerId` or `moverId` from the request body.
+     - Enforce that a mover can only create onboarding/login links for their OWN account.
+     - Enforce that a customer can only create a payment for their OWN booking.
+
+3. TRUST NO CLIENT AMOUNTS
+   - In `create-payment-intent`, do NOT trust any `amount` or `platformFee` values from the client.
+   - Instead:
+     - Look up the booking in our datastore (or add TODOs and a fake store).
+     - Recalculate the total price and platform fee on the server using existing pricing logic.
+     - Use those server-calculated values in the PaymentIntent and Connect transfer.
+   - Add idempotency keys for booking payments (e.g. key based on bookingId).
+
+4. CORS & RATE LIMITING
+   - Add CORS configuration that in production only allows:
+     - https://lervit.com
+     - https://app.lervit.com
+   - Allow localhost/Replit URLs only in development.
+   - Add `express-rate-limit` (or similar) to:
+     - Limit public API endpoints to a safe number of requests per minute.
+     - Protect `/api/stripe/webhook` with a reasonable limit but still allow Stripe retries.
+
+5. ERROR HANDLING & LOGGING
+   - Add a centralized Express error handler:
+     - Logs detailed errors on the server.
+     - Sends generic, safe messages to clients (no stack traces).
+   - Ensure no secrets, webhook signatures, or card details are ever logged.
+   - For Stripe events, log only non-sensitive data like event type, bookingId, moverId, amounts.
+
+6. CONFIG & ENV
+   - Make sure all secret values are read from environment variables:
+     - STRIPE_SECRET_KEY
+     - STRIPE_PUBLISH_KEY
+     - STRIPE_WEBHOOK_SECRET
+     - APP_BASE_URL
+   - Add a `NODE_ENV` or `APP_ENV` check so that:
+     - Extra logging and test helpers run ONLY in development.
+     - CORS and rate limits are stricter in production.
+
+7. DOCUMENTATION
+   - At the top of the Stripe integration file(s), add a short comment block describing:
+     - Security assumptions
+     - Required env vars
+     - Which routes are public vs protected vs Stripe-only
+   - At the end, output a short checklist telling me how to:
+     - Confirm webhooks are verified,
+     - Confirm CORS is working,
+     - Confirm rate limiting is active,
+     - Confirm client-side cannot change the charged amount.
+
+Inspect the existing code first, then apply changes carefully and show me the key files you updated.

@@ -113,4 +113,37 @@ Vehicle class adjustments available:
 3. Check Stripe Dashboard → Payments → See platform receives full amount
 4. Mover completes job → Check Stripe Dashboard → Connect → Transfers
 5. Verify webhook updated booking status in database
+
+## Security Hardening Checklist
+
+### Completed Security Measures
+- [x] **CORS Configuration**: Production allows only lervit.com domains; development allows localhost/Replit
+- [x] **Rate Limiting**: General API (100/15min), Auth (10/15min), Payments (20/15min), Webhooks (50/min)
+- [x] **Security Headers**: X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, HSTS (production)
+- [x] **Webhook Signature Verification**: Uses raw body + `stripe.webhooks.constructEvent()`
+- [x] **Server-Side Amount Calculation**: Payment amounts calculated from booking, never from client
+- [x] **Idempotency Keys**: Prevent duplicate PaymentIntents and Transfers
+- [x] **Ownership Validation**: Users can only access/pay for their own bookings
+- [x] **Session-Based Auth**: User IDs from server session, not request body
+- [x] **Production Webhook Secret Required**: Rejects webhooks if `STRIPE_WEBHOOK_SECRET` missing in production
+
+### Verification Commands
+```bash
+# Test CORS is working (should succeed from allowed origin)
+curl -H "Origin: https://lervit.com" -I https://your-app.replit.app/api/bookings
+
+# Test rate limiting (should get 429 after limit)
+for i in {1..120}; do curl -s https://your-app.replit.app/api/bookings; done
+
+# Test webhook verification (should fail without valid signature)
+curl -X POST https://your-app.replit.app/api/stripe-webhook \
+  -H "Content-Type: application/json" \
+  -d '{"type":"test"}'
+# Expected: {"error":"No stripe signature"}
+```
+
+### Security Files
+- `server/middleware/security.ts` - CORS, rate limiting, security headers
+- `server/config/stripe.ts` - Stripe client, commission configuration
+- `server/routes.ts` - Security documentation header, endpoint protection
 ```

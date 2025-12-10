@@ -1,3 +1,40 @@
+/**
+ * ============================================================================
+ * LERVIT API ROUTES - SECURITY DOCUMENTATION
+ * ============================================================================
+ * 
+ * SECURITY ASSUMPTIONS:
+ * ---------------------
+ * 1. All requests pass through session-based authentication middleware
+ * 2. User IDs come from server-side session, NOT from client request body
+ * 3. Payment amounts are calculated server-side from booking data
+ * 4. Webhook endpoints verify Stripe signatures before processing
+ * 
+ * REQUIRED ENVIRONMENT VARIABLES:
+ * -------------------------------
+ * - STRIPE_SECRET_KEY: Server-side Stripe secret key (sk_live_... or sk_test_...)
+ * - VITE_STRIPE_PUBLIC_KEY: Frontend publishable key (pk_live_... or pk_test_...)
+ * - STRIPE_WEBHOOK_SECRET: Webhook endpoint signing secret (whsec_...)
+ * - SESSION_SECRET: Session encryption secret
+ * - DATABASE_URL: PostgreSQL connection string
+ * 
+ * ENDPOINT SECURITY LEVELS:
+ * -------------------------
+ * PUBLIC:        /api/auth/*, /health
+ * PROTECTED:     /api/bookings/*, /api/movers/*, /api/customers/* (requires session)
+ * STRIPE-ONLY:   /api/stripe-webhook (signature verified, no user session)
+ * ADMIN-ONLY:    /api/admin/* (requires admin role)
+ * 
+ * PAYMENT SECURITY:
+ * -----------------
+ * - PaymentIntent amounts are calculated server-side from booking price
+ * - Platform fees are calculated server-side (NEVER trust client amounts)
+ * - Idempotency keys prevent duplicate charges/transfers
+ * - Webhook signature verification prevents spoofed events
+ * 
+ * ============================================================================
+ */
+
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -1861,22 +1898,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== PAYMENT ROUTES =====
   
-  // Create payment intent for a booking
+  /**
+   * CREATE PAYMENT INTENT (PROTECTED - requires authenticated customer)
+   * 
+   * SECURITY NOTES:
+   * - User ID comes from session, NOT from request body
+   * - Amount is calculated SERVER-SIDE from booking price (NEVER trust client amounts)
+   * - Ownership verified: user must be the booking's customer
+   * - Idempotency key prevents duplicate charges for same booking
+   */
   app.post("/api/bookings/:id/create-payment-intent", async (req: Request, res: Response) => {
     try {
       if (!requireUser(req, res)) return;
       
+      // SECURITY: Get user from session, not from request
       const user = (req as any).user;
       const bookingId = req.params.id;
       
-      // Get the booking
+      // Get the booking from database
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
       
-      // Verify user owns this booking
+      // SECURITY: Verify user owns this booking (prevents payment for other users' bookings)
       if (booking.customerId !== user.id) {
+        logEvent.payment('ownership_violation', { 
+          bookingId, 
+          requesterId: user.id, 
+          ownerId: booking.customerId 
+        });
         return res.status(403).json({ error: "Access denied" });
       }
       
@@ -1890,7 +1941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Booking has already been paid" });
       }
       
-      // Calculate amount in cents (Stripe requires cents)
+      // SECURITY: Calculate amount SERVER-SIDE from booking (NEVER trust client amounts)
       const amountInCents = Math.round(parseFloat(booking.price || '0') * 100);
       
       if (amountInCents <= 0) {
@@ -1930,6 +1981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create new payment intent if needed
       if (needsNewPaymentIntent) {
+        // SECURITY: Use idempotency key to prevent duplicate charges
         paymentIntent = await stripe.paymentIntents.create({
           amount: amountInCents,
           currency: "cad",
@@ -1939,6 +1991,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             customerName: user.name,
           },
           description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
+        }, {
+          idempotencyKey: `payment_intent_${booking.id}_${amountInCents}`,
         });
         
         // Update booking with new payment intent ID
@@ -2302,32 +2356,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Stripe webhook handler for payment events
+  /**
+   * =========================================================================
+   * STRIPE WEBHOOK ENDPOINT (STRIPE-ONLY - NO USER SESSION)
+   * =========================================================================
+   * 
+   * SECURITY NOTES:
+   * - This endpoint is called ONLY by Stripe servers, not by users
+   * - Signature verification is REQUIRED in production
+   * - Uses raw request body (not JSON-parsed) for signature verification
+   * - Returns 400 immediately if signature verification fails
+   * - Never log sensitive data (card details, full webhook body)
+   * 
+   * RATE LIMITING:
+   * - Configured separately in middleware/security.ts (webhookLimiter)
+   * - Allows Stripe retries while preventing abuse
+   * 
+   * =========================================================================
+   */
   app.post("/api/stripe-webhook", async (req: Request, res: Response) => {
     try {
       const sig = req.headers['stripe-signature'] as string;
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       
+      // SECURITY: Require stripe-signature header
       if (!sig) {
-        logEvent.error('stripe_webhook', new Error('Missing stripe signature'));
+        logEvent.error('stripe_webhook', new Error('Missing stripe signature - possible spoofing attempt'));
         return res.status(400).json({ error: 'No stripe signature' });
       }
       
       let event: Stripe.Event;
       
-      // Verify webhook signature in production (when secret is available)
+      // SECURITY: Always verify webhook signature in production
       if (webhookSecret) {
         try {
+          // IMPORTANT: Use raw body, not JSON-parsed body, for signature verification
           const rawBody = (req as any).rawBody;
+          if (!rawBody) {
+            logEvent.error('stripe_webhook', new Error('Raw body not available for signature verification'));
+            return res.status(400).json({ error: 'Invalid request body' });
+          }
           event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
-          logEvent.payment('webhook_verified', { status: 'verified' });
+          logEvent.payment('webhook_verified', { eventType: event.type });
         } catch (err) {
+          // SECURITY: Log and reject immediately on verification failure
           logEvent.error('stripe_webhook_verification', err);
           return res.status(400).json({ error: 'Webhook signature verification failed' });
         }
+      } else if (process.env.NODE_ENV === 'production') {
+        // SECURITY: In production, ALWAYS require webhook secret
+        logEvent.error('stripe_webhook', new Error('STRIPE_WEBHOOK_SECRET required in production'));
+        return res.status(500).json({ error: 'Webhook configuration error' });
       } else {
-        // Development mode - log warning but process anyway
-        logger.warn({ event: 'stripe_webhook' }, 'STRIPE_WEBHOOK_SECRET not set - skipping signature verification');
+        // Development mode ONLY - log warning but process anyway
+        logger.warn({ event: 'stripe_webhook' }, 'DEV MODE: STRIPE_WEBHOOK_SECRET not set - skipping signature verification');
         event = req.body as Stripe.Event;
       }
       
