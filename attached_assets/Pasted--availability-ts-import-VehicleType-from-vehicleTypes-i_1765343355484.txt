@@ -1,0 +1,73 @@
+// availability.ts
+import { VehicleType } from "./vehicleTypes";
+import { selectVehicleForItems } from "./vehicleSelection";
+import { VisionItemPrediction } from "./visionTypes";
+
+export interface OnlineVehicle {
+  id: string;
+  type: VehicleType;
+  distanceKm: number;
+  etaMinutes: number;
+  isAvailable: boolean;
+}
+
+export interface VehicleMatchResult {
+  totalVolumeFt3: number;
+  requestedVehicleType: VehicleType;
+  matchedVehicleType?: VehicleType;
+  matchedVehicleId?: string;
+  upgraded: boolean;
+  status: "MATCHED" | "NO_VEHICLE_AVAILABLE";
+}
+
+const VEHICLE_PRIORITY_ORDER: VehicleType[] = [
+  VehicleType.SUV_SMALL,
+  VehicleType.CARGO_VAN,
+  VehicleType.SMALL_TRUCK,
+  VehicleType.LARGE_TRUCK,
+];
+
+function getHigherOrEqualTypes(baseType: VehicleType): VehicleType[] {
+  const index = VEHICLE_PRIORITY_ORDER.indexOf(baseType);
+  if (index === -1) return VEHICLE_PRIORITY_ORDER;
+  return VEHICLE_PRIORITY_ORDER.slice(index); // base + bigger ones
+}
+
+/**
+ * Uses volume-based selection first, then checks actual online vehicles.
+ */
+export function matchVehicleForItems(
+  items: VisionItemPrediction[],
+  onlineVehicles: OnlineVehicle[]
+): VehicleMatchResult {
+  const vehicleSelection = selectVehicleForItems({ items });
+  const candidateTypes = getHigherOrEqualTypes(
+    vehicleSelection.baseVehicleType
+  );
+
+  for (const type of candidateTypes) {
+    const candidates = onlineVehicles
+      .filter((v) => v.type === type && v.isAvailable)
+      .sort((a, b) => a.distanceKm - b.distanceKm); // closest first
+
+    if (candidates.length > 0) {
+      const best = candidates[0];
+      return {
+        totalVolumeFt3: vehicleSelection.totalVolumeFt3,
+        requestedVehicleType: vehicleSelection.baseVehicleType,
+        matchedVehicleType: type,
+        matchedVehicleId: best.id,
+        upgraded: type !== vehicleSelection.baseVehicleType,
+        status: "MATCHED",
+      };
+    }
+  }
+
+  // ❌ No suitable vehicle online at all (even larger classes)
+  return {
+    totalVolumeFt3: vehicleSelection.totalVolumeFt3,
+    requestedVehicleType: vehicleSelection.baseVehicleType,
+    upgraded: false,
+    status: "NO_VEHICLE_AVAILABLE",
+  };
+}
