@@ -723,6 +723,8 @@ export type MoverPayout = typeof moverPayouts.$inferSelect;
 // Defines the granular stages of a move for real-time tracking
 
 export const BOOKING_STATUSES = {
+  PENDING_PAYMENT: "pending_payment",
+  PAYMENT_FAILED: "payment_failed",
   PENDING: "pending",
   CONFIRMED: "confirmed",
   EN_ROUTE_TO_PICKUP: "en_route_to_pickup",
@@ -737,6 +739,8 @@ export type BookingStatus = typeof BOOKING_STATUSES[keyof typeof BOOKING_STATUSE
 
 // Valid status transitions - each status can only move to specific next statuses
 export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
+  [BOOKING_STATUSES.PENDING_PAYMENT]: [BOOKING_STATUSES.PENDING, BOOKING_STATUSES.PAYMENT_FAILED, BOOKING_STATUSES.CANCELLED],
+  [BOOKING_STATUSES.PAYMENT_FAILED]: [BOOKING_STATUSES.PENDING_PAYMENT, BOOKING_STATUSES.CANCELLED],
   [BOOKING_STATUSES.PENDING]: [BOOKING_STATUSES.CONFIRMED, BOOKING_STATUSES.CANCELLED],
   [BOOKING_STATUSES.CONFIRMED]: [BOOKING_STATUSES.EN_ROUTE_TO_PICKUP, BOOKING_STATUSES.CANCELLED],
   [BOOKING_STATUSES.EN_ROUTE_TO_PICKUP]: [BOOKING_STATUSES.LOADING, BOOKING_STATUSES.CANCELLED],
@@ -768,6 +772,16 @@ export function getNextValidStatuses(currentStatus: string): BookingStatus[] {
 
 // Status display info for UI
 export const BOOKING_STATUS_INFO: Record<BookingStatus, { label: string; description: string; color: string }> = {
+  [BOOKING_STATUSES.PENDING_PAYMENT]: { 
+    label: "Awaiting Payment", 
+    description: "Waiting for payment to be processed",
+    color: "orange"
+  },
+  [BOOKING_STATUSES.PAYMENT_FAILED]: { 
+    label: "Payment Failed", 
+    description: "Payment could not be processed",
+    color: "red"
+  },
   [BOOKING_STATUSES.PENDING]: { 
     label: "Pending", 
     description: "Waiting for mover assignment",

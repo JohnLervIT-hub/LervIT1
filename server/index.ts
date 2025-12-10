@@ -4,6 +4,8 @@ import pgSession from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
+import { initBackgroundJobs } from "./background-jobs";
+import { logger, logEvent } from "./logger";
 
 // Verify required environment variables early
 if (!process.env.DATABASE_URL) {
@@ -126,10 +128,8 @@ app.use((req, res, next) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
       
-      // Log the error for debugging (don't expose stack in production)
-      console.error(`[ERROR] ${status}: ${message}`, process.env.NODE_ENV !== 'production' ? err.stack : '');
+      logEvent.error('express_error_handler', err, { status, path: _req.path, method: _req.method });
 
-      // Send response but don't re-throw (would crash the process)
       if (!res.headersSent) {
         res.status(status).json({ message });
       }
@@ -153,16 +153,15 @@ app.use((req, res, next) => {
     console.log(`Starting server on port ${port} (NODE_ENV: ${process.env.NODE_ENV || 'development'})...`);
     
     server.listen(port, "0.0.0.0", async () => {
-      log(`serving on port ${port}`);
+      logger.info({ port, env: process.env.NODE_ENV || 'development' }, `Server listening on port ${port}`);
       
-      // Verify database connection after server is listening (non-blocking for health checks)
       try {
         await pool.query('SELECT 1');
-        log("Database connection verified");
+        logger.info('Database connection verified');
+        
+        initBackgroundJobs();
       } catch (dbError) {
-        console.error("WARNING: Database connection failed:", dbError);
-        // Don't exit - server is running and can handle health checks
-        // Database might recover or be configured shortly
+        logEvent.error('database_connection', dbError);
       }
     });
 

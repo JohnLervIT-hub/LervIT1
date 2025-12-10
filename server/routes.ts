@@ -15,6 +15,7 @@ import Stripe from "stripe";
 import { notificationService } from "./notifications";
 import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { logger, logEvent } from "./logger";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -930,7 +931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileUrls: fileUrls.length > 0 ? fileUrls : null,
         status: 'under_review',
         submittedAt: new Date(),
-        expiryDate: req.body.expiryDate || null,
+        expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
       };
       
       const validatedData = validateBody(insertVerificationItemSchema, itemData);
@@ -946,14 +947,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existing.length > 0) {
         result = await db.update(verificationItems)
           .set({
-            ...validatedData,
+            ...validatedData as any,
             updatedAt: new Date()
           })
           .where(eq(verificationItems.id, existing[0].id))
           .returning();
       } else {
         result = await db.insert(verificationItems)
-          .values(validatedData)
+          .values(validatedData as any)
           .returning();
       }
       
@@ -1412,12 +1413,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffDifficulty: bookingData.dropoffDifficulty,
         heavyItem: bookingData.heavyItem || false,
         numberOfMovers: bookingData.numberOfMovers,
-        ...(bookingData.additionalDetails && { additionalDetails: bookingData.additionalDetails }),
+        status: BOOKING_STATUSES.PENDING_PAYMENT,
         ...(bookingData.images && { images: bookingData.images }),
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
         ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
-        ...(bookingData.estimatedWeightLbs !== undefined && { estimatedWeightLbs: bookingData.estimatedWeightLbs }),
         pickupLatitude: pickupGeo.coordinates.lat,
         pickupLongitude: pickupGeo.coordinates.lng,
         dropoffLatitude: dropoffGeo.coordinates.lat,
@@ -1516,7 +1516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               moverImage: mover.moverImage,
               vehicleType: mover.vehicleType,
               vehicleColor: mover.vehicleColor,
-              vehicleModel: mover.vehicleModel,
+              vehicleCapacity: mover.vehicleCapacity,
               licensePlate: mover.licensePlate,
               rating: mover.rating,
               completedTrips: mover.completedTrips,
@@ -1554,7 +1554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           moverImage: mover.moverImage,
           vehicleType: mover.vehicleType,
           vehicleColor: mover.vehicleColor,
-          vehicleModel: mover.vehicleModel,
+          vehicleCapacity: mover.vehicleCapacity,
           licensePlate: mover.licensePlate,
           rating: mover.rating,
           completedTrips: mover.completedTrips,
@@ -2315,20 +2315,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stripe webhook handler for payment events
   app.post("/api/stripe-webhook", async (req: Request, res: Response) => {
     try {
-      const sig = req.headers['stripe-signature'];
+      const sig = req.headers['stripe-signature'] as string;
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       
       if (!sig) {
+        logEvent.error('stripe_webhook', new Error('Missing stripe signature'));
         return res.status(400).json({ error: 'No stripe signature' });
       }
       
-      // Note: In production, you should verify the webhook signature
-      // For now, we'll process the event directly
-      const event = req.body;
+      let event: Stripe.Event;
+      
+      // Verify webhook signature in production (when secret is available)
+      if (webhookSecret) {
+        try {
+          const rawBody = (req as any).rawBody;
+          event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+          logEvent.payment('webhook_verified', { status: 'verified' });
+        } catch (err) {
+          logEvent.error('stripe_webhook_verification', err);
+          return res.status(400).json({ error: 'Webhook signature verification failed' });
+        }
+      } else {
+        // Development mode - log warning but process anyway
+        logger.warn({ event: 'stripe_webhook' }, 'STRIPE_WEBHOOK_SECRET not set - skipping signature verification');
+        event = req.body as Stripe.Event;
+      }
       
       // Handle the event
       switch (event.type) {
         case 'payment_intent.succeeded':
-          const paymentIntent = event.data.object;
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          
+          logEvent.payment('intent_succeeded', { 
+            bookingId: paymentIntent.metadata?.bookingId,
+            amount: String(paymentIntent.amount / 100)
+          });
           
           // Find booking by payment intent ID
           const successBookings = await db
@@ -2340,10 +2361,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (successBookings.length > 0) {
             const booking = successBookings[0];
             
-            // Update booking payment status
+            // Idempotency check - don't process if already succeeded
+            if (booking.paymentStatus === 'succeeded') {
+              logEvent.payment('already_processed', { bookingId: booking.id });
+              return res.json({ received: true, status: 'already_processed' });
+            }
+            
+            // Update booking payment status and move to PENDING (awaiting mover)
             await storage.updateBooking(booking.id, {
               paymentStatus: 'succeeded',
+              status: BOOKING_STATUSES.PENDING,
             });
+            
+            logEvent.payment('booking_updated', { bookingId: booking.id, status: 'succeeded' });
             
             // Send booking confirmation and payment receipt emails
             const customer = await storage.getUser(booking.customerId);
@@ -2438,7 +2468,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
           
         case 'payment_intent.payment_failed':
-          const failedIntent = event.data.object;
+          const failedIntent = event.data.object as Stripe.PaymentIntent;
+          
+          logEvent.payment('intent_failed', { 
+            bookingId: failedIntent.metadata?.bookingId,
+            error: failedIntent.last_payment_error?.message 
+          });
           
           // Find booking by payment intent ID
           const failedBookings = await db
@@ -2450,20 +2485,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (failedBookings.length > 0) {
             const booking = failedBookings[0];
             
-            // Update booking payment status
+            // Update booking payment status to failed
             await storage.updateBooking(booking.id, {
               paymentStatus: 'failed',
+              status: BOOKING_STATUSES.PAYMENT_FAILED,
             });
             
+            logEvent.payment('booking_failed', { bookingId: booking.id });
           }
           break;
           
         default:
+          logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
       }
       
       res.json({ received: true });
     } catch (error: any) {
-      console.error("Webhook error:", error);
+      logEvent.error('stripe_webhook', error);
       res.status(400).json({ error: error.message });
     }
   });
@@ -4598,13 +4636,13 @@ Respond with VALID JSON only:
       if (existingMetrics.length > 0) {
         // Update existing metrics
         const updated = await db.update(bookingMetricsTable)
-          .set({ ...metricsData, updatedAt: new Date() })
+          .set({ ...metricsData as any, updatedAt: new Date() })
           .where(eq(bookingMetricsTable.bookingId, bookingId))
           .returning();
         result = updated[0];
       } else {
         // Create new metrics
-        const inserted = await db.insert(bookingMetricsTable).values(metricsData).returning();
+        const inserted = await db.insert(bookingMetricsTable).values(metricsData as any).returning();
         result = inserted[0];
       }
       
