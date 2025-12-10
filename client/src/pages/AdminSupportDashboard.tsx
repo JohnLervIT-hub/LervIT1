@@ -57,23 +57,9 @@ export default function AdminSupportDashboard() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ ticketId, status }: { ticketId: string; status: string }) => {
-      // Get auth headers
-      const storedUser = localStorage.getItem("moveit_user");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          if (userData.id) {
-            headers["Authorization"] = `Bearer ${userData.id}`;
-          }
-        } catch (e) {
-          // Invalid stored user
-        }
-      }
-      
       const res = await fetch(`/api/support/tickets/${ticketId}/status`, {
         method: "PATCH",
-        headers,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ status }),
       });
@@ -92,23 +78,9 @@ export default function AdminSupportDashboard() {
 
   const replyMutation = useMutation({
     mutationFn: async ({ ticketId, message }: { ticketId: string; message: string }) => {
-      // Get auth headers
-      const storedUser = localStorage.getItem("moveit_user");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          if (userData.id) {
-            headers["Authorization"] = `Bearer ${userData.id}`;
-          }
-        } catch (e) {
-          // Invalid stored user
-        }
-      }
-      
       const res = await fetch(`/api/support/tickets/${ticketId}/replies`, {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ message }),
       });

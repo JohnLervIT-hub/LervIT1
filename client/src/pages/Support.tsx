@@ -167,20 +167,9 @@ export default function Support() {
 
   const createTicketMutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
-      const storedUser = localStorage.getItem("moveit_user");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          if (userData.id) {
-            headers["Authorization"] = `Bearer ${userData.id}`;
-          }
-        } catch (e) {}
-      }
-      
       const res = await fetch("/api/support/tickets", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(data),
       });
@@ -216,20 +205,9 @@ export default function Support() {
 
   const replyMutation = useMutation({
     mutationFn: async ({ ticketId, message }: { ticketId: string; message: string }) => {
-      const storedUser = localStorage.getItem("moveit_user");
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          if (userData.id) {
-            headers["Authorization"] = `Bearer ${userData.id}`;
-          }
-        } catch (e) {}
-      }
-      
       const res = await fetch(`/api/support/tickets/${ticketId}/replies`, {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ message }),
       });
