@@ -2463,7 +2463,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })
             );
             
-            console.log(`[Payment] Booking ${booking.id} paid - notified ${nearestMovers.length} movers`);
+            logEvent.payment('movers_notified', { 
+              bookingId: booking.id, 
+              moversNotified: nearestMovers.length 
+            });
           }
           break;
           

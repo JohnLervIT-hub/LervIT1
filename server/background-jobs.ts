@@ -14,7 +14,7 @@ export function initBackgroundJobs() {
     await expireOldNotifications();
   });
 
-  cron.schedule('*/10 * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     await expireStaleBookings();
   });
 

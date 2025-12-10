@@ -16,6 +16,9 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 *   **Backend:** Express.js (Node.js, TypeScript, ESM) with RESTful API, Zod for validation, and custom SHA-256 hashing.
 *   **Data Storage:** PostgreSQL (Neon serverless) with Drizzle ORM.
 *   **Monorepo Structure:** A `/shared` directory for centralized schema and types, ensuring end-to-end TypeScript type safety.
+*   **Production Observability:** Pino-based structured JSON logging (`server/logger.ts`) with event-specific loggers for payments, vehicle matching, cleanup, and errors.
+*   **Background Jobs:** node-cron scheduler (`server/background-jobs.ts`) running every 5 minutes to expire stale notifications and payment-failed bookings.
+*   **Payment Security:** Stripe webhook signature verification when `STRIPE_WEBHOOK_SECRET` is configured; idempotency checks prevent duplicate processing.
 
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Geocoding system (Google Maps Distance Matrix API), 7-component dynamic pricing model, and an algorithm that ranks the top 5 nearest available movers within 15-50km. A `jobNotifications` system handles invitations with a 10-minute expiration.
