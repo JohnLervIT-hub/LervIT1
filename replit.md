@@ -24,7 +24,12 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 *   **AI-Powered Features:**
     *   **AI Auto-Quote Predictor:** Instant price estimates with confidence levels.
     *   **AI Price Breakdown Explainer:** Natural language explanations for pricing components.
-    *   **AI Product Identifier:** Uses OpenAI Vision API + SerpAPI to identify items from photos, retrieve specifications, categorize them (e.g., Furniture, Appliance), and output structured JSON.
+    *   **Vision Engine 2.0 (AI Product Identifier):** 3-layer system for stable, consistent furniture identification:
+        - **Layer 1 - Ground-Truth Database:** 50+ furniture items with verified dimensions, weight, load_size, and vehicle recommendations in `shared/furniture-database.ts`
+        - **Layer 2 - Similarity Matching:** Text-based matching of detected items against database. If similarity > 70%, uses verified database values instead of estimation.
+        - **Layer 3 - Dimension Correction:** Category-specific clamp rules in `server/dimension-corrector.ts` normalize AI estimates to realistic ranges (e.g., beds 183-216cm length, sofas 152-356cm).
+        - **Pipeline:** Image → GPT-4o Vision detection → Database match → (If no match) Vision estimate + Correction → Volume calculation → Load size classification → Vehicle recommendation
+        - **Output:** Structured JSON with itemName, category, dimensions, volume_ft3, weight_kg, load_size, vehicle, movers_required, confidence, source (database_match/vision_estimate/fallback)
     *   **AI Support Copilot:** GPT-4o-powered analysis of support tickets providing summaries, classification, priority, root cause, recommendations, and suggested responses.
 *   **Image Upload:** Frontend drag-and-drop with validation and Multer-based API handling, mandatory for booking.
 *   **Role-Specific User Experience:** `ProtectedRoute` for access control and dynamic navigation.
