@@ -385,15 +385,15 @@ export default function LandingPage() {
               },
               {
                 step: "03",
-                icon: MapPin,
-                title: "Match & Pay",
-                description: "We find the nearest available movers. Pay securely online before they arrive.",
+                icon: CreditCard,
+                title: "Pay Securely",
+                description: "Review your quote and pay online with SecurePay™. Your payment is held until move completion.",
               },
               {
                 step: "04",
                 icon: Truck,
-                title: "Track & Move",
-                description: "Track your mover in real-time on GPS. Rate and review after completion.",
+                title: "Match & Track",
+                description: "We instantly match you with nearby verified movers. Track them live on GPS until delivery.",
               },
             ].map((item, index) => (
               <div
