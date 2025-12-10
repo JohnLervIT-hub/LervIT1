@@ -6,11 +6,15 @@ import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { initBackgroundJobs } from "./background-jobs";
 import { logger, logEvent } from "./logger";
+import { initSentry } from "./sentry";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
   securityHeaders 
 } from "./middleware/security";
+
+// Initialize Sentry for error monitoring (must be first)
+initSentry();
 
 // Verify required environment variables early
 if (!process.env.DATABASE_URL) {
