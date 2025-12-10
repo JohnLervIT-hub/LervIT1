@@ -110,6 +110,10 @@ export const bookings = pgTable("bookings", {
   currentLongitude: doublePrecision("current_longitude"),
   locationUpdatedAt: timestamp("location_updated_at"),
   
+  // Stripe Radar fraud detection
+  flaggedForReview: boolean("flagged_for_review").notNull().default(false),
+  flaggedReason: text("flagged_reason"),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

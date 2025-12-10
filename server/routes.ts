@@ -2461,7 +2461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return res.json({ received: true, status: 'already_processed' });
             }
             
-            // STRIPE RADAR: Log high-risk payments for manual review
+            // STRIPE RADAR: Log and flag high-risk payments for manual review
             if (fraudFlagged) {
               logEvent.payment('high_risk_payment', {
                 bookingId: booking.id,
@@ -2470,14 +2470,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 riskLevel,
                 riskScore,
                 amount: String(paymentIntent.amount / 100),
-                action: 'logged_for_review'
+                action: 'flagged_for_review'
               });
             }
             
             // Update booking payment status and move to PENDING (awaiting mover)
+            // Also flag for review if Stripe Radar detected high risk
             await storage.updateBooking(booking.id, {
               paymentStatus: 'succeeded',
               status: BOOKING_STATUSES.PENDING,
+              ...(fraudFlagged && {
+                flaggedForReview: true,
+                flaggedReason: 'stripe_radar_high_risk'
+              })
             });
             
             logEvent.payment('booking_confirmed', { 
