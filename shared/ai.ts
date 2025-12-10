@@ -202,9 +202,9 @@ export function generatePriceExplanation(breakdown: PriceBreakdown): string {
     parts.push(`• **Dropoff Difficulty**: $${breakdown.dropoffDifficultyFee.toFixed(2)} (${difficultyMap[breakdown.dropoffDifficulty] || breakdown.dropoffDifficulty})`);
   }
   
-  // Load size fee
+  // Heavy item
   if (breakdown.heavyItem && breakdown.heavyItemFee > 0) {
-    parts.push(`• **Load Size Fee**: $${breakdown.heavyItemFee.toFixed(2)} (extra care required)`);
+    parts.push(`• **Heavy Item Fee**: $${breakdown.heavyItemFee.toFixed(2)} (extra care required)`);
   }
   
   // Mover travel fee
