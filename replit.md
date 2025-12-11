@@ -20,6 +20,15 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 *   **Background Jobs:** node-cron scheduler (`server/background-jobs.ts`) running every 5 minutes to expire stale notifications and payment-failed bookings.
 *   **Payment Security:** Stripe webhook signature verification when `STRIPE_WEBHOOK_SECRET` is configured; idempotency checks prevent duplicate processing.
 *   **Stripe Connect Integration:** Full Express account onboarding for movers with separate transfer flow - funds held by platform until job completion, then transferred to mover's connected account minus platform fee.
+*   **Frontend Performance Optimization:** 
+    - **Route-Level Code Splitting:** All 30+ page components use React.lazy() for aggressive code splitting
+    - **Suspense Fallback:** PageLoadingSkeleton component provides instant visual feedback during lazy loading
+    - **Google Maps Lazy Loading:** GoogleMapsContext (`client/src/contexts/GoogleMapsContext.tsx`) uses useJsApiLoader from @react-google-maps/api to load Maps API only when map-dependent components mount
+    - **Non-Blocking Initial Render:** App shell renders immediately without waiting for Google Maps or heavy components
+    - **Target Metrics:** Sub-3-second LCP/FCP through deferred heavy resource loading
+*   **Sentry v7 Error Monitoring:**
+    - **Backend:** Handlers API with `setupSentryRequestHandlers(app)` before routes and `setupSentryErrorHandler(app)` after routes (`server/sentry.ts`)
+    - **Frontend:** BrowserTracing integration with 100% tracesSampleRate for development (`client/src/sentry.ts`)
 
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Geocoding system (Google Maps Distance Matrix API), 7-component dynamic pricing model, and an algorithm that ranks the top 5 nearest available movers within 15-50km. A `jobNotifications` system handles invitations with a 10-minute expiration.
