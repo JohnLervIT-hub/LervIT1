@@ -1,14 +1,15 @@
+// LervIT final hardening: Resilient polling with exponential backoff
 import { useEffect, useState, useCallback } from "react";
 import { useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Package, Navigation, Clock, Route } from "lucide-react";
+import { ArrowLeft, MapPin, Package, Navigation, Clock, Route, Wifi, WifiOff } from "lucide-react";
 import { Link } from "wouter";
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, type BookingStatus } from "@shared/schema";
+import { useResilientPolling, getConnectionStatusColor, getConnectionStatusText } from "@/hooks/useResilientPolling";
 
 interface LocationData {
   bookingId: string;
@@ -55,10 +56,16 @@ export default function TrackTrip() {
   // Google Maps API is loaded globally in App.tsx
   // No need to load it again here
 
-  const { data: locationData, isLoading } = useQuery<LocationData>({
-    queryKey: ["/api/bookings", bookingId, "location"],
-    refetchInterval: autoRefresh ? 5000 : false,
-  });
+  // Use resilient polling with exponential backoff for connection issues
+  const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
+    ["/api/bookings", bookingId, "location"],
+    {},
+    { 
+      baseInterval: 5000, 
+      maxInterval: 30000,
+      enabled: autoRefresh 
+    }
+  );
 
   useEffect(() => {
     if (locationData?.status === "completed" || locationData?.status === "cancelled") {
@@ -193,6 +200,17 @@ export default function TrackTrip() {
           >
             {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.label || locationData.status}
           </Badge>
+          {/* Connection status indicator */}
+          <div className="flex items-center gap-1.5" data-testid="connection-status" aria-label={getConnectionStatusText(pollingState.status)}>
+            {pollingState.status === 'connected' ? (
+              <Wifi className="w-4 h-4 text-green-500" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-muted-foreground" />
+            )}
+            <span className="text-xs text-muted-foreground">
+              {getConnectionStatusText(pollingState.status)}
+            </span>
+          </div>
         </div>
       </div>
 

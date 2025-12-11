@@ -1,4 +1,6 @@
+// LervIT final hardening: Added retry logic for transient API failures
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { fetchWithRetry } from "./fetchWithRetry";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -17,7 +19,11 @@ export async function apiRequest(
     headers["Content-Type"] = "application/json";
   }
   
-  const res = await fetch(url, {
+  // Use fetchWithRetry for GET requests (safe to retry)
+  // For mutations (POST/PUT/DELETE), use standard fetch to avoid duplicates
+  const fetchFn = method.toUpperCase() === 'GET' ? fetchWithRetry : fetch;
+  
+  const res = await fetchFn(url, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
@@ -34,7 +40,9 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    // Use fetchWithRetry for query functions (all GET requests)
+    // This provides automatic retry with exponential backoff for 5xx errors
+    const res = await fetchWithRetry(queryKey.join("/") as string, {
       credentials: "include",
     });
 
@@ -54,10 +62,10 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false, // Disabled - prevents skeleton flash on tab switch
       staleTime: Infinity, // Data stays fresh until manually invalidated
       gcTime: 1000 * 60 * 10, // Keep cached data for 10 minutes
-      retry: false,
+      retry: false, // We handle retries in fetchWithRetry for transient failures
     },
     mutations: {
-      retry: false,
+      retry: false, // NEVER auto-retry mutations to prevent duplicates
     },
   },
 });
