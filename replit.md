@@ -54,7 +54,12 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
 *   **Role-Specific User Experience:** `ProtectedRoute` for access control and dynamic navigation.
 *   **Customer Support System:** Ticketing system with FAQ and admin dashboard.
 *   **Payment Processing:** Stripe integration for secure payments, including a **Saved Card Feature** allowing customers to store and manage payment methods.
-*   **Email Notification System:** Comprehensive email templates for various updates.
+*   **Email Notification System:** Comprehensive email templates including:
+    - **Job Match Notifications:** Urgent emails sent to movers when matched to a job with 10-minute expiry warning, earnings display, job details, and direct CTA to accept
+    - **Booking Confirmations:** Sent to customers after payment
+    - **Payment Receipts:** Detailed payment confirmation emails
+    - **Status Updates:** Move progress notifications
+    - **Mover Assignment:** Notification to customer when mover accepts
 *   **Mover Earnings Dashboard & Payout System:** Stripe Connect integration for mover payouts, including onboarding, commission tracking, and a Mover Payout Center UI.
 *   **Real-Time Vehicle Tracking:** Movers can share location for customer tracking on Google Maps.
 *   **6-Stage Move Progress Tracking:** Granular booking status flow with visual indicators and status progression buttons.
