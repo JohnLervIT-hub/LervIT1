@@ -72,7 +72,14 @@ export default function Home() {
               <StaggerItem key={index}>
                 <div className="group text-center p-6" data-testid={`card-feature-${index}`}>
                   <div className="inline-flex items-center justify-center w-24 h-24 mb-5 group-hover:scale-110 transition-transform duration-300">
-                    <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain" style={{ background: 'none' }} />
+                    {/* Performance: lazy load below-fold images */}
+                    <img 
+                      src={feature.icon} 
+                      alt={feature.title} 
+                      className="w-full h-full object-contain" 
+                      style={{ background: 'none' }}
+                      loading="lazy"
+                    />
                   </div>
                   <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
