@@ -50,11 +50,16 @@ export function CustomAddressInput({
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   
   // Lazy load Google Maps API when this component is used
-  const { isLoaded: mapsLoaded } = useGoogleMaps();
+  const { isLoaded: mapsLoaded, requestMaps } = useGoogleMaps();
+
+  // Request Google Maps API when this component mounts
+  useEffect(() => {
+    requestMaps();
+  }, [requestMaps]);
 
   // Initialize Places Service for getting place details (after Maps API loads)
   useEffect(() => {
-    if (!mapsLoaded || !window.google) return;
+    if (!mapsLoaded || !window.google?.maps?.places) return;
     
     // Create a hidden div element for PlacesService
     const div = document.createElement('div');

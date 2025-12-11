@@ -25,14 +25,19 @@ export function AddressAutocomplete({
   const [inputValue, setInputValue] = useState(value);
   
   // Lazy load Google Maps API when this component is used
-  const { isLoaded: mapsLoaded } = useGoogleMaps();
+  const { isLoaded: mapsLoaded, requestMaps } = useGoogleMaps();
+
+  // Request Google Maps API when this component mounts
+  useEffect(() => {
+    requestMaps();
+  }, [requestMaps]);
 
   useEffect(() => {
     setInputValue(value);
   }, [value]);
 
   useEffect(() => {
-    if (!inputRef.current || !mapsLoaded || !window.google) return;
+    if (!inputRef.current || !mapsLoaded || !window.google?.maps?.places) return;
 
     // Initialize Google Places Autocomplete
     autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {

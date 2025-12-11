@@ -54,7 +54,12 @@ export default function TrackTrip() {
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
 
   // Lazy load Google Maps API when this page is accessed
-  const { isLoaded: mapsLoaded, loadError } = useGoogleMaps();
+  const { isLoaded: mapsLoaded, loadError, requestMaps } = useGoogleMaps();
+
+  // Request Google Maps API when this page mounts
+  useEffect(() => {
+    requestMaps();
+  }, [requestMaps]);
 
   const { data: locationData, isLoading } = useQuery<LocationData>({
     queryKey: ["/api/bookings", bookingId, "location"],
