@@ -57,11 +57,11 @@ export function CustomAddressInput({
 
   // Initialize Places Service for getting place details
   useEffect(() => {
-    if (!mapsLoaded || !window.google) return;
+    if (!mapsLoaded || !window.google?.maps?.places?.PlacesService) return;
     
     // Create a hidden div element for PlacesService
     const div = document.createElement('div');
-    placesServiceRef.current = new google.maps.places.PlacesService(div);
+    placesServiceRef.current = new window.google.maps.places.PlacesService(div);
   }, [mapsLoaded]);
 
   // Sync with parent value
