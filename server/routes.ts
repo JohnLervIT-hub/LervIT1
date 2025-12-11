@@ -1463,7 +1463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         price: toDecimalString(priceBreakdown.totalCost),
         baseFee: toDecimalString(priceBreakdown.baseFee),
         distanceFee: toDecimalString(priceBreakdown.distanceFee),
-        loadFee: toDecimalString(priceBreakdown.loadFee),
+        loadFee: toDecimalString(priceBreakdown.loadSizeFee),
         moverTravelFee: toDecimalString(priceBreakdown.moverTravelFee),
         pickupDifficultyFee: toDecimalString(priceBreakdown.pickupDifficultyFee),
         dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
