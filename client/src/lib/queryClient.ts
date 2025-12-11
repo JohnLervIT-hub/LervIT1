@@ -50,9 +50,10 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: 30000, // Auto-refresh every 30 seconds
-      refetchOnWindowFocus: true, // Refresh when user switches back to tab
-      staleTime: 15000, // Data considered stale after 15 seconds
+      refetchInterval: false, // Disabled - use manual invalidation after mutations
+      refetchOnWindowFocus: false, // Disabled - prevents skeleton flash on tab switch
+      staleTime: Infinity, // Data stays fresh until manually invalidated
+      gcTime: 1000 * 60 * 10, // Keep cached data for 10 minutes
       retry: false,
     },
     mutations: {
