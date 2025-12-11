@@ -77,7 +77,19 @@ if (dsn) {
         ],
         // Transform route paths into meaningful transaction names
         beforeNavigate: (context) => {
-          const path = window.location.pathname;
+          // context.name contains the URL path for the navigation
+          // Extract pathname from context.name or fall back to window.location
+          let path = window.location.pathname;
+          if (context.name && context.name.startsWith('/')) {
+            path = context.name;
+          } else if (context.name) {
+            try {
+              const url = new URL(context.name, window.location.origin);
+              path = url.pathname;
+            } catch {
+              // Keep window.location.pathname as fallback
+            }
+          }
           return {
             ...context,
             name: getTransactionName(path),
