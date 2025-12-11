@@ -60,11 +60,6 @@ const AdminVerificationDashboard = lazy(() => import("@/pages/AdminVerificationD
 const Messages = lazy(() => import("@/pages/Messages"));
 const Review = lazy(() => import("@/pages/Review"));
 
-// Demo pages - rarely accessed, load on demand
-const ProximityDemo = lazy(() => import("@/pages/ProximityDemo"));
-const LifecycleDemo = lazy(() => import("@/pages/LifecycleDemo"));
-const MoverLifecycleDemo = lazy(() => import("@/pages/MoverLifecycleDemo"));
-const VideoPreview = lazy(() => import("@/pages/VideoPreview"));
 
 function Router() {
   return (
@@ -73,10 +68,6 @@ function Router() {
         {/* Public Routes */}
         <Route path="/" component={Home} />
         <Route path="/website" component={LandingPage} />
-        <Route path="/demo" component={ProximityDemo} />
-        <Route path="/lifecycle" component={LifecycleDemo} />
-        <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
-        <Route path="/video-preview" component={VideoPreview} />
         <Route path="/login" component={Login} />
         <Route path="/signup" component={Signup} />
         <Route path="/forgot-password" component={ForgotPassword} />
