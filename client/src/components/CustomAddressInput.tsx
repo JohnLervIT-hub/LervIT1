@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { MapPin, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 
 interface Prediction {
   place_id: string;
@@ -48,23 +47,15 @@ export function CustomAddressInput({
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
-  
-  // Lazy load Google Maps API when this component is used
-  const { isLoaded: mapsLoaded, requestMaps } = useGoogleMaps();
 
-  // Request Google Maps API when this component mounts
+  // Initialize Places Service for getting place details
   useEffect(() => {
-    requestMaps();
-  }, [requestMaps]);
-
-  // Initialize Places Service for getting place details (after Maps API loads)
-  useEffect(() => {
-    if (!mapsLoaded || !window.google?.maps?.places) return;
+    if (!window.google) return;
     
     // Create a hidden div element for PlacesService
     const div = document.createElement('div');
     placesServiceRef.current = new google.maps.places.PlacesService(div);
-  }, [mapsLoaded]);
+  }, []);
 
   // Sync with parent value
   useEffect(() => {
