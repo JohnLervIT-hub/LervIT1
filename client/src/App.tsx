@@ -1,6 +1,6 @@
-import { useState, Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, prefetchCriticalData } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,9 +13,8 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import Header from "@/components/Header";
-import { Loader2 } from "lucide-react";
+import { PageSkeleton, HeroSkeleton, DashboardSkeleton } from "@/components/PageSkeleton";
 
-// Lazy load all pages for code splitting
 const Home = lazy(() => import("@/pages/Home"));
 const BrowseMovers = lazy(() => import("@/pages/BrowseMovers"));
 const RequestMove = lazy(() => import("@/pages/RequestMove"));
@@ -48,136 +47,207 @@ const CustomerProfile = lazy(() => import("@/pages/CustomerProfile"));
 const MoverProfile = lazy(() => import("@/pages/MoverProfile"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
-// Page loading spinner
-function PageLoader() {
-  return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>
-  );
-}
-
 function Router() {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Switch>
-        {/* Public Routes */}
-        <Route path="/" component={Home} />
-        <Route path="/website" component={LandingPage} />
-        <Route path="/demo" component={ProximityDemo} />
-        <Route path="/lifecycle" component={LifecycleDemo} />
-        <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
-        <Route path="/video-preview" component={VideoPreview} />
-        <Route path="/login" component={Login} />
-        <Route path="/signup" component={Signup} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/browse-movers" component={BrowseMovers} />
-        <Route path="/support" component={Support} />
-        <Route path="/request-move" component={RequestMove} />
-
-        {/* Customer-Only Routes */}
-        <Route path="/dashboard">
-          <ProtectedRoute allowedRoles={["customer"]}>
+    <Switch>
+      <Route path="/">
+        <Suspense fallback={<HeroSkeleton />}>
+          <Home />
+        </Suspense>
+      </Route>
+      <Route path="/website">
+        <Suspense fallback={<HeroSkeleton />}>
+          <LandingPage />
+        </Suspense>
+      </Route>
+      <Route path="/demo">
+        <Suspense fallback={<PageSkeleton />}>
+          <ProximityDemo />
+        </Suspense>
+      </Route>
+      <Route path="/lifecycle">
+        <Suspense fallback={<PageSkeleton />}>
+          <LifecycleDemo />
+        </Suspense>
+      </Route>
+      <Route path="/mover-lifecycle">
+        <Suspense fallback={<PageSkeleton />}>
+          <MoverLifecycleDemo />
+        </Suspense>
+      </Route>
+      <Route path="/video-preview">
+        <Suspense fallback={<PageSkeleton />}>
+          <VideoPreview />
+        </Suspense>
+      </Route>
+      <Route path="/login">
+        <Suspense fallback={<PageSkeleton />}>
+          <Login />
+        </Suspense>
+      </Route>
+      <Route path="/signup">
+        <Suspense fallback={<PageSkeleton />}>
+          <Signup />
+        </Suspense>
+      </Route>
+      <Route path="/forgot-password">
+        <Suspense fallback={<PageSkeleton />}>
+          <ForgotPassword />
+        </Suspense>
+      </Route>
+      <Route path="/reset-password">
+        <Suspense fallback={<PageSkeleton />}>
+          <ResetPassword />
+        </Suspense>
+      </Route>
+      <Route path="/browse-movers">
+        <Suspense fallback={<PageSkeleton />}>
+          <BrowseMovers />
+        </Suspense>
+      </Route>
+      <Route path="/support">
+        <Suspense fallback={<PageSkeleton />}>
+          <Support />
+        </Suspense>
+      </Route>
+      <Route path="/request-move">
+        <Suspense fallback={<PageSkeleton />}>
+          <RequestMove />
+        </Suspense>
+      </Route>
+      <Route path="/dashboard">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <CustomerDashboard />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/my-bookings">
-          <ProtectedRoute allowedRoles={["customer"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/my-bookings">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <MyBookings />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/payment/:bookingId">
-          <ProtectedRoute allowedRoles={["customer"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/payment/:bookingId">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <Payment />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/track-trip/:bookingId">
-          <ProtectedRoute allowedRoles={["customer"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/track-trip/:bookingId">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <TrackTrip />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/profile">
-          <ProtectedRoute allowedRoles={["customer"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/profile">
+        <ProtectedRoute allowedRoles={["customer"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <CustomerProfile />
-          </ProtectedRoute>
-        </Route>
-
-        {/* Mover-Only Routes */}
-        <Route path="/mover-dashboard">
-          <ProtectedRoute allowedRoles={["mover"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/mover-dashboard">
+        <ProtectedRoute allowedRoles={["mover"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <MoverDashboard />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/mover-profile">
-          <ProtectedRoute allowedRoles={["mover"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/mover-profile">
+        <ProtectedRoute allowedRoles={["mover"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <MoverProfileSetup />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/mover-settings">
-          <ProtectedRoute allowedRoles={["mover"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/mover-settings">
+        <ProtectedRoute allowedRoles={["mover"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <MoverProfile />
-          </ProtectedRoute>
-        </Route>
-
-        {/* Admin-Only Routes */}
-        <Route path="/admin">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminDashboard />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/support">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/support">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminSupportDashboard />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/verification">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/verification">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminVerificationDashboard />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/users">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/users">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminUsersPage />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/movers">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/movers">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminMoversPage />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/moves">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/moves">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminMovesPage />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/revenue">
-          <ProtectedRoute allowedRoles={["admin"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/revenue">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <Suspense fallback={<DashboardSkeleton />}>
             <AdminRevenuePage />
-          </ProtectedRoute>
-        </Route>
-
-        {/* Shared Routes (Customer & Mover) */}
-        <Route path="/messages/:bookingId">
-          <ProtectedRoute allowedRoles={["customer", "mover"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/messages/:bookingId">
+        <ProtectedRoute allowedRoles={["customer", "mover"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <Messages />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/review/:bookingId">
-          <ProtectedRoute allowedRoles={["customer", "mover"]}>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/review/:bookingId">
+        <ProtectedRoute allowedRoles={["customer", "mover"]}>
+          <Suspense fallback={<PageSkeleton />}>
             <Review />
-          </ProtectedRoute>
-        </Route>
-
-        {/* 404 */}
-        <Route component={NotFound} />
-      </Switch>
-    </Suspense>
+          </Suspense>
+        </ProtectedRoute>
+      </Route>
+      <Route>
+        <Suspense fallback={<PageSkeleton />}>
+          <NotFound />
+        </Suspense>
+      </Route>
+    </Switch>
   );
 }
 
 function App() {
-  // No more blocking on Google Maps - it loads in background via GoogleMapsProvider
+  useEffect(() => {
+    prefetchCriticalData();
+  }, []);
+
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
