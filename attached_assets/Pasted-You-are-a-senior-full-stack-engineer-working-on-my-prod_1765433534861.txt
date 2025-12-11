@@ -1,0 +1,78 @@
+You are a senior full-stack engineer working on my production LervIT moving app (MoveItCalgary project in Replit).
+I have just rolled back the codebase to the checkpoint “Add Stripe fraud detection and flag high-risk bookings”, which is my last known good production version before I tried integrating Sentry.
+
+Your job: stabilize and optimize this version of the app to production grade WITHOUT adding Sentry or radically changing the business logic.
+
+Please do the following:
+
+Verify rollback state & cleanup
+
+Search the entire project for any leftover Sentry or error-monitoring code: imports of @sentry/*, DSN env vars, middlewares, init blocks, or Sentry wrappers.
+
+Remove them safely so there are no Sentry references at all and no dead code or unused env variables.
+
+Preserve existing behaviour
+
+Keep all existing flows exactly as designed: item upload → vision engine volume estimate → vehicle class selection → price estimate → payment → booking → notification.
+
+Do not change pricing rules, vehicle class mapping, volume ranges, or any user-visible copy unless you find a clear bug (for example, obvious mismatch or broken branch).
+
+Stabilize payment → booking → notification flow
+
+Ensure the payment → booking → notification sequence can’t partially fail.
+
+Where this flow touches the database, wrap it in a transaction or equivalent atomic pattern so that either all steps succeed or everything is rolled back.
+
+Make sure failed payments cannot create bookings, and failed bookings cannot send “success” notifications.
+
+Fix TypeScript and runtime issues
+
+Run the TypeScript/type-check step and fix all warnings and errors in the project (aim for zero TS warnings).
+
+Fix any obvious runtime issues: missing null checks, unsafe any, unhandled promises, or unawaited async calls, especially around Stripe, database access, and the vision engine calls.
+
+Frontend UX + performance polish
+
+Ensure every page and modal always opens scrolled to the top (window.scrollTo(0,0) or router-based scroll restoration), so users never land in the middle or bottom of a page.
+
+Remove unnecessary re-renders, expensive effects, or console noise that can slow the app down.
+
+Make sure all buttons, forms, and navigation elements have clear loading states and error messages (no silent failures).
+
+Confirm that the vision engine results and vehicle recommendation cards render quickly and consistently.
+
+Logging and error handling (lightweight)
+
+Instead of Sentry, add simple structured logging to server-side critical paths: payment, booking creation, notifications, and vision-engine volume calculation.
+
+Use a consistent log format (level + message + key details like bookingId, userId, vehicleClass, volumeEstimate).
+
+Add robust try/catch around external calls (Stripe, maps, vision engine) and return user-friendly errors while logging the technical details on the server.
+
+Sanity checks
+
+After making changes, simulate or describe the main flows and confirm they still work end-to-end:
+
+New user creates a booking with photo upload.
+
+Vision engine returns a volume and assigns a vehicle class.
+
+Price is calculated and shown.
+
+Payment succeeds and creates a booking.
+
+Confirmation/notification is sent or displayed.
+
+Ensure there are no new TypeScript warnings, build errors, or obvious UI regressions.
+
+Code quality
+
+Keep changes as small and focused as possible: no huge rewrites.
+
+Use clear function names and comments where logic is non-obvious, especially around transactions, fraud checks, and vehicle matching.
+
+When you’re done, show me:
+
+A list of files changed.
+
+A short explanation of the key fixes and optimizations you made.
