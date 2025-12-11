@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification, IdentifiedItem, InsertIdentifiedItem, AiRun, InsertAiRun } from "@shared/schema";
 import { db } from "./db";
 import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns } from "@shared/schema";
-import { eq, and, desc, sql, lt } from "drizzle-orm";
+import { eq, and, desc, sql, lt, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -80,6 +80,11 @@ class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async getUsersByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(users).where(inArray(users.id, ids));
+  }
+
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
     const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
     return result[0];
@@ -120,6 +125,11 @@ class PostgresStorage implements IStorage {
   async updateMover(id: string, updates: Partial<Mover>): Promise<Mover | undefined> {
     const result = await db.update(movers).set(updates).where(eq(movers.id, id)).returning();
     return result[0];
+  }
+
+  async getMoversByIds(ids: string[]): Promise<Mover[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(movers).where(inArray(movers.id, ids));
   }
 
   // Bookings
