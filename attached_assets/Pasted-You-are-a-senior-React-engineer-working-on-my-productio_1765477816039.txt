@@ -1,0 +1,170 @@
+You are a senior React engineer working on my production app **LervIT** (on-demand moving & delivery).
+
+The app already has:
+- React 18 with concurrent features
+- TanStack Query for data fetching
+- Framer Motion for animations
+- WebSocket support for mover tracking / job notifications
+
+Your task is to IMPLEMENT these 3 optimizations without changing business logic:
+
+1) Scroll to top on navigation  
+2) Preload the Payment page when user is on the Load Details step  
+3) Add React.memo to expensive components (MoverCard list + PricingSummary)
+
+Do NOT change pricing rules, Vision Engine logic, or vehicle-matching logic. Only improve UX/performance.
+
+---
+
+## 0. Inspect the codebase
+
+1. Identify:
+   - The routing system (React Router vs Next.js vs custom).
+   - The component / route for:
+     - “Load Details” step (where user enters load or item details).
+     - “Payment” or “Review / Summary” step (final confirmation/payment).
+   - The components named something like:
+     - `MoverCard`, `MoverList`, or similar
+     - `PricingSummary`, `FareSummary`, or similar
+
+2. Before editing each file, add a short comment at the top like:
+// PERFORMANCE: Updated by Replit AI – scroll-to-top or memo optimization
+
+---
+
+## 1. Implement "scroll to top on navigation"
+
+Goal: Whenever the user navigates to a new page/route, the main scroll position should reset to the top, so users never land mid-page.
+
+### If using React Router:
+
+1. Create a component `ScrollToTop.tsx` (or similar) in a suitable folder, e.g. `src/components/layout/ScrollToTop.tsx`:
+
+   - Use `useLocation` and `useEffect`:
+     - On every `location.pathname` change, call `window.scrollTo({ top: 0, left: 0, behavior: 'auto' })`.
+
+2. Wrap the main route tree with this component:
+
+   - In the file where the router is rendered (usually `App.tsx` or similar), render:
+
+     <ScrollToTop>
+       {/* existing <Routes> / layout */}
+     </ScrollToTop>
+
+   - Ensure this doesn’t break existing layout.
+
+### If using Next.js:
+
+1. In the main layout or custom `_app.tsx`, use `useRouter` from `next/router`.
+
+2. Add an effect that subscribes to `router.events.on('routeChangeComplete')` and calls `window.scrollTo({ top: 0, left: 0, behavior: 'auto' })`.
+
+3. Clean up the event listener in the effect’s cleanup function.
+
+### If a scrollable container is used instead of window:
+
+- If you find a main scroll container (like `<div id="app-scroll">`), reset that container’s `scrollTop = 0` instead of `window.scrollTo`.
+
+Test:
+- Navigate through the booking flow on mobile and ensure every new screen starts at the top.
+
+---
+
+## 2. Preload the Payment page when on Load Details step
+
+Goal: When user is on the Load Details step, start preloading the Payment page route and data so that when they click “Next”, it appears instantly.
+
+### 2.1 Preload route / component
+
+1. Find:
+   - The component/route for Load Details (e.g. `LoadDetailsPage`, `LoadDetailsStep`).
+   - The component/route for Payment / Summary (e.g. `PaymentPage`, `ReviewPage`).
+
+2. If routes are code-split with `React.lazy` or Next.js dynamic imports:
+   - Use the router’s prefetch mechanism:
+     - React Router: dynamically import the Payment component ahead of time.
+     - Next.js: use `router.prefetch('/payment-route')` when Load Details mounts.
+
+3. Implementation idea (React Router example):
+   - In `LoadDetails` component’s `useEffect`, eagerly import the Payment component file:
+     `import('../path/to/PaymentPage');`
+   - This warms up the bundle for the next screen.
+
+### 2.2 Prefetch data via TanStack Query
+
+1. Identify the query key and function used to fetch data for the Payment/Review step:
+   - For example, `useQuery(['pricingSummary', bookingId], ...)` or similar.
+   - Or any query that fetches fare breakdown / final price.
+
+2. In the Load Details step:
+   - Use `queryClient.prefetchQuery(...)` to prefetch the same query(s) used by the Payment page.
+   - Only prefetch once the required input (location, vehicle, etc.) is available so the query key is valid.
+
+Example pattern (pseudo-code, adapt to real names):
+
+- Get `queryClient` from TanStack Query:
+  `const queryClient = useQueryClient();`
+
+- In a `useEffect`, when the load/booking data is ready, call:
+
+  `queryClient.prefetchQuery(['pricingSummary', bookingId], () => fetchPricingSummary(bookingId));`
+
+3. Ensure prefetching is non-blocking:
+   - Do not await it in a way that blocks UI.
+   - Let it run in the background.
+
+Test:
+- Go through Load Details → Payment:
+  - The Payment screen should show almost instantly, with data already loaded, instead of showing a long loading state.
+
+---
+
+## 3. Optimize expensive components with React.memo
+
+Goal: Prevent unnecessary re-renders on large lists or expensive UI components like Mover cards and pricing summaries.
+
+1. Locate:
+   - `MoverCard` (or equivalent component) used in lists of movers/drivers.
+   - `PricingSummary` (or equivalent) shown during final review.
+
+2. Wrap them in `React.memo`:
+
+   - Example:
+
+     export const MoverCard = React.memo(function MoverCard(props: MoverCardProps) {
+       // existing implementation
+     });
+
+   - Do the same for `PricingSummary` or similar.
+
+3. For props that are functions or derived objects:
+   - In parent components, wrap callbacks in `useCallback` and derived data in `useMemo` so that props passed to memoized components are stable where possible.
+
+4. Verify no props rely on identity changes to update.
+   - If a prop intentionally changes on every render, adjust logic or avoid memo there.
+
+Test:
+- Open the mover list.
+- Interact with non-related parts of the UI.
+- Confirm the list does not keep fully re-rendering on minor unrelated state changes (e.g., logging to see renders or using React DevTools if available).
+
+---
+
+## 4. Final verification
+
+1. Run the app locally and test the full flow:
+   - Home → pickup/dropoff selection → Load Details → Payment/Review → Confirmation.
+   - Confirm:
+     - Every screen scrolls to the top on navigation.
+     - Payment screen appears much faster after Load Details.
+     - No console errors were introduced.
+
+2. Do NOT modify:
+   - Pricing formulas
+   - Vehicle assignment logic
+   - Vision Engine logic
+   - WebSocket connection logic
+
+3. Briefly summarize changes in a small comment block at the top of each modified file or in a short `PERFORMANCE_NOTES` comment in the main file.
+
+When you’re finished, stop editing.
