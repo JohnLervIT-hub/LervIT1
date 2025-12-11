@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useStripe, Elements, PaymentElement, useElements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
@@ -124,8 +124,12 @@ export default function Payment() {
     enabled: !!bookingId,
   });
 
+  // Track if payment intent was already created to prevent duplicates
+  const paymentIntentCreated = useRef(false);
+
   useEffect(() => {
-    if (!bookingId || !user) return;
+    if (!bookingId || !user || paymentIntentCreated.current || clientSecret) return;
+    paymentIntentCreated.current = true;
 
     // Create payment intent when component loads
     apiRequest("POST", `/api/bookings/${bookingId}/create-payment-intent`, {})
@@ -133,6 +137,7 @@ export default function Payment() {
         const data = await res.json();
         
         if (!res.ok) {
+          paymentIntentCreated.current = false;
           // Check if payment was already completed
           if (data.alreadyPaid) {
             queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
@@ -146,9 +151,9 @@ export default function Payment() {
         setClientSecret(data.clientSecret);
       })
       .catch(() => {
-        // Payment intent creation handled by error state
+        paymentIntentCreated.current = false;
       });
-  }, [bookingId, user, setLocation]);
+  }, [bookingId, user, setLocation, clientSecret]);
 
   if (!user || !bookingId) {
     return (

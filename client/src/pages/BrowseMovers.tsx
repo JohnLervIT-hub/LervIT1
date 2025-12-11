@@ -108,13 +108,27 @@ export default function BrowseMovers() {
     }
   }, []);
 
+  // Always fetch movers immediately, update with coords when available
+  const baseUrl = "/api/movers?isAvailable=true";
   const apiUrl = userCoords
-    ? `/api/movers?isAvailable=true&lat=${userCoords.lat}&lng=${userCoords.lng}`
-    : "/api/movers?isAvailable=true";
+    ? `${baseUrl}&lat=${userCoords.lat}&lng=${userCoords.lng}`
+    : baseUrl;
 
-  const { data: movers, isLoading } = useQuery({
-    queryKey: [apiUrl],
+  const { data: movers, isLoading, refetch } = useQuery({
+    queryKey: [baseUrl, userCoords?.lat, userCoords?.lng],
+    queryFn: async () => {
+      const res = await fetch(apiUrl);
+      if (!res.ok) throw new Error('Failed to fetch movers');
+      return res.json();
+    },
   });
+
+  // Refetch when coords become available
+  useEffect(() => {
+    if (userCoords) {
+      refetch();
+    }
+  }, [userCoords, refetch]);
 
   const filteredMovers = useMemo(() => {
     if (!movers || !Array.isArray(movers)) return [];
@@ -153,7 +167,6 @@ export default function BrowseMovers() {
   }, [movers, searchQuery, selectedVehicleTypes, minRating, verifiedOnly, sortBy]);
 
   const handleSelectMover = (id: string) => {
-    console.log("Selected mover:", id);
     setLocation(`/request-move?moverId=${id}`);
   };
 
