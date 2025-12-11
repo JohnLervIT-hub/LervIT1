@@ -79,13 +79,23 @@ export default function MyBookings() {
     enabled: !!user?.id,
   });
   
-  // Sort and filter bookings
+  // Sort and filter bookings with safe date handling
   const now = new Date();
+  const safeParseDate = (date: unknown): Date => {
+    if (!date) return new Date(0);
+    try {
+      return new Date(date as string);
+    } catch {
+      return new Date(0);
+    }
+  };
+  
   const sortedBookings = bookings
     ?.filter(b => {
+      if (!b) return false;
       // Filter out expired pending/confirmed bookings (keep in_transit as they're active moves)
       const isActiveStatus = ["pending", "confirmed", "in_transit"].includes(b.status);
-      if (isActiveStatus && b.status !== "in_transit" && new Date(b.preferredDate) < now) {
+      if (isActiveStatus && b.status !== "in_transit" && safeParseDate(b.preferredDate) < now) {
         return false;
       }
       return true;
@@ -93,19 +103,19 @@ export default function MyBookings() {
     .sort((a, b) => {
       // Active bookings first, sorted by date ascending
       const aIsActive = ["pending", "confirmed", "in_transit"].includes(a.status) && 
-        (a.status === "in_transit" || new Date(a.preferredDate) >= now);
+        (a.status === "in_transit" || safeParseDate(a.preferredDate) >= now);
       const bIsActive = ["pending", "confirmed", "in_transit"].includes(b.status) && 
-        (b.status === "in_transit" || new Date(b.preferredDate) >= now);
+        (b.status === "in_transit" || safeParseDate(b.preferredDate) >= now);
       
       if (aIsActive && !bIsActive) return -1;
       if (!aIsActive && bIsActive) return 1;
       
       // Within same group, sort by date
       if (aIsActive && bIsActive) {
-        return new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime();
+        return safeParseDate(a.preferredDate).getTime() - safeParseDate(b.preferredDate).getTime();
       }
       // Past bookings: most recent first
-      return new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime();
+      return safeParseDate(b.preferredDate).getTime() - safeParseDate(a.preferredDate).getTime();
     }) || [];
     
   // Filter to show only focused booking if URL param exists

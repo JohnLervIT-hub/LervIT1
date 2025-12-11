@@ -26,7 +26,7 @@ const getStripe = () => {
   return stripePromise;
 };
 
-const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
+const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
@@ -75,7 +75,7 @@ const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
         description: "Thank you! Your payment has been processed. Finding movers now...",
       });
       queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/bookings?customerId=${userId}`] });
       setTimeout(() => setLocation("/my-bookings"), 1500);
     } else if (paymentIntent && paymentIntent.status === 'processing') {
       toast({
@@ -290,7 +290,7 @@ export default function Payment() {
               </div>
             ) : (
               <Elements stripe={getStripe()} options={{ clientSecret }}>
-                <CheckoutForm bookingId={bookingId} />
+                <CheckoutForm bookingId={bookingId} userId={user?.id || ''} />
               </Elements>
             )}
           </CardContent>
