@@ -146,4 +146,26 @@ curl -X POST https://your-app.replit.app/api/stripe-webhook \
 - `server/middleware/security.ts` - CORS, rate limiting, security headers
 - `server/config/stripe.ts` - Stripe client, commission configuration
 - `server/routes.ts` - Security documentation header, endpoint protection
-```
+
+## Performance Optimizations
+
+### Frontend Performance
+- **Code Splitting:** React.lazy() with route-specific Suspense boundaries for all page components in `App.tsx`
+- **Loading States:** Three skeleton variants (PageSkeleton, HeroSkeleton, DashboardSkeleton) in `@/components/PageSkeleton.tsx`
+- **Caching Strategy:** TanStack Query configured with 5-minute staleTime, 30-minute gcTime, and stale-while-revalidate pattern in `lib/queryClient.ts`
+- **Prefetching:** `prefetchCriticalData()` warms auth endpoint on app initialization
+- **Image Optimization:** Native lazy loading (`loading="lazy" decoding="async"`) with Vite asset imports
+
+### Backend Performance
+- **N+1 Query Prevention:** Batch user fetching with `getUsersByIds()` for movers endpoint
+- **Structured Logging:** Pino JSON logging with 10% sampling in production for Sentry
+
+### Performance Constraints
+- Neon serverless PostgreSQL has 200-400ms network latency per query (architectural constraint)
+- API response times typically 300-900ms due to database latency
+
+### Key Performance Files
+- `client/src/App.tsx` - Lazy loading, Suspense boundaries
+- `client/src/lib/queryClient.ts` - Cache configuration, prefetching
+- `client/src/components/PageSkeleton.tsx` - Loading skeletons
+- `client/src/sentry.ts` - Performance monitoring (10% sampling in production)
