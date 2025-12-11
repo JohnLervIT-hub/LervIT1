@@ -161,33 +161,34 @@ class PostgresStorage implements IStorage {
   }
 
   async getUnreadMessagesForUser(userId: string): Promise<{ bookingId: string; count: number; latestMessage: Message }[]> {
-    // Get all bookings where user is either customer or mover
-    const userBookings = await db.select().from(bookings).where(
-      sql`${bookings.customerId} = ${userId} OR ${bookings.moverId} = ${userId}`
-    );
+    // OPTIMIZED: Single query with aggregation instead of N+1 queries
+    // Get unread messages grouped by booking in ONE database call
+    const unreadCounts = await db.execute(sql`
+      SELECT 
+        m.booking_id,
+        COUNT(*) as unread_count,
+        (
+          SELECT row_to_json(latest.*)
+          FROM messages latest
+          WHERE latest.booking_id = m.booking_id
+            AND latest.sender_id != ${userId}
+            AND latest.read_at IS NULL
+          ORDER BY latest.created_at DESC
+          LIMIT 1
+        ) as latest_message
+      FROM messages m
+      INNER JOIN bookings b ON m.booking_id = b.id
+      WHERE (b.customer_id = ${userId} OR b.mover_id = ${userId})
+        AND m.sender_id != ${userId}
+        AND m.read_at IS NULL
+      GROUP BY m.booking_id
+    `);
     
-    const unreadByBooking: { bookingId: string; count: number; latestMessage: Message }[] = [];
-    
-    for (const booking of userBookings) {
-      // Get messages not sent by this user AND not yet read (readAt is null)
-      const unreadMessages = await db.select().from(messages)
-        .where(and(
-          eq(messages.bookingId, booking.id),
-          sql`${messages.senderId} != ${userId}`,
-          sql`${messages.readAt} IS NULL`
-        ))
-        .orderBy(desc(messages.createdAt));
-      
-      if (unreadMessages.length > 0) {
-        unreadByBooking.push({
-          bookingId: booking.id,
-          count: unreadMessages.length,
-          latestMessage: unreadMessages[0]
-        });
-      }
-    }
-    
-    return unreadByBooking;
+    return (unreadCounts.rows as any[]).map(row => ({
+      bookingId: row.booking_id,
+      count: parseInt(row.unread_count),
+      latestMessage: row.latest_message as Message
+    }));
   }
 
   async markMessagesAsRead(bookingId: string, userId: string): Promise<void> {
