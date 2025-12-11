@@ -28,7 +28,10 @@ The platform features a mobile-first design using shadcn/ui components, ensuring
     - **Target Metrics:** Sub-3-second LCP/FCP through deferred heavy resource loading
 *   **Sentry v7 Error Monitoring:**
     - **Backend:** Handlers API with `setupSentryRequestHandlers(app)` before routes and `setupSentryErrorHandler(app)` after routes (`server/sentry.ts`)
-    - **Frontend:** BrowserTracing integration with 100% tracesSampleRate for development (`client/src/sentry.ts`)
+    - **Frontend:** BrowserTracing integration with meaningful transaction names (`client/src/sentry.ts`)
+    - **Transaction Naming:** Routes mapped to descriptive names (e.g., "Booking Flow – Request Move", "Payment – Checkout", "Admin – Dashboard")
+    - **Span Collection:** Page load and navigation spans automatically captured via BrowserTracing
+    - **Environment-Specific Sampling:** 20% in production, 100% in development
 
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Geocoding system (Google Maps Distance Matrix API), 7-component dynamic pricing model, and an algorithm that ranks the top 5 nearest available movers within 15-50km. A `jobNotifications` system handles invitations with a 10-minute expiration.
