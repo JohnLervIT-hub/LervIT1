@@ -94,7 +94,7 @@ export default function MyBookings() {
     ?.filter(b => {
       if (!b) return false;
       // Filter out expired pending/confirmed bookings (keep in_transit as they're active moves)
-      const isActiveStatus = ["pending", "confirmed", "in_transit"].includes(b.status);
+      const isActiveStatus = ["pending_payment", "pending", "confirmed", "in_transit"].includes(b.status);
       if (isActiveStatus && b.status !== "in_transit" && safeParseDate(b.preferredDate) < now) {
         return false;
       }
@@ -102,9 +102,9 @@ export default function MyBookings() {
     })
     .sort((a, b) => {
       // Active bookings first, sorted by date ascending
-      const aIsActive = ["pending", "confirmed", "in_transit"].includes(a.status) && 
+      const aIsActive = ["pending_payment", "pending", "confirmed", "in_transit"].includes(a.status) && 
         (a.status === "in_transit" || safeParseDate(a.preferredDate) >= now);
-      const bIsActive = ["pending", "confirmed", "in_transit"].includes(b.status) && 
+      const bIsActive = ["pending_payment", "pending", "confirmed", "in_transit"].includes(b.status) && 
         (b.status === "in_transit" || safeParseDate(b.preferredDate) >= now);
       
       if (aIsActive && !bIsActive) return -1;
@@ -161,6 +161,7 @@ export default function MyBookings() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case "pending_payment": return <CreditCard className="w-4 h-4" />;
       case "pending": return <Clock className="w-4 h-4" />;
       case "confirmed": return <CheckCircle2 className="w-4 h-4" />;
       case "in_transit": return <TrendingUp className="w-4 h-4" />;
@@ -172,6 +173,7 @@ export default function MyBookings() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "pending_payment": return "bg-orange-500/10 text-orange-600 border-orange-500/20";
       case "pending": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
       case "confirmed": return "bg-blue-500/10 text-blue-600 border-blue-500/20";
       case "in_transit": return "bg-primary/10 text-primary border-primary/20";
@@ -267,6 +269,7 @@ export default function MyBookings() {
               <Card key={booking.id} className="overflow-hidden" data-testid={`card-booking-${booking.id}`}>
                 {/* Status Bar */}
                 <div className={`h-1 ${
+                  booking.status === 'pending_payment' ? 'bg-orange-500' :
                   booking.status === 'pending' ? 'bg-amber-500' :
                   booking.status === 'confirmed' ? 'bg-blue-500' :
                   booking.status === 'in_transit' ? 'bg-primary' :
@@ -608,7 +611,7 @@ export default function MyBookings() {
                         Track Trip Live
                       </Button>
                     )}
-                    {(booking.status === "confirmed" || booking.status === "pending") && booking.paymentStatus !== "succeeded" && booking.price && (
+                    {(booking.status === "confirmed" || booking.status === "pending" || booking.status === "pending_payment") && booking.paymentStatus !== "succeeded" && booking.price && (
                       <Button
                         onClick={() => setLocation(`/payment/${booking.id}`)}
                         className="bg-gradient-to-r from-primary to-primary/80"
@@ -618,7 +621,7 @@ export default function MyBookings() {
                         Pay ${parseFloat(booking.price).toFixed(2)} CAD
                       </Button>
                     )}
-                    {booking.status === "pending" && (
+                    {(booking.status === "pending" || booking.status === "pending_payment") && (
                       <Button
                         variant="destructive"
                         onClick={() => cancelBookingMutation.mutate(booking.id)}
