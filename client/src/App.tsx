@@ -1,273 +1,232 @@
-import { Suspense, lazy, useEffect } from "react";
+import { useState } from "react";
 import { Switch, Route } from "wouter";
-import { queryClient, prefetchCriticalData } from "./lib/queryClient";
+import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { GoogleMapsProvider } from "@/contexts/GoogleMapsContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
+import { useJsApiLoader } from "@react-google-maps/api";
 import Header from "@/components/Header";
-import { PageSkeleton, HeroSkeleton, DashboardSkeleton } from "@/components/PageSkeleton";
-
-const Home = lazy(() => import("@/pages/Home"));
-const BrowseMovers = lazy(() => import("@/pages/BrowseMovers"));
-const RequestMove = lazy(() => import("@/pages/RequestMove"));
-const CustomerDashboard = lazy(() => import("@/pages/CustomerDashboard"));
-const MyBookings = lazy(() => import("@/pages/MyBookings"));
-const MoverDashboard = lazy(() => import("@/pages/MoverDashboard"));
-const MoverProfileSetup = lazy(() => import("@/pages/MoverProfileSetup"));
-const Messages = lazy(() => import("@/pages/Messages"));
-const Review = lazy(() => import("@/pages/Review"));
-const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
-const AdminUsersPage = lazy(() => import("@/pages/AdminUsersPage"));
-const AdminMoversPage = lazy(() => import("@/pages/AdminMoversPage"));
-const AdminMovesPage = lazy(() => import("@/pages/AdminMovesPage"));
-const AdminRevenuePage = lazy(() => import("@/pages/AdminRevenuePage"));
-const ProximityDemo = lazy(() => import("@/pages/ProximityDemo"));
-const LifecycleDemo = lazy(() => import("@/pages/LifecycleDemo"));
-const MoverLifecycleDemo = lazy(() => import("@/pages/MoverLifecycleDemo"));
-const VideoPreview = lazy(() => import("@/pages/VideoPreview"));
-const Login = lazy(() => import("@/pages/Login"));
-const Signup = lazy(() => import("@/pages/Signup"));
-const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
-const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
-const Support = lazy(() => import("@/pages/Support"));
-const AdminSupportDashboard = lazy(() => import("@/pages/AdminSupportDashboard"));
-const AdminVerificationDashboard = lazy(() => import("@/pages/AdminVerificationDashboard"));
-const Payment = lazy(() => import("@/pages/Payment"));
-const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
-const LandingPage = lazy(() => import("@/pages/LandingPage"));
-const CustomerProfile = lazy(() => import("@/pages/CustomerProfile"));
-const MoverProfile = lazy(() => import("@/pages/MoverProfile"));
-const NotFound = lazy(() => import("@/pages/not-found"));
+import SplashScreen from "@/components/SplashScreen";
+import Home from "@/pages/Home";
+import BrowseMovers from "@/pages/BrowseMovers";
+import RequestMove from "@/pages/RequestMove";
+import CustomerDashboard from "@/pages/CustomerDashboard";
+import MyBookings from "@/pages/MyBookings";
+import MoverDashboard from "@/pages/MoverDashboard";
+import MoverProfileSetup from "@/pages/MoverProfileSetup";
+import Messages from "@/pages/Messages";
+import Review from "@/pages/Review";
+import AdminDashboard from "@/pages/AdminDashboard";
+import AdminUsersPage from "@/pages/AdminUsersPage";
+import AdminMoversPage from "@/pages/AdminMoversPage";
+import AdminMovesPage from "@/pages/AdminMovesPage";
+import AdminRevenuePage from "@/pages/AdminRevenuePage";
+import ProximityDemo from "@/pages/ProximityDemo";
+import LifecycleDemo from "@/pages/LifecycleDemo";
+import MoverLifecycleDemo from "@/pages/MoverLifecycleDemo";
+import VideoPreview from "@/pages/VideoPreview";
+import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import Support from "@/pages/Support";
+import AdminSupportDashboard from "@/pages/AdminSupportDashboard";
+import AdminVerificationDashboard from "@/pages/AdminVerificationDashboard";
+import Payment from "@/pages/Payment";
+import TrackTrip from "@/pages/TrackTrip";
+import LandingPage from "@/pages/LandingPage";
+import CustomerProfile from "@/pages/CustomerProfile";
+import MoverProfile from "@/pages/MoverProfile";
+import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/">
-        <Suspense fallback={<HeroSkeleton />}>
-          <Home />
-        </Suspense>
-      </Route>
-      <Route path="/website">
-        <Suspense fallback={<HeroSkeleton />}>
-          <LandingPage />
-        </Suspense>
-      </Route>
-      <Route path="/demo">
-        <Suspense fallback={<PageSkeleton />}>
-          <ProximityDemo />
-        </Suspense>
-      </Route>
-      <Route path="/lifecycle">
-        <Suspense fallback={<PageSkeleton />}>
-          <LifecycleDemo />
-        </Suspense>
-      </Route>
-      <Route path="/mover-lifecycle">
-        <Suspense fallback={<PageSkeleton />}>
-          <MoverLifecycleDemo />
-        </Suspense>
-      </Route>
-      <Route path="/video-preview">
-        <Suspense fallback={<PageSkeleton />}>
-          <VideoPreview />
-        </Suspense>
-      </Route>
-      <Route path="/login">
-        <Suspense fallback={<PageSkeleton />}>
-          <Login />
-        </Suspense>
-      </Route>
-      <Route path="/signup">
-        <Suspense fallback={<PageSkeleton />}>
-          <Signup />
-        </Suspense>
-      </Route>
-      <Route path="/forgot-password">
-        <Suspense fallback={<PageSkeleton />}>
-          <ForgotPassword />
-        </Suspense>
-      </Route>
-      <Route path="/reset-password">
-        <Suspense fallback={<PageSkeleton />}>
-          <ResetPassword />
-        </Suspense>
-      </Route>
-      <Route path="/browse-movers">
-        <Suspense fallback={<PageSkeleton />}>
-          <BrowseMovers />
-        </Suspense>
-      </Route>
-      <Route path="/support">
-        <Suspense fallback={<PageSkeleton />}>
-          <Support />
-        </Suspense>
-      </Route>
-      <Route path="/request-move">
-        <Suspense fallback={<PageSkeleton />}>
-          <RequestMove />
-        </Suspense>
-      </Route>
+      {/* Public Routes */}
+      <Route path="/" component={Home} />
+      <Route path="/website" component={LandingPage} />
+      <Route path="/demo" component={ProximityDemo} />
+      <Route path="/lifecycle" component={LifecycleDemo} />
+      <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
+      <Route path="/video-preview" component={VideoPreview} />
+      <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/browse-movers" component={BrowseMovers} />
+      <Route path="/support" component={Support} />
+      <Route path="/request-move" component={RequestMove} />
+
+      {/* Customer-Only Routes */}
       <Route path="/dashboard">
         <ProtectedRoute allowedRoles={["customer"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <CustomerDashboard />
-          </Suspense>
+          <CustomerDashboard />
         </ProtectedRoute>
       </Route>
       <Route path="/my-bookings">
         <ProtectedRoute allowedRoles={["customer"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <MyBookings />
-          </Suspense>
+          <MyBookings />
         </ProtectedRoute>
       </Route>
       <Route path="/payment/:bookingId">
         <ProtectedRoute allowedRoles={["customer"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <Payment />
-          </Suspense>
+          <Payment />
         </ProtectedRoute>
       </Route>
       <Route path="/track-trip/:bookingId">
         <ProtectedRoute allowedRoles={["customer"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <TrackTrip />
-          </Suspense>
+          <TrackTrip />
         </ProtectedRoute>
       </Route>
       <Route path="/profile">
         <ProtectedRoute allowedRoles={["customer"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <CustomerProfile />
-          </Suspense>
+          <CustomerProfile />
         </ProtectedRoute>
       </Route>
+
+      {/* Mover-Only Routes */}
       <Route path="/mover-dashboard">
         <ProtectedRoute allowedRoles={["mover"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <MoverDashboard />
-          </Suspense>
+          <MoverDashboard />
         </ProtectedRoute>
       </Route>
       <Route path="/mover-profile">
         <ProtectedRoute allowedRoles={["mover"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <MoverProfileSetup />
-          </Suspense>
+          <MoverProfileSetup />
         </ProtectedRoute>
       </Route>
       <Route path="/mover-settings">
         <ProtectedRoute allowedRoles={["mover"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <MoverProfile />
-          </Suspense>
+          <MoverProfile />
         </ProtectedRoute>
       </Route>
+
+      {/* Admin-Only Routes */}
       <Route path="/admin">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminDashboard />
-          </Suspense>
+          <AdminDashboard />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/support">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminSupportDashboard />
-          </Suspense>
+          <AdminSupportDashboard />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/verification">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminVerificationDashboard />
-          </Suspense>
+          <AdminVerificationDashboard />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/users">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminUsersPage />
-          </Suspense>
+          <AdminUsersPage />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/movers">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminMoversPage />
-          </Suspense>
+          <AdminMoversPage />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/moves">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminMovesPage />
-          </Suspense>
+          <AdminMovesPage />
         </ProtectedRoute>
       </Route>
       <Route path="/admin/revenue">
         <ProtectedRoute allowedRoles={["admin"]}>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <AdminRevenuePage />
-          </Suspense>
+          <AdminRevenuePage />
         </ProtectedRoute>
       </Route>
+
+      {/* Shared Routes (Customer & Mover) */}
       <Route path="/messages/:bookingId">
         <ProtectedRoute allowedRoles={["customer", "mover"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <Messages />
-          </Suspense>
+          <Messages />
         </ProtectedRoute>
       </Route>
       <Route path="/review/:bookingId">
         <ProtectedRoute allowedRoles={["customer", "mover"]}>
-          <Suspense fallback={<PageSkeleton />}>
-            <Review />
-          </Suspense>
+          <Review />
         </ProtectedRoute>
       </Route>
-      <Route>
-        <Suspense fallback={<PageSkeleton />}>
-          <NotFound />
-        </Suspense>
-      </Route>
+
+      {/* 404 */}
+      <Route component={NotFound} />
     </Switch>
   );
 }
 
+// CRITICAL: Libraries array MUST be defined outside component to prevent reloads
+// Include all required libraries to avoid loader conflicts
+const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "visualization")[] = ["places", "geometry"];
+
 function App() {
-  useEffect(() => {
-    prefetchCriticalData();
-  }, []);
+  const [showSplash, setShowSplash] = useState(true);
+  
+  // Load Google Maps JavaScript API with Places library
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
+
+  // Show splash screen while loading
+  if (showSplash) {
+    return (
+      <SplashScreen 
+        onComplete={() => setShowSplash(false)} 
+        minDisplayTime={2500}
+      />
+    );
+  }
+
+  if (loadError) {
+    console.error("Google Maps API Error:", loadError);
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-lg text-destructive">Failed to load Google Maps</div>
+          <div className="text-sm text-muted-foreground mt-2">Please check your API key configuration</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Wait for Google Maps to load before rendering
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-lg text-muted-foreground">Loading maps...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <GoogleMapsProvider>
-          <AuthProvider>
-            <TooltipProvider>
-              <ErrorBoundary>
-                <ScrollToTop />
-                <Header />
-                <div className="pb-16 md:pb-0">
-                  <PageTransition>
-                    <Router />
-                  </PageTransition>
-                </div>
-                <MobileBottomNav />
-              </ErrorBoundary>
-              <Toaster />
-            </TooltipProvider>
-          </AuthProvider>
-        </GoogleMapsProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <ScrollToTop />
+              <Header />
+              <div className="pb-16 md:pb-0">
+                <PageTransition>
+                  <Router />
+                </PageTransition>
+              </div>
+              <MobileBottomNav />
+            </ErrorBoundary>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

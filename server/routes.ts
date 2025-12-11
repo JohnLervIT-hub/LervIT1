@@ -54,7 +54,6 @@ import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
-import { cache, CacheKeys } from "./cache";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -699,33 +698,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       
-      // OPTIMIZED: Batch fetch all mover users in a single query
-      const moverUserIds = movers.map(m => m.userId);
-      const moverUsers = moverUserIds.length > 0 
-        ? await (storage as any).getUsersByIds(moverUserIds) 
-        : [];
-      const userMap = new Map(moverUsers.map((u: any) => [u.id, u]));
-      
-      // Enrich movers with user data and calculate distance (now O(1) lookups)
-      let enrichedMovers = movers.map((mover) => {
-        const user = userMap.get(mover.userId);
-        
-        let distance: number | null = null;
-        if (userLat && userLng && mover.latitude !== null && mover.longitude !== null) {
-          distance = calculateDistance(
-            userLat,
-            userLng,
-            mover.latitude,
-            mover.longitude
-          );
-        }
-        
-        return {
-          ...mover,
-          distance,
-          user: user ? { name: user.name, email: user.email, phone: user.phone } : null
-        };
-      });
+      // Enrich movers with user data and calculate distance
+      let enrichedMovers = await Promise.all(
+        movers.map(async (mover) => {
+          const user = await storage.getUser(mover.userId);
+          
+          let distance: number | null = null;
+          if (userLat && userLng && mover.latitude !== null && mover.longitude !== null) {
+            distance = calculateDistance(
+              userLat,
+              userLng,
+              mover.latitude,
+              mover.longitude
+            );
+          }
+          
+          return {
+            ...mover,
+            distance,
+            user: user ? { name: user.name, email: user.email, phone: user.phone } : null
+          };
+        })
+      );
       
       // Sort by distance if coordinates provided
       if (userLat && userLng) {
@@ -1531,51 +1525,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
-      // OPTIMIZED: Batch lookup ONLY the users and movers needed (targeted IN queries)
-      const customerIds = Array.from(new Set(bookings.map(b => b.customerId)));
-      const moverIds = Array.from(new Set(bookings.filter(b => b.moverId).map(b => b.moverId as string)));
-      
-      // Fetch only needed users and movers in parallel
-      const [neededUsers, neededMovers] = await Promise.all([
-        (storage as any).getUsersByIds(customerIds),
-        (storage as any).getMoversByIds(moverIds)
-      ]);
-      
-      // Get mover user IDs for secondary lookup
-      const moverUserIds = neededMovers.map((m: any) => m.userId);
-      const moverUsers = moverUserIds.length > 0 
-        ? await (storage as any).getUsersByIds(moverUserIds) 
-        : [];
-      
-      // Create lookup maps for O(1) access
-      const userMap = new Map([...neededUsers, ...moverUsers].map((u: any) => [u.id, u]));
-      const moverMap = new Map(neededMovers.map((m: any) => [m.id, m]));
-      
-      // Enrich with customer and mover data (now O(1) lookups)
-      const enrichedBookings = bookings.map((booking) => {
-        const customer = userMap.get(booking.customerId);
-        const mover = booking.moverId ? moverMap.get(booking.moverId) : null;
-        const moverUser = mover ? userMap.get(mover.userId) : null;
-        
-        return {
-          ...booking,
-          customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
-          mover: mover && moverUser ? {
-            id: mover.id,
-            userId: moverUser.id,
-            name: moverUser.name,
-            phone: moverUser.phone,
-            moverImage: mover.moverImage,
-            vehicleType: mover.vehicleType,
-            vehicleColor: mover.vehicleColor,
-            vehicleCapacity: mover.vehicleCapacity,
-            licensePlate: mover.licensePlate,
-            rating: mover.rating,
-            completedTrips: mover.completedTrips,
-            isVerified: mover.isVerified
-          } : null
-        };
-      });
+      // Enrich with customer and mover data
+      const enrichedBookings = await Promise.all(
+        bookings.map(async (booking) => {
+          const customer = await storage.getUser(booking.customerId);
+          const mover = booking.moverId ? await storage.getMover(booking.moverId) : null;
+          const moverUser = mover ? await storage.getUser(mover.userId) : null;
+          
+          return {
+            ...booking,
+            customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
+            mover: mover && moverUser ? {
+              id: mover.id,
+              userId: moverUser.id,
+              name: moverUser.name,
+              phone: moverUser.phone,
+              moverImage: mover.moverImage,
+              vehicleType: mover.vehicleType,
+              vehicleColor: mover.vehicleColor,
+              vehicleCapacity: mover.vehicleCapacity,
+              licensePlate: mover.licensePlate,
+              rating: mover.rating,
+              completedTrips: mover.completedTrips,
+              isVerified: mover.isVerified
+            } : null
+          };
+        })
+      );
       
       res.json(enrichedBookings);
     } catch (error) {

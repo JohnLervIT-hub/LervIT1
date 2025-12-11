@@ -50,22 +50,13 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: 60000,
-      refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
-      retry: 1,
-      retryDelay: 1000,
+      refetchInterval: 30000, // Auto-refresh every 30 seconds
+      refetchOnWindowFocus: true, // Refresh when user switches back to tab
+      staleTime: 15000, // Data considered stale after 15 seconds
+      retry: false,
     },
     mutations: {
       retry: false,
     },
   },
 });
-
-export function prefetchCriticalData() {
-  queryClient.prefetchQuery({
-    queryKey: ['/api/auth/me'],
-    staleTime: 5 * 60 * 1000,
-  });
-}
