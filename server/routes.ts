@@ -1411,13 +1411,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pickupGeo = await geocodeAddress(bookingData.pickupAddress);
       const dropoffGeo = await geocodeAddress(bookingData.dropoffAddress);
       
-      console.log(`[Booking] Geocoded pickup: "${bookingData.pickupAddress}" → ${pickupGeo.coordinates.lat}, ${pickupGeo.coordinates.lng} (${pickupGeo.success ? 'Google Maps' : 'fallback'})`);
-      console.log(`[Booking] Geocoded dropoff: "${bookingData.dropoffAddress}" → ${dropoffGeo.coordinates.lat}, ${dropoffGeo.coordinates.lng} (${dropoffGeo.success ? 'Google Maps' : 'fallback'})`);
+      logEvent.booking('geocoded_addresses', {
+        pickupAddress: bookingData.pickupAddress,
+        pickupCoords: pickupGeo.coordinates,
+        pickupSource: pickupGeo.success ? 'google_maps' : 'fallback',
+        dropoffAddress: bookingData.dropoffAddress,
+        dropoffCoords: dropoffGeo.coordinates,
+        dropoffSource: dropoffGeo.success ? 'google_maps' : 'fallback',
+      });
       
       // Calculate driving distance and duration using Google Distance Matrix API
       const drivingDistanceResult = await getDrivingDistance(pickupGeo.coordinates, dropoffGeo.coordinates);
       
-      console.log(`[Booking] Distance: ${drivingDistanceResult.distanceKm} km, Duration: ${drivingDistanceResult.durationMinutes} min (${drivingDistanceResult.success ? 'Google Maps' : 'Haversine fallback'})`);
+      logEvent.booking('distance_calculated', {
+        distanceKm: drivingDistanceResult.distanceKm,
+        durationMinutes: drivingDistanceResult.durationMinutes,
+        source: drivingDistanceResult.success ? 'google_maps' : 'haversine_fallback',
+      });
       const distance = drivingDistanceResult.distanceKm;
       const priceBreakdown = calculatePrice(
         distance,
@@ -1462,6 +1472,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notifiedAt: new Date(),
       } as any);
       
+      logEvent.booking('created', {
+        bookingId: booking.id,
+        customerId: user.id,
+        loadSize: bookingData.loadSize,
+        distanceKm: distance,
+        totalPrice: priceBreakdown.totalCost,
+        vehicleClass: priceBreakdown.vehicleClass,
+        status: BOOKING_STATUSES.PENDING_PAYMENT,
+      });
+      
       // Note: Confirmation email and mover matching happen AFTER payment succeeds (in Stripe webhook)
       // Do NOT send booking confirmation here - booking is still pending payment
       res.json({
@@ -1469,6 +1489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Booking created. Please complete payment to find movers.",
       });
     } catch (error) {
+      logEvent.error('booking_creation', error, { userId: (req as any).user?.id });
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });

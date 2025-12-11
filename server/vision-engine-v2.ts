@@ -44,6 +44,7 @@ import {
   getTypicalDimensions 
 } from "./dimension-corrector";
 import { ObjectStorageService } from "./objectStorage";
+import { logEvent } from "./logger";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
@@ -569,13 +570,19 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         processingTime: Date.now() - startTime,
       };
       
-      console.log('[Vision Engine 2.0] ✓ Database match path:',
-        result.itemName,
-        `| qty: ${quantity}`,
-        `| ${perItemWeight}kg/item → ${totalWeight}kg total`,
-        `| ${perItemVolume}ft³/item → ${totalVolume}ft³ total`,
-        `| ${result.load_size}`,
-        `| ${result.vehicle}`);
+      logEvent.vision('database_match', {
+        itemName: result.itemName,
+        matchedItem: item.item_id,
+        quantity,
+        perItemWeightKg: perItemWeight,
+        totalWeightKg: totalWeight,
+        perItemVolumeFt3: perItemVolume,
+        totalVolumeFt3: totalVolume,
+        loadSize: result.load_size,
+        vehicle: result.vehicle,
+        confidence: confidence,
+        processingTimeMs: result.processingTime,
+      });
     } else {
       // LAYER 2-3 PATH: Use Vision estimates with dimension corrections
       const estimated = visionResult.estimatedDimensions || getTypicalDimensions(visionResult.category);
@@ -675,20 +682,25 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         processingTime: Date.now() - startTime,
       };
       
-      console.log('[Vision Engine 2.0] ✓ Vision estimate path:',
-        result.itemName,
-        `| qty: ${quantity}`,
-        `| ${perItemWeight}kg/item → ${totalWeight}kg total`,
-        `| ${perItemVolume}ft³/item → ${totalVolume}ft³ total`,
-        `| ${result.load_size}`,
-        `| ${result.vehicle}`,
-        corrected.corrections.length > 0 ? `| ${corrected.corrections.length} corrections` : '');
+      logEvent.vision('estimate_with_corrections', {
+        itemName: result.itemName,
+        quantity,
+        perItemWeightKg: perItemWeight,
+        totalWeightKg: totalWeight,
+        perItemVolumeFt3: perItemVolume,
+        totalVolumeFt3: totalVolume,
+        loadSize: result.load_size,
+        vehicle: result.vehicle,
+        confidence: result.confidence,
+        correctionsApplied: corrected.corrections.length,
+        processingTimeMs: result.processingTime,
+      });
     }
     
     return result;
     
   } catch (error: any) {
-    console.error('[Vision Engine 2.0] Pipeline error:', error.message);
+    logEvent.error('vision_engine', error, { photoUrl });
     
     // Return fallback result
     const fallbackDims = getTypicalDimensions('Other');

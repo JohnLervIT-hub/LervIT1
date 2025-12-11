@@ -49,6 +49,14 @@ export const logEvent = {
     logger.info({ event: 'auth', action, ...data }, `Auth: ${action}`);
   },
   
+  vision: (action: string, data: Record<string, unknown>) => {
+    logger.info({ event: 'vision_engine', action, ...data }, `Vision: ${action}`);
+  },
+  
+  pricing: (action: string, data: Record<string, unknown>) => {
+    logger.info({ event: 'pricing', action, ...data }, `Pricing: ${action}`);
+  },
+  
   error: (context: string, error: Error | unknown, data?: Record<string, unknown>) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
