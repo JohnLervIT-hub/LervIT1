@@ -460,12 +460,10 @@ export default function MyBookings() {
                             <span className="text-muted-foreground">Distance ({booking.distance ? parseFloat(booking.distance).toFixed(1) : '0'} km)</span>
                             <span className="font-medium" data-testid={`text-breakdown-distance-${booking.id}`}>${parseFloat(booking.distanceFee || "0").toFixed(2)}</span>
                           </div>
-                          {parseFloat(booking.loadFee || "0") > 0 && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Load Fee ({booking.loadSize})</span>
-                              <span className="font-medium" data-testid={`text-breakdown-load-${booking.id}`}>${parseFloat(booking.loadFee || "0").toFixed(2)}</span>
-                            </div>
-                          )}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Load Size ({booking.loadSize || 'Standard'})</span>
+                            <span className="font-medium" data-testid={`text-breakdown-load-${booking.id}`}>${parseFloat(booking.loadFee || "0").toFixed(2)}</span>
+                          </div>
                           {parseFloat(booking.pickupDifficultyFee || "0") > 0 && (
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Pickup Difficulty</span>
