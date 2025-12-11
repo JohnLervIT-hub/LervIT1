@@ -28,6 +28,9 @@ if (!process.env.SESSION_SECRET) {
 
 const app = express();
 
+// Sentry request + tracing middleware
+setupSentryRequestHandlers(app);
+
 // Trust the first proxy (Replit's proxy) - required for secure cookies behind a proxy
 app.set('trust proxy', 1);
 
@@ -108,9 +111,6 @@ app.use('/api', generalApiLimiter);
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
-
-// Sentry request + tracing handlers (must be BEFORE routes for performance monitoring)
-setupSentryRequestHandlers(app);
 
 app.use((req, res, next) => {
   const start = Date.now();
