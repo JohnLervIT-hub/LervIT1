@@ -2109,8 +2109,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               estimatedEarnings: booking.price || '0',
               expiresAt,
             });
+            
+            // Send email notification to mover
+            const moverUser = await storage.getUser(mover.userId);
+            if (moverUser) {
+              try {
+                await notificationService.sendJobAssignment(
+                  moverUser,
+                  booking,
+                  booking.price || '0'
+                );
+              } catch (emailErr) {
+                console.error(`[Payment] Failed to email mover ${mover.userId}:`, emailErr);
+              }
+            }
           }
-          console.log(`[Payment] Notified ${moversToNotify.length} movers about job`);
+          console.log(`[Payment] Notified ${moversToNotify.length} movers about job (with emails)`);
         }
       } catch (moverErr) {
         console.error("[Payment] Failed to notify movers:", moverErr);
@@ -2359,6 +2373,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distanceToPickup: '0',
             estimatedEarnings: booking.price || '0',
           });
+          
+          // Send email notification to mover
+          const moverUser = await storage.getUser(mover.userId);
+          if (moverUser) {
+            try {
+              await notificationService.sendJobAssignment(
+                moverUser,
+                booking,
+                booking.price || '0'
+              );
+            } catch (emailErr) {
+              console.error(`Failed to email mover ${mover.userId}:`, emailErr);
+            }
+          }
         }
         
         res.json({ success: true, status: 'succeeded' });

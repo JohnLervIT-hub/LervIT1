@@ -118,26 +118,104 @@ class NotificationService {
     });
   }
 
-  // Job assignment email to mover
-  async sendJobAssignment(mover: User, booking: Partial<Booking>, estimatedEarnings: string): Promise<void> {
-    const subject = `New Job Opportunity - Earn $${estimatedEarnings}`;
+  // Job assignment email to mover - urgent notification with 10min expiry
+  async sendJobAssignment(mover: User, booking: Partial<Booking>, estimatedEarnings: string, distanceToPickup?: string): Promise<void> {
+    const baseUrl = process.env.BASE_URL || 
+      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    const dashboardUrl = `${baseUrl}/mover-dashboard`;
+    
+    const formattedDate = booking.preferredDate 
+      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        })
+      : 'ASAP';
+    
+    const subject = `[URGENT] NEW JOB - Earn $${estimatedEarnings} CAD (Expires in 10 min)`;
     const body = `
-      <h2>New Job Available!</h2>
-      <p>Hi ${mover.name},</p>
-      <p>A new moving job matching your profile is available.</p>
-      
-      <h3>Job Details:</h3>
-      <ul>
-        <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
-        <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
-        <li><strong>Date:</strong> ${booking.preferredDate}</li>
-        <li><strong>Load Size:</strong> ${booking.loadSize}</li>
-        <li><strong>Estimated Earnings:</strong> $${estimatedEarnings} CAD</li>
-      </ul>
-      
-      <p>Log in to your LervIT dashboard to accept this job before it expires.</p>
-      
-      <p>Good luck!</p>
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header with urgency -->
+          <tr>
+            <td style="background-color:#EA580C;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">New Job Available!</h1>
+              <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">TIME SENSITIVE - This opportunity expires in 10 minutes</p>
+            </td>
+          </tr>
+          <!-- Earnings highlight -->
+          <tr>
+            <td style="background-color:#FFF7ED;padding:20px;text-align:center;border-bottom:1px solid #EA580C;">
+              <p style="color:#9A3412;margin:0;font-size:14px;">Your Estimated Earnings</p>
+              <p style="color:#EA580C;margin:5px 0 0 0;font-size:36px;font-weight:bold;">$${estimatedEarnings} CAD</p>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:30px;">
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${mover.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">A customer near you needs help moving. Here are the details:</p>
+              
+              <h3 style="color:#333333;font-size:16px;margin:0 0 15px 0;border-bottom:1px solid #eee;padding-bottom:10px;">Job Details</h3>
+              <table width="100%" style="margin-bottom:25px;">
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Pickup:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.pickupAddress}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Dropoff:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.dropoffAddress}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>When:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${formattedDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Load Size:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.loadSize || 'Standard'}</td>
+                </tr>
+                ${distanceToPickup ? `<tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Distance to Pickup:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${distanceToPickup} km</td>
+                </tr>` : ''}
+              </table>
+              
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 25px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${dashboardUrl}" style="display:inline-block;background-color:#EA580C;color:#ffffff;font-size:18px;font-weight:bold;text-decoration:none;padding:15px 40px;border-radius:6px;">Accept This Job</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color:#888888;font-size:13px;line-height:20px;margin:0;text-align:center;">
+                IMPORTANT: First mover to accept gets the job. Don't miss out!
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+              <p style="color:#888888;font-size:11px;margin:5px 0 0 0;">Calgary's Smart Moving Platform</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `;
 
     await this.sendEmail({
