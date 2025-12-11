@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
+import { BrowserTracing } from "@sentry/tracing";
 import App from "./App";
 import "./index.css";
 
@@ -10,9 +11,9 @@ if (sentryDsn) {
     dsn: sentryDsn,
     environment: import.meta.env.MODE,
     integrations: [
-      Sentry.browserTracingIntegration(),
+      new BrowserTracing(),
     ],
-    tracesSampleRate: import.meta.env.MODE === 'production' ? 0.1 : 1.0,
+    tracesSampleRate: import.meta.env.MODE === 'production' ? 0.2 : 1.0,
   });
 }
 

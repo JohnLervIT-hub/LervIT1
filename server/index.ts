@@ -6,7 +6,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { initBackgroundJobs } from "./background-jobs";
 import { logger, logEvent } from "./logger";
-import { initSentry, setupSentryErrorHandler } from "./sentry";
+import { initSentry, setupSentryRequestHandlers, setupSentryErrorHandler } from "./sentry";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
@@ -108,6 +108,9 @@ app.use('/api', generalApiLimiter);
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
+
+// Sentry request + tracing handlers (must be BEFORE routes for performance monitoring)
+setupSentryRequestHandlers(app);
 
 app.use((req, res, next) => {
   const start = Date.now();
