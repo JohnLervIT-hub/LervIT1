@@ -9,7 +9,16 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-The platform features a mobile-first design using shadcn/ui components, ensuring a consistent and responsive user experience. It includes role-based navigation, protected routes, transparent pricing breakdowns, and an intuitive booking flow. A comprehensive typography system, responsive layouts, and various accessibility improvements (e.g., `ErrorBoundary`, `FormFieldError`, `aria-labels` for icon buttons) have been implemented. A premium admin portal features investor-ready styling with gradient headers and colorful stat cards. User experience is enhanced with a `DashboardSkeleton` component, sticky mobile progress bar, currency formatting utility, dark mode toggle, mobile bottom tab navigation, and Framer Motion-powered micro-animations for page transitions.
+The platform features a mobile-first design using shadcn/ui components, ensuring a consistent and responsive user experience. It includes role-based navigation, protected routes, transparent pricing breakdowns, and an intuitive booking flow. A comprehensive typography system, responsive layouts, and various accessibility improvements (e.g., `ErrorBoundary`, `FormFieldError`, `aria-labels` for icon buttons) have been implemented. A premium admin portal features investor-ready styling with gradient headers and colorful stat cards. User experience is enhanced with:
+- `DashboardSkeleton` component for loading states
+- `LoadingOverlay` component with specialized variants (Vision, Payment, Booking)
+- Sticky mobile progress bar for booking flow
+- Currency formatting utility
+- Dark mode toggle with Light/Dark/System options
+- Mobile bottom tab navigation
+- Framer Motion-powered micro-animations for page transitions
+- User-friendly error messages throughout the application
+- Clean production build (no console.logs in client code)
 
 ### Technical Implementations
 *   **Frontend:** React 18+ (TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS).
