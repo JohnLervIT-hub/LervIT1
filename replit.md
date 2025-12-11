@@ -146,4 +146,39 @@ curl -X POST https://your-app.replit.app/api/stripe-webhook \
 - `server/middleware/security.ts` - CORS, rate limiting, security headers
 - `server/config/stripe.ts` - Stripe client, commission configuration
 - `server/routes.ts` - Security documentation header, endpoint protection
+
+## Operational Tooling
+
+### Structured Logging
+Pino-based JSON structured logging with event-specific loggers:
+- `logEvent.payment()` - Payment processing, Stripe webhooks, transfers
+- `logEvent.booking()` - Booking creation, geocoding, distance calculation
+- `logEvent.notification()` - Email and job notification delivery
+- `logEvent.vision()` - Vision Engine 2.0 item identification results
+- `logEvent.matching()` - Mover matching and vehicle availability
+- `logEvent.cleanup()` - Background job execution
+- `logEvent.error()` - Error capture with stack traces
+
+### Testing Infrastructure
+- **Smoke Tests**: `npx tsx tests/smoke-tests.ts` - Verifies 8 critical API endpoints
+- **Load Tests**: `k6 run tests/load-test.js` - Simulates 50 concurrent users
+- **Run smoke tests before deployment** to catch issues early
+
+### Documentation
+- `docs/neon-pitr-backup.md` - Database backup and recovery procedures
+- `docs/google-places-migration.md` - Places API migration plan (Q4 2025)
+
+### Production Monitoring Commands
+```bash
+# Run smoke tests
+npx tsx tests/smoke-tests.ts
+
+# Run load tests (requires k6 installed)
+k6 run tests/load-test.js
+
+# View structured logs (production JSON format)
+tail -f /var/log/app.log | jq .
+
+# Check for errors in logs
+grep '"level":"error"' /var/log/app.log | jq .
 ```
