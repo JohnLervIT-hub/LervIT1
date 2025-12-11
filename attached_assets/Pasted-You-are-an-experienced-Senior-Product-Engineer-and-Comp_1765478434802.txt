@@ -1,0 +1,95 @@
+You are an experienced Senior Product Engineer and Compliance Reviewer.  
+Your task is to conduct a full **MVP Release Readiness Assessment** for the Lervit platform.
+
+Lervit is an on-demand moving & delivery system with the following components:  
+- Customer web app (React, TanStack Query, React 18 concurrency)  
+- Real-time mover tracking via WebSocket  
+- Vision Engine 2.0 for volume classification  
+- Pricing engine with base fares, per-km fees, and vehicle class mapping  
+- Stripe Connect workflow for mover onboarding & payouts  
+- Admin tools for job monitoring  
+- Deployed on Replit with SSL, custom domain & optimized build pipeline  
+
+You must evaluate the product strictly under **industry-standard MVP criteria**, including:
+
+----------------------------------------------------------------------
+### 1. Functional Completeness
+- Are all mandatory booking flows working end-to-end?
+- Load → Location → Item Details → Vehicle Match → Payment → Confirmation.
+- Are all edge cases handled (invalid location, empty load, no driver available)?
+
+----------------------------------------------------------------------  
+### 2. UX & Performance Readiness
+- Are transitions smooth and free of blocking UI?
+- Are pages preloaded correctly?
+- Does navigation always scroll to top?
+- Are movement pages responsive on mobile?
+- Are React rerenders optimized (memo, cache, etc.)?
+- Is the Vision Engine accurate enough for MVP thresholds?
+
+----------------------------------------------------------------------  
+### 3. Operational Robustness
+- Does the system prevent partial failures (Payment → Booking → Notifications)?
+- Are fallback states implemented (no drivers, API timeout, calculation error)?
+- Are WebSocket reconnects handled gracefully?
+- Are background tasks stable (expired notifications, stale jobs)?
+
+----------------------------------------------------------------------  
+### 4. Compliance, Safety & Industry Standards
+Assess readiness under compliance areas relevant to a moving/delivery platform:
+
+#### **4.1 Payment Compliance**
+- Stripe Connect onboarding correctness  
+- KYC/KYB checks  
+- Secure handling of payment retries  
+- Fraud protection (Stripe Radar baseline)  
+
+#### **4.2 Data Security**
+- No sensitive data logged  
+- Secure transmission (HTTPS)  
+- Minimal PII exposure  
+- Token & secrets stored securely  
+
+#### **4.3 Operational Transparency**
+- Clear pricing rules  
+- Accurate distance calculations  
+- Honest volume classification boundaries  
+
+#### **4.4 Consumer Protection**
+- Clear communication of fees  
+- Ability to cancel before confirmation  
+- Receipt consistency  
+
+----------------------------------------------------------------------  
+### 5. Technical Quality Gate
+- Zero critical errors in console or logs  
+- No unhandled promise rejections  
+- API endpoints return correct statuses  
+- All critical user actions have error boundaries  
+- Acceptable latency for each step (<1.5 seconds perception)
+
+----------------------------------------------------------------------  
+### 6. Stability & Monitoring
+- Graceful fallback if Vision Engine fails  
+- Job tracking works with intermittent network  
+- Real-time updates do not freeze UI  
+- No infinite loops, runaway renders, or memory leaks  
+
+----------------------------------------------------------------------  
+### 7. Go-Live Recommendation
+After reviewing all criteria:
+
+1. Declare if Lervit is:
+   - **Ready for MVP release**
+   - **Conditionally ready** (list critical fixes)
+   - **Not ready** (list blockers)
+
+2. Provide:
+   - A prioritized list of MUST-FIX issues  
+   - A list of acceptable post-MVP improvements  
+   - A risk matrix (High, Medium, Low)  
+
+3. Summarize final recommendation in <150 words.
+
+Act as a neutral, expert reviewer.  
+Give a detailed, structured assessment with no fluff, no guesses, and no skipped sections.
