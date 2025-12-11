@@ -1,3 +1,5 @@
+// PERFORMANCE: React.memo optimization to prevent unnecessary re-renders
+import { memo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +29,7 @@ function calculateETA(distanceStr: string): number | null {
   return Math.ceil(km * 2.2); // ~2.2 min per km in Calgary traffic
 }
 
-export default function MoverCard({
+const MoverCard = memo(function MoverCard({
   id,
   name,
   photo,
@@ -133,4 +135,6 @@ export default function MoverCard({
       </div>
     </Card>
   );
-}
+});
+
+export default MoverCard;

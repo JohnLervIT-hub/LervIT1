@@ -1,3 +1,4 @@
+// PERFORMANCE: Preload Payment page when step >= 2
 import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -98,6 +99,16 @@ export default function RequestMove() {
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
   const [dropoffAccessError, setDropoffAccessError] = useState(false);
+
+  // PERFORMANCE: Preload Payment page when user reaches step 2 for instant navigation
+  useEffect(() => {
+    if (step >= 2) {
+      // Eagerly import the Payment page to warm up the bundle
+      import("@/pages/Payment").catch(() => {
+        // Silent fail - preloading is optional optimization
+      });
+    }
+  }, [step]);
 
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {

@@ -1,3 +1,5 @@
+// PERFORMANCE: React.memo optimization to prevent unnecessary re-renders
+import { memo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,7 +13,7 @@ interface PricingSummaryProps {
   className?: string;
 }
 
-export function PricingSummary({ breakdown, isCalculating, error, className }: PricingSummaryProps) {
+export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className }: PricingSummaryProps) {
   if (error) {
     return (
       <Card className={`${className} border-destructive/30`} data-testid="pricing-error">
@@ -199,4 +201,4 @@ export function PricingSummary({ breakdown, isCalculating, error, className }: P
       </CardContent>
     </Card>
   );
-}
+});
