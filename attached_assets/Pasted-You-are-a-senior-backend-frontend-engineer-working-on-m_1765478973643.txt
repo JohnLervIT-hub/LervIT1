@@ -1,0 +1,156 @@
+You are a senior backend + frontend engineer working on my production app **LervIT** (on-demand moving & delivery).
+
+A prior readiness assessment gave LervIT **92/100 (A-, Production Ready)** with these remaining gaps:
+
+-3 points: Polling instead of robust WebSocket reconnects  
+-3 points: Google Places API deprecation warning  
+-2 points: No retry on transient API failures  
+
+Your job now is to perform a **FINAL optimization & hardening pass** to close these issues WITHOUT changing any business logic (pricing, vehicle mapping, Vision Engine, Stripe flows).
+
+Keep everything backward compatible and safe for production.
+
+----------------------------------------------------------------------
+0. Discovery – understand the current implementation
+----------------------------------------------------------------------
+
+1. Locate the following in the codebase:
+   - WebSocket client logic for mover tracking / job notifications.
+   - Any fallbacks that use polling instead of WebSocket reconnects.
+   - HTTP client / API wrapper used for server calls (fetch/axios/TanStack Query).
+   - All usage of **Google Places API** (autocomplete, geocoding, place details, etc.).
+
+2. Add a short comment at the top of each file you modify:
+   // LervIT final hardening: updated by Replit AI (WebSocket/retries/Places)
+
+----------------------------------------------------------------------
+1. Fix: Polling instead of robust WebSocket reconnects
+----------------------------------------------------------------------
+
+Goal: Use a **stable WebSocket connection** with automatic reconnect and only fall back to polling if absolutely necessary.
+
+1. Create or update a dedicated WebSocket client module, e.g. `src/lib/realtimeClient.ts` (or use existing one):
+
+   - Implement:
+     - Automatic reconnect with **exponential backoff** (e.g., 1s, 2s, 4s, max 30s).
+     - A capped number of retries or max backoff delay.
+     - Clean event handlers: `onOpen`, `onMessage`, `onError`, `onClose`.
+     - A way for UI components to subscribe/unsubscribe to specific events (e.g., job updates, mover location).
+
+   - Ensure that reconnect attempts do **not** crash the app if the server is temporarily unreachable.
+
+2. Replace any logic that:
+   - Stops using WebSocket after the first disconnect and falls back to **permanent polling**.
+   - Or uses unnecessary polling when WebSockets are available.
+
+3. Optional but recommended:
+   - Implement a **graceful fallback**: if WebSocket repeatedly fails after N retries or certain errors, log the failure and **only then** fall back to lightweight polling with a reasonable interval.
+
+4. Verify:
+   - When network is interrupted and restored, WebSocket reconnects automatically.
+   - No duplicate event listeners or multiple simultaneous connections remain.
+   - No memory leaks.
+
+----------------------------------------------------------------------
+2. Fix: No retry on transient API failures
+----------------------------------------------------------------------
+
+Goal: For **transient** network errors or 5xx responses, add a limited, safe retry mechanism.
+
+1. Identify the main HTTP client layer or TanStack Query fetch functions.
+
+2. Implement a small **retry utility**, for example:
+
+   - Retries only for:
+     - Network errors (e.g., fetch failed, ECONNRESET).
+     - HTTP 5xx status codes.
+   - Uses **limited retries** (e.g., max 2–3 attempts).
+   - Uses simple incremental or exponential backoff (e.g., 300ms, 600ms, 1200ms).
+   - Never retries:
+     - 4xx errors (validation issues, auth issues).
+     - Idempotent rules: only apply to GET/HEAD and safe operations, not to charge/withdraw actions.
+
+3. Integrate this retry logic into:
+   - The shared HTTP client used by TanStack Query or other fetches.
+   - OR per-query fetch functions where appropriate.
+
+4. VERY IMPORTANT:
+   - **Do not** double-charge cards or duplicate bookings.
+   - Do **not** wrap Stripe charge or booking commit calls in automatic retries unless they’re already idempotent and use idempotency keys.
+   - Prefer retries for read-type or configuration endpoints (e.g., pricing, lookup, address validation, job status).
+
+5. Testing:
+   - Simulate a temporary 500 error or network failure and confirm:
+     - The client retries according to the rules.
+     - On repeated failure, the app shows a clear error message instead of silently failing.
+
+----------------------------------------------------------------------
+3. Fix: Google Places API deprecation warning
+----------------------------------------------------------------------
+
+Goal: Hardening and future-proofing. We may not fully migrate today, but we must be ready and remove risky usage patterns.
+
+1. Find all Google Places usages:
+   - Autocomplete, geocoding, place details, distance matrix, etc.
+   - Identify which **exact endpoint / library** is used (e.g., Places SDK for Web, Places API via REST, deprecated fields).
+
+2. Introduce a small **abstraction layer**:
+
+   - Create a module, e.g. `src/lib/locationProvider.ts` that exposes high-level methods:
+     - `autocompleteAddress(query, options)`
+     - `geocodePlaceId(placeId)`
+     - `reverseGeocode(lat, lng)`
+   - Move all direct Google Places calls into this module.
+
+3. Within this abstraction:
+   - Add clear TODO / comments documenting:
+     - Which API features are marked as deprecated.
+     - Which modern alternative should be used (e.g., new Places endpoints, Map Platform equivalents).
+   - Ensure errors from Google Places are caught and surfaced cleanly to the UI (no unhandled rejections).
+
+4. Where reasonable, reduce tight coupling:
+   - Avoid scattering Google Places SDK usage across multiple components.
+   - Use the abstraction everywhere instead, so future migration is a single-module change.
+
+5. Confirm:
+   - The app still functions exactly as before for address search and map-related features.
+   - Any console warnings about deprecated Places usage are acknowledged and documented in comments.
+
+----------------------------------------------------------------------
+4. Light technical quality polish
+----------------------------------------------------------------------
+
+1. Scan for:
+   - Unhandled promise rejections in async functions.
+   - Console `error` logs that indicate real bugs (keep necessary logs, remove noisy ones).
+   - Any lingering TODOs in core booking flow that could cause runtime failure.
+
+2. Add **minimal structured logging** around critical paths:
+   - Payment → Booking creation → Notification dispatch.
+   - Only if logging is not already present.
+   - Ensure logs do **not** contain sensitive card data or full PII.
+
+----------------------------------------------------------------------
+5. Final verification
+----------------------------------------------------------------------
+
+1. Run the full booking flow:
+   - Home → location → load details → vehicle selection → payment → confirmation.
+   - Verify:
+     - No new regression in UX or business logic.
+     - WebSocket reconnects after network hiccups.
+     - Transient server errors are retried within safe limits.
+     - Address search still works and is now behind the abstraction module.
+
+2. Do NOT modify:
+   - Pricing formulas.
+   - Vision Engine classification logic.
+   - Stripe payment / payout logic, beyond safe retry rules on read-only endpoints.
+   - Any legal/compliance text in the UI.
+
+3. At the end, add a very short summary comment in a central file (e.g., `PERFORMANCE_NOTES.md` or main README section) describing:
+   - WebSocket reconnect improvements.
+   - Retry policy for transient failures.
+   - Google Places abstraction for future-proofing.
+
+When finished, stop editing.
