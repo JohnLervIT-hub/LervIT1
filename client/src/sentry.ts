@@ -1,11 +1,18 @@
 import * as Sentry from '@sentry/react';
-import { BrowserTracing } from '@sentry/tracing';
+
+const isProduction = import.meta.env.MODE === 'production';
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [new BrowserTracing()],
-  tracesSampleRate: 1.0,
+  integrations: [
+    Sentry.browserTracingIntegration(),
+  ],
+  tracesSampleRate: isProduction ? 0.1 : 1.0,
   environment: import.meta.env.MODE || 'development',
+  enabled: !!import.meta.env.VITE_SENTRY_DSN,
+  beforeSend(event) {
+    return event;
+  },
 });
 
 export { Sentry };
