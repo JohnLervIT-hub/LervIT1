@@ -171,8 +171,16 @@ app.use((req, res, next) => {
       logger.info({ port, env: process.env.NODE_ENV || 'development' }, `Server listening on port ${port}`);
       
       try {
-        await pool.query('SELECT 1');
-        logger.info('Database connection verified');
+        // Warm up database connections with parallel queries
+        // This pre-establishes connections to reduce first-request latency
+        const warmupStart = Date.now();
+        await Promise.all([
+          pool.query('SELECT 1'),
+          pool.query('SELECT COUNT(*) FROM movers WHERE is_available = true'),
+          pool.query('SELECT 1'), // Extra connection for pool warmup
+        ]);
+        const warmupTime = Date.now() - warmupStart;
+        logger.info({ warmupTime }, `Database connections warmed up in ${warmupTime}ms`);
         
         initBackgroundJobs();
       } catch (dbError) {

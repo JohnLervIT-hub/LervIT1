@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useStripe, Elements, PaymentElement, useElements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,17 +12,19 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield } from "lucide-react";
 import type { Booking } from "@shared/schema";
 
-// Initialize Stripe
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
-}
-
-// Initialize Stripe with configured key
-const stripeKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-
-// Validate Stripe key type (silent in production)
-
-const stripePromise = loadStripe(stripeKey);
+// Lazy-load Stripe only when payment page is accessed
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripe = () => {
+  if (!stripePromise) {
+    const key = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+    if (!key) {
+      console.error('Missing VITE_STRIPE_PUBLIC_KEY');
+      return Promise.resolve(null);
+    }
+    stripePromise = loadStripe(key);
+  }
+  return stripePromise;
+};
 
 const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
   const stripe = useStripe();
@@ -287,7 +289,7 @@ export default function Payment() {
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
             ) : (
-              <Elements stripe={stripePromise} options={{ clientSecret }}>
+              <Elements stripe={getStripe()} options={{ clientSecret }}>
                 <CheckoutForm bookingId={bookingId} />
               </Elements>
             )}

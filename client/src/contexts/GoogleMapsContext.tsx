@@ -43,9 +43,9 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    // Create script element
+    // Create script element with async loading parameter
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${GOOGLE_MAPS_LIBRARIES.join(",")}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${GOOGLE_MAPS_LIBRARIES.join(",")}&loading=async`;
     script.async = true;
     script.defer = true;
 
