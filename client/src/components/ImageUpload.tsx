@@ -64,7 +64,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
   const uploadFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     
-    console.log('[ImageUpload] Starting upload for', fileArray.length, 'files');
+    // Start upload process
     
     if (images.length + fileArray.length > maxImages) {
       toast({
@@ -115,9 +115,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
         
         try {
           if (isCompressibleFormat && file.size > 500 * 1024) {
-            console.log('[ImageUpload] Compressing', file.name, 'from', (file.size / 1024).toFixed(0), 'KB');
-            const compressed = await compressImage(file);
-            console.log('[ImageUpload] Compressed to', (compressed.size / 1024).toFixed(0), 'KB');
+              const compressed = await compressImage(file);
             processedFiles.push({ 
               blob: compressed, 
               name: file.name.replace(/\.[^/.]+$/, '') + '.jpg',
@@ -126,8 +124,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
           } else {
             processedFiles.push({ blob: file, name: file.name, wasCompressed: false });
           }
-        } catch (err) {
-          console.log('[ImageUpload] Compression failed, using original:', err);
+        } catch {
           processedFiles.push({ blob: file, name: file.name, wasCompressed: false });
         }
       }
@@ -139,7 +136,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
         formData.append('images', blob, name);
       });
 
-      console.log('[ImageUpload] Uploading', processedFiles.length, 'files...');
+      // Upload to server
       
       const response = await fetch('/api/upload/images', {
         method: 'POST',
@@ -149,13 +146,10 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       setUploadProgress(90);
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[ImageUpload] Upload failed:', response.status, errorText);
-        throw new Error(`Upload failed: ${response.status}`);
+        throw new Error('Upload failed. Please try again.');
       }
 
       const data = await response.json();
-      console.log('[ImageUpload] Upload successful:', data.urls);
       
       const newImages = [...images, ...data.urls];
       setImages(newImages);
@@ -168,14 +162,12 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       });
       
       if (onAnalyze) {
-        console.log('[ImageUpload] Triggering auto-analyze');
         onAnalyze(newImages);
       }
     } catch (error) {
-      console.error('[ImageUpload] Upload error:', error);
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload images. Please try again.",
+        description: error instanceof Error ? error.message : "Unable to upload images. Please check your connection and try again.",
         variant: "destructive",
       });
     } finally {

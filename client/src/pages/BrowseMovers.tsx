@@ -101,8 +101,7 @@ export default function BrowseMovers() {
             lng: position.coords.longitude,
           });
         },
-        (error) => {
-          console.log("Location permission denied:", error);
+        () => {
           setLocationDenied(true);
         }
       );

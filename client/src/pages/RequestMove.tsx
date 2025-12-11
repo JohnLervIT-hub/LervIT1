@@ -159,14 +159,11 @@ export default function RequestMove() {
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      console.log('[Booking] Submitting booking data:', JSON.stringify(bookingData, null, 2));
       const res = await apiRequest("POST", "/api/bookings", bookingData);
       const data = await res.json();
       if (!res.ok) {
-        console.error('[Booking] Server returned error:', data);
-        throw new Error(data.error || 'Failed to create booking');
+        throw new Error(data.error || 'Unable to create booking. Please try again.');
       }
-      console.log('[Booking] Booking created successfully:', data.id);
       return data;
     },
     onSuccess: (data) => {
@@ -174,10 +171,9 @@ export default function RequestMove() {
       setShowSuccessDialog(true);
     },
     onError: (error: Error) => {
-      console.error('[Booking] Mutation error:', error);
       toast({
         title: "Booking Failed",
-        description: error.message || "Failed to create booking. Please try again.",
+        description: error.message || "We couldn't process your booking. Please check your details and try again.",
         variant: "destructive",
       });
     },
@@ -359,7 +355,6 @@ export default function RequestMove() {
   // This function can be called manually or automatically after photo upload
   const handleIdentifyItems = async (photoUrls?: string[]) => {
     const urlsToAnalyze = photoUrls || images;
-    console.log('[ItemDetection] Starting identification, images:', urlsToAnalyze);
     
     if (urlsToAnalyze.length === 0) {
       toast({
@@ -374,21 +369,15 @@ export default function RequestMove() {
     setIdentifiedItems([]);
     
     try {
-      console.log('[ItemDetection] Sending API request...');
       const response = await apiRequest("POST", "/api/ai/items/identify", {
         photoUrls: urlsToAnalyze,
       });
       
-      console.log('[ItemDetection] Response status:', response.status);
-      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[ItemDetection] API error:', response.status, errorText);
-        throw new Error(`Failed to identify items: ${response.status}`);
+        throw new Error('Unable to analyze photos. Please try again.');
       }
       
       const result = await response.json();
-      console.log('[ItemDetection] Result:', result);
       const items = result.items || [];
       setIdentifiedItems(items);
       
@@ -441,11 +430,10 @@ export default function RequestMove() {
           variant: "destructive",
         });
       }
-    } catch (error) {
-      console.error("AI identification error:", error);
+    } catch {
       toast({
-        title: "Identification Failed",
-        description: "Could not analyze photos. Please select load details manually.",
+        title: "Analysis Unavailable",
+        description: "We couldn't analyze your photos right now. Please select your load details manually below.",
         variant: "destructive",
       });
     } finally {
@@ -455,8 +443,6 @@ export default function RequestMove() {
   
   // Auto-analyze callback for ImageUpload - runs in background after photo upload
   const handleAutoAnalyze = (photoUrls: string[]) => {
-    console.log('[AutoAnalyze] Triggered with', photoUrls.length, 'photos');
-    // Run analysis in background - don't await to keep UI responsive
     handleIdentifyItems(photoUrls);
   };
 

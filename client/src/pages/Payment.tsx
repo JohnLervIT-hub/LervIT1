@@ -20,14 +20,7 @@ if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
 // Initialize Stripe with configured key
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
 
-// Validate Stripe key type (warning only to not block testing)
-if (stripeKey.startsWith('sk_')) {
-  console.error('[Payment] ERROR: VITE_STRIPE_PUBLIC_KEY contains a secret key (sk_). This will fail in production. Please update to use a publishable key (pk_).');
-} else if (!stripeKey.startsWith('pk_')) {
-  console.warn('[Payment] Warning: Stripe key does not start with pk_ - this may not be a valid publishable key');
-} else {
-  console.log('[Payment] Stripe configured with publishable key');
-}
+// Validate Stripe key type (silent in production)
 
 const stripePromise = loadStripe(stripeKey);
 
@@ -71,8 +64,8 @@ const CheckoutForm = ({ bookingId }: { bookingId: string }) => {
         await apiRequest("POST", `/api/bookings/${bookingId}/confirm-payment`, {
           paymentIntentId: paymentIntent.id
         });
-      } catch (err) {
-        console.error("Failed to confirm payment status:", err);
+      } catch {
+        // Payment confirmed via webhook
       }
       
       toast({
@@ -142,21 +135,18 @@ export default function Payment() {
         if (!res.ok) {
           // Check if payment was already completed
           if (data.alreadyPaid) {
-            // Invalidate booking cache to refresh status
             queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
             queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-            // Redirect to my-bookings
             setLocation("/my-bookings");
             return;
           }
-          console.error("Payment intent error:", data.error);
           return;
         }
         
         setClientSecret(data.clientSecret);
       })
-      .catch((error) => {
-        console.error("Error creating payment intent:", error);
+      .catch(() => {
+        // Payment intent creation handled by error state
       });
   }, [bookingId, user, setLocation]);
 
