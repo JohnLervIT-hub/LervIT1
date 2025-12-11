@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { MapPin } from "lucide-react";
+import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 
 interface AddressAutocompleteProps {
   value: string;
@@ -22,13 +23,16 @@ export function AddressAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [inputValue, setInputValue] = useState(value);
+  
+  // Lazy load Google Maps API when this component is used
+  const { isLoaded: mapsLoaded } = useGoogleMaps();
 
   useEffect(() => {
     setInputValue(value);
   }, [value]);
 
   useEffect(() => {
-    if (!inputRef.current || !window.google) return;
+    if (!inputRef.current || !mapsLoaded || !window.google) return;
 
     // Initialize Google Places Autocomplete
     autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
@@ -59,7 +63,7 @@ export function AddressAutocomplete({
         google.maps.event.removeListener(listener);
       }
     };
-  }, [onChange]);
+  }, [onChange, mapsLoaded]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;

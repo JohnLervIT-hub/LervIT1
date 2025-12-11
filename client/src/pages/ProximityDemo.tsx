@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
-import { MapPin, Navigation, DollarSign, Clock, Zap, TrendingUp, ShieldCheck, Star, Truck } from "lucide-react";
+import { MapPin, Navigation, DollarSign, Clock, Zap, TrendingUp, ShieldCheck, Star, Truck, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 
 type Location = {
   name: string;
@@ -118,6 +119,9 @@ export default function ProximityDemo() {
   const [priceBreakdown, setPriceBreakdown] = useState<any>(null);
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  
+  // Lazy load Google Maps API
+  const { isLoaded: mapsLoaded, loadError } = useGoogleMaps();
 
   // Map configuration
   const mapContainerStyle = {
@@ -151,7 +155,7 @@ export default function ProximityDemo() {
 
   // Auto-center map when locations change
   useEffect(() => {
-    if (!map || (!pickup && !dropoff)) return;
+    if (!map || (!pickup && !dropoff) || !mapsLoaded) return;
 
     const bounds = new google.maps.LatLngBounds();
     
@@ -257,6 +261,29 @@ export default function ProximityDemo() {
     setMatchedMovers([]);
     setPriceBreakdown(null);
   };
+
+  // Show loading state while Google Maps is loading
+  if (!mapsLoaded) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading map...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive">Failed to load Google Maps</p>
+          <p className="text-sm text-muted-foreground mt-2">Please refresh the page</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pt-20 px-4 pb-4 md:pt-24 md:px-8 md:pb-8">

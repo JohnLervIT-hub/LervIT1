@@ -5,10 +5,11 @@ import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer } from 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Package, Navigation, Clock, Route } from "lucide-react";
+import { ArrowLeft, MapPin, Package, Navigation, Clock, Route, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, type BookingStatus } from "@shared/schema";
+import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 
 interface LocationData {
   bookingId: string;
@@ -52,8 +53,8 @@ export default function TrackTrip() {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
 
-  // Google Maps API is loaded globally in App.tsx
-  // No need to load it again here
+  // Lazy load Google Maps API when this page is accessed
+  const { isLoaded: mapsLoaded, loadError } = useGoogleMaps();
 
   const { data: locationData, isLoading } = useQuery<LocationData>({
     queryKey: ["/api/bookings", bookingId, "location"],
@@ -68,7 +69,7 @@ export default function TrackTrip() {
 
   // Calculate driving directions when location data changes
   useEffect(() => {
-    if (!locationData) return;
+    if (!locationData || !mapsLoaded || !window.google) return;
 
     const directionsService = new google.maps.DirectionsService();
 
@@ -128,11 +129,11 @@ export default function TrackTrip() {
         }
       );
     }
-  }, [locationData]);
+  }, [locationData, mapsLoaded]);
 
   // Update map bounds when location changes
   useEffect(() => {
-    if (map && locationData) {
+    if (map && locationData && mapsLoaded) {
       const bounds = new google.maps.LatLngBounds();
       bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
       bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
@@ -152,14 +153,27 @@ export default function TrackTrip() {
     setMap(map);
   }, []);
 
-  // Google Maps API is loaded globally in App.tsx, so no need to check loadError here
-
-  if (isLoading || !locationData) {
+  // Show loading state while maps or data is loading
+  if (isLoading || !locationData || !mapsLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading trip details...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">
+            {!mapsLoaded ? "Loading map..." : "Loading trip details..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle Google Maps load error
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-destructive">Failed to load Google Maps</p>
+          <p className="text-sm text-muted-foreground mt-2">Please refresh the page</p>
         </div>
       </div>
     );

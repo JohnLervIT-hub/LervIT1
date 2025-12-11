@@ -1,0 +1,72 @@
+Prompt for Replit AI (paste everything below):
+
+You are a senior React/Vite performance engineer.
+You are working on the LervIT / MoveItCalgary project in this Replit.
+
+Goal:
+My Sentry “Frontend Template” shows LCP and FCP ≈ 18 seconds in production.
+Backend is fine; the bottleneck is the frontend React/Vite app.
+Your job is to optimize the frontend so real users see content in under ~3 seconds on normal networks, without changing visible behavior or business logic.
+
+1. Repo & tech assumptions
+
+Frontend is a React + Vite app (TypeScript) inside the repo (likely /client or similar).
+
+Routing uses React Router (or similar).
+
+Sentry is already integrated on frontend and backend, with DSN in env vars:
+
+SENTRY_DSN for backend
+
+VITE_SENTRY_DSN (or similar) for frontend.
+
+First, confirm these assumptions by scanning the repo (don’t ask the user). Adjust paths if needed.
+
+2. High-level performance objectives
+
+Make changes so that:
+
+FCP / LCP are significantly reduced:
+
+Show at least a basic shell UI almost immediately (header, basic layout, loading skeletons).
+
+Heavy content (maps, large lists, complex forms, 3rd-party widgets) should load lazily.
+
+Do not break any existing flows:
+
+Customer booking flow
+
+Driver signup
+
+Payments & Stripe integration
+
+Admin / dashboard views
+
+Keep the code clean, typed, and well-commented.
+Add short comments where you introduce important optimizations.
+
+3. Concrete tasks (implement all of these)
+3.1. Identify the biggest frontend bottlenecks
+
+Find the main React entry file (for example client/src/main.tsx or main.tsx).
+
+Identify:
+
+Which components/pages are imported eagerly at the top level.
+
+Any API calls or async work that happen at module scope (top-level await, config fetches, etc.), before React renders.
+
+Locate the heaviest pages:
+
+Booking flow / order creation
+
+Driver / mover flows
+
+Any pages that use maps, large images, or big tables
+
+Leave a short note in comments explaining which components you identified as heavy.
+
+3.2. Implement route-level code-splitting & lazy loading
+
+Convert large page components to be loaded via React.lazy and Suspense.
+Example pattern (adapt this to the project):
