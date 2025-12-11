@@ -6,14 +6,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { GoogleMapsProvider } from "@/contexts/GoogleMapsContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
-import { useJsApiLoader } from "@react-google-maps/api";
 import Header from "@/components/Header";
-import SplashScreen from "@/components/SplashScreen";
 import { Loader2 } from "lucide-react";
 
 // Lazy load all pages for code splitting
@@ -177,67 +176,28 @@ function Router() {
   );
 }
 
-// CRITICAL: Libraries array MUST be defined outside component to prevent reloads
-const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "visualization")[] = ["places", "geometry"];
-
 function App() {
-  const [showSplash, setShowSplash] = useState(true);
-  
-  // Load Google Maps JavaScript API with Places library
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  });
-
-  // Show splash screen while loading (reduced time for faster perceived load)
-  if (showSplash) {
-    return (
-      <SplashScreen 
-        onComplete={() => setShowSplash(false)} 
-        minDisplayTime={1500}
-      />
-    );
-  }
-
-  if (loadError) {
-    console.error("Google Maps API Error:", loadError);
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-lg text-destructive">Failed to load Google Maps</div>
-          <div className="text-sm text-muted-foreground mt-2">Please check your API key configuration</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Wait for Google Maps to load before rendering
-  if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  // No more blocking on Google Maps - it loads in background via GoogleMapsProvider
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <TooltipProvider>
-            <ErrorBoundary>
-              <ScrollToTop />
-              <Header />
-              <div className="pb-16 md:pb-0">
-                <PageTransition>
-                  <Router />
-                </PageTransition>
-              </div>
-              <MobileBottomNav />
-            </ErrorBoundary>
-            <Toaster />
-          </TooltipProvider>
-        </AuthProvider>
+        <GoogleMapsProvider>
+          <AuthProvider>
+            <TooltipProvider>
+              <ErrorBoundary>
+                <ScrollToTop />
+                <Header />
+                <div className="pb-16 md:pb-0">
+                  <PageTransition>
+                    <Router />
+                  </PageTransition>
+                </div>
+                <MobileBottomNav />
+              </ErrorBoundary>
+              <Toaster />
+            </TooltipProvider>
+          </AuthProvider>
+        </GoogleMapsProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );
