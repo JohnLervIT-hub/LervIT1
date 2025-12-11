@@ -1,0 +1,102 @@
+You are a senior product engineer and UX specialist working on my production LervIT moving app.
+The core logic is stable and ready to go live; now I want you to upgrade the UI/UX to world-class quality without changing any pricing, vehicle logic, or business rules.
+
+Please do the following:
+
+1. Preserve existing logic
+
+Do not change: volume calculations, vehicle class mapping, pricing rules, fraud checks, or booking workflows.
+
+Only improve presentation, layout, responsiveness, and feedback.
+
+2. Page layout & navigation
+
+Ensure every route and modal opens scrolled to the top: implement a central scroll-to-top behavior on route change so users never land halfway down a page.
+
+Make navigation consistent across desktop and mobile (header, navbar, footer).
+
+Check that all links and buttons are clearly clickable with enough spacing on mobile.
+
+3. Responsive design (mobile-first)
+
+Audit all key screens (landing page, booking flow, vision upload page, vehicle selection, checkout, confirmation) on mobile, tablet, and desktop breakpoints.
+
+Fix any layout issues: overflowing text, misaligned cards, content going offscreen, horizontal scrolling, or cramped forms.
+
+Ensure cards for vehicle classes resize cleanly and look polished on small screens (2-column or 1-column layout where appropriate).
+
+4. Visual hierarchy & consistency
+
+Standardize typography (font sizes, weights) for titles, subtitles, body text, and labels.
+
+Use a consistent spacing system (margins/padding) so sections feel balanced and readable.
+
+Make primary CTAs (e.g., “Get Estimate”, “Confirm Booking”, “Pay Now”) visually dominant and consistent in style.
+
+5. Loading states & error messages
+
+Add clear loading indicators for:
+
+Vision engine processing after photo upload
+
+Price estimation
+
+Payment processing
+
+Booking creation
+
+Replace any generic “Something went wrong” messages with friendly, user-facing messages that still keep technical details in the logs only.
+
+Make sure forms show inline validation errors (e.g., missing address, invalid phone, failed payment) near the relevant fields.
+
+6. Booking and vehicle cards polish
+
+Clean up the vehicle class and estimate cards so they are visually consistent: same padding, border radius, shadows, and alignment.
+
+Highlight the recommended vehicle more strongly (subtle badge, border, or emphasis) without changing the underlying logic.
+
+Ensure pricing details are clearly readable: base fare, per-km rate, and estimate range if applicable.
+
+7. Performance & perceived speed
+
+Optimize images and icons (compress, use appropriate sizes).
+
+Remove unnecessary console logs and heavy debug UI that ship to production.
+
+Avoid unnecessary re-renders by checking expensive components/effects in the booking and vision flows.
+
+8. Accessibility basics
+
+Make sure buttons and interactive elements have accessible labels and aria attributes where needed.
+
+Confirm color contrast is sufficient for text on backgrounds.
+
+Ensure the app is keyboard-navigable for the main flows.
+
+9. Final walkthrough & summary
+
+After making changes, walk through:
+
+Landing → booking flow (mobile + desktop)
+
+Photo upload → vision result → vehicle selection
+
+Checkout → confirmation screen
+
+Confirm that:
+
+Pages open at the top
+
+Layouts are clean and stable
+
+No core logic or pricing changed
+
+Then list:
+
+Files changed
+
+Key UI/UX improvements you implemented
+
+Any remaining UX ideas you’d recommend for a later iteration.
+
+Keep changes focused on UI/UX polish and do not introduce new dependencies unless absolutely necessary.
