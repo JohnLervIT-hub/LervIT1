@@ -8,7 +8,6 @@ import {
   Wallet,
   LayoutDashboard,
   Users,
-  Shield,
   Plus,
   Inbox
 } from "lucide-react";
@@ -75,7 +74,6 @@ export function MobileBottomNav() {
         return [
           { href: "/admin", icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
           { href: "/admin/users", icon: <Users className="w-5 h-5" />, label: "Users" },
-          { href: "/admin/verification", icon: <Shield className="w-5 h-5" />, label: "Verify" },
           { href: "/admin/support", icon: <Inbox className="w-5 h-5" />, label: "Tickets" },
         ];
       default:
