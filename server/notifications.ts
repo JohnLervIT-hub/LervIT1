@@ -1,14 +1,11 @@
 import type { Booking, User } from "@shared/schema";
 import { Resend } from 'resend';
-import Telnyx from 'telnyx';
 
 // Initialize Resend client
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-// Initialize Telnyx client
-const telnyxClient = process.env.TELNYX_API_KEY 
-  ? new Telnyx(process.env.TELNYX_API_KEY)
-  : null;
+// Telnyx configuration
+const telnyxApiKey = process.env.TELNYX_API_KEY;
 const telnyxPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
 
 // Email notification service with Resend integration
@@ -29,13 +26,13 @@ export interface SMSNotification {
 class NotificationService {
   private fromEmail = 'LervIT <support@lervit.com>';
   
-  // Send SMS via Telnyx
+  // Send SMS via Telnyx REST API
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     console.log('\n[SMS] Sending notification:');
     console.log('To:', notification.to);
     console.log('Type:', notification.type);
     
-    if (!telnyxClient || !telnyxPhoneNumber) {
+    if (!telnyxApiKey || !telnyxPhoneNumber) {
       console.log('[SMS] Telnyx not configured - SMS logged only');
       console.log('Message:', notification.message);
       console.log('---\n');
@@ -50,13 +47,27 @@ class NotificationService {
         formattedPhone = formattedPhone.startsWith('1') ? `+${formattedPhone}` : `+1${formattedPhone}`;
       }
       
-      const message = await telnyxClient.messages.create({
-        from: telnyxPhoneNumber,
-        to: formattedPhone,
-        text: notification.message,
+      const response = await fetch('https://api.telnyx.com/v2/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${telnyxApiKey}`,
+        },
+        body: JSON.stringify({
+          from: telnyxPhoneNumber,
+          to: formattedPhone,
+          text: notification.message,
+        }),
       });
       
-      console.log('[SMS] Sent successfully! ID:', message.data?.id);
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('[SMS] Telnyx API error:', result);
+        return false;
+      }
+      
+      console.log('[SMS] Sent successfully! ID:', result.data?.id);
       console.log('---\n');
       return true;
     } catch (error: any) {
@@ -396,7 +407,7 @@ class NotificationService {
     });
   }
 
-  // Job acceptance notification to customer
+  // Job acceptance notification to customer (email + SMS)
   async sendMoverAssigned(customer: User, mover: User, booking: Partial<Booking>): Promise<void> {
     const subject = `Mover Assigned - Move #${booking.id?.slice(0, 8)}`;
     const body = `
@@ -429,6 +440,16 @@ class NotificationService {
       body,
       type: 'status_update',
     });
+    
+    // Also send SMS to customer if they have a phone number
+    if (customer.phone) {
+      const smsMessage = `LervIT: Great news! ${mover.name} has accepted your move. Pickup: ${booking.pickupAddress?.slice(0, 30)}... Check the app for details!`;
+      await this.sendSMS({
+        to: customer.phone,
+        message: smsMessage,
+        type: 'booking_update',
+      });
+    }
   }
 
   // Password reset email
