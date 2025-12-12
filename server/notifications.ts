@@ -1,8 +1,15 @@
 import type { Booking, User } from "@shared/schema";
 import { Resend } from 'resend';
+import twilio from 'twilio';
 
 // Initialize Resend client
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Initialize Twilio client
+const twilioClient = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) 
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
 
 // Email notification service with Resend integration
 export interface EmailNotification {
@@ -12,12 +19,56 @@ export interface EmailNotification {
   type: 'booking_confirmation' | 'job_assignment' | 'payment_receipt' | 'status_update';
 }
 
+// SMS notification interface
+export interface SMSNotification {
+  to: string;
+  message: string;
+  type: 'job_alert' | 'booking_update' | 'payment_confirmation';
+}
+
 class NotificationService {
   private fromEmail = 'LervIT <support@lervit.com>';
   
+  // Send SMS via Twilio
+  async sendSMS(notification: SMSNotification): Promise<boolean> {
+    console.log('\n[SMS] Sending notification:');
+    console.log('To:', notification.to);
+    console.log('Type:', notification.type);
+    
+    if (!twilioClient || !twilioPhoneNumber) {
+      console.log('[SMS] Twilio not configured - SMS logged only');
+      console.log('Message:', notification.message);
+      console.log('---\n');
+      return false;
+    }
+    
+    try {
+      // Format phone number for Twilio (ensure E.164 format)
+      let formattedPhone = notification.to.replace(/[^0-9+]/g, '');
+      if (!formattedPhone.startsWith('+')) {
+        // Assume Canadian number if no country code
+        formattedPhone = formattedPhone.startsWith('1') ? `+${formattedPhone}` : `+1${formattedPhone}`;
+      }
+      
+      const message = await twilioClient.messages.create({
+        body: notification.message,
+        from: twilioPhoneNumber,
+        to: formattedPhone,
+      });
+      
+      console.log('[SMS] Sent successfully! SID:', message.sid);
+      console.log('---\n');
+      return true;
+    } catch (error: any) {
+      console.error('[SMS] Failed to send:', error.message);
+      console.log('---\n');
+      return false;
+    }
+  }
+  
   async sendEmail(notification: EmailNotification): Promise<void> {
     // Log for debugging
-    console.log('\n📧 EMAIL NOTIFICATION:');
+    console.log('\n[EMAIL] Sending notification:');
     console.log('To:', notification.to);
     console.log('Subject:', notification.subject);
     console.log('Type:', notification.type);
@@ -36,13 +87,13 @@ class NotificationService {
         if (error) {
           console.error('Resend error:', error);
         } else {
-          console.log('✅ Email sent successfully! ID:', data?.id);
+          console.log('[EMAIL] Sent successfully! ID:', data?.id);
         }
       } catch (error) {
         console.error('Failed to send email:', error);
       }
     } else {
-      console.log('⚠️ Resend not configured - email logged only');
+      console.log('[EMAIL] Resend not configured - email logged only');
       console.log('Body:', notification.body);
     }
     console.log('---\n');
@@ -224,6 +275,16 @@ class NotificationService {
       body,
       type: 'job_assignment',
     });
+    
+    // Also send SMS if mover has a phone number
+    if (mover.phone) {
+      const smsMessage = `LervIT: NEW JOB - $${estimatedEarnings} CAD. ${booking.loadSize || 'Standard'} load. Expires in 10 min! Open app to accept: ${dashboardUrl}`;
+      await this.sendSMS({
+        to: mover.phone,
+        message: smsMessage,
+        type: 'job_alert',
+      });
+    }
   }
 
   // Payment receipt email to customer
