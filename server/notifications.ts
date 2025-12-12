@@ -1,15 +1,15 @@
 import type { Booking, User } from "@shared/schema";
 import { Resend } from 'resend';
-import twilio from 'twilio';
+import Telnyx from 'telnyx';
 
 // Initialize Resend client
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-// Initialize Twilio client
-const twilioClient = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) 
-  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+// Initialize Telnyx client
+const telnyxClient = process.env.TELNYX_API_KEY 
+  ? Telnyx(process.env.TELNYX_API_KEY)
   : null;
-const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+const telnyxPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
 
 // Email notification service with Resend integration
 export interface EmailNotification {
@@ -29,34 +29,34 @@ export interface SMSNotification {
 class NotificationService {
   private fromEmail = 'LervIT <support@lervit.com>';
   
-  // Send SMS via Twilio
+  // Send SMS via Telnyx
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     console.log('\n[SMS] Sending notification:');
     console.log('To:', notification.to);
     console.log('Type:', notification.type);
     
-    if (!twilioClient || !twilioPhoneNumber) {
-      console.log('[SMS] Twilio not configured - SMS logged only');
+    if (!telnyxClient || !telnyxPhoneNumber) {
+      console.log('[SMS] Telnyx not configured - SMS logged only');
       console.log('Message:', notification.message);
       console.log('---\n');
       return false;
     }
     
     try {
-      // Format phone number for Twilio (ensure E.164 format)
+      // Format phone number for Telnyx (ensure E.164 format)
       let formattedPhone = notification.to.replace(/[^0-9+]/g, '');
       if (!formattedPhone.startsWith('+')) {
         // Assume Canadian number if no country code
         formattedPhone = formattedPhone.startsWith('1') ? `+${formattedPhone}` : `+1${formattedPhone}`;
       }
       
-      const message = await twilioClient.messages.create({
-        body: notification.message,
-        from: twilioPhoneNumber,
+      const message = await telnyxClient.messages.create({
+        from: telnyxPhoneNumber,
         to: formattedPhone,
+        text: notification.message,
       });
       
-      console.log('[SMS] Sent successfully! SID:', message.sid);
+      console.log('[SMS] Sent successfully! ID:', message.data?.id);
       console.log('---\n');
       return true;
     } catch (error: any) {
