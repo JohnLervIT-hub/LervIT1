@@ -7,7 +7,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // Initialize Telnyx client
 const telnyxClient = process.env.TELNYX_API_KEY 
-  ? Telnyx(process.env.TELNYX_API_KEY)
+  ? new Telnyx(process.env.TELNYX_API_KEY)
   : null;
 const telnyxPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
 

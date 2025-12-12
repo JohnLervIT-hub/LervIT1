@@ -41,7 +41,7 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Customer Support System:** Ticketing system with FAQ and admin dashboard.
 *   **Payment Processing:** Stripe integration for secure payments, including a **Saved Card Feature**.
 *   **Email Notification System:** Comprehensive email templates for job matches, booking confirmations, payment receipts, status updates, and mover assignments.
-*   **SMS Notification System (Twilio):** Real-time SMS alerts to movers for job opportunities.
+*   **SMS Notification System (Telnyx):** Real-time SMS alerts to movers for job opportunities.
 *   **Mover Earnings Dashboard & Payout System:** Stripe Connect integration for mover payouts, onboarding, commission tracking, and a dedicated UI.
 *   **Real-Time Vehicle Tracking:** Movers can share their location for customer tracking.
 *   **6-Stage Move Progress Tracking:** Granular booking status flow with visual indicators.
@@ -62,4 +62,4 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Maps:** Google Maps JavaScript API via `@react-google-maps/api`
 *   **Search/Data Enrichment:** SerpAPI
 *   **Email Sending:** Resend
-*   **SMS Notifications:** Twilio (pending user configuration)
+*   **SMS Notifications:** Telnyx
