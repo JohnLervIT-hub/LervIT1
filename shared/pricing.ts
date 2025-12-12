@@ -52,7 +52,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     volumeRangeMin: 0,
     volumeRangeMax: 20,
     baseFee: 15.00,
-    perKmRate: 0.80,
+    perKmRate: 0.90,  // Updated from $0.80 to $0.90/km
     loadType: 'Small items, single chairs',
     examples: '1-4 boxes, single chair, small items',
   },
@@ -163,8 +163,8 @@ const PRICING_CONFIG = {
   },
   // Load Size Fees (replaces heavy item fee in pricing calculation)
   LOAD_SIZE_FEES: {
-    boxes: 0.00,     // SUV loads - no extra fee (boxes, small items)
-    small: 0.00,     // Alias for boxes
+    boxes: 5.00,     // Class A (SUV) - $5 mandatory load fee for 0-20 ft³
+    small: 5.00,     // Alias for boxes - $5 mandatory load fee
     medium: 15.00,   // Cargo Van loads
     large: 30.00,    // Pickup Truck loads
     apartment: 45.00, // Moving Truck loads
@@ -182,7 +182,8 @@ export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICUL
 /**
  * Calculate the total price using vehicle class-based pricing
  * New formula: total = baseFee + distanceFee + loadSizeFee + accessFees
- * Load Size Fees: Boxes: $0, Medium: $15, Large: $30, Apartment: $45
+ * Load Size Fees: Boxes: $5 (Class A), Medium: $15, Large: $30, Apartment: $45
+ * Class A Distance Rate: $0.90/km
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,

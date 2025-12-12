@@ -26,16 +26,16 @@ const loadSizes: LoadSize[] = [
   {
     id: "boxes",
     label: "Boxes",
-    volume: "1-10 ft³",
+    volume: "0-20 ft³",
     description: "Small personal items",
     examples: ["Shoes", "Bags", "Boxes", "Lamps", "Monitors"],
     image: boxesImage,
-    fee: 0,
+    fee: 5,
   },
   {
     id: "medium",
     label: "Medium",
-    volume: "11-50 ft³",
+    volume: "21-80 ft³",
     description: "Small furniture",
     examples: ["Chairs", "Small tables", "TVs", "Bookshelves"],
     image: mediumImage,
@@ -44,7 +44,7 @@ const loadSizes: LoadSize[] = [
   {
     id: "large",
     label: "Large",
-    volume: "50-170 ft³",
+    volume: "81-170 ft³",
     description: "Large furniture",
     examples: ["Sofas", "Beds", "Fridges", "Dressers"],
     image: largeImage,
