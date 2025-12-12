@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { MapPin, FileText, HelpCircle } from "lucide-react";
+import { MapPin, FileText } from "lucide-react";
 
 export function CustomerNav() {
   return (
@@ -20,12 +20,6 @@ export function CustomerNav() {
       <Link href="/dashboard" data-testid="link-dashboard">
         <Button variant="ghost" className="hover-elevate active-elevate-2">
           Dashboard
-        </Button>
-      </Link>
-      <Link href="/support" data-testid="link-support">
-        <Button variant="ghost" className="hover-elevate active-elevate-2">
-          <HelpCircle className="w-4 h-4 mr-2" />
-          Support
         </Button>
       </Link>
     </nav>

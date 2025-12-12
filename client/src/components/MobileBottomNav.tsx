@@ -9,8 +9,8 @@ import {
   LayoutDashboard,
   Users,
   Shield,
-  HelpCircle,
-  Plus
+  Plus,
+  Inbox
 } from "lucide-react";
 
 interface NavItem {
@@ -64,21 +64,19 @@ export function MobileBottomNav() {
           { href: "/dashboard", icon: <Home className="w-5 h-5" />, label: "Home" },
           { href: "/my-bookings", icon: <Calendar className="w-5 h-5" />, label: "Bookings" },
           { href: "/request-move", icon: <Plus className="w-5 h-5" />, label: "New Move" },
-          { href: "/support", icon: <HelpCircle className="w-5 h-5" />, label: "Support" },
         ];
       case "mover":
         return [
           { href: "/mover-dashboard", icon: <Home className="w-5 h-5" />, label: "Jobs" },
           { href: "/mover-dashboard?tab=active", icon: <Truck className="w-5 h-5" />, label: "Active" },
           { href: "/mover-dashboard?tab=payouts", icon: <Wallet className="w-5 h-5" />, label: "Payouts" },
-          { href: "/support", icon: <HelpCircle className="w-5 h-5" />, label: "Support" },
         ];
       case "admin":
         return [
           { href: "/admin", icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
           { href: "/admin/users", icon: <Users className="w-5 h-5" />, label: "Users" },
           { href: "/admin/verification", icon: <Shield className="w-5 h-5" />, label: "Verify" },
-          { href: "/admin/support", icon: <HelpCircle className="w-5 h-5" />, label: "Support" },
+          { href: "/admin/support", icon: <Inbox className="w-5 h-5" />, label: "Tickets" },
         ];
       default:
         return [];
