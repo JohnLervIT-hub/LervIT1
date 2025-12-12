@@ -1143,13 +1143,24 @@ export default function MoverDashboard() {
               <Button
                 variant="outline"
                 size="icon"
+                onClick={() => setLocation("/mover-settings")}
+                data-testid="button-mover-settings"
+                className="rounded-full"
+                title="Account Settings"
+                aria-label="Account Settings"
+              >
+                <Users className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
                 onClick={() => setLocation("/mover-profile")}
                 data-testid="button-edit-profile"
                 className="rounded-full"
-                title="My Profile"
-                aria-label="My Profile"
+                title="Vehicle & Business Profile"
+                aria-label="Vehicle & Business Profile"
               >
-                <User className="w-4 h-4" />
+                <Settings className="w-4 h-4" />
               </Button>
             </div>
           </div>
