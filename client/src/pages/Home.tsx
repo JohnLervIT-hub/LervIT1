@@ -3,10 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Camera, Users, Navigation, Package, Armchair, Sofa, Building2 } from "lucide-react";
-import { Link } from "wouter";
+import { Camera, Users, Navigation } from "lucide-react";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
@@ -139,90 +136,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Pricing Section */}
-      <section id="pricing" className="py-16 md:py-20 lg:py-24 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 md:mb-16 space-y-4">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
-              Transparent Pricing
-            </span>
-            <h2 className="text-3xl md:text-4xl font-bold">
-              No Hidden Fees, Ever
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Our AI calculates exact pricing based on your items. What you see is what you pay.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              {
-                name: "Boxes",
-                volume: "Up to 10 ft³",
-                description: "Small items, boxes, bags",
-                starting: "$49",
-                icon: Package,
-              },
-              {
-                name: "Medium",
-                volume: "11-50 ft³",
-                description: "Small furniture, appliances",
-                starting: "$89",
-                icon: Armchair,
-              },
-              {
-                name: "Large",
-                volume: "50-170 ft³",
-                description: "Full room, large furniture",
-                starting: "$159",
-                popular: true,
-                icon: Sofa,
-              },
-              {
-                name: "Apartment",
-                volume: "170+ ft³",
-                description: "Full apartment moves",
-                starting: "$299",
-                icon: Building2,
-              },
-            ].map((tier, index) => (
-              <Card 
-                key={index} 
-                className={`relative ${tier.popular ? 'border-primary shadow-lg' : ''}`}
-                data-testid={`card-pricing-${tier.name.toLowerCase()}`}
-              >
-                {tier.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
-                  </div>
-                )}
-                <CardContent className="pt-8 pb-6 px-6 text-center">
-                  <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <tier.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <h3 className="font-semibold text-lg mb-1">{tier.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-4">{tier.volume}</p>
-                  <div className="mb-4">
-                    <span className="text-3xl font-bold">{tier.starting}</span>
-                    <span className="text-sm text-muted-foreground"> CAD</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-6">{tier.description}</p>
-                  <Link href="/request-move">
-                    <Button className="w-full" variant={tier.popular ? "default" : "outline"} data-testid={`button-quote-${tier.name.toLowerCase()}`}>
-                      Get Quote
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <p className="text-center text-sm text-muted-foreground mt-8">
-            Final price includes distance and access conditions. No surprises.
-          </p>
         </div>
       </section>
     </div>
