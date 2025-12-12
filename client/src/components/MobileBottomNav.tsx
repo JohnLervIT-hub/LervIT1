@@ -4,10 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { 
   Home, 
   Calendar, 
-  MessageCircle, 
-  User, 
   Truck, 
-  Settings, 
   Wallet,
   LayoutDashboard,
   Users,
@@ -68,7 +65,6 @@ export function MobileBottomNav() {
           { href: "/my-bookings", icon: <Calendar className="w-5 h-5" />, label: "Bookings" },
           { href: "/request-move", icon: <Plus className="w-5 h-5" />, label: "New Move" },
           { href: "/support", icon: <HelpCircle className="w-5 h-5" />, label: "Support" },
-          { href: "/profile", icon: <User className="w-5 h-5" />, label: "Profile" },
         ];
       case "mover":
         return [
@@ -76,7 +72,6 @@ export function MobileBottomNav() {
           { href: "/mover-dashboard?tab=active", icon: <Truck className="w-5 h-5" />, label: "Active" },
           { href: "/mover-dashboard?tab=payouts", icon: <Wallet className="w-5 h-5" />, label: "Payouts" },
           { href: "/support", icon: <HelpCircle className="w-5 h-5" />, label: "Support" },
-          { href: "/mover-settings", icon: <Settings className="w-5 h-5" />, label: "Settings" },
         ];
       case "admin":
         return [

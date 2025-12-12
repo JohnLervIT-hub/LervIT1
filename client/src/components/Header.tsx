@@ -1,21 +1,14 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, Truck, User, LogOut } from "lucide-react";
+import { Menu, Truck, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { CustomerNav } from "./CustomerNav";
 import { MoverNav } from "./MoverNav";
 import { AdminNav } from "./AdminNav";
 import { ThemeToggle } from "./ThemeToggle";
 import { MessageNotification } from "./MessageNotification";
+import { ProfileSheet } from "./ProfileSheet";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -101,38 +94,10 @@ export default function Header() {
           </div>
 
           <div className="hidden md:flex items-center gap-2">
-            <ThemeToggle />
+            {!user && <ThemeToggle />}
             {user && <MessageNotification />}
             {user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="button-user-menu" aria-label="User menu">
-                    <User className="w-5 h-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
-                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                    {user.email}
-                  </DropdownMenuLabel>
-                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground capitalize">
-                    Role: {user.role}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {user.role === "customer" && (
-                    <Link href="/profile">
-                      <DropdownMenuItem data-testid="link-profile">
-                        <User className="w-4 h-4 mr-2" />
-                        My Profile
-                      </DropdownMenuItem>
-                    </Link>
-                  )}
-                  <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Log Out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <ProfileSheet />
             ) : (
               <>
                 <Link href="/login" data-testid="link-login">
@@ -150,18 +115,22 @@ export default function Header() {
           </div>
 
           <div className="flex items-center gap-1 md:hidden">
-            <ThemeToggle />
+            {!user && <ThemeToggle />}
             {user && <MessageNotification />}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hover-elevate active-elevate-2"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              data-testid="button-mobile-menu"
-              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-            >
-              <Menu className="w-6 h-6" />
-            </Button>
+            {user ? (
+              <ProfileSheet />
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hover-elevate active-elevate-2"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                data-testid="button-mobile-menu"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              >
+                <Menu className="w-6 h-6" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
