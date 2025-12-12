@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, Upload, Truck, User } from "lucide-react";
+import { Loader2, Upload, Truck, User, Phone } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const VEHICLE_TYPES = ["Car", "SUV", "Pickup", "Cargo Van", "Cube Truck", "Flatbed"];
@@ -36,6 +36,7 @@ const profileSchema = z.object({
   vehicleColor: z.string().optional(),
   licensePlate: z.string().optional(),
   bio: z.string().max(500, "Bio must be 500 characters or less").optional(),
+  phone: z.string().optional(),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -62,6 +63,7 @@ export default function MoverProfileSetup() {
       vehicleColor: "",
       licensePlate: "",
       bio: "",
+      phone: "",
     },
   });
 
@@ -73,6 +75,7 @@ export default function MoverProfileSetup() {
         vehicleColor: mover.vehicleColor || "",
         licensePlate: mover.licensePlate || "",
         bio: mover.bio || "",
+        phone: user?.phone || "",
       });
       
       // Set image previews if they exist
@@ -128,6 +131,16 @@ export default function MoverProfileSetup() {
     },
   });
 
+  // Update user phone mutation
+  const updateUserPhoneMutation = useMutation({
+    mutationFn: async (phone: string) => {
+      return apiRequest("PATCH", "/api/users/profile", { phone });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
   const handleMoverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -169,9 +182,15 @@ export default function MoverProfileSetup() {
         vehiclePhotoUrl = result.url;
       }
 
-      // Update mover profile
+      // Update user phone if provided
+      if (data.phone) {
+        await updateUserPhoneMutation.mutateAsync(data.phone);
+      }
+
+      // Update mover profile (exclude phone from mover update)
+      const { phone, ...moverData } = data;
       await updateProfileMutation.mutateAsync({
-        ...data,
+        ...moverData,
         moverImage: moverImageUrl,
         vehiclePhoto: vehiclePhotoUrl,
       });
@@ -280,6 +299,36 @@ export default function MoverProfileSetup() {
                   </FormItem>
                 )}
               />
+            </Card>
+
+            {/* Contact Information Section */}
+            <Card className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Phone className="w-5 h-5 text-muted-foreground" />
+                  <h2 className="text-xl font-semibold">Contact Information</h2>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone Number (for SMS job alerts)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., +1 403-555-1234"
+                          data-testid="input-phone"
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        We'll send you instant SMS alerts when new jobs are available near you
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </Card>
 
             {/* Vehicle Information Section */}
