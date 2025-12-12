@@ -182,6 +182,22 @@ Pino-based JSON structured logging with event-specific loggers:
 - `docs/neon-pitr-backup.md` - Database backup and recovery procedures
 - `docs/google-places-migration.md` - Places API migration plan (Q4 2025)
 
+## Future Integrations (Pending)
+
+### Twilio SMS Notifications
+**Status:** Not yet configured - user to provide credentials when ready
+
+**Required Secrets:**
+- `TWILIO_ACCOUNT_SID` - Account identifier
+- `TWILIO_AUTH_TOKEN` - Authentication token
+- `TWILIO_PHONE_NUMBER` - Canadian phone number for sending
+
+**Implementation Plan:**
+1. Add `phone` field to movers table (opt-in)
+2. Create `sendSMS()` function in `server/notifications.ts`
+3. Send SMS alongside email for job match alerts
+4. SMS first (instant), email as backup (detailed info)
+
 ### Production Monitoring Commands
 ```bash
 # Run smoke tests
