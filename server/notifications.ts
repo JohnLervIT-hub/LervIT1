@@ -1,4 +1,4 @@
-import type { Booking, User } from "@shared/schema";
+import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
 
 // Initialize Resend client
@@ -407,31 +407,114 @@ class NotificationService {
     });
   }
 
-  // Job acceptance notification to customer (email + SMS)
-  async sendMoverAssigned(customer: User, mover: User, booking: Partial<Booking>): Promise<void> {
-    const subject = `Mover Assigned - Move #${booking.id?.slice(0, 8)}`;
+  // Job acceptance notification to customer (email + SMS) - Uber-style with mover details
+  async sendMoverAssigned(customer: User, mover: User, booking: Partial<Booking>, moverProfile?: Partial<Mover>): Promise<void> {
+    const vehicleType = moverProfile?.vehicleType || 'Vehicle';
+    const vehicleColor = moverProfile?.vehicleColor || '';
+    const licensePlate = moverProfile?.licensePlate || '';
+    const rating = moverProfile?.rating || '0';
+    const completedTrips = moverProfile?.completedTrips || 0;
+    
+    // Format vehicle display (e.g., "White Pickup Truck")
+    const vehicleDisplay = vehicleColor 
+      ? `${vehicleColor} ${vehicleType.charAt(0).toUpperCase() + vehicleType.slice(1)}`
+      : vehicleType.charAt(0).toUpperCase() + vehicleType.slice(1);
+    
+    const subject = `Your Mover is Confirmed - Move #${booking.id?.slice(0, 8)}`;
     const body = `
-      <h2>Great News! A Mover Has Been Assigned</h2>
-      <p>Hi ${customer.name},</p>
-      <p>${mover.name} has accepted your moving job!</p>
-      
-      <h3>Your Mover:</h3>
-      <ul>
-        <li><strong>Name:</strong> ${mover.name}</li>
-        <li><strong>Contact:</strong> ${mover.email}</li>
-      </ul>
-      
-      <h3>Move Details:</h3>
-      <ul>
-        <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
-        <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
-        <li><strong>Date:</strong> ${booking.preferredDate}</li>
-        <li><strong>Price:</strong> $${booking.price} CAD</li>
-      </ul>
-      
-      <p>You can message your mover through the LervIT platform.</p>
-      
-      <p>Looking forward to your move!</p>
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+              <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">Your mover is on the way!</p>
+            </td>
+          </tr>
+          <!-- Mover Card -->
+          <tr>
+            <td style="padding:30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:20px;">Meet Your Mover</h2>
+              
+              <!-- Mover Info Box -->
+              <table width="100%" style="background-color:#f8f9fa;border-radius:8px;padding:20px;margin-bottom:25px;">
+                <tr>
+                  <td style="padding:15px;">
+                    <h3 style="color:#333333;margin:0 0 5px 0;font-size:22px;">${mover.name}</h3>
+                    <p style="color:#666666;margin:0 0 10px 0;font-size:14px;">
+                      <span style="color:#FFB800;">★</span> ${parseFloat(rating as string).toFixed(1)} rating · ${completedTrips} completed trips
+                    </p>
+                    
+                    <!-- Vehicle Details -->
+                    <table style="margin-top:15px;width:100%;">
+                      <tr>
+                        <td style="padding:8px 0;border-top:1px solid #e0e0e0;">
+                          <span style="color:#888888;font-size:13px;">VEHICLE</span><br/>
+                          <span style="color:#333333;font-size:16px;font-weight:bold;">${vehicleDisplay}</span>
+                        </td>
+                      </tr>
+                      ${licensePlate ? `
+                      <tr>
+                        <td style="padding:8px 0;border-top:1px solid #e0e0e0;">
+                          <span style="color:#888888;font-size:13px;">LICENSE PLATE</span><br/>
+                          <span style="color:#333333;font-size:18px;font-weight:bold;letter-spacing:2px;">${licensePlate}</span>
+                        </td>
+                      </tr>
+                      ` : ''}
+                      <tr>
+                        <td style="padding:8px 0;border-top:1px solid #e0e0e0;">
+                          <span style="color:#888888;font-size:13px;">CONTACT</span><br/>
+                          <span style="color:#333333;font-size:14px;">${mover.phone || mover.email}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Move Details -->
+              <h3 style="color:#333333;font-size:16px;margin:0 0 15px 0;border-bottom:1px solid #eee;padding-bottom:10px;">Move Details</h3>
+              <table width="100%" style="margin-bottom:25px;">
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>From:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.pickupAddress}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>To:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.dropoffAddress}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>When:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.preferredDate ? new Date(booking.preferredDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'ASAP'}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Total:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:16px;font-weight:bold;">$${booking.price} CAD</td>
+                </tr>
+              </table>
+              
+              <p style="color:#555555;font-size:14px;line-height:22px;margin:0;">
+                You can message your mover through the LervIT app. Have a great move!
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. Calgary's Smart Moving Platform.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
     `;
 
     await this.sendEmail({
@@ -441,9 +524,10 @@ class NotificationService {
       type: 'status_update',
     });
     
-    // Also send SMS to customer if they have a phone number
+    // Also send SMS to customer if they have a phone number - Uber style with vehicle details
     if (customer.phone) {
-      const smsMessage = `LervIT: Great news! ${mover.name} has accepted your move. Pickup: ${booking.pickupAddress?.slice(0, 30)}... Check the app for details!`;
+      const plateInfo = licensePlate ? ` Plate: ${licensePlate}.` : '';
+      const smsMessage = `LervIT: ${mover.name} is your mover! ${vehicleDisplay}.${plateInfo} Track your move in the app.`;
       await this.sendSMS({
         to: customer.phone,
         message: smsMessage,

@@ -1692,13 +1692,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(jobNotifications.status, 'pending')
         ));
       
-      // 4. Send email notifications
+      // 4. Send email + SMS notifications with Uber-style mover details
       const customer = await storage.getUser(updatedBooking.customerId);
       const mover = await storage.getMover(moverId);
       if (customer && mover) {
         const moverUser = await storage.getUser(mover.userId);
         if (moverUser) {
-          await notificationService.sendMoverAssigned(customer, moverUser, updatedBooking);
+          await notificationService.sendMoverAssigned(customer, moverUser, updatedBooking, mover);
         }
       }
       
