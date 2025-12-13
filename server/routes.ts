@@ -1199,6 +1199,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           vehiclePhoto: mover.vehiclePhoto,
           profileVerified: mover.profileVerified,
           documentsVerified: mover.documentsVerified,
+          pilotStatus: mover.pilotStatus,
+          pilotNotes: mover.pilotNotes,
+          pilotExpiresAt: mover.pilotExpiresAt,
+          pilotApprovedAt: mover.pilotApprovedAt,
         },
         verificationSummary: {
           overallStatus: summary.overallStatus,
@@ -2636,8 +2640,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 lng: parseFloat(String(booking.dropoffLongitude || '0')),
               };
               
-              // Find nearest available movers
-              const allMovers = await storage.getAvailableMoversWithCoordinates();
+              // Find nearest available movers (includes fully verified + pilot-approved movers)
+              const allMovers = await storage.getOperationalMovers();
               const moversWithUserData = await Promise.all(
                 allMovers.map(async (m: any) => {
                   const moverUser = await storage.getUser(m.userId);

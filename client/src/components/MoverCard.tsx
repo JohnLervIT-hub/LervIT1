@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { MapPin, Truck, Star, Clock, ShieldCheck } from "lucide-react";
+import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket } from "lucide-react";
 
 interface MoverCardProps {
   id: string;
@@ -18,7 +18,8 @@ interface MoverCardProps {
   verified: boolean;
   completedMoves: number;
   onSelect: (id: string) => void;
-  travelFee?: number; // Optional travel fee for specific bookings
+  travelFee?: number;
+  pilotApproved?: boolean;
 }
 
 // Helper function to calculate ETA based on distance
@@ -42,6 +43,7 @@ const MoverCard = memo(function MoverCard({
   completedMoves,
   onSelect,
   travelFee,
+  pilotApproved,
 }: MoverCardProps) {
   const eta = calculateETA(distance);
   
@@ -64,6 +66,12 @@ const MoverCard = memo(function MoverCard({
                   <Badge variant="default" className="text-xs gap-1 shrink-0" data-testid={`badge-verified-${id}`}>
                     <ShieldCheck className="w-3 h-3" />
                     Verified
+                  </Badge>
+                )}
+                {pilotApproved && !verified && (
+                  <Badge variant="secondary" className="text-xs gap-1 shrink-0 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-early-access-${id}`}>
+                    <Rocket className="w-3 h-3" />
+                    Early Access
                   </Badge>
                 )}
               </div>

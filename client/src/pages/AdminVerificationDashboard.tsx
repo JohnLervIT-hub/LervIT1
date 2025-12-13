@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck } from "lucide-react";
+import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck, Rocket } from "lucide-react";
 import { format } from "date-fns";
 
 interface Driver {
@@ -55,6 +55,10 @@ interface DriverDetail {
     vehicleColor: string | null;
     licensePlate: string | null;
     vehiclePhoto: string | null;
+    pilotStatus: string | null;
+    pilotNotes: string | null;
+    pilotExpiresAt: string | null;
+    pilotApprovedAt: string | null;
   };
   verificationSummary: {
     overallStatus: string;
@@ -75,6 +79,9 @@ export default function AdminVerificationDashboard() {
   const [selectedItem, setSelectedItem] = useState<VerificationItem | null>(null);
   const [reviewStatus, setReviewStatus] = useState<string>("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [pilotStatus, setPilotStatus] = useState<string>("");
+  const [pilotNotes, setPilotNotes] = useState("");
+  const [pilotExpiresAt, setPilotExpiresAt] = useState("");
 
   // Build drivers URL with filters
   const buildDriversUrl = () => {
@@ -125,6 +132,15 @@ export default function AdminVerificationDashboard() {
     },
   });
 
+  // Initialize pilot form fields when driver detail loads
+  useEffect(() => {
+    if (driverDetail?.driver) {
+      setPilotStatus(driverDetail.driver.pilotStatus || "");
+      setPilotNotes(driverDetail.driver.pilotNotes || "");
+      setPilotExpiresAt(driverDetail.driver.pilotExpiresAt ? driverDetail.driver.pilotExpiresAt.split('T')[0] : "");
+    }
+  }, [driverDetail]);
+
   // Review mutation
   const reviewMutation = useMutation({
     mutationFn: async ({ itemId, status, reason }: { itemId: string; status: string; reason?: string }) => {
@@ -152,6 +168,37 @@ export default function AdminVerificationDashboard() {
       });
     },
   });
+
+  const pilotMutation = useMutation({
+    mutationFn: async ({ moverId, status, notes, expiresAt }: { moverId: string; status: string; notes?: string; expiresAt?: string }) => {
+      return apiRequest("PATCH", `/api/admin/movers/${moverId}/pilot-status`, { status, notes, expiresAt });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/verification/drivers"] });
+      queryClient.refetchQueries({ queryKey: [`/api/admin/verification/driver/${selectedDriverId}`] });
+      toast({
+        title: "Pilot status updated",
+        description: "The driver's early access status has been updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update pilot status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePilotUpdate = () => {
+    if (!selectedDriverId || !pilotStatus) return;
+    pilotMutation.mutate({
+      moverId: selectedDriverId,
+      status: pilotStatus,
+      notes: pilotNotes || undefined,
+      expiresAt: pilotExpiresAt || undefined,
+    });
+  };
 
   const handleReview = () => {
     if (!selectedItem) return;
@@ -429,7 +476,14 @@ export default function AdminVerificationDashboard() {
         </Card>
 
         {/* Driver Detail Dialog */}
-        <Dialog open={!!selectedDriverId} onOpenChange={(open) => !open && setSelectedDriverId(null)}>
+        <Dialog open={!!selectedDriverId} onOpenChange={(open) => {
+          if (!open) {
+            setSelectedDriverId(null);
+            setPilotStatus("");
+            setPilotNotes("");
+            setPilotExpiresAt("");
+          }
+        }}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Driver Verification Details</DialogTitle>
@@ -507,6 +561,115 @@ export default function AdminVerificationDashboard() {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Early Access (Pilot) Program */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Rocket className="w-5 h-5" />
+                      Early Access Program
+                    </CardTitle>
+                    <CardDescription>Allow this driver to operate before full verification is complete</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Current Status:</span>
+                      {driverDetail.driver.pilotStatus === "approved" ? (
+                        <Badge className="bg-green-500 gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          Early Access Approved
+                        </Badge>
+                      ) : driverDetail.driver.pilotStatus === "pending" ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <Clock className="w-3 h-3" />
+                          Pending Review
+                        </Badge>
+                      ) : driverDetail.driver.pilotStatus === "rejected" ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <XCircle className="w-3 h-3" />
+                          Rejected
+                        </Badge>
+                      ) : driverDetail.driver.pilotStatus === "suspended" ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          Suspended
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          Not Enrolled
+                        </Badge>
+                      )}
+                    </div>
+
+                    {driverDetail.driver.pilotApprovedAt && (
+                      <div className="text-sm text-muted-foreground">
+                        Approved on: {format(new Date(driverDetail.driver.pilotApprovedAt), "MMM d, yyyy")}
+                      </div>
+                    )}
+
+                    {driverDetail.driver.pilotExpiresAt && (
+                      <div className="text-sm text-muted-foreground">
+                        Expires: {format(new Date(driverDetail.driver.pilotExpiresAt), "MMM d, yyyy")}
+                      </div>
+                    )}
+
+                    {driverDetail.driver.pilotNotes && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">Notes:</div>
+                        <div className="text-sm bg-muted p-2 rounded">{driverDetail.driver.pilotNotes}</div>
+                      </div>
+                    )}
+
+                    <div className="border-t pt-4 space-y-3">
+                      <div>
+                        <Label htmlFor="pilot-status">Update Status</Label>
+                        <Select value={pilotStatus} onValueChange={setPilotStatus}>
+                          <SelectTrigger id="pilot-status" data-testid="select-pilot-status">
+                            <SelectValue placeholder="Select new status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="approved">Approve Early Access</SelectItem>
+                            <SelectItem value="pending">Set as Pending</SelectItem>
+                            <SelectItem value="rejected">Reject</SelectItem>
+                            <SelectItem value="suspended">Suspend</SelectItem>
+                            <SelectItem value="none">Remove from Program</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pilot-notes">Notes (optional)</Label>
+                        <Textarea
+                          id="pilot-notes"
+                          placeholder="Add notes about this decision..."
+                          value={pilotNotes}
+                          onChange={(e) => setPilotNotes(e.target.value)}
+                          rows={2}
+                          data-testid="textarea-pilot-notes"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pilot-expires">Expiry Date (optional)</Label>
+                        <Input
+                          id="pilot-expires"
+                          type="date"
+                          value={pilotExpiresAt}
+                          onChange={(e) => setPilotExpiresAt(e.target.value)}
+                          data-testid="input-pilot-expires"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={handlePilotUpdate}
+                        disabled={!pilotStatus || pilotMutation.isPending}
+                        data-testid="button-update-pilot"
+                      >
+                        {pilotMutation.isPending ? "Updating..." : "Update Early Access Status"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Verification Items */}
                 <Card>
