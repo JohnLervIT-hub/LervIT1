@@ -1209,6 +1209,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
               )[0]
             : null;
+          
+          // Check if mover has accepted Early Access terms
+          const hasAcceptedTerms = await storage.hasAcceptedCurrentTerms(mover.id);
 
           return {
             driverId: mover.id,
@@ -1223,6 +1226,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hasRejected: summary.hasRejected,
             isAvailable: mover.isAvailable,
             lastUpdated: lastVerificationItem?.updatedAt || mover.createdAt,
+            pilotStatus: mover.pilotStatus,
+            hasAcceptedTerms,
           };
         })
       );

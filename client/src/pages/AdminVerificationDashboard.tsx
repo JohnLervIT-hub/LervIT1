@@ -26,6 +26,8 @@ interface Driver {
   hasRejected: boolean;
   isAvailable: boolean;
   lastUpdated: string;
+  pilotStatus?: string;
+  hasAcceptedTerms?: boolean;
 }
 
 interface VerificationItem {
@@ -381,7 +383,7 @@ export default function AdminVerificationDashboard() {
                         
                         {/* Driver Info */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h3 className="font-semibold truncate">{driver.name}</h3>
                             {driver.isAvailable && (
                               <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" title="Online" />
@@ -389,6 +391,13 @@ export default function AdminVerificationDashboard() {
                             <span className="text-sm text-muted-foreground">
                               {parseFloat(driver.rating).toFixed(1)}★
                             </span>
+                            {driver.pilotStatus === 'approved' && (
+                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs gap-1">
+                                <Rocket className="w-3 h-3" />
+                                Early Access
+                                {driver.hasAcceptedTerms && <CheckCircle className="w-3 h-3 text-green-500" />}
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                             <span className="truncate max-w-[200px]">{driver.email}</span>
