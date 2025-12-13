@@ -39,10 +39,10 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, notInArray } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -1539,6 +1539,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Admin get users error:', error);
       res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // PATCH /api/admin/users/:id - Admin update user profile
+  app.patch("/api/admin/users/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const userId = req.params.id;
+      const { name, email, phone, role } = req.body;
+      
+      // Check if user exists
+      const existingUser = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (existingUser.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Prevent changing the last admin's role
+      if (existingUser[0].role === 'admin' && role && role !== 'admin') {
+        const adminCount = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
+        if (adminCount.length <= 1) {
+          return res.status(400).json({ error: "Cannot change role of the last admin" });
+        }
+      }
+      
+      // If email is being changed, check for duplicates
+      if (email && email !== existingUser[0].email) {
+        const emailExists = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+        if (emailExists.length > 0) {
+          return res.status(400).json({ error: "Email already in use" });
+        }
+      }
+      
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (email !== undefined) updateData.email = email;
+      if (phone !== undefined) updateData.phone = phone;
+      if (role !== undefined) updateData.role = role;
+      
+      const result = await db.update(usersTable)
+        .set(updateData)
+        .where(eq(usersTable.id, userId))
+        .returning();
+      
+      console.log(`[Admin] User ${userId} profile updated by admin`);
+      
+      const { password: _, ...userWithoutPassword } = result[0];
+      res.json({ message: "User updated", user: userWithoutPassword });
+    } catch (error) {
+      console.error('Admin update user error:', error);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // DELETE /api/admin/users/:id - Admin delete user (for abandoned accounts)
+  app.delete("/api/admin/users/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const userId = req.params.id;
+      const adminUser = (req as any).user;
+      
+      // Prevent self-deletion
+      if (userId === adminUser.id) {
+        return res.status(400).json({ error: "Cannot delete your own account" });
+      }
+      
+      // Check if user exists
+      const existingUser = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (existingUser.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Prevent deleting the last admin
+      if (existingUser[0].role === 'admin') {
+        const adminCount = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
+        if (adminCount.length <= 1) {
+          return res.status(400).json({ error: "Cannot delete the last admin" });
+        }
+      }
+      
+      // Check for active bookings
+      const activeBookings = await db.select().from(bookings)
+        .where(and(
+          eq(bookings.customerId, userId),
+          notInArray(bookings.status, ['completed', 'cancelled'])
+        ));
+      
+      if (activeBookings.length > 0) {
+        return res.status(400).json({ 
+          error: "Cannot delete user with active bookings",
+          activeBookingsCount: activeBookings.length
+        });
+      }
+      
+      // Delete related data in order (respecting foreign keys)
+      // 1. Delete support ticket replies
+      const userTickets = await db.select({ id: supportTickets.id })
+        .from(supportTickets)
+        .where(eq(supportTickets.userId, userId));
+      
+      for (const ticket of userTickets) {
+        await db.delete(supportTicketReplies).where(eq(supportTicketReplies.ticketId, ticket.id));
+      }
+      
+      // 2. Delete support tickets
+      await db.delete(supportTickets).where(eq(supportTickets.userId, userId));
+      
+      // 3. Delete messages
+      await db.delete(messages).where(eq(messages.senderId, userId));
+      
+      // 4. Delete mover-related data if user is a mover
+      const mover = await db.select().from(moversTable).where(eq(moversTable.userId, userId)).limit(1);
+      if (mover.length > 0) {
+        await db.delete(moverTermsAcceptance).where(eq(moverTermsAcceptance.moverId, mover[0].id));
+        await db.delete(verificationItems).where(eq(verificationItems.moverId, mover[0].id));
+        await db.delete(moversTable).where(eq(moversTable.userId, userId));
+      }
+      
+      // 5. Delete completed/cancelled bookings (cascade)
+      const userBookings = await db.select({ id: bookings.id })
+        .from(bookings)
+        .where(eq(bookings.customerId, userId));
+      
+      for (const booking of userBookings) {
+        await db.delete(moverEarnings).where(eq(moverEarnings.bookingId, booking.id));
+        await db.delete(messages).where(eq(messages.bookingId, booking.id));
+        await db.delete(reviews).where(eq(reviews.bookingId, booking.id));
+      }
+      await db.delete(bookings).where(eq(bookings.customerId, userId));
+      
+      // 6. Finally delete the user
+      await db.delete(usersTable).where(eq(usersTable.id, userId));
+      
+      console.log(`[Admin] User ${userId} (${existingUser[0].email}) deleted by admin ${adminUser.id}`);
+      
+      res.json({ message: "User deleted successfully", deletedUser: existingUser[0].email });
+    } catch (error) {
+      console.error('Admin delete user error:', error);
+      res.status(500).json({ error: "Failed to delete user" });
     }
   });
 
