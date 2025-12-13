@@ -1,0 +1,86 @@
+Lervit Early Access (Pilot) — Description for Replit
+
+Implement an “Early Access (Pilot)” onboarding mode for movers that allows manual approvals before full verification is rolled out.
+
+Purpose
+
+Early Access enables Lervit to onboard the first movers quickly for a controlled beta launch while keeping compliance transparent. Movers can accept jobs in the pilot only after a manual review by the admin team.
+
+Key Rules
+
+Early Access is NOT “Verified.”
+The system must clearly label movers as “Early Access (Pilot)” and never display “Verified” unless verification is completed.
+
+Manual Approval Workflow
+
+Movers sign up and submit basic profile info (name, phone, city, vehicle type).
+
+Status defaults to Pending Approval.
+
+Admin can manually set status to:
+
+Approved (Early Access)
+
+Rejected
+
+Suspended
+
+Minimum Safety Checks (Pilot)
+Admin approval requires confirming at least:
+
+Working phone number (SMS/Call)
+
+Vehicle exists (photo or quick call confirmation)
+
+Mover agrees to independent contractor terms
+
+Mover agrees they are responsible for insurance and safe delivery
+
+Restrictions for Early Access Movers
+Early Access movers can only receive jobs that meet pilot safety rules:
+
+Local-only service area (admin configurable)
+
+No high-value cargo category (optional toggle)
+
+No “white glove” service unless admin-enabled
+
+Max distance / max item size limits (admin configurable)
+
+UI Copy
+Display on mover profile and admin dashboard:
+
+Badge: Early Access (Pilot)
+
+Tooltip / info text:
+“You are approved to participate in Lervit’s early pilot. Full verification will be required as we scale.”
+
+Customer Transparency (Optional but recommended)
+On the customer side, show:
+
+“Pilot mover” label OR simple confidence copy like:
+“Approved for early access. Verification expanding soon.”
+
+Data Model Requirements
+
+Add mover fields:
+
+status: PENDING | EARLY_ACCESS_APPROVED | VERIFIED | REJECTED | SUSPENDED
+
+approvedByAdminId
+
+approvedAt
+
+notes (admin-only)
+
+pilotRestrictions (optional object: maxDistance, categoriesAllowed, etc.)
+
+Admin Dashboard Requirements
+
+Filter movers by status
+
+Approve / reject / suspend in one click
+
+Add internal notes
+
+Show audit trail (who approved and when)
