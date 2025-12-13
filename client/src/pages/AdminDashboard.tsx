@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2 } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send } from "lucide-react";
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -293,6 +293,51 @@ export default function AdminDashboard() {
               <p className="text-xs text-muted-foreground">Currently in progress</p>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Admin Tools</h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Link href="/admin/support" data-testid="link-admin-support">
+              <Card className="hover-elevate cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+                  <div className="p-2 rounded-lg bg-rose-500/10">
+                    <MessageSquare className="w-5 h-5 text-rose-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Support Tickets</CardTitle>
+                    <CardDescription className="text-xs">Manage customer support</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </Link>
+            <Link href="/admin/verification" data-testid="link-admin-verification">
+              <Card className="hover-elevate cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+                  <div className="p-2 rounded-lg bg-emerald-500/10">
+                    <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Verification</CardTitle>
+                    <CardDescription className="text-xs">Review driver documents</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </Link>
+            <Link href="/admin/email-center" data-testid="link-admin-email-center">
+              <Card className="hover-elevate cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+                  <div className="p-2 rounded-lg bg-indigo-500/10">
+                    <Send className="w-5 h-5 text-indigo-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Email Center</CardTitle>
+                    <CardDescription className="text-xs">Send bulk or personal emails</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </Link>
+          </div>
         </div>
 
         <Tabs defaultValue="bookings">

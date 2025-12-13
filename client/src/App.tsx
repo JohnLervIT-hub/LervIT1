@@ -45,6 +45,7 @@ const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const Support = lazy(() => import("@/pages/Support"));
 const AdminSupportDashboard = lazy(() => import("@/pages/AdminSupportDashboard"));
 const AdminVerificationDashboard = lazy(() => import("@/pages/AdminVerificationDashboard"));
+const AdminEmailCenter = lazy(() => import("@/pages/AdminEmailCenter"));
 const Payment = lazy(() => import("@/pages/Payment"));
 const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
@@ -150,6 +151,11 @@ function Router() {
         <Route path="/admin/revenue">
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminRevenuePage />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/email-center">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminEmailCenter />
           </ProtectedRoute>
         </Route>
 
