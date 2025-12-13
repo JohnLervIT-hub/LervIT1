@@ -1080,6 +1080,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== EARLY ACCESS MOVER TERMS ACCEPTANCE =====
+  
+  // GET /api/movers/terms/status - Check if mover has accepted current terms
+  app.get("/api/movers/terms/status", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // Get the mover profile for this user
+      const mover = await storage.getMoverByUserId(user.id);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      
+      const CURRENT_TERMS_VERSION = 'EA-1.0';
+      const hasAccepted = await storage.hasAcceptedCurrentTerms(mover.id);
+      const latestAcceptance = await storage.getLatestMoverTermsAcceptance(mover.id);
+      
+      res.json({
+        hasAcceptedCurrentTerms: hasAccepted,
+        currentTermsVersion: CURRENT_TERMS_VERSION,
+        latestAcceptance: latestAcceptance ? {
+          termsVersion: latestAcceptance.termsVersion,
+          acceptedAt: latestAcceptance.acceptedAt,
+        } : null,
+        pilotStatus: mover.pilotStatus,
+        requiresTermsAcceptance: mover.pilotStatus === 'approved' && !hasAccepted,
+      });
+    } catch (error) {
+      console.error('Terms status error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // POST /api/movers/terms/accept - Accept the Early Access terms
+  app.post("/api/movers/terms/accept", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // Get the mover profile for this user
+      const mover = await storage.getMoverByUserId(user.id);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      
+      // Only pilot-approved movers can accept early access terms
+      if (mover.pilotStatus !== 'approved') {
+        return res.status(403).json({ error: "Only pilot-approved movers can accept Early Access terms" });
+      }
+      
+      const CURRENT_TERMS_VERSION = 'EA-1.0';
+      
+      // Check if already accepted
+      const existing = await storage.getMoverTermsAcceptance(mover.id, CURRENT_TERMS_VERSION);
+      if (existing) {
+        return res.json({ 
+          message: "Terms already accepted",
+          acceptance: existing
+        });
+      }
+      
+      // Record the acceptance with audit trail
+      const acceptance = await storage.createMoverTermsAcceptance({
+        moverId: mover.id,
+        termsVersion: CURRENT_TERMS_VERSION,
+        acceptedFromIp: req.ip || req.headers['x-forwarded-for']?.toString() || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+      
+      console.log(`[Terms] Mover ${mover.id} accepted Early Access terms v${CURRENT_TERMS_VERSION}`);
+      
+      res.json({
+        message: "Early Access terms accepted successfully",
+        acceptance: {
+          termsVersion: acceptance.termsVersion,
+          acceptedAt: acceptance.acceptedAt,
+        }
+      });
+    } catch (error) {
+      console.error('Terms acceptance error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ===== ADMIN VERIFICATION DASHBOARD ROUTES =====
   
   // GET /api/admin/verification/drivers - List all drivers with verification summaries

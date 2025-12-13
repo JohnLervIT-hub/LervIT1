@@ -22,6 +22,7 @@ import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { EarlyAccessTermsModal } from "@/components/EarlyAccessTermsModal";
 import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidStatuses, type BookingStatus } from "@shared/schema";
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
@@ -277,6 +278,20 @@ export default function MoverDashboard() {
     queryKey: [`/api/movers/${mover?.id}/verification-status`],
     enabled: !!mover?.id,
   });
+
+  // Get Early Access terms acceptance status
+  const { data: termsStatus } = useQuery<any>({
+    queryKey: ["/api/movers/terms/status"],
+    enabled: !!mover?.id,
+  });
+
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
+  useEffect(() => {
+    if (termsStatus?.requiresTermsAcceptance) {
+      setShowTermsModal(true);
+    }
+  }, [termsStatus]);
 
   // Get all bookings for this mover (server returns assigned + available)
   const { data: allBookings, isLoading } = useQuery<Booking[]>({

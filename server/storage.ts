@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
-import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification, IdentifiedItem, InsertIdentifiedItem, AiRun, InsertAiRun } from "@shared/schema";
+import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification, IdentifiedItem, InsertIdentifiedItem, AiRun, InsertAiRun, MoverTermsAcceptance, InsertMoverTermsAcceptance } from "@shared/schema";
 import { db } from "./db";
-import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns } from "@shared/schema";
+import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns, moverTermsAcceptance } from "@shared/schema";
 import { eq, and, desc, sql, lt } from "drizzle-orm";
 
 export interface IStorage {
@@ -57,6 +57,12 @@ export interface IStorage {
   updateMoverPilotStatus(moverId: string, status: string, adminId: string, notes?: string, expiresAt?: Date): Promise<Mover | undefined>;
   getMoversByPilotStatus(status: string): Promise<Mover[]>;
   getOperationalMovers(): Promise<Mover[]>;
+  
+  // Mover Terms Acceptance
+  getMoverTermsAcceptance(moverId: string, termsVersion: string): Promise<MoverTermsAcceptance | undefined>;
+  getLatestMoverTermsAcceptance(moverId: string): Promise<MoverTermsAcceptance | undefined>;
+  createMoverTermsAcceptance(data: InsertMoverTermsAcceptance): Promise<MoverTermsAcceptance>;
+  hasAcceptedCurrentTerms(moverId: string): Promise<boolean>;
 }
 
 class PostgresStorage implements IStorage {
@@ -304,7 +310,7 @@ class PostgresStorage implements IStorage {
   }
   
   async getOperationalMovers(): Promise<Mover[]> {
-    // Returns movers who are either fully verified OR approved for pilot (and not expired)
+    // Returns movers who are either fully verified OR approved for pilot (and not expired) AND have accepted terms
     return await db.select().from(movers)
       .where(and(
         eq(movers.isAvailable, true),
@@ -312,11 +318,52 @@ class PostgresStorage implements IStorage {
         sql`(
           (${movers.isVerified} = true AND ${movers.profileVerified} = true AND ${movers.documentsVerified} = true)
           OR 
-          (${movers.pilotStatus} = 'approved' AND (${movers.pilotExpiresAt} IS NULL OR ${movers.pilotExpiresAt} > NOW()))
+          (
+            ${movers.pilotStatus} = 'approved' 
+            AND (${movers.pilotExpiresAt} IS NULL OR ${movers.pilotExpiresAt} > NOW())
+            AND EXISTS (
+              SELECT 1 FROM mover_terms_acceptance 
+              WHERE mover_terms_acceptance.mover_id = ${movers.id} 
+              AND mover_terms_acceptance.terms_version = 'EA-1.0'
+            )
+          )
         )`
       ))
       .orderBy(desc(movers.rating));
   }
+  
+  // Mover Terms Acceptance
+  async getMoverTermsAcceptance(moverId: string, termsVersion: string): Promise<MoverTermsAcceptance | undefined> {
+    const result = await db.select().from(moverTermsAcceptance)
+      .where(and(
+        eq(moverTermsAcceptance.moverId, moverId),
+        eq(moverTermsAcceptance.termsVersion, termsVersion)
+      ))
+      .limit(1);
+    return result[0];
+  }
+  
+  async getLatestMoverTermsAcceptance(moverId: string): Promise<MoverTermsAcceptance | undefined> {
+    const result = await db.select().from(moverTermsAcceptance)
+      .where(eq(moverTermsAcceptance.moverId, moverId))
+      .orderBy(desc(moverTermsAcceptance.acceptedAt))
+      .limit(1);
+    return result[0];
+  }
+  
+  async createMoverTermsAcceptance(data: InsertMoverTermsAcceptance): Promise<MoverTermsAcceptance> {
+    const result = await db.insert(moverTermsAcceptance).values(data).returning();
+    return result[0];
+  }
+  
+  async hasAcceptedCurrentTerms(moverId: string): Promise<boolean> {
+    const CURRENT_TERMS_VERSION = 'EA-1.0';
+    const acceptance = await this.getMoverTermsAcceptance(moverId, CURRENT_TERMS_VERSION);
+    return !!acceptance;
+  }
 }
 
 export const storage = new PostgresStorage();
+
+// Export current terms version constant
+export const CURRENT_TERMS_VERSION = 'EA-1.0';

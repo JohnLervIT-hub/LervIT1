@@ -1,0 +1,135 @@
+LERVIT – EARLY ACCESS MOVER TERMS (PILOT)
+
+Effective Date: [Auto-insert date]
+Program: Early Access (Pilot)
+
+By clicking “I Agree”, you (“Mover”) agree to the following terms to participate in Lervit’s Early Access pilot.
+
+1. Early Access Status
+
+You are approved to participate in Lervit’s Early Access (Pilot).
+Early Access does not mean “verified”. Full verification requirements may be introduced later as the platform scales.
+
+2. Independent Contractor Relationship
+
+You are an independent contractor, not an employee, partner, or agent of Lervit.
+
+You choose when, where, and whether to accept jobs.
+
+You may work for other platforms or clients at any time.
+
+Lervit does not provide wages, benefits, insurance, or equipment.
+
+3. Vehicle, Insurance, and Responsibility
+
+You confirm that:
+
+You own or have lawful access to the vehicle you use.
+
+You are responsible for maintaining valid auto insurance and any coverage required for your operations.
+
+You are responsible for safe loading, transport, and delivery of items.
+
+Lervit does not provide cargo, vehicle, or liability insurance for movers during the Early Access pilot.
+
+4. Payments and Fees
+
+You will be paid for completed jobs according to the app’s pricing and payout rules.
+
+Lervit may apply a platform service fee.
+During Early Access, this fee may be reduced or refunded at Lervit’s discretion.
+
+You are responsible for your own taxes, including GST/HST if applicable.
+
+5. Job Acceptance and Conduct
+
+You may freely accept or decline any job.
+
+If you accept a job, you agree to:
+
+Contact the customer promptly
+
+Arrive on time
+
+Perform the job professionally and safely
+
+Unsafe behavior, fraud, or misuse of the platform may result in suspension or removal.
+
+6. Communications
+
+You agree to receive transactional communications (SMS, calls, in-app notifications) related to:
+
+Job offers
+
+Job updates
+
+Payouts
+
+Account status
+
+You may opt out of non-essential messages where applicable.
+
+7. Suspension or Removal
+
+Lervit may suspend or remove your Early Access status at any time, with or without notice, including for:
+
+Safety concerns
+
+Repeated no-shows
+
+Customer complaints
+
+Misrepresentation of vehicle or services
+
+8. Limitation of Liability
+
+To the maximum extent permitted by law:
+
+Lervit is not responsible for loss, damage, or disputes arising from jobs accepted through the platform.
+
+You agree to indemnify Lervit against claims arising from your actions as a mover.
+
+9. Future Verification
+
+You acknowledge that:
+
+Additional verification (ID, insurance, background checks) may be required later
+
+Continued access to the platform may depend on completing those steps
+
+10. Acceptance
+
+By clicking “I Agree”, you confirm that:
+
+You have read and understood these terms
+
+You agree to participate as an independent contractor in the Early Access pilot
+
+✅ Replit Implementation Notes (Important)
+
+Implement this as a click-to-accept (clickwrap):
+
+UI
+
+Modal or full-page terms
+
+Scrollable text
+
+Checkbox: “I agree to the Early Access Mover Terms”
+
+Button disabled until checked
+
+Data to store (non-negotiable)
+{
+  "moverId": "uuid",
+  "termsVersion": "EA-1.0",
+  "acceptedAt": "timestamp",
+  "acceptedFromIp": "optional",
+  "status": "EARLY_ACCESS_APPROVED"
+}
+
+Guardrail
+
+Movers cannot receive jobs unless terms are accepted
+
+Display badge: Early Access (Pilot) (not “Verified”)

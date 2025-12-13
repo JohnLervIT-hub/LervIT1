@@ -58,6 +58,27 @@ export const movers = pgTable("movers", {
   pilotStatusIdx: index("movers_pilot_status_idx").on(table.pilotStatus),
 }));
 
+// Early Access Mover Terms Acceptance - Legal consent tracking
+export const moverTermsAcceptance = pgTable("mover_terms_acceptance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  termsVersion: text("terms_version").notNull(), // e.g., "EA-1.0"
+  acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
+  acceptedFromIp: text("accepted_from_ip"),
+  userAgent: text("user_agent"),
+}, (table) => ({
+  moverIdIdx: index("mover_terms_acceptance_mover_id_idx").on(table.moverId),
+  versionIdx: index("mover_terms_acceptance_version_idx").on(table.termsVersion),
+}));
+
+export const insertMoverTermsAcceptanceSchema = createInsertSchema(moverTermsAcceptance).omit({
+  id: true,
+  acceptedAt: true,
+});
+
+export type InsertMoverTermsAcceptance = z.infer<typeof insertMoverTermsAcceptanceSchema>;
+export type MoverTermsAcceptance = typeof moverTermsAcceptance.$inferSelect;
+
 export const bookings = pgTable("bookings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   customerId: varchar("customer_id").references(() => users.id).notNull(),
