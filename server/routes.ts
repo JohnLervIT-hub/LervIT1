@@ -1406,6 +1406,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[Admin] Pilot status updated for mover ${moverId}: ${status} by admin ${adminId}`);
       
+      // Send notification to driver about pilot status change
+      const moverUser = await storage.getUser(mover.userId);
+      if (moverUser) {
+        try {
+          await notificationService.sendPilotStatusUpdate(moverUser, status, notes);
+          console.log(`[Notification] Pilot status notification sent to ${moverUser.email}`);
+        } catch (notifError) {
+          console.error(`[Notification] Failed to send pilot status notification:`, notifError);
+        }
+      }
+      
       res.json(result);
     } catch (error) {
       console.error('Admin pilot status update error:', error);

@@ -13,14 +13,14 @@ export interface EmailNotification {
   to: string;
   subject: string;
   body: string;
-  type: 'booking_confirmation' | 'job_assignment' | 'payment_receipt' | 'status_update';
+  type: 'booking_confirmation' | 'job_assignment' | 'payment_receipt' | 'status_update' | 'pilot_status';
 }
 
 // SMS notification interface
 export interface SMSNotification {
   to: string;
   message: string;
-  type: 'job_alert' | 'booking_update' | 'payment_confirmation';
+  type: 'job_alert' | 'booking_update' | 'payment_confirmation' | 'pilot_status';
 }
 
 class NotificationService {
@@ -601,6 +601,128 @@ class NotificationService {
       body,
       type: 'status_update',
     });
+  }
+
+  async sendPilotStatusUpdate(
+    user: User, 
+    newStatus: string, 
+    notes?: string
+  ): Promise<void> {
+    const baseUrl = process.env.BASE_URL || 
+      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    const dashboardUrl = `${baseUrl}/mover-dashboard`;
+
+    const statusMessages: Record<string, { title: string; message: string; color: string }> = {
+      approved: {
+        title: "You're Approved for Early Access!",
+        message: "Congratulations! You've been approved for the LervIT Early Access Program. You can now start accepting jobs on the platform.",
+        color: "#22C55E"
+      },
+      pending: {
+        title: "Early Access Application Received",
+        message: "Your application for the LervIT Early Access Program is being reviewed. We'll notify you once a decision is made.",
+        color: "#3B82F6"
+      },
+      rejected: {
+        title: "Early Access Application Update",
+        message: "Unfortunately, your application for the LervIT Early Access Program was not approved at this time.",
+        color: "#EF4444"
+      },
+      suspended: {
+        title: "Early Access Status Update",
+        message: "Your Early Access status has been temporarily suspended. Please contact support for more information.",
+        color: "#F59E0B"
+      },
+      none: {
+        title: "Early Access Status Update",
+        message: "Your Early Access status has been updated.",
+        color: "#6B7280"
+      }
+    };
+
+    const statusInfo = statusMessages[newStatus] || statusMessages.none;
+    const subject = `LervIT: ${statusInfo.title}`;
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:${statusInfo.color};padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">${statusInfo.title}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:30px;">
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${user.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">${statusInfo.message}</p>
+              ${notes ? `
+              <div style="background-color:#F3F4F6;border-left:4px solid ${statusInfo.color};padding:15px;margin:20px 0;border-radius:4px;">
+                <p style="color:#374151;font-size:14px;margin:0;"><strong>Admin Notes:</strong></p>
+                <p style="color:#555555;font-size:14px;margin:10px 0 0 0;">${notes}</p>
+              </div>
+              ` : ''}
+              ${newStatus === 'approved' ? `
+              <table cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background-color:${statusInfo.color};border-radius:6px;padding:15px 30px;">
+                    <a href="${dashboardUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">Go to Dashboard</a>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+              <p style="color:#888888;font-size:14px;line-height:22px;margin:20px 0 0 0;">If you have any questions, please contact our support team.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">© ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    await this.sendEmail({
+      to: user.email,
+      subject,
+      body,
+      type: 'pilot_status',
+    });
+
+    if (user.phone) {
+      let smsMessage = '';
+      switch (newStatus) {
+        case 'approved':
+          smsMessage = `LervIT: Congrats! You've been approved for Early Access. Start accepting jobs now: ${dashboardUrl}`;
+          break;
+        case 'pending':
+          smsMessage = `LervIT: Your Early Access application is being reviewed. We'll notify you when there's an update.`;
+          break;
+        case 'rejected':
+          smsMessage = `LervIT: Your Early Access application update - please check your email for details.`;
+          break;
+        case 'suspended':
+          smsMessage = `LervIT: Your Early Access status has been updated. Please check your email for details.`;
+          break;
+        default:
+          smsMessage = `LervIT: Your Early Access status has been updated. Check your email for details.`;
+      }
+
+      await this.sendSMS({
+        to: user.phone,
+        message: smsMessage,
+        type: 'pilot_status',
+      });
+    }
   }
 }
 
