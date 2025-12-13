@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, FileText, CheckCircle } from "lucide-react";
@@ -186,15 +185,15 @@ export function EarlyAccessTermsModal({ open, onAccept }: EarlyAccessTermsModalP
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea 
-          className="flex-1 border rounded-md p-4 max-h-[50vh]"
-          onScrollCapture={handleScroll}
+        <div 
+          className="flex-1 border rounded-md p-4 max-h-[50vh] overflow-y-auto"
+          onScroll={handleScroll}
           ref={scrollRef}
         >
           <div className="whitespace-pre-wrap text-sm text-muted-foreground font-mono leading-relaxed">
             {EARLY_ACCESS_TERMS}
           </div>
-        </ScrollArea>
+        </div>
 
         {!hasScrolledToBottom && (
           <p className="text-xs text-muted-foreground text-center">
