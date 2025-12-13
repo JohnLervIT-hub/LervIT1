@@ -45,10 +45,17 @@ export const movers = pgTable("movers", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   isAvailable: boolean("is_available").default(true).notNull(),
+  // Early Access (Pilot) program fields
+  pilotStatus: text("pilot_status").default("none"), // none | pending | approved | rejected | suspended
+  pilotApprovedBy: varchar("pilot_approved_by").references(() => users.id),
+  pilotApprovedAt: timestamp("pilot_approved_at"),
+  pilotNotes: text("pilot_notes"),
+  pilotExpiresAt: timestamp("pilot_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("movers_user_id_idx").on(table.userId),
   availabilityIdx: index("movers_availability_idx").on(table.isAvailable),
+  pilotStatusIdx: index("movers_pilot_status_idx").on(table.pilotStatus),
 }));
 
 export const bookings = pgTable("bookings", {
