@@ -297,12 +297,16 @@ export default function MoverDashboard() {
     }
   }, [termsStatus]);
 
-  // Show welcome tutorial for new movers (only once per session)
+  // Show welcome tutorial for new movers (only once, persisted to database)
   useEffect(() => {
-    if (user && !user.hasCompletedOnboarding && mover && !tutorialDismissed) {
+    // Only show if: user exists, hasn't completed onboarding, mover profile exists, and not already dismissed this session
+    if (user && user.hasCompletedOnboarding === false && mover && !tutorialDismissed) {
       setShowWelcomeTutorial(true);
+    } else if (user?.hasCompletedOnboarding === true) {
+      // If already completed, make sure tutorial stays closed
+      setShowWelcomeTutorial(false);
     }
-  }, [user, mover, tutorialDismissed]);
+  }, [user?.hasCompletedOnboarding, mover, tutorialDismissed]);
 
   const handleTutorialComplete = () => {
     setTutorialDismissed(true);
