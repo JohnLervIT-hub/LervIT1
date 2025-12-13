@@ -26,6 +26,8 @@ import { EarlyAccessTermsModal } from "@/components/EarlyAccessTermsModal";
 import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidStatuses, type BookingStatus } from "@shared/schema";
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
+import { MoverWelcomeTutorial } from "@/components/MoverWelcomeTutorial";
+import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 
 type Booking = {
   id: string;
@@ -286,12 +288,26 @@ export default function MoverDashboard() {
   });
 
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showWelcomeTutorial, setShowWelcomeTutorial] = useState(false);
+  const [tutorialDismissed, setTutorialDismissed] = useState(false);
 
   useEffect(() => {
     if (termsStatus?.requiresTermsAcceptance) {
       setShowTermsModal(true);
     }
   }, [termsStatus]);
+
+  // Show welcome tutorial for new movers (only once per session)
+  useEffect(() => {
+    if (user && !user.hasCompletedOnboarding && mover && !tutorialDismissed) {
+      setShowWelcomeTutorial(true);
+    }
+  }, [user, mover, tutorialDismissed]);
+
+  const handleTutorialComplete = () => {
+    setTutorialDismissed(true);
+    setShowWelcomeTutorial(false);
+  };
 
   // Get all bookings for this mover (server returns assigned + available)
   const { data: allBookings, isLoading } = useQuery<Booking[]>({
@@ -1220,6 +1236,13 @@ export default function MoverDashboard() {
           onAccept={() => setShowTermsModal(false)} 
         />
 
+        {/* Mover Welcome Tutorial */}
+        <MoverWelcomeTutorial
+          isOpen={showWelcomeTutorial}
+          onComplete={handleTutorialComplete}
+          userName={user?.name || "Mover"}
+        />
+
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -1298,6 +1321,9 @@ export default function MoverDashboard() {
           </TabsList>
 
           <TabsContent value="available" className="space-y-4">
+            {/* Profile Completion Card - shows when profile is incomplete */}
+            <ProfileCompletionCard mover={mover} />
+            
             {!availableBookings || availableBookings.length === 0 ? (
               <Card className="border-dashed">
                 <CardContent className="py-16 text-center">
