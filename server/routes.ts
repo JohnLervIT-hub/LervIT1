@@ -481,6 +481,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: z.string().min(1).optional(),
         phone: z.string().optional(),
         address: z.string().optional(),
+        hasCompletedOnboarding: z.boolean().optional(),
       });
       
       const updates = validateBody(updateProfileSchema, req.body);

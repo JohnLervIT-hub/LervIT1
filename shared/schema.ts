@@ -21,6 +21,9 @@ export const users = pgTable("users", {
   lockedUntil: timestamp("locked_until"),
   lockedByAdmin: boolean("locked_by_admin").default(false).notNull(),
   lockReason: text("lock_reason"),
+  // Onboarding and first-move discount fields
+  hasCompletedOnboarding: boolean("has_completed_onboarding").default(false).notNull(),
+  hasUsedFirstMoveDiscount: boolean("has_used_first_move_discount").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -113,6 +116,11 @@ export const bookings = pgTable("bookings", {
   dropoffDifficultyFee: decimal("dropoff_difficulty_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   heavyItemFee: decimal("heavy_item_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
+  
+  // First-move discount
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  discountReason: text("discount_reason"),
   
   // AI-powered features
   aiEstimate: text("ai_estimate"),
