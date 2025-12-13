@@ -433,35 +433,42 @@ export default function AdminEmailCenter() {
                   <CardTitle className="text-lg">Email Preview</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {emailType ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const info = getTypeInfo(emailType);
-                          if (!info) return null;
-                          return (
-                            <>
-                              <div className={`w-3 h-3 rounded-full ${info.color}`} />
-                              <span className="text-sm font-medium">{info.label}</span>
-                            </>
-                          );
-                        })()}
+                  {(subject || content || emailType) ? (
+                    <div className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900">
+                      {(() => {
+                        const info = getTypeInfo(emailType);
+                        const headerColor = info?.color || "bg-gray-500";
+                        return (
+                          <div className={`${headerColor} px-4 py-3`}>
+                            <div className="flex items-center gap-2">
+                              <Mail className="w-5 h-5 text-white" />
+                              <span className="text-white font-semibold text-sm">LervIT</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div className="p-4 space-y-3">
+                        {subject ? (
+                          <h3 className="font-bold text-base text-gray-900 dark:text-gray-100">{subject}</h3>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">No subject entered...</p>
+                        )}
+                        {content ? (
+                          <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                            {content}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">No content entered...</p>
+                        )}
+                        <div className="pt-3 border-t mt-4">
+                          <p className="text-xs text-muted-foreground text-center">
+                            This email was sent by LervIT. Questions? Contact support.
+                          </p>
+                        </div>
                       </div>
-                      {subject && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Subject</p>
-                          <p className="font-medium">{subject}</p>
-                        </div>
-                      )}
-                      {content && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Preview</p>
-                          <p className="text-sm text-muted-foreground line-clamp-3">{content}</p>
-                        </div>
-                      )}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Select an email type to preview</p>
+                    <p className="text-sm text-muted-foreground">Start composing to see preview</p>
                   )}
                 </CardContent>
               </Card>
