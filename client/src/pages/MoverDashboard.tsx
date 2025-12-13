@@ -1325,9 +1325,6 @@ export default function MoverDashboard() {
           </TabsList>
 
           <TabsContent value="available" className="space-y-4">
-            {/* Profile Completion Card - shows when profile is incomplete */}
-            <ProfileCompletionCard mover={mover} />
-            
             {!availableBookings || availableBookings.length === 0 ? (
               <Card className="border-dashed">
                 <CardContent className="py-16 text-center">
