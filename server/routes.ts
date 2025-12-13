@@ -1287,6 +1287,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== PILOT (EARLY ACCESS) PROGRAM ROUTES =====
+  
+  // PATCH /api/admin/movers/:id/pilot-status - Update mover pilot status
+  app.patch("/api/admin/movers/:id/pilot-status", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { status, notes, expiresAt } = req.body;
+      const moverId = req.params.id;
+      const adminId = (req.session as any).userId;
+      
+      if (!status || !['none', 'pending', 'approved', 'rejected', 'suspended'].includes(status)) {
+        return res.status(400).json({ error: "Invalid pilot status. Must be one of: none, pending, approved, rejected, suspended" });
+      }
+      
+      const mover = await storage.getMover(moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      const expiryDate = expiresAt ? new Date(expiresAt) : undefined;
+      const result = await storage.updateMoverPilotStatus(moverId, status, adminId, notes, expiryDate);
+      
+      console.log(`[Admin] Pilot status updated for mover ${moverId}: ${status} by admin ${adminId}`);
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Admin pilot status update error:', error);
+      res.status(500).json({ error: "Failed to update pilot status" });
+    }
+  });
+  
+  // GET /api/admin/movers/pilot - Get all movers by pilot status
+  app.get("/api/admin/movers/pilot", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const status = req.query.status as string || 'pending';
+      
+      const movers = await storage.getMoversByPilotStatus(status);
+      
+      // Enrich with user data
+      const enrichedMovers = await Promise.all(movers.map(async (mover) => {
+        const user = await storage.getUser(mover.userId);
+        return {
+          ...mover,
+          user: user ? { id: user.id, name: user.name, email: user.email, phone: user.phone } : null
+        };
+      }));
+      
+      res.json(enrichedMovers);
+    } catch (error) {
+      console.error('Admin get pilot movers error:', error);
+      res.status(500).json({ error: "Failed to get pilot movers" });
+    }
+  });
+
   // POST /api/admin/users/:id/lock - Admin lock/suspend a user account
   app.post("/api/admin/users/:id/lock", async (req: Request, res: Response) => {
     try {
