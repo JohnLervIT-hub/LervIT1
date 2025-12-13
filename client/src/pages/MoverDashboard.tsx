@@ -1209,6 +1209,11 @@ export default function MoverDashboard() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
 
+        <EarlyAccessTermsModal 
+          open={showTermsModal} 
+          onAccept={() => setShowTermsModal(false)} 
+        />
+
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
           <AlertDialogContent>
             <AlertDialogHeader>
