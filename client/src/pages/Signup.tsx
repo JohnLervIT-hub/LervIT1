@@ -4,17 +4,10 @@ import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { FormFieldError } from "@/components/FormFieldError";
-import { Truck, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, Package, Users } from "lucide-react";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -179,17 +172,40 @@ export default function Signup() {
               </div>
               <FormFieldError id="password-error" message={getFieldError('password')} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">I want to</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger id="role" className="h-11" data-testid="select-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="customer">Find movers for my move</SelectItem>
-                  <SelectItem value="mover">Become a mover and earn</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-3">
+              <Label>I want to</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRole("customer")}
+                  aria-pressed={role === "customer"}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
+                    role === "customer"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/50 hover:bg-muted"
+                  }`}
+                  data-testid="button-role-customer"
+                >
+                  <Package className="w-6 h-6" />
+                  <span className="font-medium text-sm">Find Movers</span>
+                  <span className="text-xs text-muted-foreground">I need help moving</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("mover")}
+                  aria-pressed={role === "mover"}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
+                    role === "mover"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/50 hover:bg-muted"
+                  }`}
+                  data-testid="button-role-mover"
+                >
+                  <Users className="w-6 h-6" />
+                  <span className="font-medium text-sm">Become a Mover</span>
+                  <span className="text-xs text-muted-foreground">Earn money moving</span>
+                </button>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4 pt-2">
