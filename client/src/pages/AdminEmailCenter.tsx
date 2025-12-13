@@ -92,7 +92,7 @@ export default function AdminEmailCenter() {
   });
 
   const { data: recipients, isLoading: recipientsLoading } = useQuery<Recipient[]>({
-    queryKey: ["/api/admin/email/recipients", audienceType],
+    queryKey: ["/api/admin/email/recipients?audienceType=all"],
     enabled: audienceType === "specific",
   });
 
