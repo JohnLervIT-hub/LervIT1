@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Camera, Calendar, CreditCard, Truck, Sparkles, ArrowRight, Check, Gift } from "lucide-react";
@@ -118,6 +118,9 @@ export function WelcomeTutorial({ isOpen, onComplete, userName }: WelcomeTutoria
           <DialogTitle className="text-center text-xl">
             {isFirstStep ? `Hey ${userName.split(" ")[0]}!` : step.title}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Customer onboarding tutorial - Step {currentStep + 1} of {tutorialSteps.length}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="py-4 text-center">

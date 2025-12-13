@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, ArrowRight, Check, User, Bell, Wallet, Shield, Truck } from "lucide-react";
@@ -121,6 +121,9 @@ export function MoverWelcomeTutorial({ isOpen, onComplete, userName }: MoverWelc
           <DialogTitle className="text-center text-xl">
             {isFirstStep ? `Hey ${userName.split(" ")[0]}!` : step.title}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Mover onboarding tutorial - Step {currentStep + 1} of {tutorialSteps.length}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="py-4 text-center">

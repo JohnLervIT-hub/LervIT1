@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { EarlyAccessTermsModal } from "@/components/EarlyAccessTermsModal";
 import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidStatuses, type BookingStatus } from "@shared/schema";
@@ -1585,6 +1585,10 @@ export default function MoverDashboard() {
       {/* Image Preview Dialog */}
       <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
         <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+          <DialogTitle className="sr-only">Image Preview</DialogTitle>
+          <DialogDescription className="sr-only">
+            Viewing image {previewIndex + 1} of {previewImages.length}
+          </DialogDescription>
           <div className="relative flex items-center justify-center min-h-[60vh]">
             {previewImages.length > 0 && (
               <>
