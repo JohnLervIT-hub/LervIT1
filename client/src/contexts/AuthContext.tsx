@@ -9,6 +9,8 @@ interface User {
   avatarUrl?: string | null;
   role: "customer" | "mover" | "admin";
   createdAt?: string | null;
+  hasCompletedOnboarding?: boolean;
+  hasUsedFirstMoveDiscount?: boolean;
 }
 
 interface AuthContextType {
@@ -43,6 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatarUrl: userData.avatarUrl,
           role: userData.role || "customer",
           createdAt: userData.createdAt,
+          hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
+          hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
         });
       } else {
         setUser(null);
@@ -101,6 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       avatarUrl: userData.avatarUrl,
       role: userData.role || "customer",
       createdAt: userData.createdAt,
+      hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
+      hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
     });
   };
 
@@ -128,6 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       avatarUrl: userData.avatarUrl,
       role: userData.role || "customer",
       createdAt: userData.createdAt,
+      hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
+      hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
     });
   };
 

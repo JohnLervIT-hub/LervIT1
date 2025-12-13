@@ -1601,6 +1601,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bookingData.numberOfMovers as 1 | 2
       );
       
+      // Calculate first-move discount for new customers
+      // Re-fetch latest user state to avoid race conditions with concurrent bookings
+      const latestUser = await storage.getUser(user.id);
+      let finalPrice = priceBreakdown.totalCost;
+      let discountPercent = 0;
+      let discountAmount = 0;
+      let discountReason: string | null = null;
+
+      if (latestUser && !latestUser.hasUsedFirstMoveDiscount) {
+        discountPercent = 10;
+        discountAmount = Math.round(priceBreakdown.totalCost * 0.10 * 100) / 100;
+        finalPrice = priceBreakdown.totalCost - discountAmount;
+        discountReason = "First-move 10% discount";
+      }
+      
       // Create booking with geocoded data, price breakdown, and AI metadata
       // SECURITY: Use authenticated user's ID, not from request body
       const booking = await storage.createBooking({
@@ -1623,7 +1638,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffLatitude: dropoffGeo.coordinates.lat,
         dropoffLongitude: dropoffGeo.coordinates.lng,
         distance: toDecimalString(distance),
-        price: toDecimalString(priceBreakdown.totalCost),
+        price: toDecimalString(finalPrice),
         baseFee: toDecimalString(priceBreakdown.baseFee),
         distanceFee: toDecimalString(priceBreakdown.distanceFee),
         loadFee: toDecimalString(priceBreakdown.loadSizeFee),
@@ -1632,8 +1647,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
         heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
         subtotal: toDecimalString(priceBreakdown.subtotal),
+        discountPercent: toDecimalString(discountPercent),
+        discountAmount: toDecimalString(discountAmount),
+        discountReason: discountReason,
         notifiedAt: new Date(),
       } as any);
+      
+      // Mark discount as used if applied
+      if (discountAmount > 0) {
+        await storage.updateUser(user.id, { hasUsedFirstMoveDiscount: true });
+      }
       
       logEvent.booking('created', {
         bookingId: booking.id,

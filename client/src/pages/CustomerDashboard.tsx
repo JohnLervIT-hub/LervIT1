@@ -49,9 +49,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
+import { WelcomeTutorial } from "@/components/WelcomeTutorial";
+import { FirstMovePromo } from "@/components/FirstMovePromo";
 
 type Booking = {
   id: string;
@@ -82,11 +84,12 @@ const LOAD_SIZE_OPTIONS = [
 ];
 
 export default function CustomerDashboard() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
   
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [feedbackBooking, setFeedbackBooking] = useState<Booking | null>(null);
@@ -99,6 +102,24 @@ export default function CustomerDashboard() {
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
   });
+
+  // Show welcome tutorial for new customers who haven't completed onboarding
+  useEffect(() => {
+    if (user && user.role === "customer" && !user.hasCompletedOnboarding) {
+      setShowTutorial(true);
+    }
+  }, [user]);
+
+  const handleTutorialComplete = async () => {
+    setShowTutorial(false);
+    await refreshUser();
+  };
+
+  // Check if user is eligible for first-move discount promo
+  const showFirstMovePromo = user && 
+    user.role === "customer" && 
+    !user.hasUsedFirstMoveDiscount && 
+    user.hasCompletedOnboarding;
 
   const reportMutation = useMutation({
     mutationFn: async (bookingId: string) => {
@@ -320,6 +341,13 @@ export default function CustomerDashboard() {
 
   return (
     <div className="min-h-screen pt-20 pb-12 bg-background">
+      {/* Welcome Tutorial for new customers */}
+      <WelcomeTutorial
+        isOpen={showTutorial}
+        onComplete={handleTutorialComplete}
+        userName={user?.name || "there"}
+      />
+
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
         
         {/* Friendly Greeting */}
@@ -336,6 +364,13 @@ export default function CustomerDashboard() {
             </p>
           </div>
         </FadeIn>
+
+        {/* First Move Promo for eligible customers */}
+        {showFirstMovePromo && (
+          <div className="mb-6">
+            <FirstMovePromo userName={user?.name || "there"} />
+          </div>
+        )}
 
         {/* Upcoming Move Highlight */}
         {upcomingBooking && (
