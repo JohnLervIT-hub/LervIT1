@@ -54,25 +54,25 @@ const EMAIL_TEMPLATES = [
   {
     name: "Welcome Announcement",
     subject: "Welcome to LervIT - Your Moving Partner",
-    content: "We're excited to have you join LervIT! Whether you're moving across town or need help with a delivery, our trusted movers are here to help.\n\nHere's what you can do:\n- Request a move in minutes\n- Get matched with verified movers\n- Track your move in real-time\n\nGet started today!",
+    content: "We're excited to have you join LervIT! Whether you're moving across town or need help with a delivery, our trusted movers are here to help.\n\nHere's what you can do:\n- Request a move in minutes\n- Get matched with verified movers\n- Track your move in real-time\n\nGet started today!\n\nFrom the LervIT Team\n\nQuestions? Contact us at support@lervit.com",
     type: "news",
   },
   {
     name: "Special Promotion",
     subject: "Limited Time Offer - 15% Off Your Next Move!",
-    content: "For a limited time, enjoy 15% off your next booking with LervIT!\n\nUse code: SAVE15 at checkout.\n\nTerms apply. Offer valid for moves booked within the next 7 days.",
+    content: "For a limited time, enjoy 15% off your next booking with LervIT!\n\nUse code: SAVE15 at checkout.\n\nTerms apply. Offer valid for moves booked within the next 7 days.\n\nFrom the LervIT Team\n\nQuestions? Contact us at support@lervit.com",
     type: "promotion",
   },
   {
     name: "New Feature Announcement",
     subject: "New Feature: Real-Time Move Tracking",
-    content: "We're excited to announce our latest feature - Real-Time Move Tracking!\n\nNow you can:\n- Track your mover's location live\n- Get accurate ETAs\n- Receive instant updates\n\nTry it on your next booking!",
+    content: "We're excited to announce our latest feature - Real-Time Move Tracking!\n\nNow you can:\n- Track your mover's location live\n- Get accurate ETAs\n- Receive instant updates\n\nTry it on your next booking!\n\nFrom the LervIT Team\n\nQuestions? Contact us at support@lervit.com",
     type: "news",
   },
   {
     name: "Account Security Update",
     subject: "Important: Security Update to Your Account",
-    content: "We've made some security improvements to better protect your account.\n\nPlease ensure your contact information is up to date in your profile settings.\n\nIf you notice any suspicious activity, please contact our support team immediately.",
+    content: "We've made some security improvements to better protect your account.\n\nPlease ensure your contact information is up to date in your profile settings.\n\nIf you notice any suspicious activity, please contact our support team immediately.\n\nFrom the LervIT Team\n\nQuestions? Contact us at support@lervit.com",
     type: "account_update",
   },
 ];
