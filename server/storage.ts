@@ -52,6 +52,11 @@ export interface IStorage {
   
   // AI Runs (tracking)
   createAiRun(insertRun: InsertAiRun): Promise<AiRun>;
+  
+  // Pilot (Early Access) Program
+  updateMoverPilotStatus(moverId: string, status: string, adminId: string, notes?: string, expiresAt?: Date): Promise<Mover | undefined>;
+  getMoversByPilotStatus(status: string): Promise<Mover[]>;
+  getOperationalMovers(): Promise<Mover[]>;
 }
 
 class PostgresStorage implements IStorage {
@@ -277,6 +282,40 @@ class PostgresStorage implements IStorage {
   async createAiRun(insertRun: InsertAiRun): Promise<AiRun> {
     const result = await db.insert(aiRuns).values(insertRun).returning();
     return result[0];
+  }
+  
+  // Pilot (Early Access) Program
+  async updateMoverPilotStatus(moverId: string, status: string, adminId: string, notes?: string, expiresAt?: Date): Promise<Mover | undefined> {
+    const updates: Partial<Mover> = {
+      pilotStatus: status,
+      pilotApprovedBy: adminId,
+      pilotApprovedAt: status === 'approved' ? new Date() : null,
+      pilotNotes: notes || null,
+      pilotExpiresAt: expiresAt || null,
+    };
+    const result = await db.update(movers).set(updates).where(eq(movers.id, moverId)).returning();
+    return result[0];
+  }
+  
+  async getMoversByPilotStatus(status: string): Promise<Mover[]> {
+    return await db.select().from(movers)
+      .where(eq(movers.pilotStatus, status))
+      .orderBy(desc(movers.createdAt));
+  }
+  
+  async getOperationalMovers(): Promise<Mover[]> {
+    // Returns movers who are either fully verified OR approved for pilot (and not expired)
+    return await db.select().from(movers)
+      .where(and(
+        eq(movers.isAvailable, true),
+        sql`${movers.latitude} IS NOT NULL AND ${movers.longitude} IS NOT NULL`,
+        sql`(
+          (${movers.isVerified} = true AND ${movers.profileVerified} = true AND ${movers.documentsVerified} = true)
+          OR 
+          (${movers.pilotStatus} = 'approved' AND (${movers.pilotExpiresAt} IS NULL OR ${movers.pilotExpiresAt} > NOW()))
+        )`
+      ))
+      .orderBy(desc(movers.rating));
   }
 }
 
