@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   Table, 
   TableBody, 
@@ -26,12 +27,25 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package } from "lucide-react";
+import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package, Pencil, Trash2, Save, X } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type UserType = {
   id: string;
@@ -58,20 +72,67 @@ type Booking = {
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
+  const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<UserType | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "" });
 
-  const { data: users, isLoading } = useQuery<UserType[]>({
+  const { data: users, isLoading
+
+ } = useQuery<UserType[]>({
     queryKey: ["/api/users"],
   });
 
-  // Fetch all bookings for admin view
   const { data: allBookings } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
 
-  // Get user's bookings (as customer or mover)
+  const updateUserMutation = useMutation({
+    mutationFn: async (data: { id: string; name: string; email: string; phone: string; role: string }) => {
+      return apiRequest("PATCH", `/api/admin/users/${data.id}`, {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        role: data.role,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "User updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setEditingUser(null);
+      setSelectedUser(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to update user", 
+        description: error.message || "An error occurred",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest("DELETE", `/api/admin/users/${userId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "User deleted successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setDeleteConfirmUser(null);
+      setSelectedUser(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to delete user", 
+        description: error.message || "An error occurred",
+        variant: "destructive" 
+      });
+    },
+  });
+
   const getUserBookings = (userId: string, role: string) => {
     if (!allBookings) return [];
     if (role === "customer") {
@@ -101,6 +162,24 @@ export default function AdminUsersPage() {
         {status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
       </Badge>
     );
+  };
+
+  const handleEditClick = (u: UserType) => {
+    setEditingUser(u);
+    setEditForm({
+      name: u.name || "",
+      email: u.email || "",
+      phone: u.phone || "",
+      role: u.role || "customer",
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingUser) return;
+    updateUserMutation.mutate({
+      id: editingUser.id,
+      ...editForm,
+    });
   };
 
   if (!user || user.role !== "admin") {
@@ -264,18 +343,44 @@ export default function AdminUsersPage() {
                           {u.createdAt ? format(new Date(u.createdAt), "MMM d, yyyy") : "N/A"}
                         </TableCell>
                         <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedUser(u);
-                            }}
-                            data-testid={`button-view-user-${u.id}`}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            View
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedUser(u);
+                              }}
+                              data-testid={`button-view-user-${u.id}`}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(u);
+                              }}
+                              data-testid={`button-edit-user-${u.id}`}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            {u.id !== user.id && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirmUser(u);
+                                }}
+                                data-testid={`button-delete-user-${u.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -293,7 +398,7 @@ export default function AdminUsersPage() {
       </div>
 
       {/* User Details Dialog */}
-      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+      <Dialog open={!!selectedUser && !editingUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
@@ -345,6 +450,25 @@ export default function AdminUsersPage() {
                     <div>
                       <p className="text-sm text-muted-foreground">User ID</p>
                       <p className="font-mono text-xs text-muted-foreground">{selectedUser.id}</p>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button 
+                        onClick={() => handleEditClick(selectedUser)}
+                        data-testid="button-edit-profile"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Profile
+                      </Button>
+                      {selectedUser.id !== user.id && (
+                        <Button 
+                          variant="destructive"
+                          onClick={() => setDeleteConfirmUser(selectedUser)}
+                          data-testid="button-delete-profile"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete User
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -419,6 +543,104 @@ export default function AdminUsersPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit User Profile</DialogTitle>
+            <DialogDescription>
+              Update the user's information below
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Enter name"
+                data-testid="input-edit-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                placeholder="Enter email"
+                data-testid="input-edit-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                placeholder="Enter phone number"
+                data-testid="input-edit-phone"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">Role</Label>
+              <Select value={editForm.role} onValueChange={(value) => setEditForm({ ...editForm, role: value })}>
+                <SelectTrigger data-testid="select-edit-role">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="customer">Customer</SelectItem>
+                  <SelectItem value="mover">Mover</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingUser(null)} data-testid="button-cancel-edit">
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveEdit} 
+              disabled={updateUserMutation.isPending}
+              data-testid="button-save-edit"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmUser} onOpenChange={(open) => !open && setDeleteConfirmUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the account for <strong>{deleteConfirmUser?.name || deleteConfirmUser?.email}</strong>? 
+              This action cannot be undone and will remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 hover:bg-red-600"
+              onClick={() => deleteConfirmUser && deleteUserMutation.mutate(deleteConfirmUser.id)}
+              disabled={deleteUserMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
