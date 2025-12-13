@@ -327,7 +327,6 @@ export default function BrowseMovers() {
                 verified={mover.isVerified}
                 completedMoves={mover.totalMoves || 0}
                 onSelect={handleSelectMover}
-                pilotApproved={true}
               />
             ))}
           </div>
