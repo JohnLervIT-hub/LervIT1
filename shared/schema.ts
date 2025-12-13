@@ -863,3 +863,42 @@ export const BOOKING_STATUS_INFO: Record<BookingStatus, { label: string; descrip
     color: "red"
   },
 };
+
+// Email Campaigns - for admin to send bulk or personal emails
+export const emailCampaigns = pgTable("email_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(), // HTML content
+  type: text("type").notNull(), // 'account_update' | 'news' | 'promotion' | 'event' | 'personal'
+  audienceType: text("audience_type").notNull(), // 'all' | 'customers' | 'movers' | 'specific'
+  recipientIds: text("recipient_ids").array(), // specific user IDs if audienceType is 'specific'
+  recipientCount: integer("recipient_count").notNull().default(0),
+  sentBy: varchar("sent_by").references(() => users.id).notNull(),
+  status: text("status").notNull().default("draft"), // 'draft' | 'sending' | 'sent' | 'failed'
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sentByIdx: index("email_campaigns_sent_by_idx").on(table.sentBy),
+  statusIdx: index("email_campaigns_status_idx").on(table.status),
+  typeIdx: index("email_campaigns_type_idx").on(table.type),
+}));
+
+export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).omit({
+  id: true,
+  createdAt: true,
+  sentAt: true,
+});
+
+export type InsertEmailCampaign = z.infer<typeof insertEmailCampaignSchema>;
+export type EmailCampaign = typeof emailCampaigns.$inferSelect;
+
+// Email campaign types for UI
+export const EMAIL_CAMPAIGN_TYPES = {
+  ACCOUNT_UPDATE: "account_update",
+  NEWS: "news",
+  PROMOTION: "promotion",
+  EVENT: "event",
+  PERSONAL: "personal",
+} as const;
+
+export type EmailCampaignType = typeof EMAIL_CAMPAIGN_TYPES[keyof typeof EMAIL_CAMPAIGN_TYPES];
