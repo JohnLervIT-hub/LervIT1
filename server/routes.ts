@@ -1836,10 +1836,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         insertBookingSchema.extend({
           customerId: z.string().optional(),
           pickupAddress: z.string().min(1, "Pickup address is required"),
-          dropoffAddress: z.string().min(1, "Dropoff address is required")
+          dropoffAddress: z.string().min(1, "Dropoff address is required"),
+          preSelectedMoverId: z.string().optional(), // For direct mover selection from Browse Movers page
         }),
         { ...req.body, customerId: user.id }
       );
+      
+      // Extract and validate preSelectedMoverId for later use (after payment)
+      let validatedPreSelectedMoverId: string | null = null;
+      if (bookingData.preSelectedMoverId) {
+        // SECURITY: Validate that the pre-selected mover exists and is operational
+        const preSelectedMover = await storage.getMover(bookingData.preSelectedMoverId);
+        if (preSelectedMover && preSelectedMover.isAvailable) {
+          validatedPreSelectedMoverId = bookingData.preSelectedMoverId;
+          logEvent.booking('preselected_mover_validated', {
+            moverId: validatedPreSelectedMoverId,
+            customerId: user.id,
+          });
+        } else {
+          // Log warning but don't reject - fall back to proximity matching
+          logEvent.booking('preselected_mover_invalid', {
+            requestedMoverId: bookingData.preSelectedMoverId,
+            reason: preSelectedMover ? 'mover_unavailable' : 'mover_not_found',
+            customerId: user.id,
+          });
+        }
+      }
       
       // Geocode addresses using Google Maps API for accurate coordinates
       const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
@@ -1895,6 +1917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create booking with geocoded data, price breakdown, and AI metadata
       // SECURITY: Use authenticated user's ID, not from request body
+      // If preSelectedMoverId is provided, store it for direct assignment after payment
       const booking = await storage.createBooking({
         customerId: user.id,
         pickupAddress: bookingData.pickupAddress,
@@ -1906,6 +1929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         heavyItem: bookingData.heavyItem || false,
         numberOfMovers: bookingData.numberOfMovers,
         status: BOOKING_STATUSES.PENDING_PAYMENT,
+        ...(validatedPreSelectedMoverId && { preSelectedMoverId: validatedPreSelectedMoverId }), // Store validated pre-selected mover for direct assignment after payment
         ...(bookingData.images && { images: bookingData.images }),
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
         ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
@@ -3042,52 +3066,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 lng: parseFloat(String(booking.dropoffLongitude || '0')),
               };
               
-              // Find nearest available movers (includes fully verified + pilot-approved movers)
-              const allMovers = await storage.getOperationalMovers();
-              const moversWithUserData = await Promise.all(
-                allMovers.map(async (m: any) => {
-                  const moverUser = await storage.getUser(m.userId);
-                  if (!moverUser || m.latitude === null || m.longitude === null) {
-                    return null;
-                  }
-                  return {
-                    moverId: m.id,
-                    userId: m.userId,
-                    name: moverUser.name,
-                    vehicleType: m.vehicleType,
-                    rating: m.rating || '0',
-                    totalMoves: m.totalMoves,
-                    isAvailable: m.isAvailable,
-                    latitude: m.latitude as number,
-                    longitude: m.longitude as number,
-                  };
-                })
-              ).then(results => results.filter((m: any): m is NonNullable<typeof m> => m !== null));
-              
-              // Use AI-recommended vehicle type for intelligent mover filtering
-              const nearestMovers = findNearestMovers(
-                pickupCoords,
-                dropoffCoords,
-                (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
-                moversWithUserData,
-                {},
-                booking.aiRecommendedVehicle || null
-              );
-              
-              // Create job notifications for top movers
-              const expiresAt = calculateExpiryTime(10); // 10 minutes
-              await Promise.all(
-                nearestMovers.map((mover: any) =>
-                  storage.createJobNotification({
+              // Check if customer pre-selected a mover from Browse Movers page
+              if (booking.preSelectedMoverId) {
+                // DIRECT MOVER SELECTION: Assign the pre-selected mover directly
+                logEvent.booking('direct_mover_assignment', {
+                  bookingId: booking.id,
+                  preSelectedMoverId: booking.preSelectedMoverId,
+                });
+                
+                // Get the pre-selected mover's details
+                const preSelectedMover = await storage.getMover(booking.preSelectedMoverId);
+                if (preSelectedMover) {
+                  // Assign the mover directly to the booking and clear preSelectedMoverId to prevent duplicate processing
+                  await storage.updateBooking(booking.id, {
+                    moverId: booking.preSelectedMoverId,
+                    preSelectedMoverId: null, // Clear after assignment to prevent duplicate processing on webhook retries
+                    status: BOOKING_STATUSES.ACCEPTED,
+                    acceptedAt: new Date(),
+                  });
+                  
+                  // Calculate mover earnings and commission
+                  const bookingPrice = parseFloat(booking.price || '0');
+                  const platformFeeAmount = calculatePlatformFee(bookingPrice);
+                  const moverNetAmount = bookingPrice - platformFeeAmount;
+                  
+                  await storage.updateBooking(booking.id, {
+                    platformFeeAmount: toDecimalString(platformFeeAmount),
+                    moverNetAmount: toDecimalString(moverNetAmount),
+                  });
+                  
+                  // Create a job notification for the pre-selected mover (for tracking/history)
+                  const expiresAt = calculateExpiryTime(10);
+                  await storage.createJobNotification({
                     bookingId: booking.id,
-                    moverId: mover.moverId,
-                    distanceToPickup: toDecimalString(mover.distanceToPickup),
-                    estimatedEarnings: toDecimalString(mover.estimatedEarnings),
-                    status: 'pending',
+                    moverId: booking.preSelectedMoverId,
+                    distanceToPickup: toDecimalString(0), // Direct selection, distance not relevant
+                    estimatedEarnings: toDecimalString(moverNetAmount),
+                    status: 'accepted',
                     expiresAt,
+                  });
+                  
+                  // Notify the selected mover via email and SMS
+                  const moverUser = await storage.getUser(preSelectedMover.userId);
+                  if (moverUser) {
+                    await notificationService.sendJobAssignment(moverUser, booking, moverNetAmount);
+                    // Send SMS notification
+                    if (moverUser.phone) {
+                      await notificationService.sendMoverJobSMS(
+                        moverUser.phone,
+                        moverUser.name,
+                        booking.pickupAddress,
+                        booking.dropoffAddress,
+                        moverNetAmount
+                      );
+                    }
+                    logEvent.notification('direct_mover_notified', {
+                      bookingId: booking.id,
+                      moverId: booking.preSelectedMoverId,
+                      moverUserId: moverUser.id,
+                    });
+                  }
+                } else {
+                  // Pre-selected mover not found - fall back to proximity matching
+                  logEvent.error('direct_mover_not_found', new Error('Pre-selected mover not found'), {
+                    bookingId: booking.id,
+                    preSelectedMoverId: booking.preSelectedMoverId,
+                  });
+                }
+              } else {
+                // PROXIMITY MATCHING: Find nearest available movers (normal flow)
+                const allMovers = await storage.getOperationalMovers();
+                const moversWithUserData = await Promise.all(
+                  allMovers.map(async (m: any) => {
+                    const moverUser = await storage.getUser(m.userId);
+                    if (!moverUser || m.latitude === null || m.longitude === null) {
+                      return null;
+                    }
+                    return {
+                      moverId: m.id,
+                      userId: m.userId,
+                      name: moverUser.name,
+                      vehicleType: m.vehicleType,
+                      rating: m.rating || '0',
+                      totalMoves: m.totalMoves,
+                      isAvailable: m.isAvailable,
+                      latitude: m.latitude as number,
+                      longitude: m.longitude as number,
+                    };
                   })
-                )
-              );
+                ).then(results => results.filter((m: any): m is NonNullable<typeof m> => m !== null));
+                
+                // Use AI-recommended vehicle type for intelligent mover filtering
+                const nearestMovers = findNearestMovers(
+                  pickupCoords,
+                  dropoffCoords,
+                  (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+                  moversWithUserData,
+                  {},
+                  booking.aiRecommendedVehicle || null
+                );
+                
+                // Create job notifications for top movers
+                const expiresAt = calculateExpiryTime(10); // 10 minutes
+                await Promise.all(
+                  nearestMovers.map((mover: any) =>
+                    storage.createJobNotification({
+                      bookingId: booking.id,
+                      moverId: mover.moverId,
+                      distanceToPickup: toDecimalString(mover.distanceToPickup),
+                      estimatedEarnings: toDecimalString(mover.estimatedEarnings),
+                      status: 'pending',
+                      expiresAt,
+                    })
+                  )
+                );
               
               // Send job assignment emails to movers (wrapped separately for isolation)
               try {
@@ -3111,6 +3203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 bookingId: booking.id, 
                 moversNotified: nearestMovers.length 
               });
+              } // End of else block for proximity matching
             } catch (moverNotifyErr) {
               logEvent.error('webhook_mover_notifications', moverNotifyErr, { bookingId: booking.id });
             }

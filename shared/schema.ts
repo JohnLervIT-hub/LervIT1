@@ -86,6 +86,7 @@ export const bookings = pgTable("bookings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   customerId: varchar("customer_id").references(() => users.id).notNull(),
   moverId: varchar("mover_id").references(() => movers.id),
+  preSelectedMoverId: varchar("pre_selected_mover_id").references(() => movers.id), // For direct mover selection from Browse Movers page
   pickupAddress: text("pickup_address").notNull(),
   dropoffAddress: text("dropoff_address").notNull(),
   pickupLatitude: doublePrecision("pickup_latitude").notNull().default(0),

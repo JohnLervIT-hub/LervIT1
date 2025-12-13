@@ -99,6 +99,9 @@ export default function RequestMove() {
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
   const [dropoffAccessError, setDropoffAccessError] = useState(false);
+  
+  // Pre-selected mover from Browse Movers page
+  const [preSelectedMoverId, setPreSelectedMoverId] = useState<string | null>(null);
 
   // PERFORMANCE: Preload Payment page when user reaches step 2 for instant navigation
   useEffect(() => {
@@ -143,11 +146,12 @@ export default function RequestMove() {
       }
     }
 
-    // If no pending booking, check URL parameters (from hero form)
+    // If no pending booking, check URL parameters (from hero form or Browse Movers page)
     const params = new URLSearchParams(window.location.search);
     const pickup = params.get('pickup');
     const dropoff = params.get('dropoff');
     const preferredDate = params.get('date');
+    const moverId = params.get('moverId');
 
     if (pickup) {
       setPickupAddress(pickup);
@@ -157,6 +161,9 @@ export default function RequestMove() {
     }
     if (preferredDate) {
       setDate(preferredDate);
+    }
+    if (moverId) {
+      setPreSelectedMoverId(moverId);
     }
 
     // Show a toast if data was pre-filled from hero
@@ -618,6 +625,7 @@ export default function RequestMove() {
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
+        preSelectedMoverId: preSelectedMoverId || undefined,
       };
       createBookingMutation.mutate(bookingData);
     }
