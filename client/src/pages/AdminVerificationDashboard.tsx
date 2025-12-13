@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck, Rocket } from "lucide-react";
 import { format } from "date-fns";
+import { AdminRowLayout, AdminRowCell, AdminRowPrimary, AdminRowProgress, AdminRowMobileExtras } from "@/components/admin/AdminRowLayout";
 
 interface Driver {
   driverId: string;
@@ -375,90 +376,81 @@ export default function AdminVerificationDashboard() {
                       onClick={() => setSelectedDriverId(driver.driverId)}
                       data-testid={`row-driver-${driver.driverId}`}
                     >
-                      <div className="flex items-center gap-4">
-                        {/* Avatar & Name */}
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-lg shrink-0">
-                          {driver.name?.charAt(0)?.toUpperCase() || "?"}
-                        </div>
-                        
-                        {/* Driver Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <h3 className="font-semibold truncate">{driver.name}</h3>
-                            {driver.isAvailable && (
-                              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" title="Online" />
-                            )}
-                            <span className="text-sm text-muted-foreground">
-                              {parseFloat(driver.rating).toFixed(1)}★
+                      <AdminRowLayout preset="5-col">
+                        <AdminRowPrimary
+                          avatar={
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-lg">
+                              {driver.name?.charAt(0)?.toUpperCase() || "?"}
+                            </div>
+                          }
+                          title={
+                            <span className="flex items-center gap-2">
+                              {driver.name}
+                              {driver.isAvailable && (
+                                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" title="Online" />
+                              )}
+                              <span className="text-sm text-muted-foreground font-normal">
+                                {parseFloat(driver.rating).toFixed(1)}★
+                              </span>
                             </span>
-                            {driver.pilotStatus === 'approved' && (
+                          }
+                          subtitle={
+                            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                              <span className="truncate max-w-[200px]">{driver.email}</span>
+                              {driver.phone && <span>{driver.phone}</span>}
+                            </span>
+                          }
+                          badges={
+                            driver.pilotStatus === 'approved' && (
                               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs gap-1">
                                 <Rocket className="w-3 h-3" />
                                 Early Access
                                 {driver.hasAcceptedTerms && <CheckCircle className="w-3 h-3 text-green-500" />}
                               </Badge>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                            <span className="truncate max-w-[200px]">{driver.email}</span>
-                            {driver.phone && <span>{driver.phone}</span>}
-                          </div>
-                        </div>
+                            )
+                          }
+                        />
 
-                        {/* Progress & Status - Desktop */}
-                        <div className="hidden md:flex items-center gap-6">
-                          {/* Progress */}
-                          <div className="w-32">
-                            <div className="flex items-center justify-between text-sm mb-1">
-                              <span className="text-muted-foreground">Progress</span>
-                              <span className="font-medium">{driver.approvedCount}/{driver.totalRequired}</span>
-                            </div>
-                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                              <div
-                                className={`h-full ${progressColor} transition-all duration-300`}
-                                style={{ width: `${progressPercent}%` }}
-                              />
-                            </div>
-                          </div>
+                        <AdminRowCell hideOnMobile>
+                          <AdminRowProgress
+                            current={driver.approvedCount}
+                            total={driver.totalRequired}
+                          />
+                        </AdminRowCell>
 
-                          {/* Status Badge */}
-                          <div className="w-28">
-                            {getStatusBadge(driver.overallStatus)}
-                          </div>
+                        <AdminRowCell hideOnMobile>
+                          {getStatusBadge(driver.overallStatus)}
+                        </AdminRowCell>
 
-                          {/* Flags */}
-                          <div className="flex gap-1 w-24">
-                            {driver.hasExpired && (
-                              <Badge variant="destructive" className="text-xs">Expired</Badge>
-                            )}
-                            {driver.hasRejected && (
-                              <Badge variant="destructive" className="text-xs">Rejected</Badge>
-                            )}
-                            {!driver.hasExpired && !driver.hasRejected && driver.overallStatus === "APPROVED" && (
-                              <Badge className="bg-green-500 text-xs">Complete</Badge>
-                            )}
-                          </div>
+                        <AdminRowCell hideOnMobile className="flex gap-1">
+                          {driver.hasExpired && (
+                            <Badge variant="destructive" className="text-xs">Expired</Badge>
+                          )}
+                          {driver.hasRejected && (
+                            <Badge variant="destructive" className="text-xs">Rejected</Badge>
+                          )}
+                          {!driver.hasExpired && !driver.hasRejected && driver.overallStatus === "APPROVED" && (
+                            <Badge className="bg-green-500 text-xs">Complete</Badge>
+                          )}
+                        </AdminRowCell>
 
-                          {/* Last Updated */}
-                          <div className="text-sm text-muted-foreground w-24">
+                        <AdminRowCell hideOnMobile className="flex items-center justify-end gap-3">
+                          <span className="text-sm text-muted-foreground">
                             {format(new Date(driver.lastUpdated), "MMM d, yyyy")}
-                          </div>
-                        </div>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            data-testid={`button-view-${driver.driverId}`}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            <span className="hidden sm:inline">Review</span>
+                          </Button>
+                        </AdminRowCell>
+                      </AdminRowLayout>
 
-                        {/* Action Button */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          data-testid={`button-view-${driver.driverId}`}
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          <span className="hidden sm:inline">Review</span>
-                        </Button>
-                      </div>
-
-                      {/* Mobile: Progress & Status */}
-                      <div className="md:hidden mt-3 flex flex-wrap items-center gap-2">
+                      <AdminRowMobileExtras>
                         {getStatusBadge(driver.overallStatus)}
                         {driver.hasExpired && (
                           <Badge variant="destructive" className="text-xs">Expired</Badge>
@@ -475,7 +467,7 @@ export default function AdminVerificationDashboard() {
                           </div>
                           <span className="text-xs text-muted-foreground">{driver.approvedCount}/{driver.totalRequired}</span>
                         </div>
-                      </div>
+                      </AdminRowMobileExtras>
                     </div>
                   );
                 })}
