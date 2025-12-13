@@ -393,6 +393,24 @@ export default function MoverDashboard() {
     },
   });
 
+  const handleAcceptBooking = (bookingId: string) => {
+    const hasValidPhoto = mover?.moverImage && mover.moverImage.trim().length > 0;
+    if (!hasValidPhoto) {
+      toast({
+        title: "Profile photo required",
+        description: "Please upload a profile photo before accepting jobs.",
+        variant: "destructive",
+        action: (
+          <Button variant="outline" size="sm" onClick={() => setLocation("/mover-profile")}>
+            Add Photo
+          </Button>
+        ),
+      });
+      return;
+    }
+    acceptBookingMutation.mutate(bookingId);
+  };
+
   const completeBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
@@ -1009,7 +1027,7 @@ export default function MoverDashboard() {
               {showActions && (
                 <Button
                   variant="default"
-                  onClick={() => acceptBookingMutation.mutate(booking.id)}
+                  onClick={() => handleAcceptBooking(booking.id)}
                   disabled={acceptBookingMutation.isPending}
                   data-testid={`button-accept-${booking.id}`}
                   className="flex-1 sm:flex-none"

@@ -6,7 +6,7 @@ import { useLocation } from "wouter";
 
 interface ProfileCompletionCardProps {
   mover: {
-    profilePhoto?: string | null;
+    moverImage?: string | null;
     vehicleType?: string | null;
     bio?: string | null;
   } | null;
@@ -19,9 +19,9 @@ export function ProfileCompletionCard({ mover }: ProfileCompletionCardProps) {
     {
       id: "photo",
       label: "Add a profile photo",
-      description: "Help customers recognize you",
+      description: "Required to accept jobs",
       icon: Camera,
-      isComplete: !!mover?.profilePhoto,
+      isComplete: !!mover?.moverImage,
     },
     {
       id: "vehicle",

@@ -24,10 +24,6 @@ import { Search, SlidersHorizontal, MapPin, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
-import moverPhoto1 from "@assets/generated_images/male_mover_profile_photo.png";
-import moverPhoto2 from "@assets/generated_images/female_mover_profile_photo.png";
-import moverPhoto3 from "@assets/generated_images/young_mover_headshot.png";
-
 function MoverCardSkeleton() {
   return (
     <Card className="p-6">
@@ -55,8 +51,6 @@ function MoverCardSkeleton() {
     </Card>
   );
 }
-
-const moverPhotos = [moverPhoto1, moverPhoto2, moverPhoto3];
 
 const VEHICLE_TYPES = ["Cargo Van", "Pickup Truck", "Large Truck", "SUV"];
 
@@ -175,10 +169,10 @@ export default function BrowseMovers() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
-            Available Movers in Calgary
+            Early Access Movers
           </h1>
           <p className="text-muted-foreground">
-            Browse verified movers near you
+            Meet our founding movers ready to help with your move
           </p>
         </div>
 
@@ -319,12 +313,12 @@ export default function BrowseMovers() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMovers.map((mover: any, index: number) => (
+            {filteredMovers.map((mover: any) => (
               <MoverCard
                 key={mover.id}
                 id={mover.id}
                 name={mover.user?.name || "Unknown"}
-                photo={moverPhotos[index % moverPhotos.length]}
+                photo={mover.moverImage || undefined}
                 rating={parseFloat(mover.rating) || 0}
                 reviewCount={mover.totalMoves || 0}
                 vehicleType={mover.vehicleType}
@@ -333,6 +327,7 @@ export default function BrowseMovers() {
                 verified={mover.isVerified}
                 completedMoves={mover.totalMoves || 0}
                 onSelect={handleSelectMover}
+                pilotApproved={true}
               />
             ))}
           </div>

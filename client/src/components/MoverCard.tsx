@@ -9,7 +9,7 @@ import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket } from "lucide-react";
 interface MoverCardProps {
   id: string;
   name: string;
-  photo: string;
+  photo?: string;
   rating: number;
   reviewCount: number;
   vehicleType: string;
