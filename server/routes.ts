@@ -39,10 +39,10 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -1679,6 +1679,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Admin delete user error:', error);
       res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
+  // ===== ADMIN EMAIL CAMPAIGNS =====
+  
+  // GET /api/admin/email/campaigns - List all email campaigns
+  app.get("/api/admin/email/campaigns", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const campaigns = await db.select()
+        .from(emailCampaigns)
+        .orderBy(desc(emailCampaigns.createdAt));
+      
+      res.json(campaigns);
+    } catch (error) {
+      console.error('Get campaigns error:', error);
+      res.status(500).json({ error: "Failed to get campaigns" });
+    }
+  });
+
+  // GET /api/admin/email/recipients - Get potential recipients based on audience type
+  app.get("/api/admin/email/recipients", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { audienceType } = req.query;
+      
+      let users;
+      if (audienceType === 'customers') {
+        users = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, role: usersTable.role })
+          .from(usersTable)
+          .where(eq(usersTable.role, 'customer'));
+      } else if (audienceType === 'movers') {
+        users = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, role: usersTable.role })
+          .from(usersTable)
+          .where(eq(usersTable.role, 'mover'));
+      } else {
+        // All users (excluding admins)
+        users = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, role: usersTable.role })
+          .from(usersTable)
+          .where(notInArray(usersTable.role, ['admin']));
+      }
+      
+      res.json(users);
+    } catch (error) {
+      console.error('Get recipients error:', error);
+      res.status(500).json({ error: "Failed to get recipients" });
+    }
+  });
+
+  // POST /api/admin/email/send - Send an email campaign
+  app.post("/api/admin/email/send", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const adminUser = (req as any).user;
+      const { subject, content, type, audienceType, recipientIds } = req.body;
+      
+      if (!subject || !content || !type || !audienceType) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      // Get recipients based on audience type
+      let recipients;
+      if (audienceType === 'specific' && recipientIds?.length > 0) {
+        recipients = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+          .from(usersTable)
+          .where(sql`${usersTable.id} IN (${sql.join(recipientIds.map((id: string) => sql`${id}`), sql`, `)})`);
+      } else if (audienceType === 'customers') {
+        recipients = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+          .from(usersTable)
+          .where(eq(usersTable.role, 'customer'));
+      } else if (audienceType === 'movers') {
+        recipients = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+          .from(usersTable)
+          .where(eq(usersTable.role, 'mover'));
+      } else {
+        // All users (excluding admins)
+        recipients = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+          .from(usersTable)
+          .where(notInArray(usersTable.role, ['admin']));
+      }
+      
+      if (recipients.length === 0) {
+        return res.status(400).json({ error: "No recipients found" });
+      }
+      
+      // Create campaign record
+      const [campaign] = await db.insert(emailCampaigns).values({
+        subject,
+        content,
+        type,
+        audienceType,
+        recipientIds: recipients.map(r => r.id),
+        recipientCount: recipients.length,
+        sentBy: adminUser.id,
+        status: 'sending',
+      }).returning();
+      
+      // Send emails to all recipients
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const recipient of recipients) {
+        const success = await notificationService.sendCampaignEmail(
+          recipient.email,
+          recipient.name,
+          subject,
+          content,
+          type
+        );
+        if (success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
+      
+      // Update campaign status
+      const finalStatus = failCount === recipients.length ? 'failed' : 'sent';
+      await db.update(emailCampaigns)
+        .set({ status: finalStatus, sentAt: new Date() })
+        .where(eq(emailCampaigns.id, campaign.id));
+      
+      console.log(`[Admin Email] Campaign sent by ${adminUser.id}: ${successCount} success, ${failCount} failed`);
+      
+      res.json({ 
+        message: "Campaign sent", 
+        campaignId: campaign.id,
+        recipientCount: recipients.length,
+        successCount,
+        failCount
+      });
+    } catch (error) {
+      console.error('Send campaign error:', error);
+      res.status(500).json({ error: "Failed to send campaign" });
     }
   });
 
