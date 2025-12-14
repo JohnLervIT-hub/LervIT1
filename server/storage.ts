@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
-import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification, IdentifiedItem, InsertIdentifiedItem, AiRun, InsertAiRun, MoverTermsAcceptance, InsertMoverTermsAcceptance } from "@shared/schema";
+import type { User, InsertUser, Mover, InsertMover, Booking, InsertBooking, Message, InsertMessage, Review, InsertReview, JobNotification, InsertJobNotification, IdentifiedItem, InsertIdentifiedItem, AiRun, InsertAiRun, MoverTermsAcceptance, InsertMoverTermsAcceptance, InAppNotification, InsertInAppNotification } from "@shared/schema";
 import { db } from "./db";
-import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns, moverTermsAcceptance } from "@shared/schema";
+import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns, moverTermsAcceptance, inAppNotifications } from "@shared/schema";
 import { eq, and, desc, sql, lt } from "drizzle-orm";
 
 export interface IStorage {
@@ -63,6 +63,13 @@ export interface IStorage {
   getLatestMoverTermsAcceptance(moverId: string): Promise<MoverTermsAcceptance | undefined>;
   createMoverTermsAcceptance(data: InsertMoverTermsAcceptance): Promise<MoverTermsAcceptance>;
   hasAcceptedCurrentTerms(moverId: string): Promise<boolean>;
+  
+  // In-App Notifications (Inbox)
+  getNotificationsByUser(userId: string, limit?: number): Promise<InAppNotification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  createNotification(data: InsertInAppNotification): Promise<InAppNotification>;
+  markNotificationAsRead(id: string): Promise<InAppNotification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
 }
 
 class PostgresStorage implements IStorage {
@@ -360,6 +367,46 @@ class PostgresStorage implements IStorage {
     const CURRENT_TERMS_VERSION = 'EA-1.0';
     const acceptance = await this.getMoverTermsAcceptance(moverId, CURRENT_TERMS_VERSION);
     return !!acceptance;
+  }
+  
+  // In-App Notifications (Inbox)
+  async getNotificationsByUser(userId: string, limit: number = 50): Promise<InAppNotification[]> {
+    return await db.select().from(inAppNotifications)
+      .where(eq(inAppNotifications.userId, userId))
+      .orderBy(desc(inAppNotifications.createdAt))
+      .limit(limit);
+  }
+  
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` })
+      .from(inAppNotifications)
+      .where(and(
+        eq(inAppNotifications.userId, userId),
+        eq(inAppNotifications.isRead, false)
+      ));
+    return result[0]?.count ?? 0;
+  }
+  
+  async createNotification(data: InsertInAppNotification): Promise<InAppNotification> {
+    const result = await db.insert(inAppNotifications).values(data).returning();
+    return result[0];
+  }
+  
+  async markNotificationAsRead(id: string): Promise<InAppNotification | undefined> {
+    const result = await db.update(inAppNotifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(inAppNotifications.id, id))
+      .returning();
+    return result[0];
+  }
+  
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db.update(inAppNotifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(
+        eq(inAppNotifications.userId, userId),
+        eq(inAppNotifications.isRead, false)
+      ));
   }
 }
 

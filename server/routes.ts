@@ -4590,6 +4590,74 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== IN-APP INBOX / NOTIFICATIONS =====
+  
+  // Get all notifications for the logged-in user
+  app.get("/api/inbox", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const limit = parseInt(req.query.limit as string) || 50;
+      const notifications = await storage.getNotificationsByUser(user.id, limit);
+      
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+  
+  // Get unread notification count
+  app.get("/api/inbox/unread-count", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const count = await storage.getUnreadNotificationCount(user.id);
+      
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get unread count" });
+    }
+  });
+  
+  // Mark a single notification as read
+  app.post("/api/inbox/:id/read", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      const notification = await storage.markNotificationAsRead(req.params.id);
+      
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      
+      // Verify the notification belongs to the user
+      if (notification.userId !== user.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+  
+  // Mark all notifications as read
+  app.post("/api/inbox/read-all", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      await storage.markAllNotificationsAsRead(user.id);
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
   // ===== MOVER PAYOUT SYSTEM (Uber-style) =====
   
   // Use platform commission from centralized config

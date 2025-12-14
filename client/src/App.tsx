@@ -52,6 +52,7 @@ const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const CustomerProfile = lazy(() => import("@/pages/CustomerProfile"));
 const MoverProfile = lazy(() => import("@/pages/MoverProfile"));
+const Inbox = lazy(() => import("@/pages/Inbox"));
 
 function Router() {
   return (
@@ -99,6 +100,13 @@ function Router() {
         <Route path="/profile">
           <ProtectedRoute allowedRoles={["customer"]}>
             <CustomerProfile />
+          </ProtectedRoute>
+        </Route>
+
+        {/* Shared Authenticated Routes */}
+        <Route path="/inbox">
+          <ProtectedRoute allowedRoles={["customer", "mover", "admin"]}>
+            <Inbox />
           </ProtectedRoute>
         </Route>
 
