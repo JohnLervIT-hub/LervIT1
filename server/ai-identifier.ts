@@ -157,33 +157,44 @@ export async function identifyItemFromPhoto(photoUrl: string): Promise<{
           content: [
             {
               type: "text",
-              text: `You are an expert at identifying household items for a moving company. Analyze this image carefully.
+              text: `You are an expert at identifying ALL types of items for a moving company. Analyze this image carefully and identify what you see.
+
+IDENTIFY ANY ITEM including but not limited to:
+- Furniture (sofas, beds, tables, chairs, desks, dressers)
+- Appliances (refrigerator, washer, dryer, microwave, oven)
+- Electronics (TVs, computers, monitors, gaming consoles)
+- Bags & Luggage (suitcases, duffel bags, backpacks, travel bags)
+- Boxes & Containers (cardboard boxes, plastic bins, storage containers)
+- Personal Items (clothing, shoes, books, toys)
+- Sports & Recreation (bikes, gym equipment, sports gear)
+- Kitchen Items (pots, pans, dishes, small appliances)
+- Decor & Art (paintings, mirrors, lamps, rugs)
 
 LOOK FOR:
-- Brand logos/labels (IKEA, Ashley, West Elm, Samsung, LG, etc.)
-- Model names or product lines
-- Size indicators (Queen, King, 65-inch, 3-seater, L-shaped, etc.)
-- Material (leather, fabric, wood, metal, glass)
-- Style descriptors (sectional, modular, recliner, etc.)
+- Brand logos/labels
+- Size indicators
+- Material type
+- Style or model descriptors
 
-PROVIDE ACCURATE DIMENSIONS based on item type:
+REFERENCE DIMENSIONS:
+- Large suitcase: ~75cm L x 50cm W x 30cm H, 5-8kg
+- Duffel bag: ~65cm L x 35cm W x 35cm H, 2-5kg
+- Backpack: ~50cm L x 30cm W x 20cm H, 1-3kg
+- Medium cardboard box: ~45cm L x 45cm W x 45cm H, 5-20kg
 - L-shaped sectional sofa: ~280-320cm L x 160-200cm W x 80-90cm H, 100-150kg
 - 3-seat sofa: ~200-230cm L x 85-95cm W x 80-90cm H, 60-90kg
-- Armchair: ~80-100cm L x 80-90cm W x 85-100cm H, 20-35kg
 - Queen bed frame: ~160cm L x 210cm W x 40-100cm H, 40-70kg
-- 6-drawer dresser: ~140-160cm L x 45-55cm W x 80-90cm H, 60-80kg
-- Dining table (6-seat): ~180cm L x 90cm W x 75cm H, 40-60kg
 - 65-inch TV: ~145cm L x 10cm W x 85cm H, 20-30kg
 - Refrigerator: ~70-90cm L x 70-80cm W x 170-180cm H, 80-120kg
 
 Return ONLY valid JSON:
 {
-  "itemName": "detailed name with size/style (e.g., 'Gray L-shaped sectional sofa with chaise')",
-  "category": "Furniture|Appliance|Fragile|Oversized|Bulky|Electronics|Other",
+  "itemName": "specific descriptive name (e.g., 'Large black rolling suitcase', 'Gray duffel bag', 'Brown cardboard moving box')",
+  "category": "Furniture|Appliance|Fragile|Oversized|Bulky|Electronics|Bags|Boxes|Personal|Sports|Kitchen|Decor|Other",
   "confidence": 0.0-1.0,
   "brand": "brand if visible or null",
   "model": "model/product line if visible or null",
-  "searchQuery": "best search query to find this exact product specifications online (e.g., 'IKEA KIVIK sectional sofa dimensions weight')",
+  "searchQuery": "best search query to find this exact product specifications online",
   "estimatedWeight": weight in kg (number),
   "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number }
 }`
@@ -427,9 +438,10 @@ function categorizeItem(itemName: string, category: string, weightKg?: number, v
 } {
   // Normalize category
   const normalizedCategory = category.toLowerCase();
+  const itemNameLower = itemName.toLowerCase();
   let finalCategory: IdentificationResult['category'] = 'Other';
   
-  if (normalizedCategory.includes('furniture') || normalizedCategory.includes('sofa') || normalizedCategory.includes('bed') || normalizedCategory.includes('table')) {
+  if (normalizedCategory.includes('furniture') || normalizedCategory.includes('sofa') || normalizedCategory.includes('bed') || normalizedCategory.includes('table') || normalizedCategory.includes('chair') || normalizedCategory.includes('desk')) {
     finalCategory = 'Furniture';
   } else if (normalizedCategory.includes('appliance') || normalizedCategory.includes('fridge') || normalizedCategory.includes('washer') || normalizedCategory.includes('dryer')) {
     finalCategory = 'Appliance';
@@ -437,6 +449,18 @@ function categorizeItem(itemName: string, category: string, weightKg?: number, v
     finalCategory = 'Electronics';
   } else if (normalizedCategory.includes('fragile') || normalizedCategory.includes('glass') || normalizedCategory.includes('mirror')) {
     finalCategory = 'Fragile';
+  } else if (normalizedCategory.includes('bag') || itemNameLower.includes('bag') || itemNameLower.includes('suitcase') || itemNameLower.includes('luggage') || itemNameLower.includes('backpack') || itemNameLower.includes('duffel')) {
+    finalCategory = 'Bags' as any;
+  } else if (normalizedCategory.includes('box') || itemNameLower.includes('box') || itemNameLower.includes('container') || itemNameLower.includes('bin')) {
+    finalCategory = 'Boxes' as any;
+  } else if (normalizedCategory.includes('personal') || normalizedCategory.includes('clothing') || normalizedCategory.includes('shoes')) {
+    finalCategory = 'Personal' as any;
+  } else if (normalizedCategory.includes('sport') || normalizedCategory.includes('bike') || normalizedCategory.includes('gym')) {
+    finalCategory = 'Sports' as any;
+  } else if (normalizedCategory.includes('kitchen') || normalizedCategory.includes('cookware')) {
+    finalCategory = 'Kitchen' as any;
+  } else if (normalizedCategory.includes('decor') || normalizedCategory.includes('art') || normalizedCategory.includes('lamp') || normalizedCategory.includes('rug')) {
+    finalCategory = 'Decor' as any;
   }
   
   // Determine handling complexity based on weight and volume
