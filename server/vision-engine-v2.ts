@@ -27,7 +27,7 @@
 
 import OpenAI from "openai";
 import * as path from "path";
-import sharp from "sharp";
+import heicConvert from "heic-convert";
 import { 
   FURNITURE_DATABASE, 
   findBestMatch, 
@@ -97,10 +97,12 @@ async function imageToBase64(imagePath: string): Promise<string> {
     if (ext === '.heic' || ext === '.heif') {
       console.log('[Vision Engine 2.0] Converting HEIC/HEIF to JPEG for OpenAI compatibility');
       try {
-        const jpegBuffer = await sharp(buffer)
-          .jpeg({ quality: 90 })
-          .toBuffer();
-        const base64 = jpegBuffer.toString('base64');
+        const jpegBuffer = await heicConvert({
+          buffer: Buffer.from(buffer),
+          format: 'JPEG',
+          quality: 0.9
+        });
+        const base64 = Buffer.from(jpegBuffer).toString('base64');
         return `data:image/jpeg;base64,${base64}`;
       } catch (conversionError) {
         console.error('[Vision Engine 2.0] HEIC conversion failed:', conversionError);
