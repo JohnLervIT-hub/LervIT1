@@ -127,9 +127,12 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
 
 export default function Payment() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [, params] = useRoute("/payment/:bookingId");
   const [, setLocation] = useLocation();
   const [clientSecret, setClientSecret] = useState("");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const bookingId = params?.bookingId;
 
   const { data: booking, isLoading: bookingLoading } = useQuery<Booking>({
@@ -140,33 +143,49 @@ export default function Payment() {
   // Track if payment intent was already created to prevent duplicates
   const paymentIntentCreated = useRef(false);
 
+  const createPaymentIntent = async () => {
+    if (!bookingId || !user) return;
+    
+    setIsCreatingIntent(true);
+    setPaymentError(null);
+    
+    try {
+      const res = await apiRequest("POST", `/api/bookings/${bookingId}/create-payment-intent`, {});
+      const data = await res.json();
+      
+      if (!res.ok) {
+        if (data.alreadyPaid) {
+          queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+          setLocation("/my-bookings");
+          return;
+        }
+        throw new Error(data.error || "Failed to initialize payment");
+      }
+      
+      if (!data.clientSecret) {
+        throw new Error("No payment session received");
+      }
+      
+      setClientSecret(data.clientSecret);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to load payment form";
+      setPaymentError(errorMessage);
+      toast({
+        title: "Payment Setup Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingIntent(false);
+    }
+  };
+
   useEffect(() => {
     if (!bookingId || !user || paymentIntentCreated.current || clientSecret) return;
     paymentIntentCreated.current = true;
-
-    // Create payment intent when component loads
-    apiRequest("POST", `/api/bookings/${bookingId}/create-payment-intent`, {})
-      .then(async (res) => {
-        const data = await res.json();
-        
-        if (!res.ok) {
-          paymentIntentCreated.current = false;
-          // Check if payment was already completed
-          if (data.alreadyPaid) {
-            queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
-            queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-            setLocation("/my-bookings");
-            return;
-          }
-          return;
-        }
-        
-        setClientSecret(data.clientSecret);
-      })
-      .catch(() => {
-        paymentIntentCreated.current = false;
-      });
-  }, [bookingId, user, setLocation, clientSecret]);
+    createPaymentIntent();
+  }, [bookingId, user, clientSecret]);
 
   if (!user || !bookingId) {
     return (
@@ -295,7 +314,32 @@ export default function Payment() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!clientSecret ? (
+            {paymentError ? (
+              <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                <div className="text-center">
+                  <p className="text-destructive font-medium">Unable to load payment form</p>
+                  <p className="text-sm text-muted-foreground mt-1">{paymentError}</p>
+                </div>
+                <Button 
+                  onClick={() => {
+                    paymentIntentCreated.current = false;
+                    setPaymentError(null);
+                    createPaymentIntent();
+                  }}
+                  disabled={isCreatingIntent}
+                  data-testid="button-retry-payment-setup"
+                >
+                  {isCreatingIntent ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Retrying...
+                    </>
+                  ) : (
+                    "Try Again"
+                  )}
+                </Button>
+              </div>
+            ) : !clientSecret ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
