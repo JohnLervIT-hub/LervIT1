@@ -3537,6 +3537,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const message = await storage.createMessage(messageData);
       
       const sender = await storage.getUser(message.senderId);
+      
+      // Create in-app notification for the recipient
+      try {
+        const booking = await storage.getBooking(message.bookingId);
+        if (booking) {
+          // Determine recipient: if sender is customer, notify mover; if sender is mover's user, notify customer
+          let recipientId: string | null = null;
+          
+          if (message.senderId === booking.customerId && booking.moverId) {
+            // Sender is customer, notify mover
+            const mover = await storage.getMover(booking.moverId);
+            if (mover) {
+              recipientId = mover.userId;
+            }
+          } else if (booking.moverId) {
+            // Sender is mover, notify customer
+            const mover = await storage.getMover(booking.moverId);
+            if (mover && mover.userId === message.senderId) {
+              recipientId = booking.customerId;
+            }
+          }
+          
+          if (recipientId) {
+            const senderName = sender?.name || "Someone";
+            const messagePreview = message.text.length > 80 
+              ? message.text.substring(0, 80) + "..." 
+              : message.text;
+            
+            await storage.createInAppNotification({
+              userId: recipientId,
+              type: "new_message",
+              title: `New message from ${senderName}`,
+              message: messagePreview,
+              bookingId: message.bookingId,
+              actionUrl: `/messages/${message.bookingId}`,
+              isRead: false,
+            });
+          }
+        }
+      } catch (notifError) {
+        // Don't fail the message creation if notification fails
+        console.error("Failed to create message notification:", notifError);
+      }
+      
       res.json({
         ...message,
         sender: sender ? { id: sender.id, name: sender.name } : null
