@@ -100,6 +100,14 @@ export const CATEGORY_DIMENSION_LIMITS: Record<FurnitureCategory, DimensionLimit
     height: { min: 15, max: 200 },
     weight: { min: 1, max: 300 },
   },
+  
+  // Luggage: bags, suitcases, backpacks, etc.
+  Luggage: {
+    length: { min: 15, max: 85 },   // Small handbag to large suitcase
+    width: { min: 10, max: 55 },    // Thin to deep
+    height: { min: 15, max: 80 },   // Small bag to tall suitcase
+    weight: { min: 0.5, max: 30 },  // Empty bag to fully packed suitcase
+  },
 };
 
 /**
@@ -198,6 +206,56 @@ const SUBCATEGORY_LIMITS: Record<string, Partial<DimensionLimits>> = {
     height: { min: 81, max: 114 },
     weight: { min: 10, max: 25 },
   },
+  
+  // Luggage subcategories
+  'handbag': {
+    length: { min: 20, max: 40 },
+    width: { min: 8, max: 20 },
+    height: { min: 15, max: 35 },
+    weight: { min: 0.3, max: 2 },
+  },
+  'purse': {
+    length: { min: 15, max: 35 },
+    width: { min: 5, max: 15 },
+    height: { min: 10, max: 25 },
+    weight: { min: 0.2, max: 1.5 },
+  },
+  'backpack': {
+    length: { min: 35, max: 55 },
+    width: { min: 15, max: 35 },
+    height: { min: 40, max: 60 },
+    weight: { min: 0.5, max: 3 },
+  },
+  'duffel': {
+    length: { min: 45, max: 75 },
+    width: { min: 25, max: 40 },
+    height: { min: 25, max: 40 },
+    weight: { min: 1, max: 5 },
+  },
+  'carry-on': {
+    length: { min: 50, max: 60 },
+    width: { min: 30, max: 40 },
+    height: { min: 20, max: 30 },
+    weight: { min: 2, max: 5 },
+  },
+  'suitcase': {
+    length: { min: 55, max: 80 },
+    width: { min: 35, max: 55 },
+    height: { min: 25, max: 40 },
+    weight: { min: 3, max: 8 },
+  },
+  'tote': {
+    length: { min: 30, max: 50 },
+    width: { min: 10, max: 20 },
+    height: { min: 25, max: 40 },
+    weight: { min: 0.3, max: 2 },
+  },
+  'briefcase': {
+    length: { min: 35, max: 50 },
+    width: { min: 8, max: 15 },
+    height: { min: 25, max: 35 },
+    weight: { min: 1, max: 3 },
+  },
 };
 
 /**
@@ -222,6 +280,7 @@ function normalizeCategory(category: string): FurnitureCategory {
   if (categoryLower.includes('electronic') || categoryLower.includes('tv') || categoryLower.includes('television') || categoryLower.includes('monitor') || categoryLower.includes('computer')) return 'Electronics';
   if (categoryLower.includes('storage') || categoryLower.includes('bookshelf') || categoryLower.includes('wardrobe') || categoryLower.includes('cabinet')) return 'Storage';
   if (categoryLower.includes('outdoor') || categoryLower.includes('patio') || categoryLower.includes('grill') || categoryLower.includes('garden')) return 'Outdoor';
+  if (categoryLower.includes('luggage') || categoryLower.includes('bag') || categoryLower.includes('suitcase') || categoryLower.includes('backpack') || categoryLower.includes('duffel') || categoryLower.includes('carry-on') || categoryLower.includes('briefcase') || categoryLower.includes('purse') || categoryLower.includes('handbag') || categoryLower.includes('tote')) return 'Luggage';
   
   return 'Other';
 }

@@ -223,6 +223,13 @@ function correctCategory(itemName: string, detectedCategory: string): {
     return { category: 'Dresser', wasCorrected: true, originalCategory: detectedCategory };
   }
   
+  // Luggage keywords - bags, suitcases, backpacks, etc.
+  const luggageKeywords = ['bag', 'suitcase', 'backpack', 'duffel', 'luggage', 'carry-on', 'briefcase', 'purse', 'handbag', 'tote', 'messenger', 'gym bag', 'travel bag', 'duffle'];
+  if (luggageKeywords.some(kw => nameLower.includes(kw)) && detectedCategory !== 'Luggage') {
+    console.log(`[Vision Engine 2.0] Category correction: ${detectedCategory} → Luggage (detected "${itemName}")`);
+    return { category: 'Luggage', wasCorrected: true, originalCategory: detectedCategory };
+  }
+  
   return { category: detectedCategory, wasCorrected: false };
 }
 
@@ -356,9 +363,9 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
 Analyze this image and identify the item with maximum detail.
 
 IDENTIFY:
-1. Item type (be specific: "L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser")
-2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Other
-3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional for sofas)
+1. Item type (be specific: "L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
+2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
+3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
 4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
 5. Material if visible (leather, fabric, wood, metal, glass)
 
@@ -384,6 +391,13 @@ REFERENCE DIMENSIONS (use these):
 • 55" TV: ~125×8×72cm, 18kg
 • 65" TV: ~145×10×85cm, 25kg
 • Washing machine: ~60×65×85cm, 75kg
+• Small handbag/purse: ~30×15×20cm, 0.5kg
+• Backpack: ~45×30×20cm, 1kg
+• Duffel bag: ~60×35×30cm, 1.5kg
+• Carry-on suitcase: ~55×35×25cm, 3kg
+• Medium suitcase: ~65×45×30cm, 4kg
+• Large suitcase: ~75×50×35cm, 5kg
+• Travel bag: ~50×30×25cm, 1kg
 
 Return ONLY valid JSON (no markdown):
 {
