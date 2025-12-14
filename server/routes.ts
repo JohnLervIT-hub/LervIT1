@@ -2757,14 +2757,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Check if booking is in valid state for payment (pending or confirmed)
-      if (booking.status !== 'pending' && booking.status !== 'confirmed') {
-        return res.status(400).json({ error: "Booking must be pending or confirmed for payment" });
+      // Check if booking is in valid state for payment (pending, confirmed, or payment_failed for retries)
+      const validPaymentStatuses = ['pending', 'confirmed', 'payment_failed', 'pending_payment'];
+      if (!validPaymentStatuses.includes(booking.status)) {
+        return res.status(400).json({ error: "Booking must be pending, confirmed, or payment_failed for payment" });
       }
       
       // Check if already paid
       if (booking.paymentStatus === 'succeeded') {
         return res.status(400).json({ error: "Booking has already been paid" });
+      }
+      
+      // If this is a payment retry (status was payment_failed), reset status to pending
+      const isRetry = booking.status === 'payment_failed' || booking.paymentStatus === 'failed';
+      if (isRetry) {
+        await storage.updateBooking(bookingId, { 
+          status: 'pending',
+          paymentStatus: 'pending'
+        });
+        logEvent.payment('payment_retry_initiated', { bookingId, previousStatus: booking.status });
       }
       
       // SECURITY: Calculate amount SERVER-SIDE from booking (NEVER trust client amounts)

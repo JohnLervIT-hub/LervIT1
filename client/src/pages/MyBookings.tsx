@@ -97,19 +97,21 @@ export default function MyBookings() {
   const sortedBookings = bookings
     ?.filter(b => {
       if (!b) return false;
-      // Filter out expired pending/confirmed bookings (keep in_transit as they're active moves)
-      const isActiveStatus = ["pending_payment", "pending", "confirmed", "in_transit"].includes(b.status);
-      if (isActiveStatus && b.status !== "in_transit" && safeParseDate(b.preferredDate) < now) {
+      // Filter out expired pending/confirmed bookings (keep in_transit and payment_failed as they're active)
+      const isActiveStatus = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"].includes(b.status);
+      // Also keep bookings with failed payment status
+      if (b.paymentStatus === "failed") return true;
+      if (isActiveStatus && b.status !== "in_transit" && b.status !== "payment_failed" && safeParseDate(b.preferredDate) < now) {
         return false;
       }
       return true;
     })
     .sort((a, b) => {
-      // Active bookings first, sorted by date ascending
-      const aIsActive = ["pending_payment", "pending", "confirmed", "in_transit"].includes(a.status) && 
-        (a.status === "in_transit" || safeParseDate(a.preferredDate) >= now);
-      const bIsActive = ["pending_payment", "pending", "confirmed", "in_transit"].includes(b.status) && 
-        (b.status === "in_transit" || safeParseDate(b.preferredDate) >= now);
+      // Active bookings first (including payment_failed for retry), sorted by date ascending
+      const aIsActive = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"].includes(a.status) && 
+        (a.status === "in_transit" || a.status === "payment_failed" || a.paymentStatus === "failed" || safeParseDate(a.preferredDate) >= now);
+      const bIsActive = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"].includes(b.status) && 
+        (b.status === "in_transit" || b.status === "payment_failed" || b.paymentStatus === "failed" || safeParseDate(b.preferredDate) >= now);
       
       if (aIsActive && !bIsActive) return -1;
       if (!aIsActive && bIsActive) return 1;
@@ -623,6 +625,16 @@ export default function MyBookings() {
                       >
                         <CreditCard className="w-4 h-4 mr-2" />
                         Pay ${parseFloat(booking.price).toFixed(2)} CAD
+                      </Button>
+                    )}
+                    {(booking.status === "payment_failed" || booking.paymentStatus === "failed") && booking.price && (
+                      <Button
+                        onClick={() => setLocation(`/payment/${booking.id}`)}
+                        className="bg-gradient-to-r from-orange-500 to-orange-600"
+                        data-testid={`button-retry-payment-${booking.id}`}
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Retry Payment - ${parseFloat(booking.price).toFixed(2)} CAD
                       </Button>
                     )}
                     {(booking.status === "pending" || booking.status === "pending_payment") && booking.paymentStatus !== "succeeded" && (
