@@ -2768,7 +2768,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Booking has already been paid" });
       }
       
-      // If this is a payment retry (status was payment_failed), reset status to pending
+      // If this is a payment retry (status was payment_failed), reset status and force new PaymentIntent
       const isRetry = booking.status === 'payment_failed' || booking.paymentStatus === 'failed';
       if (isRetry) {
         await storage.updateBooking(bookingId, { 
@@ -2789,8 +2789,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let paymentIntent;
       let needsNewPaymentIntent = false;
       
-      if (booking.stripePaymentIntentId) {
-        // Retrieve existing payment intent
+      if (booking.stripePaymentIntentId && !isRetry) {
+        // Retrieve existing payment intent (only if not a retry)
         try {
           paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
           
@@ -2812,13 +2812,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // If payment intent doesn't exist, create a new one
           needsNewPaymentIntent = true;
         }
+      } else if (isRetry) {
+        // For retries, cancel old PaymentIntent and create fresh one
+        if (booking.stripePaymentIntentId) {
+          try {
+            await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
+            logEvent.payment('old_intent_canceled_for_retry', { bookingId, oldIntentId: booking.stripePaymentIntentId });
+          } catch (cancelError) {
+            // Intent might already be canceled or in a non-cancelable state - that's fine
+            logEvent.payment('old_intent_cancel_skipped', { bookingId, reason: 'already_canceled_or_succeeded' });
+          }
+        }
+        needsNewPaymentIntent = true;
       } else {
         needsNewPaymentIntent = true;
       }
       
       // Create new payment intent if needed
       if (needsNewPaymentIntent) {
-        // SECURITY: Use idempotency key to prevent duplicate charges
+        // Use timestamp in idempotency key for retries to allow new intent creation
+        const idempotencyKey = isRetry 
+          ? `payment_intent_${booking.id}_${amountInCents}_retry_${Date.now()}`
+          : `payment_intent_${booking.id}_${amountInCents}`;
+        
         paymentIntent = await stripe.paymentIntents.create({
           amount: amountInCents,
           currency: "cad",
@@ -2826,10 +2842,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             bookingId: booking.id,
             customerId: user.id,
             customerName: user.name,
+            isRetry: isRetry ? 'true' : 'false',
           },
           description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
         }, {
-          idempotencyKey: `payment_intent_${booking.id}_${amountInCents}`,
+          idempotencyKey,
         });
         
         // Update booking with new payment intent ID
