@@ -27,6 +27,7 @@
 
 import OpenAI from "openai";
 import * as path from "path";
+import sharp from "sharp";
 import { 
   FURNITURE_DATABASE, 
   findBestMatch, 
@@ -80,6 +81,7 @@ export interface VisionEngineResult {
 
 /**
  * Download image from Object Storage and convert to base64 data URL
+ * Automatically converts HEIC/HEIF (iPhone format) to JPEG for OpenAI compatibility
  */
 async function imageToBase64(imagePath: string): Promise<string> {
   console.log('[Vision Engine 2.0] Converting image to base64:', imagePath);
@@ -88,9 +90,25 @@ async function imageToBase64(imagePath: string): Promise<string> {
     const objectStorageService = new ObjectStorageService();
     const objectFile = await objectStorageService.getObjectEntityFile(imagePath);
     const [buffer] = await objectFile.download();
-    const base64 = buffer.toString('base64');
     
     const ext = path.extname(imagePath).toLowerCase();
+    
+    // Check if HEIC/HEIF format (iPhone) - needs conversion
+    if (ext === '.heic' || ext === '.heif') {
+      console.log('[Vision Engine 2.0] Converting HEIC/HEIF to JPEG for OpenAI compatibility');
+      try {
+        const jpegBuffer = await sharp(buffer)
+          .jpeg({ quality: 90 })
+          .toBuffer();
+        const base64 = jpegBuffer.toString('base64');
+        return `data:image/jpeg;base64,${base64}`;
+      } catch (conversionError) {
+        console.error('[Vision Engine 2.0] HEIC conversion failed:', conversionError);
+        throw new Error('Failed to convert HEIC image. Please upload a JPEG, PNG, or WebP image.');
+      }
+    }
+    
+    const base64 = buffer.toString('base64');
     const mimeTypes: Record<string, string> = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
