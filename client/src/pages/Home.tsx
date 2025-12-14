@@ -30,22 +30,22 @@ export default function Home() {
   const features = [
     {
       icon: visionEngineIcon,
-      title: "Lervit Vision Engine™",
+      title: "LervIT Vision Engine™",
       description: "Snap a photo of your items and our AI instantly identifies them, estimates dimensions, and recommends the perfect vehicle size",
     },
     {
       icon: matchLogicIcon,
-      title: "Lervit MatchLogic™",
+      title: "LervIT MatchLogic™",
       description: "Get matched with the nearest verified movers in real-time—see ratings, ETAs, and transparent pricing before you book",
     },
     {
       icon: securePayIcon,
-      title: "Lervit SecurePay™",
+      title: "LervIT SecurePay™",
       description: "Pay safely with Stripe, save your cards for faster checkout, and enjoy transparent pricing with no hidden fees",
     },
     {
       icon: trustShieldIcon,
-      title: "Lervit TrustShield™",
+      title: "LervIT TrustShield™",
       description: "Every mover is background-checked with verified licenses, insurance, and real customer reviews you can trust",
     },
   ];

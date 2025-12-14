@@ -12,22 +12,22 @@ const EARLY_ACCESS_TERMS = `LERVIT – EARLY ACCESS MOVER TERMS (PILOT)
 Effective Date: Upon Acceptance
 Program: Early Access (Pilot)
 
-By clicking "I Agree", you ("Mover") agree to the following terms to participate in Lervit's Early Access pilot.
+By clicking "I Agree", you ("Mover") agree to the following terms to participate in LervIT's Early Access pilot.
 
 1. Early Access Status
 
-You are approved to participate in Lervit's Early Access (Pilot).
+You are approved to participate in LervIT's Early Access (Pilot).
 Early Access does not mean "verified". Full verification requirements may be introduced later as the platform scales.
 
 2. Independent Contractor Relationship
 
-You are an independent contractor, not an employee, partner, or agent of Lervit.
+You are an independent contractor, not an employee, partner, or agent of LervIT.
 
 You choose when, where, and whether to accept jobs.
 
 You may work for other platforms or clients at any time.
 
-Lervit does not provide wages, benefits, insurance, or equipment.
+LervIT does not provide wages, benefits, insurance, or equipment.
 
 3. Vehicle, Insurance, and Responsibility
 
@@ -39,14 +39,14 @@ You are responsible for maintaining valid auto insurance and any coverage requir
 
 You are responsible for safe loading, transport, and delivery of items.
 
-Lervit does not provide cargo, vehicle, or liability insurance for movers during the Early Access pilot.
+LervIT does not provide cargo, vehicle, or liability insurance for movers during the Early Access pilot.
 
 4. Payments and Fees
 
 You will be paid for completed jobs according to the app's pricing and payout rules.
 
-Lervit may apply a platform service fee.
-During Early Access, this fee may be reduced or refunded at Lervit's discretion.
+LervIT may apply a platform service fee.
+During Early Access, this fee may be reduced or refunded at LervIT's discretion.
 
 You are responsible for your own taxes, including GST/HST if applicable.
 
@@ -80,7 +80,7 @@ You may opt out of non-essential messages where applicable.
 
 7. Suspension or Removal
 
-Lervit may suspend or remove your Early Access status at any time, with or without notice, including for:
+LervIT may suspend or remove your Early Access status at any time, with or without notice, including for:
 
 Safety concerns
 
@@ -94,9 +94,9 @@ Misrepresentation of vehicle or services
 
 To the maximum extent permitted by law:
 
-Lervit is not responsible for loss, damage, or disputes arising from jobs accepted through the platform.
+LervIT is not responsible for loss, damage, or disputes arising from jobs accepted through the platform.
 
-You agree to indemnify Lervit against claims arising from your actions as a mover.
+You agree to indemnify LervIT against claims arising from your actions as a mover.
 
 9. Future Verification
 
