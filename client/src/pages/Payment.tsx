@@ -42,53 +42,64 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
 
     setIsProcessing(true);
 
-    // Use redirect: 'if_required' to handle payment inline without redirect
-    // This avoids cross-origin navigation errors in iframes
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/my-bookings`,
-      },
-      redirect: 'if_required',
-    });
+    try {
+      // Use redirect: 'if_required' to handle payment inline without redirect
+      // This avoids cross-origin navigation errors in iframes
+      const { error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/my-bookings`,
+        },
+        redirect: 'if_required',
+      });
 
-    setIsProcessing(false);
-
-    if (error) {
+      if (error) {
+        toast({
+          title: "Payment Failed",
+          description: error.message || "An error occurred during payment. Please try again.",
+          variant: "destructive",
+        });
+      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        // Payment succeeded - update booking status immediately
+        try {
+          await apiRequest("POST", `/api/bookings/${bookingId}/confirm-payment`, {
+            paymentIntentId: paymentIntent.id
+          });
+        } catch {
+          // Payment confirmed via webhook
+        }
+        
+        toast({
+          title: "Payment Successful!",
+          description: "Thank you! Your payment has been processed. Finding movers now...",
+        });
+        queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/bookings?customerId=${userId}`] });
+        setTimeout(() => setLocation("/my-bookings"), 1500);
+      } else if (paymentIntent && paymentIntent.status === 'processing') {
+        toast({
+          title: "Payment Processing",
+          description: "Your payment is being processed. We'll update you shortly.",
+        });
+        setTimeout(() => setLocation("/my-bookings"), 1500);
+      } else {
+        // Handle other statuses
+        toast({
+          title: "Payment Status",
+          description: `Payment status: ${paymentIntent?.status || 'unknown'}`,
+        });
+      }
+    } catch (err) {
+      // Handle any unexpected errors from Stripe
+      console.error("Payment error:", err);
       toast({
-        title: "Payment Failed",
-        description: error.message,
+        title: "Payment Error",
+        description: "Something went wrong. Please try again or contact support.",
         variant: "destructive",
       });
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      // Payment succeeded - update booking status immediately
-      try {
-        await apiRequest("POST", `/api/bookings/${bookingId}/confirm-payment`, {
-          paymentIntentId: paymentIntent.id
-        });
-      } catch {
-        // Payment confirmed via webhook
-      }
-      
-      toast({
-        title: "Payment Successful!",
-        description: "Thank you! Your payment has been processed. Finding movers now...",
-      });
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings?customerId=${userId}`] });
-      setTimeout(() => setLocation("/my-bookings"), 1500);
-    } else if (paymentIntent && paymentIntent.status === 'processing') {
-      toast({
-        title: "Payment Processing",
-        description: "Your payment is being processed. We'll update you shortly.",
-      });
-      setTimeout(() => setLocation("/my-bookings"), 1500);
-    } else {
-      // Handle other statuses
-      toast({
-        title: "Payment Status",
-        description: `Payment status: ${paymentIntent?.status || 'unknown'}`,
-      });
+    } finally {
+      // Always reset processing state
+      setIsProcessing(false);
     }
   };
 
