@@ -23,6 +23,7 @@ import {
 import { Search, SlidersHorizontal, MapPin, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { LocationPrompt } from "@/components/LocationPrompt";
 
 function MoverCardSkeleton() {
   return (
@@ -86,21 +87,10 @@ export default function BrowseMovers() {
     );
   };
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserCoords({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          });
-        },
-        () => {
-          setLocationDenied(true);
-        }
-      );
-    }
-  }, []);
+  const handleLocationGranted = (coords: { lat: number; lng: number }) => {
+    setUserCoords(coords);
+    setLocationDenied(false);
+  };
 
   // Always fetch movers immediately, update with coords when available
   const baseUrl = "/api/movers?isAvailable=true";
@@ -175,6 +165,15 @@ export default function BrowseMovers() {
             Meet our founding movers ready to help with your move
           </p>
         </div>
+
+        {!userCoords && (
+          <div className="mb-6">
+            <LocationPrompt 
+              variant="card" 
+              onLocationGranted={handleLocationGranted}
+            />
+          </div>
+        )}
 
         <div className="mb-8 flex gap-4">
           <div className="relative flex-1">

@@ -5,6 +5,7 @@ import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Camera, Users, Navigation } from "lucide-react";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
+import { LocationPrompt } from "@/components/LocationPrompt";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
@@ -51,6 +52,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      <LocationPrompt variant="banner" />
       <HeroSection />
 
       <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
