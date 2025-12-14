@@ -910,3 +910,66 @@ export const EMAIL_CAMPAIGN_TYPES = {
 } as const;
 
 export type EmailCampaignType = typeof EMAIL_CAMPAIGN_TYPES[keyof typeof EMAIL_CAMPAIGN_TYPES];
+
+// ===== IN-APP NOTIFICATIONS (Inbox) =====
+// Unified notification system for customers and movers
+
+export const NOTIFICATION_TYPES = {
+  BOOKING_CREATED: "booking_created",
+  BOOKING_CONFIRMED: "booking_confirmed",
+  BOOKING_STATUS_UPDATE: "booking_status_update",
+  BOOKING_CANCELLED: "booking_cancelled",
+  BOOKING_COMPLETED: "booking_completed",
+  PAYMENT_RECEIVED: "payment_received",
+  PAYMENT_FAILED: "payment_failed",
+  MOVER_ASSIGNED: "mover_assigned",
+  JOB_OPPORTUNITY: "job_opportunity",
+  JOB_EXPIRED: "job_expired",
+  NEW_MESSAGE: "new_message",
+  REVIEW_RECEIVED: "review_received",
+  SUPPORT_TICKET_UPDATE: "support_ticket_update",
+  EARNINGS_RECEIVED: "earnings_received",
+  PAYOUT_COMPLETED: "payout_completed",
+  VERIFICATION_UPDATE: "verification_update",
+  SYSTEM_MESSAGE: "system_message",
+} as const;
+
+export type NotificationType = typeof NOTIFICATION_TYPES[keyof typeof NOTIFICATION_TYPES];
+
+export const inAppNotifications = pgTable("in_app_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: text("type").notNull(), // NotificationType
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  
+  // Optional references for navigation
+  bookingId: varchar("booking_id").references(() => bookings.id),
+  supportTicketId: varchar("support_ticket_id").references(() => supportTickets.id),
+  
+  // Action link for when user clicks the notification
+  actionUrl: text("action_url"),
+  
+  // Read status
+  isRead: boolean("is_read").default(false).notNull(),
+  readAt: timestamp("read_at"),
+  
+  // Metadata for additional context
+  metadata: text("metadata"), // JSON string for additional data
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("in_app_notifications_user_id_idx").on(table.userId),
+  userReadIdx: index("in_app_notifications_user_read_idx").on(table.userId, table.isRead),
+  typeIdx: index("in_app_notifications_type_idx").on(table.type),
+  createdAtIdx: index("in_app_notifications_created_at_idx").on(table.createdAt),
+}));
+
+export const insertInAppNotificationSchema = createInsertSchema(inAppNotifications).omit({
+  id: true,
+  createdAt: true,
+  readAt: true,
+});
+
+export type InsertInAppNotification = z.infer<typeof insertInAppNotificationSchema>;
+export type InAppNotification = typeof inAppNotifications.$inferSelect;
