@@ -54,15 +54,6 @@ export default function SplashScreen({ onComplete, minDisplayTime = 2000 }: Spla
               transition={{ duration: 0.6, ease: "easeOut" }}
             />
             
-            <motion.h1
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-              className="text-3xl sm:text-4xl font-bold text-gray-900"
-            >
-              LervIT
-            </motion.h1>
-            
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
