@@ -5,15 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { generatePriceExplanation } from "@shared/ai";
+import EditBookingForm from "@/components/EditBookingForm";
 
 type Booking = {
   id: string;
@@ -66,6 +67,9 @@ export default function MyBookings() {
   
   // State for specific booking view from URL query param
   const [focusedBookingId, setFocusedBookingId] = useState<string | null>(null);
+  
+  // State for edit booking dialog
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   
   // Parse URL for specific booking
   useEffect(() => {
@@ -621,6 +625,16 @@ export default function MyBookings() {
                         Pay ${parseFloat(booking.price).toFixed(2)} CAD
                       </Button>
                     )}
+                    {(booking.status === "pending" || booking.status === "pending_payment") && booking.paymentStatus !== "succeeded" && (
+                      <Button
+                        variant="outline"
+                        onClick={() => setEditingBooking(booking)}
+                        data-testid={`button-edit-${booking.id}`}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Booking
+                      </Button>
+                    )}
                     {(booking.status === "pending" || booking.status === "pending_payment") && (
                       <Button
                         variant="destructive"
@@ -659,6 +673,29 @@ export default function MyBookings() {
         )}
       </div>
       
+      {/* Edit Booking Dialog */}
+      <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Edit Booking
+            </DialogTitle>
+            <DialogDescription>
+              Update your booking details. The price will be recalculated automatically.
+            </DialogDescription>
+          </DialogHeader>
+          {editingBooking && user && (
+            <EditBookingForm
+              booking={editingBooking}
+              customerId={user.id}
+              onSuccess={() => setEditingBooking(null)}
+              onCancel={() => setEditingBooking(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Image Preview Dialog */}
       <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
         <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
