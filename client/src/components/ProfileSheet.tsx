@@ -25,6 +25,7 @@ import {
   Users,
   ChevronRight,
   Moon,
+  Bell,
 } from "lucide-react";
 
 export function ProfileSheet() {
@@ -59,12 +60,14 @@ export function ProfileSheet() {
       case "customer":
         return [
           { href: "/profile", icon: User, label: "My Profile" },
+          { href: "/inbox", icon: Bell, label: "Notifications" },
           { href: "/my-bookings", icon: Calendar, label: "My Bookings" },
           { href: "/support", icon: HelpCircle, label: "Help & Support" },
         ];
       case "mover":
         return [
           { href: "/mover-profile", icon: User, label: "My Profile" },
+          { href: "/inbox", icon: Bell, label: "Notifications" },
           { href: "/mover-settings", icon: Settings, label: "Settings" },
           { href: "/mover-dashboard?tab=payouts", icon: Wallet, label: "Earnings & Payouts" },
           { href: "/mover-verification", icon: Shield, label: "Verification" },
@@ -73,6 +76,7 @@ export function ProfileSheet() {
       case "admin":
         return [
           { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
+          { href: "/inbox", icon: Bell, label: "Notifications" },
           { href: "/admin/users", icon: Users, label: "Manage Users" },
           { href: "/admin/verification", icon: Shield, label: "Verification" },
           { href: "/admin/support", icon: HelpCircle, label: "Support Tickets" },

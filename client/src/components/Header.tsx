@@ -8,7 +8,6 @@ import { MoverNav } from "./MoverNav";
 import { AdminNav } from "./AdminNav";
 import { ThemeToggle } from "./ThemeToggle";
 import { MessageNotification } from "./MessageNotification";
-import { InboxIndicator } from "./InboxIndicator";
 import { ProfileSheet } from "./ProfileSheet";
 
 export default function Header() {
@@ -96,7 +95,6 @@ export default function Header() {
 
           <div className="hidden md:flex items-center gap-2">
             {!user && <ThemeToggle />}
-            {user && <InboxIndicator />}
             {user && <MessageNotification />}
             {user ? (
               <ProfileSheet />
@@ -118,7 +116,6 @@ export default function Header() {
 
           <div className="flex items-center gap-1 md:hidden">
             {!user && <ThemeToggle />}
-            {user && <InboxIndicator />}
             {user && <MessageNotification />}
             {user ? (
               <ProfileSheet />
