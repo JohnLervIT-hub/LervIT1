@@ -2545,6 +2545,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Customer endpoint to edit unpaid bookings (before payment is made)
+  app.patch("/api/bookings/:id/edit", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      
+      // Validate editable fields schema
+      const editBookingSchema = z.object({
+        pickupAddress: z.string().min(1).optional(),
+        dropoffAddress: z.string().min(1).optional(),
+        preferredDate: z.union([z.string(), z.date()]).optional(),
+        loadSize: z.enum(['boxes', 'small', 'medium', 'large', 'apartment']).optional(),
+        pickupDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']).optional(),
+        dropoffDifficulty: z.enum(['ground', 'basement', 'stairs', 'elevator']).optional(),
+        heavyItem: z.boolean().optional(),
+        numberOfMovers: z.number().int().min(1).max(2).optional(),
+        description: z.string().optional(),
+      });
+      
+      const updates = validateBody(editBookingSchema, req.body);
+      
+      // Get existing booking
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Security: Verify user owns this booking
+      if (existingBooking.customerId !== user.id) {
+        return res.status(403).json({ error: "You are not authorized to edit this booking" });
+      }
+      
+      // Security: Only allow editing unpaid bookings
+      if (existingBooking.paymentStatus === 'succeeded') {
+        return res.status(400).json({ error: "Cannot edit a booking that has already been paid" });
+      }
+      
+      // Only allow editing pending or pending_payment bookings
+      if (!['pending', 'pending_payment'].includes(existingBooking.status)) {
+        return res.status(400).json({ error: "Can only edit bookings with pending status" });
+      }
+      
+      // Build update data
+      const updateData: any = { ...updates };
+      
+      // Convert preferredDate to Date if string
+      if (updates.preferredDate && typeof updates.preferredDate === 'string') {
+        updateData.preferredDate = new Date(updates.preferredDate);
+      }
+      
+      // If addresses changed, re-geocode and recalculate distance
+      const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
+      const { calculatePrice, calculateMoverEarnings } = await import("@shared/pricing");
+      
+      let pickupLat = existingBooking.pickupLatitude;
+      let pickupLng = existingBooking.pickupLongitude;
+      let dropoffLat = existingBooking.dropoffLatitude;
+      let dropoffLng = existingBooking.dropoffLongitude;
+      let distance = parseFloat(existingBooking.distance || '0');
+      
+      if (updates.pickupAddress) {
+        const pickupGeo = await geocodeAddress(updates.pickupAddress);
+        if (pickupGeo.success) {
+          pickupLat = pickupGeo.coordinates.lat;
+          pickupLng = pickupGeo.coordinates.lng;
+          updateData.pickupLatitude = pickupLat;
+          updateData.pickupLongitude = pickupLng;
+        }
+      }
+      
+      if (updates.dropoffAddress) {
+        const dropoffGeo = await geocodeAddress(updates.dropoffAddress);
+        if (dropoffGeo.success) {
+          dropoffLat = dropoffGeo.coordinates.lat;
+          dropoffLng = dropoffGeo.coordinates.lng;
+          updateData.dropoffLatitude = dropoffLat;
+          updateData.dropoffLongitude = dropoffLng;
+        }
+      }
+      
+      // Recalculate distance if addresses changed
+      if (updates.pickupAddress || updates.dropoffAddress) {
+        const distanceResult = await getDrivingDistance(
+          { lat: pickupLat, lng: pickupLng },
+          { lat: dropoffLat, lng: dropoffLng }
+        );
+        if (distanceResult.success) {
+          distance = distanceResult.distanceKm;
+          updateData.distance = distance.toFixed(2);
+        }
+      }
+      
+      // Always recalculate price when any pricing-affecting field changes
+      const finalLoadSize = updates.loadSize || existingBooking.loadSize;
+      const finalPickupDifficulty = updates.pickupDifficulty || existingBooking.pickupDifficulty;
+      const finalDropoffDifficulty = updates.dropoffDifficulty || existingBooking.dropoffDifficulty;
+      const finalHeavyItem = updates.heavyItem !== undefined ? updates.heavyItem : existingBooking.heavyItem;
+      const finalNumberOfMovers = updates.numberOfMovers || existingBooking.numberOfMovers;
+      
+      const priceBreakdown = calculatePrice(
+        distance,
+        finalLoadSize as 'boxes' | 'small' | 'medium' | 'large' | 'apartment',
+        finalPickupDifficulty as 'ground' | 'basement' | 'stairs' | 'elevator',
+        finalDropoffDifficulty as 'ground' | 'basement' | 'stairs' | 'elevator',
+        finalHeavyItem,
+        finalNumberOfMovers as 1 | 2
+      );
+      
+      // Apply first-move discount if applicable
+      let discountPercent = 0;
+      let discountAmount = 0;
+      let discountReason = null;
+      let finalPrice = priceBreakdown.totalCost;
+      
+      if (!user.hasUsedFirstMoveDiscount) {
+        discountPercent = 10;
+        discountAmount = priceBreakdown.totalCost * 0.10;
+        discountReason = 'First move 10% discount';
+        finalPrice = priceBreakdown.totalCost - discountAmount;
+      }
+      
+      // Calculate platform fees for mover payouts
+      const earnings = calculateMoverEarnings(priceBreakdown);
+      
+      // Update all pricing-related fields
+      updateData.baseFee = priceBreakdown.baseFee.toFixed(2);
+      updateData.distanceFee = priceBreakdown.distanceFee.toFixed(2);
+      updateData.loadFee = priceBreakdown.loadSizeFee.toFixed(2);
+      updateData.pickupDifficultyFee = priceBreakdown.pickupDifficultyFee.toFixed(2);
+      updateData.dropoffDifficultyFee = priceBreakdown.dropoffDifficultyFee.toFixed(2);
+      updateData.heavyItemFee = priceBreakdown.heavyItemFee.toFixed(2);
+      updateData.subtotal = priceBreakdown.subtotal.toFixed(2);
+      updateData.price = finalPrice.toFixed(2);
+      updateData.discountPercent = discountPercent.toFixed(2);
+      updateData.discountAmount = discountAmount.toFixed(2);
+      updateData.discountReason = discountReason;
+      updateData.platformFeePercent = earnings.platformFeePercent.toFixed(2);
+      updateData.platformFeeAmount = earnings.platformFee.toFixed(2);
+      updateData.moverNetAmount = earnings.net.toFixed(2);
+      updateData.updatedAt = new Date();
+      
+      // If price changed significantly and there's an existing PaymentIntent, cancel it
+      if (existingBooking.stripePaymentIntentId) {
+        const oldPrice = parseFloat(existingBooking.price || '0');
+        const newPrice = finalPrice;
+        if (Math.abs(oldPrice - newPrice) > 0.01) {
+          try {
+            await stripe.paymentIntents.cancel(existingBooking.stripePaymentIntentId);
+            updateData.stripePaymentIntentId = null;
+          } catch (e) {
+            // Payment intent may already be in a terminal state
+            console.log('[Edit Booking] Could not cancel PaymentIntent:', e);
+          }
+        }
+      }
+      
+      const updatedBooking = await storage.updateBooking(bookingId, updateData);
+      
+      console.log(`[Booking Edit] Customer ${user.email} updated booking ${bookingId}`);
+      
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error('[Booking Edit] Error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
   // ===== PAYMENT ROUTES =====
   
   /**
