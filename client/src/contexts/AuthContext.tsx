@@ -96,6 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const userData = await response.json();
     
+    // Small delay to ensure browser processes Set-Cookie header before subsequent requests
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     setUser({
       id: userData.id,
       email: userData.email,
@@ -124,6 +127,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     const userData = await response.json();
+    
+    // Small delay to ensure browser processes Set-Cookie header before subsequent requests
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     setUser({
       id: userData.id,
