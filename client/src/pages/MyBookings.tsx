@@ -570,7 +570,14 @@ export default function MyBookings() {
                       <p className="text-sm font-medium mb-3 flex items-center gap-2">
                         <Package className="w-4 h-4 text-muted-foreground" />
                         Item Photos ({booking.images.length})
-                        <span className="text-xs text-muted-foreground ml-1">- Click to enlarge</span>
+                        <button
+                          type="button"
+                          onClick={() => handleImageClick(booking.images!, 0)}
+                          className="text-xs text-primary hover:underline ml-1 cursor-pointer"
+                          data-testid={`button-click-to-enlarge-${booking.id}`}
+                        >
+                          - Click to enlarge
+                        </button>
                       </p>
                       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
                         {booking.images.map((imageUrl, index) => (
