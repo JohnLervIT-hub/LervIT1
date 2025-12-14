@@ -27,6 +27,12 @@ const app = express();
 // Trust the first proxy (Replit's proxy) - required for secure cookies behind a proxy
 app.set('trust proxy', 1);
 
+// Health check endpoint - MUST be first, before any middleware
+// This ensures Cloud Run's health checks respond immediately without session/db overhead
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: Date.now() });
+});
+
 // Session configuration with PostgreSQL store
 const PgStore = pgSession(session);
 
@@ -99,12 +105,6 @@ app.use(securityHeaders);
 // Rate limiting - prevents abuse (applied to /api routes)
 app.use('/api', generalApiLimiter);
 
-// Health check endpoint - responds immediately without database queries
-// This must be registered before other middleware for fastest response
-app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: Date.now() });
-});
-
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -167,25 +167,27 @@ app.use((req, res, next) => {
     
     console.log(`Starting server on port ${port} (NODE_ENV: ${process.env.NODE_ENV || 'development'})...`);
     
-    server.listen(port, "0.0.0.0", async () => {
+    server.listen(port, "0.0.0.0", () => {
       logger.info({ port, env: process.env.NODE_ENV || 'development' }, `Server listening on port ${port}`);
       
-      try {
-        // Warm up database connections with parallel queries
-        // This pre-establishes connections to reduce first-request latency
-        const warmupStart = Date.now();
-        await Promise.all([
-          pool.query('SELECT 1'),
-          pool.query('SELECT COUNT(*) FROM movers WHERE is_available = true'),
-          pool.query('SELECT 1'), // Extra connection for pool warmup
-        ]);
-        const warmupTime = Date.now() - warmupStart;
-        logger.info({ warmupTime }, `Database connections warmed up in ${warmupTime}ms`);
-        
-        initBackgroundJobs();
-      } catch (dbError) {
-        logEvent.error('database_connection', dbError);
-      }
+      // Initialize background jobs immediately (non-blocking)
+      initBackgroundJobs();
+      
+      // Warm up database connections in background (non-blocking)
+      // This doesn't block Cloud Run's health check
+      setImmediate(async () => {
+        try {
+          const warmupStart = Date.now();
+          await Promise.all([
+            pool.query('SELECT 1'),
+            pool.query('SELECT COUNT(*) FROM movers WHERE is_available = true'),
+          ]);
+          const warmupTime = Date.now() - warmupStart;
+          logger.info({ warmupTime }, `Database connections warmed up in ${warmupTime}ms`);
+        } catch (dbError) {
+          logEvent.error('database_connection', dbError);
+        }
+      });
     });
 
     // Handle server errors
