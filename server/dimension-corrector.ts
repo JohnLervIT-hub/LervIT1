@@ -93,12 +93,12 @@ export const CATEGORY_DIMENSION_LIMITS: Record<FurnitureCategory, DimensionLimit
     weight: { min: 5, max: 80 },
   },
   
-  // Other: miscellaneous items
+  // Other: miscellaneous items (reduced to reasonable fallback for unknown items)
   Other: {
-    length: { min: 20, max: 300 },
-    width: { min: 20, max: 200 },
-    height: { min: 15, max: 200 },
-    weight: { min: 1, max: 300 },
+    length: { min: 20, max: 80 },
+    width: { min: 15, max: 50 },
+    height: { min: 15, max: 60 },
+    weight: { min: 0.5, max: 20 },
   },
   
   // Luggage: bags, suitcases, backpacks, etc.
