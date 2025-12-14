@@ -3081,14 +3081,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   await storage.updateBooking(booking.id, {
                     moverId: booking.preSelectedMoverId,
                     preSelectedMoverId: null, // Clear after assignment to prevent duplicate processing on webhook retries
-                    status: BOOKING_STATUSES.ACCEPTED,
+                    status: BOOKING_STATUSES.CONFIRMED,
                     acceptedAt: new Date(),
                   });
                   
-                  // Calculate mover earnings and commission
+                  // Calculate mover earnings and commission using platform fee calculator
                   const bookingPrice = parseFloat(booking.price || '0');
-                  const platformFeeAmount = calculatePlatformFee(bookingPrice);
-                  const moverNetAmount = bookingPrice - platformFeeAmount;
+                  const feeBreakdown = calculatePlatformFee(bookingPrice);
+                  const platformFeeAmount = feeBreakdown.platformFeeCents / 100;
+                  const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
                   
                   await storage.updateBooking(booking.id, {
                     platformFeeAmount: toDecimalString(platformFeeAmount),
@@ -3109,16 +3110,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Notify the selected mover via email and SMS
                   const moverUser = await storage.getUser(preSelectedMover.userId);
                   if (moverUser) {
-                    await notificationService.sendJobAssignment(moverUser, booking, moverNetAmount);
+                    const earningsStr = moverNetAmount.toFixed(2);
+                    await notificationService.sendJobAssignment(moverUser, booking, earningsStr);
                     // Send SMS notification
                     if (moverUser.phone) {
-                      await notificationService.sendMoverJobSMS(
-                        moverUser.phone,
-                        moverUser.name,
-                        booking.pickupAddress,
-                        booking.dropoffAddress,
-                        moverNetAmount
-                      );
+                      const baseUrl = process.env.BASE_URL || 
+                        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+                      const smsMessage = `LervIT: You've been assigned a job! Earn $${earningsStr} CAD. From: ${booking.pickupAddress}. Open app to view: ${baseUrl}/mover-dashboard`;
+                      await notificationService.sendSMS({
+                        to: moverUser.phone,
+                        message: smsMessage,
+                        type: 'job_alert',
+                      });
                     }
                     logEvent.notification('direct_mover_notified', {
                       bookingId: booking.id,
