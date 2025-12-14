@@ -2302,6 +2302,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const moverUser = await storage.getUser(mover.userId);
         if (moverUser) {
           await notificationService.sendMoverAssigned(customer, moverUser, updatedBooking, mover);
+          
+          // Create in-app notification for customer
+          await storage.createNotification({
+            userId: customer.id,
+            type: 'mover_assigned',
+            title: 'Mover Assigned',
+            message: `Great news! ${moverUser.name} has been assigned to your move.`,
+            bookingId: updatedBooking.id,
+            actionUrl: '/my-bookings',
+            isRead: false,
+          });
+          
+          // Create in-app notification for mover
+          await storage.createNotification({
+            userId: moverUser.id,
+            type: 'job_opportunity',
+            title: 'Job Accepted',
+            message: `You've successfully accepted a new job!`,
+            bookingId: updatedBooking.id,
+            actionUrl: '/mover-dashboard',
+            isRead: false,
+          });
         }
       }
       
@@ -3172,6 +3194,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   booking.price || '0'
                 );
                 logEvent.notification('customer_emails_sent', { bookingId: booking.id, customerId: customer.id });
+                
+                // Create in-app notification for payment confirmation
+                await storage.createNotification({
+                  userId: customer.id,
+                  type: 'payment_received',
+                  title: 'Payment Confirmed',
+                  message: `Your payment of $${booking.price} CAD was successful. We're finding movers for your move.`,
+                  bookingId: booking.id,
+                  actionUrl: '/my-bookings',
+                  isRead: false,
+                });
               }
             } catch (emailErr) {
               logEvent.error('webhook_customer_emails', emailErr, { bookingId: booking.id });
@@ -3252,6 +3285,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       bookingId: booking.id,
                       moverId: booking.preSelectedMoverId,
                       moverUserId: moverUser.id,
+                    });
+                    
+                    // Create in-app notification for the mover
+                    await storage.createNotification({
+                      userId: moverUser.id,
+                      type: 'job_opportunity',
+                      title: 'New Job Assigned',
+                      message: `You've been assigned a new job! Earn $${earningsStr} CAD.`,
+                      bookingId: booking.id,
+                      actionUrl: '/mover-dashboard',
+                      isRead: false,
+                    });
+                  }
+                  
+                  // Create in-app notification for customer about mover assignment
+                  const assignedCustomer = await storage.getUser(booking.customerId);
+                  if (assignedCustomer) {
+                    await storage.createNotification({
+                      userId: assignedCustomer.id,
+                      type: 'mover_assigned',
+                      title: 'Mover Assigned',
+                      message: `Great news! A mover has been assigned to your move.`,
+                      bookingId: booking.id,
+                      actionUrl: '/my-bookings',
+                      isRead: false,
                     });
                   }
                 } else {
@@ -4390,6 +4448,16 @@ Respond with VALID JSON only:
       const updateData: any = { updatedAt: new Date() };
       if (user.role === "admin") {
         updateData.lastStaffReplyAt = new Date();
+        
+        // Create in-app notification for the customer when staff replies
+        await storage.createNotification({
+          userId: ticket[0].userId,
+          type: 'support_ticket_update',
+          title: 'Support Reply',
+          message: `Support has replied to your ticket: "${ticket[0].subject}"`,
+          actionUrl: `/support/${req.params.id}`,
+          isRead: false,
+        });
       }
       await db.update(supportTickets)
         .set(updateData)
