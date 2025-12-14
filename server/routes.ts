@@ -300,6 +300,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = hashPassword(userData.password);
       const user = await storage.createUser({ ...userData, password: hashedPassword });
       
+      // Generate email verification token
+      const { randomBytes } = await import("crypto");
+      const verificationToken = randomBytes(32).toString("hex");
+      const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      
+      // Update user with verification token
+      await db.update(usersTable)
+        .set({ 
+          verificationToken,
+          verificationTokenExpiry,
+        })
+        .where(eq(usersTable.id, user.id));
+      
+      // Send verification email
+      await notificationService.sendVerificationEmail(user.email, user.name, verificationToken);
+      
       // If user signed up as a mover, automatically create a mover profile
       if (user.role === "mover") {
         const { generateRandomCalgaryCoordinates } = await import("@shared/geocoding");
@@ -315,7 +331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Regenerate session to prevent session fixation attacks
-      const createdUser = user;
+      const createdUser = { ...user, emailVerified: false };
       req.session.regenerate((err) => {
         if (err) {
           return res.status(500).json({ error: "Session error" });
@@ -330,7 +346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(500).json({ error: "Session save error" });
           }
           const { password: _, ...userWithoutPassword } = createdUser;
-          res.json(userWithoutPassword);
+          res.json({ ...userWithoutPassword, verificationEmailSent: true });
         });
       });
     } catch (error) {
@@ -604,6 +620,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json({ message: "Password has been reset successfully" });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Email verification endpoint
+  app.post("/api/auth/verify-email", async (req: Request, res: Response) => {
+    try {
+      const verifySchema = z.object({
+        token: z.string().min(1),
+      });
+      const { token } = validateBody(verifySchema, req.body);
+      
+      // Find user with this verification token
+      const allUsers = await storage.getAllUsers();
+      const user = allUsers.find(u => u.verificationToken === token);
+      
+      if (!user) {
+        return res.status(400).json({ error: "Invalid or expired verification token" });
+      }
+      
+      if (!user.verificationTokenExpiry) {
+        return res.status(400).json({ error: "Invalid or expired verification token" });
+      }
+      
+      const expiryDate = new Date(user.verificationTokenExpiry);
+      const now = new Date();
+      
+      if (now > expiryDate) {
+        return res.status(400).json({ error: "Verification token has expired. Please request a new one." });
+      }
+      
+      // Mark email as verified and clear token
+      await db.update(usersTable)
+        .set({ 
+          emailVerified: true,
+          verificationToken: null,
+          verificationTokenExpiry: null,
+        })
+        .where(eq(usersTable.id, user.id));
+      
+      // Send welcome email
+      await notificationService.sendWelcomeEmail(user.email, user.name);
+      
+      res.json({ message: "Email verified successfully! Welcome to LervIT." });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Resend verification email endpoint
+  app.post("/api/auth/resend-verification", async (req: Request, res: Response) => {
+    try {
+      const resendSchema = z.object({
+        email: z.string().email(),
+      });
+      const { email } = validateBody(resendSchema, req.body);
+      
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        // Don't reveal if email exists or not
+        return res.json({ message: "If the email is registered, a verification link has been sent." });
+      }
+      
+      if (user.emailVerified) {
+        return res.status(400).json({ error: "Email is already verified" });
+      }
+      
+      // Generate new verification token
+      const { randomBytes } = await import("crypto");
+      const verificationToken = randomBytes(32).toString("hex");
+      const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      
+      await db.update(usersTable)
+        .set({ 
+          verificationToken,
+          verificationTokenExpiry,
+        })
+        .where(eq(usersTable.id, user.id));
+      
+      // Send verification email
+      await notificationService.sendVerificationEmail(user.email, user.name, verificationToken);
+      
+      res.json({ message: "If the email is registered, a verification link has been sent." });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }

@@ -21,6 +21,10 @@ export const users = pgTable("users", {
   lockedUntil: timestamp("locked_until"),
   lockedByAdmin: boolean("locked_by_admin").default(false).notNull(),
   lockReason: text("lock_reason"),
+  // Email verification fields
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  verificationToken: text("verification_token"),
+  verificationTokenExpiry: timestamp("verification_token_expiry"),
   // Onboarding and first-move discount fields
   hasCompletedOnboarding: boolean("has_completed_onboarding").default(false).notNull(),
   hasUsedFirstMoveDiscount: boolean("has_used_first_move_discount").default(false).notNull(),
@@ -203,6 +207,9 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
   firebaseUid: true,
+  emailVerified: true,
+  verificationToken: true,
+  verificationTokenExpiry: true,
 });
 
 export const insertMoverSchema = createInsertSchema(movers).omit({
