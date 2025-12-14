@@ -42,6 +42,7 @@ const MoverLifecycleDemo = lazy(() => import("@/pages/MoverLifecycleDemo"));
 const VideoPreview = lazy(() => import("@/pages/VideoPreview"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
 const Support = lazy(() => import("@/pages/Support"));
 const AdminSupportDashboard = lazy(() => import("@/pages/AdminSupportDashboard"));
 const AdminVerificationDashboard = lazy(() => import("@/pages/AdminVerificationDashboard"));
@@ -69,6 +70,7 @@ function Router() {
         <Route path="/video-preview" component={VideoPreview} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
+        <Route path="/verify-email" component={VerifyEmail} />
         <Route path="/browse-movers" component={BrowseMovers} />
         <Route path="/support" component={Support} />
         <Route path="/request-move" component={RequestMove} />

@@ -642,14 +642,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (!user.verificationTokenExpiry) {
-        return res.status(400).json({ error: "Invalid or expired verification token" });
+        return res.status(400).json({ 
+          error: "Invalid or expired verification token",
+          email: user.email  // Return email for resend functionality
+        });
       }
       
       const expiryDate = new Date(user.verificationTokenExpiry);
       const now = new Date();
       
       if (now > expiryDate) {
-        return res.status(400).json({ error: "Verification token has expired. Please request a new one." });
+        return res.status(400).json({ 
+          error: "Verification token has expired. Please request a new one.",
+          email: user.email  // Return email for resend functionality
+        });
       }
       
       // Mark email as verified and clear token
@@ -1932,6 +1938,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only customers can create bookings" });
       }
       
+      // SECURITY: Require email verification to create bookings
+      if (!user.emailVerified) {
+        return res.status(403).json({ 
+          error: "Email verification required",
+          message: "Please verify your email address before making a booking. Check your inbox for the verification link.",
+          requiresEmailVerification: true
+        });
+      }
+      
       // Validate booking data - customerId will be added from authenticated user
       const bookingData = validateBody(
         insertBookingSchema.extend({
@@ -2538,6 +2553,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ownerId: booking.customerId 
         });
         return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // SECURITY: Require email verification for payments
+      if (!user.emailVerified) {
+        return res.status(403).json({ 
+          error: "Email verification required",
+          message: "Please verify your email address before making a payment.",
+          requiresEmailVerification: true
+        });
       }
       
       // Check if booking is in valid state for payment (pending or confirmed)
