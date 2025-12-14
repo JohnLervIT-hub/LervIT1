@@ -61,20 +61,18 @@ try {
   process.exit(1);
 }
 
-// Replit uses HTTPS proxy even in development
-// Use 'lax' sameSite which works for same-site requests in the Replit webview
-const isReplitEnv = process.env.REPL_ID || process.env.REPLIT_DEPLOYMENT;
-
+// Session configuration
+// Use 'auto' for secure which checks req.secure (respects trust proxy setting)
 app.use(session({
   store: sessionStore,
   secret: process.env.SESSION_SECRET || 'lervit-dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction || !!isReplitEnv, // Secure in production or Replit (HTTPS proxy)
+    secure: 'auto', // Automatically set based on connection (respects trust proxy)
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax', // Use 'lax' for same-site cookie behavior
+    sameSite: 'lax',
   },
   name: 'lervit.sid',
 }));
