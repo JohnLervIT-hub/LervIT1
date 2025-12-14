@@ -61,16 +61,20 @@ try {
   process.exit(1);
 }
 
+// Replit uses HTTPS proxy even in development, so we should use secure cookies
+// when behind a trusted proxy (which we've set with trust proxy = 1)
+const isReplitEnv = process.env.REPL_ID || process.env.REPLIT_DEPLOYMENT;
+
 app.use(session({
   store: sessionStore,
   secret: process.env.SESSION_SECRET || 'lervit-dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction, // Only secure in production (HTTPS)
+    secure: isProduction || !!isReplitEnv, // Secure in production or Replit (HTTPS proxy)
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax', // More compatible with deployment environments
+    sameSite: isReplitEnv ? 'none' : 'lax', // 'none' needed for cross-site in Replit webview
   },
   name: 'lervit.sid',
 }));
