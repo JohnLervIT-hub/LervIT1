@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Send, MapPin, Calendar } from "lucide-react";
-import { useState } from "react";
+import { useState, memo, useCallback } from "react";
 
 interface Message {
   id: string;
@@ -14,6 +14,31 @@ interface Message {
   timestamp: string;
   isCurrentUser: boolean;
 }
+
+// Memoized individual message component to prevent re-renders
+const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
+  return (
+    <div
+      className={`flex ${message.isCurrentUser ? 'justify-end' : 'justify-start'}`}
+      data-testid={`message-${message.id}`}
+    >
+      <div className={`max-w-[70%] ${message.isCurrentUser ? 'order-2' : 'order-1'}`}>
+        <div
+          className={`px-4 py-2 rounded-lg ${
+            message.isCurrentUser
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted'
+          }`}
+        >
+          <p className="text-sm">{message.text}</p>
+        </div>
+        <div className="text-xs text-muted-foreground mt-1 px-2">
+          {message.timestamp}
+        </div>
+      </div>
+    </div>
+  );
+});
 
 interface ChatInterfaceProps {
   bookingId: string;
@@ -27,7 +52,7 @@ interface ChatInterfaceProps {
   onSendMessage: (message: string) => void;
 }
 
-export default function ChatInterface({
+function ChatInterface({
   bookingId,
   otherUserName,
   otherUserPhoto,
@@ -40,12 +65,13 @@ export default function ChatInterface({
 }: ChatInterfaceProps) {
   const [newMessage, setNewMessage] = useState("");
 
-  const handleSend = () => {
+  // Memoize send handler to prevent child re-renders
+  const handleSend = useCallback(() => {
     if (newMessage.trim()) {
       onSendMessage(newMessage);
       setNewMessage("");
     }
-  };
+  }, [newMessage, onSendMessage]);
 
   return (
     <div className="flex flex-col h-full max-h-[800px]">
@@ -84,26 +110,7 @@ export default function ChatInterface({
       <Card className="flex-1 flex flex-col overflow-hidden">
         <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.isCurrentUser ? 'justify-end' : 'justify-start'}`}
-              data-testid={`message-${message.id}`}
-            >
-              <div className={`max-w-[70%] ${message.isCurrentUser ? 'order-2' : 'order-1'}`}>
-                <div
-                  className={`px-4 py-2 rounded-lg ${
-                    message.isCurrentUser
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  }`}
-                >
-                  <p className="text-sm">{message.text}</p>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1 px-2">
-                  {message.timestamp}
-                </div>
-              </div>
-            </div>
+            <MessageBubble key={message.id} message={message} />
           ))}
         </CardContent>
 
@@ -134,3 +141,6 @@ export default function ChatInterface({
     </div>
   );
 }
+
+// Export memoized component to prevent re-renders when parent changes
+export default memo(ChatInterface);

@@ -594,8 +594,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const { token, password } = validateBody(resetPasswordSchema, req.body);
       
-      const allUsers = await storage.getAllUsers();
-      const user = allUsers.find(u => u.resetToken === token);
+      // Direct lookup by reset token (efficient, no pagination needed)
+      const user = await storage.getUserByResetToken(token);
       
       if (!user) {
         return res.status(400).json({ error: "Invalid or expired reset token" });
@@ -633,9 +633,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const { token } = validateBody(verifySchema, req.body);
       
-      // Find user with this verification token
-      const allUsers = await storage.getAllUsers();
-      const user = allUsers.find(u => u.verificationToken === token);
+      // Direct lookup by verification token (efficient, no pagination needed)
+      const user = await storage.getUserByVerificationToken(token);
       
       if (!user) {
         return res.status(400).json({ error: "Invalid or expired verification token" });
@@ -731,12 +730,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/users", async (req: Request, res: Response) => {
     try {
-      const allUsers = await storage.getAllUsers();
-      const usersWithoutPasswords = allUsers.map((user) => {
+      // Support pagination via query params
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      const result = await storage.getAllUsers({ limit, offset });
+      const usersWithoutPasswords = result.data.map((user: any) => {
         const { password, ...userWithoutPassword } = user;
         return userWithoutPassword;
       });
-      res.json(usersWithoutPasswords);
+      
+      // Return paginated response
+      res.json({
+        data: usersWithoutPasswords,
+        total: result.total,
+        limit: result.limit,
+        offset: result.offset,
+        hasMore: result.hasMore,
+      });
     } catch (error) {
       res.status(500).json({ error: "Internal server error" });
     }
@@ -2124,9 +2135,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Get all pending/confirmed bookings (available to accept)
         // Include both "pending" and "confirmed" (paid) jobs without a mover
-        const allPendingBookings = await storage.getAllBookings();
-        const availableBookings = allPendingBookings.filter(
-          (b) => (b.status === "pending" || b.status === "confirmed") && b.moverId === null
+        const allPendingBookingsResult = await storage.getAllBookings({ limit: 200 });
+        const availableBookings = allPendingBookingsResult.data.filter(
+          (b: any) => (b.status === "pending" || b.status === "confirmed") && b.moverId === null
         );
         
         // Combine both sets (remove duplicates)
@@ -2143,7 +2154,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (moverId) {
           bookings = await storage.getBookingsByMover(moverId);
         } else {
-          bookings = await storage.getAllBookings();
+          // Support pagination for admin view
+          const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+          const offset = parseInt(req.query.offset as string) || 0;
+          const result = await storage.getAllBookings({ limit, offset });
+          bookings = result.data;
         }
       } else {
         return res.status(403).json({ error: "Access denied" });
@@ -5792,12 +5807,12 @@ Respond with VALID JSON only:
 
   // ===== AI PRODUCT IDENTIFIER ROUTES =====
   
-  // POST /api/ai/items/identify - Identify items from photos
+  // POST /api/ai/items/identify - Identify items from photos (ASYNC mode for performance)
+  // Creates pending items immediately and processes in background
   // Supports pre-booking identification (without bookingId) or post-booking identification (with bookingId)
-  // Pre-booking identification works without authentication for better UX
   app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
     try {
-      const { bookingId, photoUrls } = req.body;
+      const { bookingId, photoUrls, async: useAsync = true } = req.body;
       
       if (!photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
         return res.status(400).json({ error: "photoUrls array required" });
@@ -5817,10 +5832,49 @@ Respond with VALID JSON only:
         }
       }
       
+      // ASYNC MODE (default): Create pending items and queue for background processing
+      // This returns immediately, preventing the request from blocking
+      if (useAsync && bookingId) {
+        const { visionQueue } = await import('./vision-queue');
+        
+        console.log(`[Vision Engine 2.0] ASYNC: Queueing ${photoUrls.length} photos for background processing`);
+        
+        const items: any[] = [];
+        
+        for (const photoUrl of photoUrls) {
+          // Create pending item in database
+          const pendingItem = await storage.createIdentifiedItem({
+            bookingId,
+            photoUrl,
+            processingStatus: 'pending',
+          });
+          
+          // Queue for background processing
+          await visionQueue.enqueue(pendingItem.id, bookingId, photoUrl);
+          
+          items.push(pendingItem);
+        }
+        
+        // Return immediately with pending items
+        return res.json({
+          success: true,
+          async: true,
+          items,
+          message: `${photoUrls.length} photo(s) queued for analysis. Results will appear shortly.`,
+          summary: {
+            total: photoUrls.length,
+            pending: photoUrls.length,
+            successful: 0,
+            failed: 0,
+          },
+        });
+      }
+      
+      // SYNC MODE: Process photos synchronously (for pre-booking or explicit sync requests)
       // Import Vision Engine 2.0 (dynamic to avoid loading on startup)
       const { identifyItemV2, toIdentificationResult } = await import('./vision-engine-v2');
       
-      console.log(`[Vision Engine 2.0] Processing ${photoUrls.length} photos in parallel...`);
+      console.log(`[Vision Engine 2.0] SYNC: Processing ${photoUrls.length} photos in parallel...`);
       const startTime = Date.now();
       
       // Process ALL photos in parallel for speed using Vision Engine 2.0
@@ -5907,6 +5961,7 @@ Respond with VALID JSON only:
       
       res.json({
         success: true,
+        async: false,
         items,
         errors: errors.length > 0 ? errors : undefined,
         summary: {
@@ -5991,8 +6046,8 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       
       // Find bookings with NULL/empty images OR old /uploads/ paths (which don't persist after deploy)
-      const allBookings = await storage.getAllBookings();
-      const brokenBookings = allBookings.filter((b: any) => {
+      const allBookingsResult = await storage.getAllBookings({ limit: 200 });
+      const brokenBookings = allBookingsResult.data.filter((b: any) => {
         if (!b.images || b.images.length === 0) return true;
         // Check if any image uses old /uploads/ path (not cloud storage)
         return b.images.some((img: string) => img.startsWith('/uploads/') && !img.startsWith('/objects/'));

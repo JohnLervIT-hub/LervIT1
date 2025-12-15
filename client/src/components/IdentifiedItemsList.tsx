@@ -2,13 +2,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Package, Weight, Ruler, Truck, Users, Shield, AlertCircle, Sparkles, CheckCircle2, Box } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
+import { memo, useMemo } from "react";
 
 interface IdentifiedItemsListProps {
   items: IdentifiedItem[];
   isLoading?: boolean;
 }
 
-export function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListProps) {
+// Memoized component to prevent unnecessary re-renders
+export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListProps) {
   if (isLoading) {
     return (
       <Card className="overflow-hidden" data-testid="card-identified-items-loading">

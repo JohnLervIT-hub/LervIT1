@@ -4,17 +4,34 @@ import { db } from "./db";
 import { users, movers, bookings, messages, reviews, jobNotifications, identifiedItems, aiRuns, moverTermsAcceptance, inAppNotifications } from "@shared/schema";
 import { eq, and, desc, sql, lt } from "drizzle-orm";
 
+// Pagination options for list queries
+export interface PaginationOptions {
+  limit?: number;   // Default 50, max 200
+  offset?: number;  // For cursor-based pagination
+}
+
+// Paginated response wrapper
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined>;
-  getAllUsers(): Promise<User[]>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  getUserByVerificationToken(token: string): Promise<User | undefined>;
+  getAllUsers(pagination?: PaginationOptions): Promise<PaginatedResult<User>>;
   createUser(insertUser: InsertUser): Promise<User>;
 
   // Movers
   getMover(id: string): Promise<Mover | undefined>;
-  getMovers(filters?: { location?: string; isAvailable?: boolean }): Promise<Mover[]>;
+  getMovers(filters?: { location?: string; isAvailable?: boolean }, pagination?: PaginationOptions): Promise<Mover[]>;
   createMover(insertMover: InsertMover): Promise<Mover>;
   updateMover(id: string, updates: Partial<Mover>): Promise<Mover | undefined>;
 
@@ -22,7 +39,7 @@ export interface IStorage {
   getBooking(id: string): Promise<Booking | undefined>;
   getBookingsByCustomer(customerId: string): Promise<Booking[]>;
   getBookingsByMover(moverId: string): Promise<Booking[]>;
-  getAllBookings(): Promise<Booking[]>;
+  getAllBookings(pagination?: PaginationOptions): Promise<PaginatedResult<Booking>>;
   createBooking(insertBooking: InsertBooking): Promise<Booking>;
   updateBooking(id: string, updates: Partial<Booking>): Promise<Booking | undefined>;
 
@@ -89,8 +106,37 @@ class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(desc(users.createdAt));
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.resetToken, token)).limit(1);
+    return result[0];
+  }
+
+  async getUserByVerificationToken(token: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.verificationToken, token)).limit(1);
+    return result[0];
+  }
+
+  async getAllUsers(pagination?: PaginationOptions): Promise<PaginatedResult<User>> {
+    const limit = Math.min(pagination?.limit || 50, 200);
+    const offset = pagination?.offset || 0;
+    
+    // Get total count for pagination metadata
+    const countResult = await db.select({ count: sql<number>`count(*)::int` }).from(users);
+    const total = countResult[0]?.count ?? 0;
+    
+    // Get paginated data
+    const data = await db.select().from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      data,
+      total,
+      limit,
+      offset,
+      hasMore: offset + data.length < total,
+    };
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -154,8 +200,27 @@ class PostgresStorage implements IStorage {
     return await db.select().from(bookings).where(eq(bookings.moverId, moverId)).orderBy(desc(bookings.createdAt));
   }
 
-  async getAllBookings(): Promise<Booking[]> {
-    return await db.select().from(bookings).orderBy(desc(bookings.preferredDate), desc(bookings.createdAt));
+  async getAllBookings(pagination?: PaginationOptions): Promise<PaginatedResult<Booking>> {
+    const limit = Math.min(pagination?.limit || 50, 200);
+    const offset = pagination?.offset || 0;
+    
+    // Get total count for pagination metadata
+    const countResult = await db.select({ count: sql<number>`count(*)::int` }).from(bookings);
+    const total = countResult[0]?.count ?? 0;
+    
+    // Get paginated data
+    const data = await db.select().from(bookings)
+      .orderBy(desc(bookings.preferredDate), desc(bookings.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      data,
+      total,
+      limit,
+      offset,
+      hasMore: offset + data.length < total,
+    };
   }
 
   async createBooking(insertBooking: InsertBooking): Promise<Booking> {

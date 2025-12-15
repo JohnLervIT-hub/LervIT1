@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { MapPin } from "lucide-react";
 
@@ -9,6 +9,23 @@ interface AddressAutocompleteProps {
   className?: string;
   id?: string;
   "data-testid"?: string;
+}
+
+// Debounce hook to limit API calls
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
 }
 
 export function AddressAutocomplete({
@@ -22,10 +39,28 @@ export function AddressAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [inputValue, setInputValue] = useState(value);
+  // Track when autocomplete just fired to avoid duplicate onChange calls
+  const autocompleteJustFired = useRef(false);
+  
+  // Debounce parent onChange to reduce unnecessary updates during typing
+  const debouncedInputValue = useDebounce(inputValue, 300);
 
   useEffect(() => {
     setInputValue(value);
   }, [value]);
+  
+  // Notify parent of debounced changes for manual entry
+  useEffect(() => {
+    // Skip if autocomplete just fired (it already called onChange)
+    if (autocompleteJustFired.current) {
+      autocompleteJustFired.current = false;
+      return;
+    }
+    // Only update parent if value actually differs
+    if (debouncedInputValue !== value) {
+      onChange(debouncedInputValue);
+    }
+  }, [debouncedInputValue, value, onChange]);
 
   useEffect(() => {
     if (!inputRef.current || !window.google) return;
@@ -49,6 +84,8 @@ export function AddressAutocomplete({
       const place = autocompleteRef.current?.getPlace();
       
       if (place && place.formatted_address) {
+        // Mark that autocomplete just fired to prevent double onChange
+        autocompleteJustFired.current = true;
         setInputValue(place.formatted_address);
         onChange(place.formatted_address, place);
       }
@@ -61,11 +98,11 @@ export function AddressAutocomplete({
     };
   }, [onChange]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInputValue(newValue);
-    onChange(newValue); // Also update parent for manual entry
-  };
+    // Parent onChange is now debounced via useEffect above
+  }, []);
 
   return (
     <div className="relative">

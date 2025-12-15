@@ -41,11 +41,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package, Pencil, Trash2, Save, X } from "lucide-react";
-import { useState } from "react";
+import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package, Pencil, Trash2, Save, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+// Paginated response type
+type PaginatedResponse<T> = {
+  data: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
 
 type UserType = {
   id: string;
@@ -70,6 +79,8 @@ type Booking = {
   customer?: { name: string };
 };
 
+const PAGE_SIZE = 50;
+
 export default function AdminUsersPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -79,12 +90,16 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<UserType | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", role: "" });
+  const [page, setPage] = useState(0);
 
-  const { data: users, isLoading
-
- } = useQuery<UserType[]>({
-    queryKey: ["/api/users"],
+  // Fetch paginated users - use URL with query params as the query key for proper caching
+  const usersQueryKey = `/api/users?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`;
+  const { data: usersResponse, isLoading } = useQuery<PaginatedResponse<UserType>>({
+    queryKey: [usersQueryKey],
   });
+
+  // Extract users from paginated response
+  const users = usersResponse?.data;
 
   const { data: allBookings } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
@@ -101,7 +116,13 @@ export default function AdminUsersPage() {
     },
     onSuccess: () => {
       toast({ title: "User updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      // Invalidate all user queries using predicate to match any key starting with /api/users
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/users');
+        },
+      });
       setEditingUser(null);
       setSelectedUser(null);
     },
@@ -120,7 +141,13 @@ export default function AdminUsersPage() {
     },
     onSuccess: () => {
       toast({ title: "User deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      // Invalidate all user queries using predicate to match any key starting with /api/users
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/users');
+        },
+      });
       setDeleteConfirmUser(null);
       setSelectedUser(null);
     },
@@ -391,6 +418,40 @@ export default function AdminUsersPage() {
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No users found</p>
+              </div>
+            )}
+            
+            {/* Pagination Controls */}
+            {usersResponse && (
+              <div className="flex items-center justify-between pt-4 border-t mt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {usersResponse.offset + 1} - {Math.min(usersResponse.offset + usersResponse.data.length, usersResponse.total)} of {usersResponse.total} users
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    data-testid="button-prev-page"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground px-2">
+                    Page {page + 1} of {Math.ceil(usersResponse.total / PAGE_SIZE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={!usersResponse.hasMore}
+                    data-testid="button-next-page"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
