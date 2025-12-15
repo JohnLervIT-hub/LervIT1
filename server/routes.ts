@@ -289,16 +289,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const signupSchema = insertUserSchema.extend({
         password: z.string().min(6, "Password must be at least 6 characters"),
+        phoneVerificationToken: z.string().min(1, "Phone verification required"),
       });
-      const userData = validateBody(signupSchema, req.body);
+      const { phoneVerificationToken, ...userData } = validateBody(signupSchema, req.body);
+      
+      // Verify the phone verification token
+      const { phoneVerificationTokens } = await import("@shared/schema");
+      const tokens = await db.select().from(phoneVerificationTokens)
+        .where(eq(phoneVerificationTokens.verifiedToken, phoneVerificationToken))
+        .limit(1);
+      
+      if (tokens.length === 0) {
+        return res.status(400).json({ error: "Invalid or expired phone verification. Please verify your phone number again." });
+      }
+      
+      const phoneToken = tokens[0];
+      
+      if (!phoneToken.verified) {
+        return res.status(400).json({ error: "Phone number not verified. Please complete phone verification." });
+      }
+      
+      if (new Date() > new Date(phoneToken.expiresAt)) {
+        return res.status(400).json({ error: "Phone verification expired. Please verify your phone number again." });
+      }
       
       const existingUser = await storage.getUserByEmail(userData.email);
       if (existingUser) {
         return res.status(400).json({ error: "Email already registered" });
       }
       
+      // Use the verified phone number from the token
       const hashedPassword = hashPassword(userData.password);
-      const user = await storage.createUser({ ...userData, password: hashedPassword });
+      const user = await storage.createUser({ 
+        ...userData, 
+        password: hashedPassword,
+        phone: phoneToken.phone,
+        phoneVerified: true, // Phone is already verified
+      });
+      
+      // Delete the used verification token
+      await db.delete(phoneVerificationTokens).where(eq(phoneVerificationTokens.id, phoneToken.id));
       
       // Generate email verification token
       const { randomBytes } = await import("crypto");
@@ -715,6 +745,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== PRE-SIGNUP PHONE VERIFICATION (Uber-style OTP flow) =====
+  // These endpoints work without authentication for the signup flow
+  
+  // Pre-signup: Send phone verification code
+  app.post("/api/auth/pre-signup/send-code", async (req: Request, res: Response) => {
+    try {
+      const phoneSchema = z.object({
+        phone: z.string().min(10, "Invalid phone number"),
+      });
+      const { phone } = validateBody(phoneSchema, req.body);
+
+      // Check if phone is already registered
+      const existingUser = await db.select().from(usersTable).where(eq(usersTable.phone, phone)).limit(1);
+      if (existingUser.length > 0 && existingUser[0].phoneVerified) {
+        return res.status(400).json({ error: "This phone number is already registered. Please login instead." });
+      }
+
+      // Generate 6-digit verification code
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiryTime = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      // Delete any existing verification tokens for this phone
+      const { phoneVerificationTokens } = await import("@shared/schema");
+      await db.delete(phoneVerificationTokens).where(eq(phoneVerificationTokens.phone, phone));
+
+      // Create new verification token
+      await db.insert(phoneVerificationTokens).values({
+        phone,
+        verificationCode,
+        expiresAt: expiryTime,
+        verified: false,
+      });
+
+      // Send SMS via notification service
+      await notificationService.sendPhoneVerificationCode(phone, verificationCode);
+
+      res.json({ message: "Verification code sent to your phone" });
+    } catch (error) {
+      logger.error({ error }, "Pre-signup phone verification send error");
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Pre-signup: Verify phone code and get signup token
+  app.post("/api/auth/pre-signup/verify-code", async (req: Request, res: Response) => {
+    try {
+      const verifySchema = z.object({
+        phone: z.string().min(10, "Invalid phone number"),
+        code: z.string().length(6, "Code must be 6 digits"),
+      });
+      const { phone, code } = validateBody(verifySchema, req.body);
+
+      // Find verification token
+      const { phoneVerificationTokens } = await import("@shared/schema");
+      const tokens = await db.select().from(phoneVerificationTokens)
+        .where(eq(phoneVerificationTokens.phone, phone))
+        .limit(1);
+
+      if (tokens.length === 0) {
+        return res.status(400).json({ error: "No verification code found. Please request a new one." });
+      }
+
+      const token = tokens[0];
+
+      if (new Date() > new Date(token.expiresAt)) {
+        return res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+      }
+
+      if (token.verificationCode !== code) {
+        return res.status(400).json({ error: "Invalid verification code" });
+      }
+
+      // Generate a verified token for signup
+      const { randomBytes } = await import("crypto");
+      const verifiedToken = randomBytes(32).toString("hex");
+      const newExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes to complete signup
+
+      // Update token as verified
+      await db.update(phoneVerificationTokens)
+        .set({
+          verified: true,
+          verifiedToken,
+          expiresAt: newExpiry,
+        })
+        .where(eq(phoneVerificationTokens.id, token.id));
+
+      res.json({ 
+        message: "Phone verified successfully",
+        verifiedToken,
+        phone,
+      });
+    } catch (error) {
+      logger.error({ error }, "Pre-signup phone verification verify error");
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // ===== POST-LOGIN PHONE VERIFICATION (existing authenticated flow) =====
   // Phone verification - send code
   app.post("/api/auth/send-phone-verification", async (req: Request, res: Response) => {
     try {

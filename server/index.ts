@@ -112,6 +112,10 @@ app.use('/api', generalApiLimiter);
 app.use('/api/auth/send-phone-verification', phoneVerificationLimiter);
 app.use('/api/auth/verify-phone', phoneVerificationLimiter);
 
+// Pre-signup phone verification rate limiting (Uber-style OTP flow)
+app.use('/api/auth/pre-signup/send-code', phoneVerificationLimiter);
+app.use('/api/auth/pre-signup/verify-code', phoneVerificationLimiter);
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

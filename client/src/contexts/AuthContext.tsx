@@ -17,7 +17,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string, role?: string, phone?: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, role?: string, phone?: string, phoneVerificationToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
   refreshUser: () => Promise<void>;
@@ -116,12 +116,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const signup = async (name: string, email: string, password: string, role: string = "customer", phone?: string) => {
+  const signup = async (name: string, email: string, password: string, role: string = "customer", phone?: string, phoneVerificationToken?: string) => {
     const response = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ name, email, password, role, phone }),
+      body: JSON.stringify({ name, email, password, role, phone, phoneVerificationToken }),
     });
     
     if (!response.ok) {

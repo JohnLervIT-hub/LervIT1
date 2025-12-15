@@ -35,6 +35,28 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Pre-signup phone verification for Uber-style OTP flow
+export const phoneVerificationTokens = pgTable("phone_verification_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull(),
+  verificationCode: text("verification_code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  verified: boolean("verified").default(false).notNull(),
+  verifiedToken: text("verified_token"), // Token to use during signup to prove phone is verified
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  phoneIdx: index("phone_verification_tokens_phone_idx").on(table.phone),
+  tokenIdx: index("phone_verification_tokens_token_idx").on(table.verifiedToken),
+}));
+
+export const insertPhoneVerificationTokenSchema = createInsertSchema(phoneVerificationTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPhoneVerificationToken = z.infer<typeof insertPhoneVerificationTokenSchema>;
+export type PhoneVerificationToken = typeof phoneVerificationTokens.$inferSelect;
+
 export const movers = pgTable("movers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),

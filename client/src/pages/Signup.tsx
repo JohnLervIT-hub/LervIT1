@@ -4,23 +4,51 @@ import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { FormFieldError } from "@/components/FormFieldError";
-import { Truck, Eye, EyeOff, Loader2, Package, Users } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, Package, Users, Phone, ArrowLeft, CheckCircle } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+
+type SignupStep = "phone" | "otp" | "details";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
   const { user, signup } = useAuth();
   const { toast } = useToast();
+  
+  // Step state
+  const [step, setStep] = useState<SignupStep>("phone");
+  
+  // Phone verification state
+  const [phone, setPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [verifiedToken, setVerifiedToken] = useState("");
+  const [verifiedPhone, setVerifiedPhone] = useState("");
+  
+  // Account details state
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("customer");
   const [isLoading, setIsLoading] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  
+  // Format phone number for display
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/\D/g, "");
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 6) return `(${numbers.slice(0, 3)}) ${numbers.slice(3)}`;
+    return `(${numbers.slice(0, 3)}) ${numbers.slice(3, 6)}-${numbers.slice(6, 10)}`;
+  };
+  
+  // Clean phone number for API
+  const cleanPhoneNumber = (value: string) => {
+    return value.replace(/\D/g, "");
+  };
   
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -62,12 +90,85 @@ export default function Signup() {
     }
   }, [user, isLoading, setLocation]);
 
+  // Send OTP mutation
+  const sendOtpMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      return apiRequest("POST", "/api/auth/pre-signup/send-code", { phone: phoneNumber });
+    },
+    onSuccess: () => {
+      setStep("otp");
+      toast({
+        title: "Code Sent",
+        description: "A 6-digit verification code has been sent to your phone.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Send Code",
+        description: error.message || "Please check your phone number and try again.",
+      });
+    },
+  });
+
+  // Verify OTP mutation
+  const verifyOtpMutation = useMutation({
+    mutationFn: async ({ phoneNumber, code }: { phoneNumber: string; code: string }) => {
+      const response = await apiRequest("POST", "/api/auth/pre-signup/verify-code", { 
+        phone: phoneNumber, 
+        code 
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setVerifiedToken(data.verifiedToken);
+      setVerifiedPhone(data.phone);
+      setStep("details");
+      toast({
+        title: "Phone Verified",
+        description: "Your phone number has been verified. Complete your profile to continue.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Verification Failed",
+        description: error.message || "Invalid code. Please try again.",
+      });
+    },
+  });
+
+  const handleSendOtp = () => {
+    const cleanedPhone = cleanPhoneNumber(phone);
+    if (cleanedPhone.length < 10) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Phone Number",
+        description: "Please enter a valid 10-digit phone number.",
+      });
+      return;
+    }
+    sendOtpMutation.mutate(cleanedPhone);
+  };
+
+  const handleVerifyOtp = () => {
+    if (otpCode.length !== 6) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Code",
+        description: "Please enter the 6-digit verification code.",
+      });
+      return;
+    }
+    verifyOtpMutation.mutate({ phoneNumber: cleanPhoneNumber(phone), code: otpCode });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      await signup(name, email, password, role, phone);
+      await signup(name, email, password, role, verifiedPhone, verifiedToken);
       setIsLoading(false);
       toast({
         title: "Account created!",
@@ -83,6 +184,151 @@ export default function Signup() {
     }
   };
 
+  // Step 1: Phone Number Entry (Uber-style)
+  if (step === "phone") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center pb-2">
+            <div className="flex justify-center mb-4">
+              <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
+                <Phone className="w-7 h-7 text-primary-foreground" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Enter your phone</h1>
+            <p className="text-muted-foreground text-sm" data-testid="status-signup-step">
+              We'll send you a code to verify your number
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="(403) 555-1234"
+                value={formatPhoneNumber(phone)}
+                onChange={(e) => setPhone(cleanPhoneNumber(e.target.value))}
+                className="h-12 text-lg"
+                data-testid="input-phone"
+                autoFocus
+              />
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4 pt-2">
+            <Button
+              onClick={handleSendOtp}
+              className="w-full h-11"
+              disabled={sendOtpMutation.isPending || cleanPhoneNumber(phone).length < 10}
+              data-testid="button-send-code"
+            >
+              {sendOtpMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending code...
+                </>
+              ) : (
+                "Continue"
+              )}
+            </Button>
+            <div className="text-center text-sm">
+              <span className="text-muted-foreground">Already have an account? </span>
+              <button
+                type="button"
+                onClick={() => setLocation("/login")}
+                className="text-primary font-medium hover:underline"
+                data-testid="link-login"
+              >
+                Sign in
+              </button>
+            </div>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // Step 2: OTP Verification (Uber-style)
+  if (step === "otp") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center pb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setStep("phone");
+                setOtpCode("");
+              }}
+              className="absolute left-4 top-4 p-2 hover:bg-muted rounded-full transition-colors"
+              data-testid="button-back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="flex justify-center mb-4">
+              <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
+                <CheckCircle className="w-7 h-7 text-primary-foreground" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Enter the code</h1>
+            <p className="text-muted-foreground text-sm" data-testid="status-otp-sent">
+              We sent a code to {formatPhoneNumber(phone)}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-4">
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otpCode}
+                onChange={(value) => setOtpCode(value)}
+                data-testid="input-otp-code"
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <p className="text-xs text-center text-muted-foreground">
+              Didn't receive a code?{" "}
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={sendOtpMutation.isPending}
+                className="text-primary underline hover:no-underline"
+                data-testid="button-resend-code"
+              >
+                Resend
+              </button>
+            </p>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4 pt-2">
+            <Button
+              onClick={handleVerifyOtp}
+              className="w-full h-11"
+              disabled={verifyOtpMutation.isPending || otpCode.length !== 6}
+              data-testid="button-verify-code"
+            >
+              {verifyOtpMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                "Verify"
+              )}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // Step 3: Account Details (after phone verification)
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <Card className="w-full max-w-md">
@@ -92,9 +338,12 @@ export default function Signup() {
               <Truck className="w-7 h-7 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Create an account</h1>
-          <p className="text-muted-foreground text-sm">
-            Join LervIT to get moving
+          <h1 className="text-2xl font-bold tracking-tight">Complete your profile</h1>
+          <p className="text-muted-foreground text-sm" data-testid="status-phone-verified">
+            <span className="inline-flex items-center gap-1 text-green-600">
+              <CheckCircle className="w-4 h-4" />
+              {formatPhoneNumber(verifiedPhone)} verified
+            </span>
           </p>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -131,18 +380,6 @@ export default function Signup() {
                 aria-describedby={getFieldError('email') ? 'email-error' : undefined}
               />
               <FormFieldError id="email-error" message={getFieldError('email')} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone (optional)</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="(403) 555-1234"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="h-11"
-                data-testid="input-phone"
-              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
