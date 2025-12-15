@@ -66,6 +66,14 @@ The platform features a mobile-first design using shadcn/ui components for a res
 
 ## Recent Changes (Dec 15, 2025)
 
+### Phone Verification System
+*   **SMS Verification:** 6-digit verification codes sent via Telnyx SMS with 10-minute expiry.
+*   **Schema Fields:** Added `phoneVerified`, `phoneVerificationCode`, `phoneVerificationExpiry` to users table.
+*   **API Endpoints:** `/api/auth/send-phone-verification` and `/api/auth/verify-phone` with authentication required.
+*   **Security:** Rate limiting (5 requests/15 min in production), masked verification codes in logs.
+*   **Frontend Component:** `PhoneVerification.tsx` with OTP input, integrated into CustomerProfile and MoverProfile pages.
+*   **AuthContext Integration:** `phoneVerified` field added to User type and set on login/signup/refresh.
+
 ### Performance Optimizations
 *   **Storage Query Pagination:** Added `limit` and `offset` support to `getUsers()`, `getMovers()`, and `getBookings()` storage methods with proper pagination response format containing `data`, `total`, `limit`, `offset`, and `hasMore` fields.
 *   **Token Lookup Methods:** Added `getUserByResetToken()` and `getUserByVerificationToken()` direct lookup methods to avoid full table scans for password reset and email verification flows.

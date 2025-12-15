@@ -714,6 +714,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });
+
+  // Phone verification - send code
+  app.post("/api/auth/send-phone-verification", async (req: Request, res: Response) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const phoneSchema = z.object({
+        phone: z.string().min(10, "Invalid phone number"),
+      });
+      const { phone } = validateBody(phoneSchema, req.body);
+
+      const user = await storage.getUser(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Generate 6-digit verification code
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiryTime = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      // Update user with phone number and verification code
+      await db.update(usersTable)
+        .set({
+          phone: phone,
+          phoneVerificationCode: verificationCode,
+          phoneVerificationExpiry: expiryTime,
+          phoneVerified: false,
+        })
+        .where(eq(usersTable.id, user.id));
+
+      // Send SMS via notification service
+      await notificationService.sendPhoneVerificationCode(phone, verificationCode);
+
+      res.json({ message: "Verification code sent to your phone" });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Phone verification - verify code
+  app.post("/api/auth/verify-phone", async (req: Request, res: Response) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const verifySchema = z.object({
+        code: z.string().length(6, "Code must be 6 digits"),
+      });
+      const { code } = validateBody(verifySchema, req.body);
+
+      const user = await storage.getUser(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (!user.phoneVerificationCode || !user.phoneVerificationExpiry) {
+        return res.status(400).json({ error: "No verification code found. Please request a new one." });
+      }
+
+      if (new Date() > new Date(user.phoneVerificationExpiry)) {
+        return res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+      }
+
+      if (user.phoneVerificationCode !== code) {
+        return res.status(400).json({ error: "Invalid verification code" });
+      }
+
+      // Mark phone as verified and clear code
+      await db.update(usersTable)
+        .set({
+          phoneVerified: true,
+          phoneVerificationCode: null,
+          phoneVerificationExpiry: null,
+        })
+        .where(eq(usersTable.id, user.id));
+
+      res.json({ message: "Phone number verified successfully!" });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
   
   // ===== USER ROUTES =====
   app.post("/api/users", async (req: Request, res: Response) => {

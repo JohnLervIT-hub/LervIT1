@@ -32,6 +32,7 @@ import {
   Star
 } from "lucide-react";
 import { Link } from "wouter";
+import { PhoneVerification } from "@/components/PhoneVerification";
 
 type Mover = {
   id: string;
@@ -341,6 +342,14 @@ export default function MoverProfile() {
             </Button>
           </CardContent>
         </Card>
+
+        <div className="mb-6">
+          <PhoneVerification
+            currentPhone={user.phone}
+            isVerified={user.phoneVerified}
+            onVerified={() => refreshUser()}
+          />
+        </div>
 
         <Card className="mb-6">
           <CardHeader>

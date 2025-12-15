@@ -149,6 +149,25 @@ export const paymentLimiter = rateLimit({
   },
 });
 
+// Phone verification rate limit (5 per 15 minutes - prevent brute force)
+export const phoneVerificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isProduction ? 5 : 50,
+  message: { error: 'Too many verification attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }, // Behind Replit proxy
+  handler: (req, res) => {
+    logger.warn({ 
+      ip: req.ip, 
+      path: req.path,
+      userId: (req as any).session?.userId,
+      event: 'phone_verification_rate_limit_exceeded' 
+    }, 'Phone verification rate limit exceeded');
+    res.status(429).json({ error: 'Too many verification attempts. Please try again later.' });
+  },
+});
+
 /**
  * Security Headers Middleware
  * Adds essential security headers to all responses

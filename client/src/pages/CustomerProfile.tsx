@@ -34,6 +34,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Link } from "wouter";
+import { PhoneVerification } from "@/components/PhoneVerification";
 
 type NotificationSettings = {
   emailBookingUpdates: boolean;
@@ -457,6 +458,14 @@ export default function CustomerProfile() {
             </Button>
           </CardContent>
         </Card>
+
+        <div className="mb-6">
+          <PhoneVerification
+            currentPhone={user.phone}
+            isVerified={user.phoneVerified}
+            onVerified={() => refreshUser()}
+          />
+        </div>
 
         <Card className="mb-6">
           <CardHeader>

@@ -25,6 +25,10 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   verificationToken: text("verification_token"),
   verificationTokenExpiry: timestamp("verification_token_expiry"),
+  // Phone verification fields
+  phoneVerified: boolean("phone_verified").default(false).notNull(),
+  phoneVerificationCode: text("phone_verification_code"),
+  phoneVerificationExpiry: timestamp("phone_verification_expiry"),
   // Onboarding and first-move discount fields
   hasCompletedOnboarding: boolean("has_completed_onboarding").default(false).notNull(),
   hasUsedFirstMoveDiscount: boolean("has_used_first_move_discount").default(false).notNull(),

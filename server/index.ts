@@ -9,7 +9,8 @@ import { logger, logEvent } from "./logger";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
-  securityHeaders 
+  securityHeaders,
+  phoneVerificationLimiter
 } from "./middleware/security";
 
 // Verify required environment variables early
@@ -106,6 +107,10 @@ app.use(securityHeaders);
 
 // Rate limiting - prevents abuse (applied to /api routes)
 app.use('/api', generalApiLimiter);
+
+// Stricter rate limiting for phone verification (prevents brute-force)
+app.use('/api/auth/send-phone-verification', phoneVerificationLimiter);
+app.use('/api/auth/verify-phone', phoneVerificationLimiter);
 
 app.use((req, res, next) => {
   const start = Date.now();

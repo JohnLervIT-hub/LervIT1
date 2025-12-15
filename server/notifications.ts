@@ -20,12 +20,22 @@ export interface EmailNotification {
 export interface SMSNotification {
   to: string;
   message: string;
-  type: 'job_alert' | 'booking_update' | 'payment_confirmation' | 'pilot_status';
+  type: 'job_alert' | 'booking_update' | 'payment_confirmation' | 'pilot_status' | 'phone_verification';
 }
 
 class NotificationService {
   private fromEmail = 'LervIT <support@lervit.com>';
   
+  // Send phone verification code via SMS
+  async sendPhoneVerificationCode(phone: string, code: string): Promise<boolean> {
+    const message = `Your LervIT verification code is: ${code}. This code expires in 10 minutes.`;
+    return this.sendSMS({
+      to: phone,
+      message,
+      type: 'phone_verification' as any,
+    });
+  }
+
   // Send SMS via Telnyx REST API
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     console.log('\n[SMS] Sending notification:');
@@ -34,7 +44,11 @@ class NotificationService {
     
     if (!telnyxApiKey || !telnyxPhoneNumber) {
       console.log('[SMS] Telnyx not configured - SMS logged only');
-      console.log('Message:', notification.message);
+      // Mask verification codes in logs for security
+      const maskedMessage = notification.type === 'phone_verification' 
+        ? notification.message.replace(/\d{6}/, '******')
+        : notification.message;
+      console.log('Message:', maskedMessage);
       console.log('---\n');
       return false;
     }

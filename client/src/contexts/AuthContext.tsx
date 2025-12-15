@@ -11,6 +11,7 @@ interface User {
   createdAt?: string | null;
   hasCompletedOnboarding?: boolean;
   hasUsedFirstMoveDiscount?: boolean;
+  phoneVerified?: boolean;
 }
 
 interface AuthContextType {
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           createdAt: userData.createdAt,
           hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
           hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
+          phoneVerified: userData.phoneVerified ?? false,
         });
       } else {
         setUser(null);
@@ -110,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createdAt: userData.createdAt,
       hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
       hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
+      phoneVerified: userData.phoneVerified ?? false,
     });
   };
 
@@ -142,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createdAt: userData.createdAt,
       hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
       hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
+      phoneVerified: userData.phoneVerified ?? false,
     });
   };
 
