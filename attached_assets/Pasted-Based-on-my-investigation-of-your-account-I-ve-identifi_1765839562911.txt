@@ -1,0 +1,33 @@
+Based on my investigation of your account, I've identified the issue with your SMS functionality:
+
+Issue Identified
+Your account is verified and in good standing, with the following details:
+
+Phone Number: +15878643866 (Canadian local number) - Status: Active
+Messaging Profile: "Lervit Notifications" - Status: Enabled
+Whitelisted Destinations: US and Canada
+However, your phone number does not have a messaging campaign assigned (messaging_campaign_id is empty). This is likely causing your SMS issues.
+
+Why This Matters
+For SMS messaging in the US and Canada, carriers require 10DLC (10-Digit Long Code) registration for Application-to-Person (A2P) messaging. Without a registered campaign:
+
+Messages may be blocked or filtered by carriers
+Delivery rates will be significantly lower
+You may experience complete message failures
+Steps to Resolve
+Register Your Brand: Create a brand in the Mission Control Portal that identifies your business.
+Create a Messaging Campaign: Set up a campaign that defines your messaging use case (e.g., notifications, marketing, 2FA).
+Associate the Campaign with Your Phone Number: Link your phone number (+15878643866) to the approved campaign.
+How to Set This Up:
+Log into the Mission Control Portal↗
+Navigate to Messaging → Campaign Registry
+Follow the steps to create a Brand and Campaign
+Assign your phone number to the campaign
+Helpful Documentation
+10DLC Quickstart Guide↗ - Step-by-step setup instructions
+Acceptable Use Policy for Messaging↗ - Content guidelines and requirements
+Additional Notes
+All Telnyx messaging services are currently operational (no outages).
+Your messaging profile has mobile_only: true enabled, which restricts messages to mobile numbers only.
+Ensure recipients have opted in to receive your messages.
+If you need assistance with the 10DLC registration process or have questions about campaign setup, please contact Telnyx support at mailto:support@telnyx.com|support@telnyx.com↗ or use the chat feature in the Mission Control Portal.
