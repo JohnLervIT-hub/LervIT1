@@ -115,9 +115,12 @@ async function imageToBase64(imagePath: string): Promise<string> {
   else if (imagePath.startsWith('/uploads/')) {
     try {
       const fs = await import('fs');
-      const localPath = path.join(process.cwd(), 'public', imagePath);
+      // Remove leading slash to properly join with public directory
+      const relativePath = imagePath.replace(/^\/+/, '');
+      const localPath = path.join(process.cwd(), 'public', relativePath);
+      console.log('[Vision Engine 2.0] Reading local file:', localPath);
       if (!fs.existsSync(localPath)) {
-        throw new Error(`Image file not found: ${imagePath}`);
+        throw new Error(`Image file not found: ${localPath}`);
       }
       buffer = fs.readFileSync(localPath);
     } catch (error) {

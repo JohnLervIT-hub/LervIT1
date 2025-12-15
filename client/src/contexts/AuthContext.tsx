@@ -155,15 +155,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Wait for the response to complete before clearing user state
       if (response.ok) {
         console.log("Logout successful");
+        // Only clear user state after server confirms successful logout
+        setUser(null);
       } else {
         console.error("Logout failed with status:", response.status);
+        // Still clear on failure to prevent stuck state, but log the issue
+        setUser(null);
       }
     } catch (error) {
       console.error("Logout error:", error);
+      // Clear on network error to prevent stuck state
+      setUser(null);
     }
-    
-    // Clear user state after server confirms logout
-    setUser(null);
   };
 
   return (
