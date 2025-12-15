@@ -781,9 +781,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Send SMS via notification service
-      await notificationService.sendPhoneVerificationCode(phone, verificationCode);
+      const smsSent = await notificationService.sendPhoneVerificationCode(phone, verificationCode);
 
-      res.json({ message: "Verification code sent to your phone" });
+      // In development, include the code in response if SMS failed (for testing)
+      const isDev = process.env.NODE_ENV === 'development';
+      if (isDev && !smsSent) {
+        console.log(`[DEV] Verification code for ${phone}: ${verificationCode}`);
+        res.json({ 
+          message: "Verification code sent to your phone",
+          devCode: verificationCode, // Only in development when SMS fails
+        });
+      } else {
+        res.json({ message: "Verification code sent to your phone" });
+      }
     } catch (error) {
       logger.error({ error }, "Pre-signup phone verification send error");
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });

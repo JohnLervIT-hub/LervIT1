@@ -90,17 +90,31 @@ export default function Signup() {
     }
   }, [user, isLoading, setLocation]);
 
+  // Dev code state (only used in development when SMS fails)
+  const [devCode, setDevCode] = useState<string | null>(null);
+
   // Send OTP mutation
   const sendOtpMutation = useMutation({
     mutationFn: async (phoneNumber: string) => {
-      return apiRequest("POST", "/api/auth/pre-signup/send-code", { phone: phoneNumber });
+      const response = await apiRequest("POST", "/api/auth/pre-signup/send-code", { phone: phoneNumber });
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setStep("otp");
-      toast({
-        title: "Code Sent",
-        description: "A 6-digit verification code has been sent to your phone.",
-      });
+      // In development, show the code if SMS failed
+      if (data.devCode) {
+        setDevCode(data.devCode);
+        toast({
+          title: "Code Sent (Dev Mode)",
+          description: `SMS not configured. Your code is: ${data.devCode}`,
+          duration: 30000,
+        });
+      } else {
+        toast({
+          title: "Code Sent",
+          description: "A 6-digit verification code has been sent to your phone.",
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
