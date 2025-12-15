@@ -74,9 +74,10 @@ export default function AdminDashboard() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const { toast } = useToast();
 
-  const { data: users, isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+  const { data: usersResponse, isLoading: usersLoading } = useQuery<{ data: User[], total: number }>({
+    queryKey: ["/api/users?limit=200&offset=0"],
   });
+  const users = usersResponse?.data;
 
   const { data: movers, isLoading: moversLoading } = useQuery<Mover[]>({
     queryKey: ["/api/movers"],
@@ -509,7 +510,7 @@ export default function AdminDashboard() {
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {users.map((u) => (
+                      {users?.map((u) => (
                         <div
                           key={u.id}
                           className="flex items-center justify-between p-3 border rounded-md"
