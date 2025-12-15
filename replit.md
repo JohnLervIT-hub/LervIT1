@@ -63,3 +63,14 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Search/Data Enrichment:** SerpAPI
 *   **Email Sending:** Resend
 *   **SMS Notifications:** Telnyx
+
+## Recent Changes (Dec 15, 2025)
+
+### Performance Optimizations
+*   **Storage Query Pagination:** Added `limit` and `offset` support to `getUsers()`, `getMovers()`, and `getBookings()` storage methods with proper pagination response format containing `data`, `total`, `limit`, `offset`, and `hasMore` fields.
+*   **Token Lookup Methods:** Added `getUserByResetToken()` and `getUserByVerificationToken()` direct lookup methods to avoid full table scans for password reset and email verification flows.
+*   **Admin Pagination:** `AdminUsersPage` now uses paginated API with proper React Query cache invalidation via predicate functions to ensure all paginated queries are refreshed after mutations.
+*   **Component Memoization:** Applied `React.memo()` to `ChatInterface` with memoized `MessageBubble` component to reduce unnecessary re-renders.
+*   **AddressAutocomplete Debounce:** Fixed debounce logic using `autocompleteJustFired` ref to allow manual address edits after place selection without duplicate callbacks.
+*   **Circuit Breaker System:** Implemented `CircuitBreaker` class in `server/circuit-breaker.ts` for external API resilience (Stripe, OpenAI, Telnyx) with configurable failure thresholds and recovery timeouts.
+*   **Vision Queue:** Async job processing system in `server/vision-queue.ts` for background HEIC conversion and OpenAI Vision API calls.
