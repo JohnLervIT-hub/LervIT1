@@ -37,7 +37,10 @@ type Booking = {
   dropoffDifficultyFee: string | null;
   heavyItemFee: string | null;
   subtotal: string | null;
-  numberOfMovers: number | null;
+  numberOfMovers?: number;
+  pickupDifficulty?: string;
+  dropoffDifficulty?: string;
+  heavyItem?: boolean;
   paymentStatus: string | null;
   createdAt: string;
   mover: {
