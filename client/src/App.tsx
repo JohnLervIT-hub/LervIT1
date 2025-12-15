@@ -210,7 +210,7 @@ function App() {
               <ErrorBoundary>
                 <ScrollToTop />
                 <Header />
-                <div className="pb-16 md:pb-0">
+                <div className="pt-16 pb-16 md:pb-0">
                   <PageTransition>
                     <Router />
                   </PageTransition>
