@@ -305,4 +305,4 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
       )}
     </div>
   );
-}
+});
