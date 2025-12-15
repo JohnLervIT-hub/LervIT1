@@ -66,13 +66,22 @@ The platform features a mobile-first design using shadcn/ui components for a res
 
 ## Recent Changes (Dec 15, 2025)
 
-### Phone Verification System
-*   **SMS Verification:** 6-digit verification codes sent via Telnyx SMS with 10-minute expiry.
-*   **Schema Fields:** Added `phoneVerified`, `phoneVerificationCode`, `phoneVerificationExpiry` to users table.
+### Uber-Style OTP Signup Flow
+*   **Pre-Signup Phone Verification:** Phone verification now required BEFORE account creation (similar to Uber).
+*   **3-Step Signup Flow:**
+    1. **Phone Entry:** User enters phone number, clicks "Continue" to send OTP.
+    2. **OTP Verification:** User enters 6-digit code sent via Telnyx SMS.
+    3. **Profile Completion:** After phone verification, user completes name/email/password/role.
+*   **New Schema:** `phone_verification_tokens` table stores pre-signup verification codes with 10-minute expiry.
+*   **New API Endpoints:** `/api/auth/pre-signup/send-code` and `/api/auth/pre-signup/verify-code` (no auth required).
+*   **Updated Signup API:** `/api/auth/signup` now requires `phoneVerificationToken` parameter.
+*   **Security:** Rate limiting (5 requests/15 min in production), automatic phone verification on account creation.
+*   **AuthContext Integration:** `phoneVerified` field propagated across login/signup/refresh flows.
+
+### Post-Login Phone Verification
+*   **For Existing Users:** `PhoneVerification.tsx` component allows verified users to update/verify phone numbers.
 *   **API Endpoints:** `/api/auth/send-phone-verification` and `/api/auth/verify-phone` with authentication required.
-*   **Security:** Rate limiting (5 requests/15 min in production), masked verification codes in logs.
-*   **Frontend Component:** `PhoneVerification.tsx` with OTP input, integrated into CustomerProfile and MoverProfile pages.
-*   **AuthContext Integration:** `phoneVerified` field added to User type and set on login/signup/refresh.
+*   **Integration:** Available in CustomerProfile and MoverProfile pages.
 
 ### Performance Optimizations
 *   **Storage Query Pagination:** Added `limit` and `offset` support to `getUsers()`, `getMovers()`, and `getBookings()` storage methods with proper pagination response format containing `data`, `total`, `limit`, `offset`, and `hasMore` fields.

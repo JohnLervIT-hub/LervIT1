@@ -319,12 +319,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Use the verified phone number from the token
+      // Strip any user-provided phone/phoneVerified to prevent bypass attempts
+      const { phone: _ignoredPhone, phoneVerified: _ignoredVerified, ...safeUserData } = userData as any;
       const hashedPassword = hashPassword(userData.password);
       const user = await storage.createUser({ 
-        ...userData, 
+        ...safeUserData, 
         password: hashedPassword,
-        phone: phoneToken.phone,
-        phoneVerified: true, // Phone is already verified
+        phone: phoneToken.phone, // Always use phone from verified token
+        phoneVerified: true, // Phone is already verified via OTP
       });
       
       // Delete the used verification token
