@@ -40,6 +40,7 @@ class NotificationService {
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     console.log('\n[SMS] Sending notification:');
     console.log('To:', notification.to);
+    console.log('From:', telnyxPhoneNumber ? `${telnyxPhoneNumber.slice(0, 4)}****${telnyxPhoneNumber.slice(-2)}` : 'NOT SET');
     console.log('Type:', notification.type);
     
     if (!telnyxApiKey || !telnyxPhoneNumber) {
