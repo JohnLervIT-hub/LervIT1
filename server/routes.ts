@@ -3761,7 +3761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ? message.text.substring(0, 80) + "..." 
               : message.text;
             
-            await storage.createInAppNotification({
+            await storage.createNotification({
               userId: recipientId,
               type: "new_message",
               title: `New message from ${senderName}`,

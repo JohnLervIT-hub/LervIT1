@@ -80,51 +80,82 @@ export interface VisionEngineResult {
 }
 
 /**
- * Download image from Object Storage and convert to base64 data URL
+ * Download image from Object Storage or local disk and convert to base64 data URL
  * Automatically converts HEIC/HEIF (iPhone format) to JPEG for OpenAI compatibility
  */
 async function imageToBase64(imagePath: string): Promise<string> {
   console.log('[Vision Engine 2.0] Converting image to base64:', imagePath);
   
+  const ext = path.extname(imagePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.heic': 'image/jpeg', // Will be converted
+    '.heif': 'image/jpeg', // Will be converted
+  };
+  
+  let buffer: Buffer;
+  
+  // Handle Object Storage paths
   if (imagePath.startsWith('/objects/')) {
-    const objectStorageService = new ObjectStorageService();
-    const objectFile = await objectStorageService.getObjectEntityFile(imagePath);
-    const [buffer] = await objectFile.download();
-    
-    const ext = path.extname(imagePath).toLowerCase();
-    
-    // Check if HEIC/HEIF format (iPhone) - needs conversion
-    if (ext === '.heic' || ext === '.heif') {
-      console.log('[Vision Engine 2.0] Converting HEIC/HEIF to JPEG for OpenAI compatibility');
-      try {
-        const jpegBuffer = await heicConvert({
-          buffer: Buffer.from(buffer),
-          format: 'JPEG',
-          quality: 0.9
-        });
-        const base64 = Buffer.from(jpegBuffer).toString('base64');
-        return `data:image/jpeg;base64,${base64}`;
-      } catch (conversionError) {
-        console.error('[Vision Engine 2.0] HEIC conversion failed:', conversionError);
-        throw new Error('Failed to convert HEIC image. Please upload a JPEG, PNG, or WebP image.');
-      }
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(imagePath);
+      const [downloadedBuffer] = await objectFile.download();
+      buffer = Buffer.from(downloadedBuffer);
+    } catch (error) {
+      console.error('[Vision Engine 2.0] Object Storage download failed:', error);
+      throw new Error('Failed to download image from storage. Please try uploading again.');
     }
-    
-    const base64 = buffer.toString('base64');
-    const mimeTypes: Record<string, string> = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-    };
-    const mimeType = mimeTypes[ext] || 'image/jpeg';
-    
-    return `data:${mimeType};base64,${base64}`;
+  }
+  // Handle local /uploads/ paths (fallback when Object Storage fails)
+  else if (imagePath.startsWith('/uploads/')) {
+    try {
+      const fs = await import('fs');
+      const localPath = path.join(process.cwd(), 'public', imagePath);
+      if (!fs.existsSync(localPath)) {
+        throw new Error(`Image file not found: ${imagePath}`);
+      }
+      buffer = fs.readFileSync(localPath);
+    } catch (error) {
+      console.error('[Vision Engine 2.0] Local file read failed:', error);
+      throw new Error('Failed to read uploaded image. Please try uploading again.');
+    }
+  }
+  // Handle full URLs (http/https)
+  else if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath;
+  }
+  // Unknown path format
+  else {
+    console.error('[Vision Engine 2.0] Unknown image path format:', imagePath);
+    throw new Error('Invalid image path format. Please upload a valid image.');
   }
   
-  // For URLs, return as-is
-  return imagePath;
+  // Check if HEIC/HEIF format (iPhone) - needs conversion
+  if (ext === '.heic' || ext === '.heif') {
+    console.log('[Vision Engine 2.0] Converting HEIC/HEIF to JPEG for OpenAI compatibility');
+    try {
+      const jpegBuffer = await heicConvert({
+        buffer: buffer,
+        format: 'JPEG',
+        quality: 0.9
+      });
+      const base64 = Buffer.from(jpegBuffer).toString('base64');
+      return `data:image/jpeg;base64,${base64}`;
+    } catch (conversionError) {
+      console.error('[Vision Engine 2.0] HEIC conversion failed:', conversionError);
+      throw new Error('Failed to convert HEIC image. Please upload a JPEG, PNG, or WebP image.');
+    }
+  }
+  
+  const base64 = buffer.toString('base64');
+  const mimeType = mimeTypes[ext] || 'image/jpeg';
+  
+  return `data:${mimeType};base64,${base64}`;
 }
 
 /**

@@ -147,13 +147,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
+      
+      // Wait for the response to complete before clearing user state
+      if (response.ok) {
+        console.log("Logout successful");
+      } else {
+        console.error("Logout failed with status:", response.status);
+      }
     } catch (error) {
       console.error("Logout error:", error);
     }
+    
+    // Clear user state after server confirms logout
     setUser(null);
   };
 
