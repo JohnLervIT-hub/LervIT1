@@ -386,6 +386,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug endpoint to check cookie/session status
+  app.get("/api/auth/debug-session", (req: Request, res: Response) => {
+    const cookies = req.headers.cookie || 'none';
+    const sessionId = req.sessionID;
+    const hasSession = !!req.session;
+    const hasUserId = !!req.session?.userId;
+    
+    console.log("=== SESSION DEBUG ===");
+    console.log("Cookies received:", cookies);
+    console.log("Session ID:", sessionId);
+    console.log("Has session:", hasSession);
+    console.log("Has userId:", hasUserId);
+    console.log("User agent:", req.headers['user-agent']);
+    console.log("Origin:", req.headers.origin);
+    console.log("Referer:", req.headers.referer);
+    console.log("=== END DEBUG ===");
+    
+    res.json({
+      cookiesReceived: cookies !== 'none',
+      sessionId: sessionId?.substring(0, 8) + '...',
+      hasSession,
+      hasUserId,
+      userId: req.session?.userId?.substring(0, 8) + '...' || null,
+    });
+  });
+
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const loginSchema = z.object({
@@ -489,6 +515,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (saveErr) {
             return res.status(500).json({ error: "Session save error" });
           }
+          
+          // Debug: Log session details after save
+          console.log("=== LOGIN SUCCESS DEBUG ===");
+          console.log("Session ID:", req.sessionID);
+          console.log("Session cookie:", req.session.cookie);
+          console.log("User ID set:", req.session.userId);
+          console.log("Set-Cookie header:", res.getHeader('Set-Cookie'));
+          console.log("=== END LOGIN DEBUG ===");
+          
           const { password: _, ...userWithoutPassword } = userData;
           res.json(userWithoutPassword);
         });
