@@ -7,9 +7,10 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles: string[];
   redirectTo?: string;
+  requireEmailVerification?: boolean;
 }
 
-export function ProtectedRoute({ children, allowedRoles, redirectTo }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, allowedRoles, redirectTo, requireEmailVerification = true }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -34,9 +35,12 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo }: Protected
         });
         
         setLocation(targetRoute);
+      } else if (requireEmailVerification && !user.emailVerified && user.role !== 'admin') {
+        // Redirect to email verification page if email not verified
+        setLocation("/verify-email");
       }
     }
-  }, [user, isLoading, allowedRoles, redirectTo, setLocation, toast]);
+  }, [user, isLoading, allowedRoles, redirectTo, setLocation, toast, requireEmailVerification]);
 
   // Show loading state while auth is initializing
   if (isLoading) {
@@ -49,6 +53,15 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo }: Protected
 
   // Don't render protected content for unauthorized users
   if (!user || !allowedRoles.includes(user.role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Block access if email verification required but not verified (except admins)
+  if (requireEmailVerification && !user.emailVerified && user.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>

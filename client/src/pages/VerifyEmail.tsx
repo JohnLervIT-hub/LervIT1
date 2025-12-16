@@ -27,11 +27,20 @@ export default function VerifyEmail() {
       setToken(tokenParam);
       verifyEmail(tokenParam);
     } else {
+      // No token - user is here to see verification required message
       setIsLoading(false);
-      setVerificationStatus("error");
-      setErrorMessage("No verification token found. Please check your email for the verification link.");
+      // If user is logged in but not verified, show pending state
+      if (user && !user.emailVerified) {
+        setVerificationStatus("pending");
+      } else if (user && user.emailVerified) {
+        // Already verified, redirect to dashboard
+        setLocation("/dashboard");
+      } else {
+        setVerificationStatus("error");
+        setErrorMessage("No verification token found. Please check your email for the verification link.");
+      }
     }
-  }, []);
+  }, [user]);
 
   const verifyEmail = async (verificationToken: string) => {
     try {
@@ -127,6 +136,72 @@ export default function VerifyEmail() {
               Please wait while we verify your email address...
             </p>
           </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show pending verification message when user needs to verify email
+  if (verificationStatus === "pending" && user && !user.emailVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
+                <Mail className="w-8 h-8 text-primary-foreground" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold">Verify Your Email</h1>
+            <p className="text-muted-foreground">
+              Please verify your email address to access the dashboard
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-center text-muted-foreground">
+              We've sent a verification link to <strong>{user.email}</strong>. 
+              Please check your inbox and spam folder, then click the link to verify your account.
+            </p>
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm text-center">
+                Didn't receive the email? Click below to resend.
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-2">
+            <Button
+              className="w-full"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              data-testid="button-resend-verification"
+            >
+              {isResending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="w-4 h-4 mr-2" />
+                  Resend Verification Email
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                refreshUser?.();
+                toast({
+                  title: "Checking verification status...",
+                  description: "If you've verified your email, you'll be redirected.",
+                });
+              }}
+              data-testid="button-check-status"
+            >
+              I've Verified My Email
+            </Button>
+          </CardFooter>
         </Card>
       </div>
     );

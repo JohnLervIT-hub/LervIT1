@@ -12,6 +12,7 @@ interface User {
   hasCompletedOnboarding?: boolean;
   hasUsedFirstMoveDiscount?: boolean;
   phoneVerified?: boolean;
+  emailVerified?: boolean;
 }
 
 interface AuthContextType {
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
           hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
           phoneVerified: userData.phoneVerified ?? false,
+          emailVerified: userData.emailVerified ?? false,
         });
       } else {
         setUser(null);
