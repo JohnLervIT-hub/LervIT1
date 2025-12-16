@@ -98,8 +98,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const userData = await response.json();
     
-    // Small delay to ensure browser processes Set-Cookie header before subsequent requests
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Longer delay for mobile browsers (especially iOS Safari) to properly set cookies
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Verify the session is actually working by making a test request
+    try {
+      const verifyResponse = await fetch("/api/auth/me", {
+        credentials: "include",
+      });
+      if (!verifyResponse.ok) {
+        console.warn("Session verification failed after login, retrying...");
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (e) {
+      console.warn("Session verification error:", e);
+    }
     
     setUser({
       id: userData.id,
@@ -131,8 +144,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const userData = await response.json();
     
-    // Small delay to ensure browser processes Set-Cookie header before subsequent requests
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Longer delay for mobile browsers (especially iOS Safari) to properly set cookies
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Verify the session is actually working by making a test request
+    // This helps catch cookie issues early
+    try {
+      const verifyResponse = await fetch("/api/auth/me", {
+        credentials: "include",
+      });
+      if (!verifyResponse.ok) {
+        console.warn("Session verification failed after signup, retrying...");
+        // If verification fails, wait longer and try one more time
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (e) {
+      console.warn("Session verification error:", e);
+    }
     
     setUser({
       id: userData.id,
