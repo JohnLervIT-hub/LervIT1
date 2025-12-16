@@ -553,8 +553,11 @@ class NotificationService {
 
   // Password reset email
   async sendPasswordReset(email: string, name: string, resetToken: string): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    // In development, prioritize the dev domain to ensure tokens work correctly
+    const isProduction = process.env.NODE_ENV === 'production';
+    const baseUrl = isProduction 
+      ? (process.env.BASE_URL || 'https://app.lervit.com')
+      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
     const subject = 'Reset Your LervIT Password';
     const body = `
@@ -620,8 +623,11 @@ class NotificationService {
 
   // Email verification email
   async sendVerificationEmail(email: string, name: string, verificationToken: string): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    // In development, prioritize the dev domain to ensure tokens work correctly
+    const isProduction = process.env.NODE_ENV === 'production';
+    const baseUrl = isProduction 
+      ? (process.env.BASE_URL || 'https://app.lervit.com')
+      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
     const verifyUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
     const subject = 'Verify Your LervIT Email Address';
     const body = `
