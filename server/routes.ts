@@ -536,6 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailJobAlerts: z.boolean().optional(),
         emailBookingUpdates: z.boolean().optional(),
         emailEarningsReports: z.boolean().optional(),
+        emailPromotions: z.boolean().optional(),
         pushNotifications: z.boolean().optional(),
       });
       

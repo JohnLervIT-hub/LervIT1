@@ -38,6 +38,7 @@ export const users = pgTable("users", {
   emailJobAlerts: boolean("email_job_alerts").default(true).notNull(),
   emailBookingUpdates: boolean("email_booking_updates").default(true).notNull(),
   emailEarningsReports: boolean("email_earnings_reports").default(true).notNull(),
+  emailPromotions: boolean("email_promotions").default(false).notNull(),
   pushNotifications: boolean("push_notifications").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

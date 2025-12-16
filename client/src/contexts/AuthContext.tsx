@@ -19,6 +19,7 @@ interface User {
   emailJobAlerts?: boolean;
   emailBookingUpdates?: boolean;
   emailEarningsReports?: boolean;
+  emailPromotions?: boolean;
   pushNotifications?: boolean;
 }
 
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           emailJobAlerts: userData.emailJobAlerts ?? true,
           emailBookingUpdates: userData.emailBookingUpdates ?? true,
           emailEarningsReports: userData.emailEarningsReports ?? true,
+          emailPromotions: userData.emailPromotions ?? false,
           pushNotifications: userData.pushNotifications ?? true,
         });
       } else {
@@ -147,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       emailJobAlerts: userData.emailJobAlerts ?? true,
       emailBookingUpdates: userData.emailBookingUpdates ?? true,
       emailEarningsReports: userData.emailEarningsReports ?? true,
+      emailPromotions: userData.emailPromotions ?? false,
       pushNotifications: userData.pushNotifications ?? true,
     });
   };
@@ -202,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       emailJobAlerts: userData.emailJobAlerts ?? true,
       emailBookingUpdates: userData.emailBookingUpdates ?? true,
       emailEarningsReports: userData.emailEarningsReports ?? true,
+      emailPromotions: userData.emailPromotions ?? false,
       pushNotifications: userData.pushNotifications ?? true,
     });
   };
