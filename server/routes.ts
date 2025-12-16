@@ -39,7 +39,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc } from "drizzle-orm";
@@ -1992,15 +1992,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 3. Delete messages
       await db.delete(messages).where(eq(messages.senderId, userId));
       
-      // 4. Delete mover-related data if user is a mover
+      // 4. Delete in-app notifications
+      await db.delete(inAppNotifications).where(eq(inAppNotifications.userId, userId));
+      
+      // 5. Delete mover-related data if user is a mover
       const mover = await db.select().from(moversTable).where(eq(moversTable.userId, userId)).limit(1);
       if (mover.length > 0) {
         await db.delete(moverTermsAcceptance).where(eq(moverTermsAcceptance.moverId, mover[0].id));
         await db.delete(verificationItems).where(eq(verificationItems.moverId, mover[0].id));
+        await db.delete(jobNotifications).where(eq(jobNotifications.moverId, mover[0].id));
+        await db.delete(moverPerformanceTable).where(eq(moverPerformanceTable.moverId, mover[0].id));
+        await db.delete(moverPayouts).where(eq(moverPayouts.moverId, mover[0].id));
+        await db.delete(moverEarnings).where(eq(moverEarnings.moverId, mover[0].id));
+        await db.delete(moverStripeAccounts).where(eq(moverStripeAccounts.moverId, mover[0].id));
         await db.delete(moversTable).where(eq(moversTable.userId, userId));
       }
       
-      // 5. Delete completed/cancelled bookings (cascade)
+      // 6. Delete reviews where user is the customer
+      await db.delete(reviews).where(eq(reviews.customerId, userId));
+      
+      // 7. Delete completed/cancelled bookings (cascade)
       const userBookings = await db.select({ id: bookings.id })
         .from(bookings)
         .where(eq(bookings.customerId, userId));
@@ -2009,10 +2020,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.delete(moverEarnings).where(eq(moverEarnings.bookingId, booking.id));
         await db.delete(messages).where(eq(messages.bookingId, booking.id));
         await db.delete(reviews).where(eq(reviews.bookingId, booking.id));
+        await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, booking.id));
       }
       await db.delete(bookings).where(eq(bookings.customerId, userId));
       
-      // 6. Finally delete the user
+      // 8. Finally delete the user
       await db.delete(usersTable).where(eq(usersTable.id, userId));
       
       console.log(`[Admin] User ${userId} (${existingUser[0].email}) deleted by admin ${adminUser.id}`);
