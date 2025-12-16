@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,10 @@ export default function VerifyEmail() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isResending, setIsResending] = useState(false);
   const [emailFromApi, setEmailFromApi] = useState("");
+  
+  // Prevent duplicate verification calls
+  const verificationAttemptedRef = useRef(false);
+  const verificationInProgressRef = useRef(false);
 
   const userEmail = emailFromApi || user?.email || "";
 
@@ -24,6 +28,11 @@ export default function VerifyEmail() {
     const tokenParam = params.get("token");
     
     if (tokenParam) {
+      // Only attempt verification once per page load
+      if (verificationAttemptedRef.current || verificationInProgressRef.current) {
+        return;
+      }
+      verificationAttemptedRef.current = true;
       setToken(tokenParam);
       verifyEmail(tokenParam);
     } else {
@@ -43,6 +52,12 @@ export default function VerifyEmail() {
   }, [user]);
 
   const verifyEmail = async (verificationToken: string) => {
+    // Prevent concurrent verification attempts
+    if (verificationInProgressRef.current) {
+      return;
+    }
+    verificationInProgressRef.current = true;
+    
     try {
       const response = await fetch("/api/auth/verify-email", {
         method: "POST",
@@ -79,6 +94,7 @@ export default function VerifyEmail() {
       });
     } finally {
       setIsLoading(false);
+      verificationInProgressRef.current = false;
     }
   };
 
