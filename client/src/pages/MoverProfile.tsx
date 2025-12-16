@@ -365,13 +365,16 @@ export default function MoverProfile() {
           </CardContent>
         </Card>
 
-        <div className="mb-6">
-          <PhoneVerification
-            currentPhone={user.phone}
-            isVerified={user.phoneVerified}
-            onVerified={() => refreshUser()}
-          />
-        </div>
+        {/* Show PhoneVerification component only if NOT verified */}
+        {!user.phoneVerified && (
+          <div className="mb-6">
+            <PhoneVerification
+              currentPhone={user.phone}
+              isVerified={user.phoneVerified}
+              onVerified={() => refreshUser()}
+            />
+          </div>
+        )}
 
         <Card className="mb-6">
           <CardHeader>
@@ -585,6 +588,22 @@ export default function MoverProfile() {
               </div>
               <Badge className="bg-blue-600">Verified</Badge>
             </div>
+
+            {/* Phone Verification Badge - shown only when verified */}
+            {user.phoneVerified && (
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg" data-testid="security-phone-verified">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <Smartphone className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Phone Verified</p>
+                    <p className="text-sm text-muted-foreground">{user.phone}</p>
+                  </div>
+                </div>
+                <Badge className="bg-blue-600">Verified</Badge>
+              </div>
+            )}
             
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
