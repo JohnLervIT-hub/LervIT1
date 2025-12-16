@@ -692,11 +692,97 @@ class NotificationService {
     });
   }
 
-  // Welcome email after verification
-  async sendWelcomeEmail(email: string, name: string): Promise<void> {
+  // Welcome email after verification - different templates for customers and movers
+  async sendWelcomeEmail(email: string, name: string, role: string = 'customer'): Promise<void> {
     const baseUrl = process.env.BASE_URL || 
       (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-    const subject = 'Welcome to LervIT - Your Moving Made Easy!';
+    
+    const isMover = role === 'mover';
+    const subject = isMover 
+      ? 'Welcome to LervIT - Start Earning Today!'
+      : 'Welcome to LervIT - Your Moving Made Easy!';
+    
+    const dashboardUrl = isMover ? `${baseUrl}/mover-dashboard` : `${baseUrl}/dashboard`;
+    
+    // Customer-specific content
+    const customerContent = `
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">Your email has been verified and you're all set to use LervIT! Here's what you can do:</p>
+              
+              <table width="100%" style="margin-bottom:30px;">
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">📦 Book Your First Move</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Get matched with trusted local movers in minutes</p>
+                  </td>
+                </tr>
+                <tr><td style="height:10px;"></td></tr>
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">💰 Transparent Pricing</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Know exactly what you'll pay before you book - no hidden fees</p>
+                  </td>
+                </tr>
+                <tr><td style="height:10px;"></td></tr>
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">📍 Track Your Move</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Real-time updates and direct messaging with your mover</p>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:0 auto 25px auto;">
+                <tr>
+                  <td style="background-color:#4CAF50;border-radius:6px;padding:15px 40px;">
+                    <a href="${dashboardUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">Start Your First Move</a>
+                  </td>
+                </tr>
+              </table>`;
+    
+    // Mover-specific content
+    const moverContent = `
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">Your email has been verified and you're ready to start earning with LervIT! Here's how to get started:</p>
+              
+              <table width="100%" style="margin-bottom:30px;">
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">🚚 Complete Your Profile</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Add your vehicle details, availability, and service areas to start receiving job offers</p>
+                  </td>
+                </tr>
+                <tr><td style="height:10px;"></td></tr>
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">✅ Get Verified</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Upload your documents for verification to unlock more job opportunities</p>
+                  </td>
+                </tr>
+                <tr><td style="height:10px;"></td></tr>
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">💵 Set Up Payouts</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Connect your Stripe account to receive fast, secure payments</p>
+                  </td>
+                </tr>
+                <tr><td style="height:10px;"></td></tr>
+                <tr>
+                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;">
+                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">📱 Accept Jobs</h3>
+                    <p style="color:#666666;margin:0;font-size:14px;">Get notified of nearby jobs via SMS and accept with one tap</p>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:0 auto 25px auto;">
+                <tr>
+                  <td style="background-color:#4CAF50;border-radius:6px;padding:15px 40px;">
+                    <a href="${dashboardUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">Go to Mover Dashboard</a>
+                  </td>
+                </tr>
+              </table>`;
+    
     const body = `
 <!DOCTYPE html>
 <html>
@@ -708,46 +794,15 @@ class NotificationService {
           <!-- Header -->
           <tr>
             <td style="background-color:#4CAF50;padding:30px;text-align:center;">
-              <h1 style="color:#ffffff;margin:0;font-size:28px;">Welcome to LervIT!</h1>
+              <h1 style="color:#ffffff;margin:0;font-size:28px;">Welcome to LervIT${isMover ? ', Partner!' : '!'}</h1>
+              ${isMover ? '<p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">Join Calgary\'s Growing Network of Movers</p>' : ''}
             </td>
           </tr>
           <!-- Content -->
           <tr>
             <td style="padding:40px 30px;">
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${name},</p>
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">Your email has been verified and you're all set to use LervIT! Here's what you can do:</p>
-              
-              <table width="100%" style="margin-bottom:30px;">
-                <tr>
-                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
-                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">1. Book Your First Move</h3>
-                    <p style="color:#666666;margin:0;font-size:14px;">Get matched with trusted local movers in minutes</p>
-                  </td>
-                </tr>
-                <tr><td style="height:10px;"></td></tr>
-                <tr>
-                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;margin-bottom:10px;">
-                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">2. Transparent Pricing</h3>
-                    <p style="color:#666666;margin:0;font-size:14px;">Know exactly what you'll pay before you book - no hidden fees</p>
-                  </td>
-                </tr>
-                <tr><td style="height:10px;"></td></tr>
-                <tr>
-                  <td style="padding:15px;background-color:#f8f9fa;border-radius:8px;">
-                    <h3 style="color:#333333;margin:0 0 8px 0;font-size:16px;">3. Track Your Move</h3>
-                    <p style="color:#666666;margin:0;font-size:14px;">Real-time updates and direct messaging with your mover</p>
-                  </td>
-                </tr>
-              </table>
-              
-              <!-- CTA Button -->
-              <table cellpadding="0" cellspacing="0" style="margin:0 auto 25px auto;">
-                <tr>
-                  <td style="background-color:#4CAF50;border-radius:6px;padding:15px 40px;">
-                    <a href="${baseUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">Start Your First Move</a>
-                  </td>
-                </tr>
-              </table>
+              ${isMover ? moverContent : customerContent}
               
               <p style="color:#555555;font-size:14px;line-height:22px;margin:0;text-align:center;">Questions? Just reply to this email - we're here to help!</p>
             </td>

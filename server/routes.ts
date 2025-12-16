@@ -698,8 +698,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(usersTable.id, user.id));
       
-      // Send welcome email
-      await notificationService.sendWelcomeEmail(user.email, user.name);
+      // Send role-specific welcome email
+      await notificationService.sendWelcomeEmail(user.email, user.name, user.role);
       
       res.json({ message: "Email verified successfully! Welcome to LervIT." });
     } catch (error) {
