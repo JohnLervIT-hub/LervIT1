@@ -13,6 +13,13 @@ interface User {
   hasUsedFirstMoveDiscount?: boolean;
   phoneVerified?: boolean;
   emailVerified?: boolean;
+  // Notification preferences
+  smsJobAlerts?: boolean;
+  smsBookingUpdates?: boolean;
+  emailJobAlerts?: boolean;
+  emailBookingUpdates?: boolean;
+  emailEarningsReports?: boolean;
+  pushNotifications?: boolean;
 }
 
 interface AuthContextType {
@@ -51,6 +58,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
           phoneVerified: userData.phoneVerified ?? false,
           emailVerified: userData.emailVerified ?? false,
+          smsJobAlerts: userData.smsJobAlerts ?? true,
+          smsBookingUpdates: userData.smsBookingUpdates ?? false,
+          emailJobAlerts: userData.emailJobAlerts ?? true,
+          emailBookingUpdates: userData.emailBookingUpdates ?? true,
+          emailEarningsReports: userData.emailEarningsReports ?? true,
+          pushNotifications: userData.pushNotifications ?? true,
         });
       } else {
         setUser(null);
@@ -129,6 +142,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
       phoneVerified: userData.phoneVerified ?? false,
       emailVerified: userData.emailVerified ?? false,
+      smsJobAlerts: userData.smsJobAlerts ?? true,
+      smsBookingUpdates: userData.smsBookingUpdates ?? false,
+      emailJobAlerts: userData.emailJobAlerts ?? true,
+      emailBookingUpdates: userData.emailBookingUpdates ?? true,
+      emailEarningsReports: userData.emailEarningsReports ?? true,
+      pushNotifications: userData.pushNotifications ?? true,
     });
   };
 
@@ -178,6 +197,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
       phoneVerified: userData.phoneVerified ?? false,
       emailVerified: userData.emailVerified ?? false,
+      smsJobAlerts: userData.smsJobAlerts ?? true,
+      smsBookingUpdates: userData.smsBookingUpdates ?? false,
+      emailJobAlerts: userData.emailJobAlerts ?? true,
+      emailBookingUpdates: userData.emailBookingUpdates ?? true,
+      emailEarningsReports: userData.emailEarningsReports ?? true,
+      pushNotifications: userData.pushNotifications ?? true,
     });
   };
 

@@ -32,6 +32,13 @@ export const users = pgTable("users", {
   // Onboarding and first-move discount fields
   hasCompletedOnboarding: boolean("has_completed_onboarding").default(false).notNull(),
   hasUsedFirstMoveDiscount: boolean("has_used_first_move_discount").default(false).notNull(),
+  // Notification preference fields
+  smsJobAlerts: boolean("sms_job_alerts").default(true).notNull(),
+  smsBookingUpdates: boolean("sms_booking_updates").default(false).notNull(),
+  emailJobAlerts: boolean("email_job_alerts").default(true).notNull(),
+  emailBookingUpdates: boolean("email_booking_updates").default(true).notNull(),
+  emailEarningsReports: boolean("email_earnings_reports").default(true).notNull(),
+  pushNotifications: boolean("push_notifications").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

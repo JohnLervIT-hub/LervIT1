@@ -530,6 +530,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phone: z.string().optional(),
         address: z.string().optional(),
         hasCompletedOnboarding: z.boolean().optional(),
+        // Notification preferences
+        smsJobAlerts: z.boolean().optional(),
+        smsBookingUpdates: z.boolean().optional(),
+        emailJobAlerts: z.boolean().optional(),
+        emailBookingUpdates: z.boolean().optional(),
+        emailEarningsReports: z.boolean().optional(),
+        pushNotifications: z.boolean().optional(),
       });
       
       const updates = validateBody(updateProfileSchema, req.body);

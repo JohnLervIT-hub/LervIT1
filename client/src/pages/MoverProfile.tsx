@@ -65,13 +65,14 @@ export default function MoverProfile() {
   const [address, setAddress] = useState(user?.address || "");
   const [isUploading, setIsUploading] = useState(false);
   
+  // Initialize notifications from user data (persisted in database)
   const [notifications, setNotifications] = useState<NotificationSettings>({
-    emailJobAlerts: true,
-    emailBookingUpdates: true,
-    emailEarningsReports: true,
-    smsJobAlerts: true,
-    smsBookingUpdates: false,
-    pushNotifications: true,
+    emailJobAlerts: (user as any)?.emailJobAlerts ?? true,
+    emailBookingUpdates: (user as any)?.emailBookingUpdates ?? true,
+    emailEarningsReports: (user as any)?.emailEarningsReports ?? true,
+    smsJobAlerts: (user as any)?.smsJobAlerts ?? true,
+    smsBookingUpdates: (user as any)?.smsBookingUpdates ?? false,
+    pushNotifications: (user as any)?.pushNotifications ?? true,
   });
 
   const { data: moverData } = useQuery<Mover>({
@@ -157,11 +158,32 @@ export default function MoverProfile() {
     updateProfileMutation.mutate({ name, phone, address });
   };
 
+  // Mutation to save notification preferences to database
+  const updateNotificationMutation = useMutation({
+    mutationFn: async (updates: Partial<NotificationSettings>) => {
+      return apiRequest("PATCH", "/api/users/profile", updates);
+    },
+    onSuccess: () => {
+      refreshUser();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+    onError: () => {
+      toast({
+        title: "Update Failed",
+        description: "Could not save notification preference. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const toggleNotification = (key: keyof NotificationSettings) => {
+    const newValue = !notifications[key];
     setNotifications(prev => ({
       ...prev,
-      [key]: !prev[key],
+      [key]: newValue,
     }));
+    // Save to database
+    updateNotificationMutation.mutate({ [key]: newValue });
     toast({
       title: "Preference Updated",
       description: "Your notification preference has been saved.",
