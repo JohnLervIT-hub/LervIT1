@@ -23,6 +23,15 @@ export default function VerifyEmail() {
 
   const userEmail = emailFromApi || user?.email || "";
 
+  // Helper function to get dashboard based on user role
+  const getDashboardRoute = (role: string) => {
+    switch (role) {
+      case 'mover': return '/mover-dashboard';
+      case 'admin': return '/admin';
+      default: return '/dashboard';
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenParam = params.get("token");
@@ -42,8 +51,8 @@ export default function VerifyEmail() {
       if (user && !user.emailVerified) {
         setVerificationStatus("pending");
       } else if (user && user.emailVerified) {
-        // Already verified, redirect to dashboard
-        setLocation("/dashboard");
+        // Already verified, redirect to appropriate dashboard based on role
+        setLocation(getDashboardRoute(user.role));
       } else {
         setVerificationStatus("error");
         setErrorMessage("No verification token found. Please check your email for the verification link.");
@@ -206,12 +215,15 @@ export default function VerifyEmail() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => {
-                refreshUser?.();
+              onClick={async () => {
                 toast({
                   title: "Checking verification status...",
-                  description: "If you've verified your email, you'll be redirected.",
+                  description: "Please wait...",
                 });
+                if (refreshUser) {
+                  await refreshUser();
+                }
+                // After refresh, useEffect will handle redirect if verified
               }}
               data-testid="button-check-status"
             >
@@ -246,7 +258,7 @@ export default function VerifyEmail() {
           <CardFooter className="flex flex-col gap-2">
             <Button
               className="w-full"
-              onClick={() => setLocation("/dashboard")}
+              onClick={() => setLocation(user ? getDashboardRoute(user.role) : "/dashboard")}
               data-testid="button-go-to-dashboard"
             >
               Go to Dashboard
