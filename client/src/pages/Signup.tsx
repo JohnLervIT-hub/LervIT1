@@ -8,11 +8,11 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { FormFieldError } from "@/components/FormFieldError";
-import { Truck, Eye, EyeOff, Loader2, Package, Users, Phone, ArrowLeft, CheckCircle } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, Package, Users, Phone, ArrowLeft, CheckCircle, Mail } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
 
-type SignupStep = "phone" | "otp" | "details";
+type SignupStep = "phone" | "otp" | "details" | "success";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -79,6 +79,9 @@ export default function Signup() {
   };
 
   useEffect(() => {
+    // Don't redirect if we're showing the success screen
+    if (step === "success") return;
+    
     if (user && !isLoading) {
       if (user.role === "customer") {
         setLocation("/dashboard");
@@ -88,7 +91,7 @@ export default function Signup() {
         setLocation("/admin");
       }
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading, setLocation, step]);
 
   // Dev code state (only used in development when SMS fails)
   const [devCode, setDevCode] = useState<string | null>(null);
@@ -184,10 +187,8 @@ export default function Signup() {
     try {
       await signup(name, email, password, role, verifiedPhone, verifiedToken);
       setIsLoading(false);
-      toast({
-        title: "Account created!",
-        description: "Welcome to LervIT!",
-      });
+      // Show success screen with email verification instructions
+      setStep("success");
     } catch (error) {
       toast({
         variant: "destructive",
@@ -195,6 +196,15 @@ export default function Signup() {
         description: error instanceof Error ? error.message : "Please try again.",
       });
       setIsLoading(false);
+    }
+  };
+  
+  // Navigate to appropriate dashboard based on role
+  const goToDashboard = () => {
+    if (role === "mover") {
+      setLocation("/mover-dashboard");
+    } else {
+      setLocation("/dashboard");
     }
   };
 
@@ -336,6 +346,55 @@ export default function Signup() {
                 "Verify"
               )}
             </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // Step 4: Success - Check Email (after account creation)
+  if (step === "success") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center pb-2">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                <Mail className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Check Your Email</h1>
+            <p className="text-muted-foreground" data-testid="status-signup-success">
+              We've sent a verification link to
+            </p>
+            <p className="font-medium text-foreground" data-testid="text-verification-email">
+              {email}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Click the link in the email to verify your account. If you don't see it, check your spam folder.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-900">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm text-green-700 dark:text-green-400">
+                Phone verified: {formatPhoneNumber(verifiedPhone)}
+              </span>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3 pt-2">
+            <Button
+              onClick={goToDashboard}
+              className="w-full h-11"
+              data-testid="button-continue-to-dashboard"
+            >
+              Continue to Dashboard
+            </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              You can use the app while waiting for email verification
+            </p>
           </CardFooter>
         </Card>
       </div>
