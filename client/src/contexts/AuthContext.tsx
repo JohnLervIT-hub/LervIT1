@@ -128,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
       hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
       phoneVerified: userData.phoneVerified ?? false,
+      emailVerified: userData.emailVerified ?? false,
     });
   };
 
@@ -176,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasCompletedOnboarding: userData.hasCompletedOnboarding ?? false,
       hasUsedFirstMoveDiscount: userData.hasUsedFirstMoveDiscount ?? false,
       phoneVerified: userData.phoneVerified ?? false,
+      emailVerified: userData.emailVerified ?? false,
     });
   };
 
