@@ -28,8 +28,12 @@ import {
   CreditCard,
   Plus,
   Trash2,
-  Star
+  Star,
+  CheckCircle,
+  MoreVertical
 } from "lucide-react";
+import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -216,10 +220,31 @@ export default function CustomerProfile() {
 
   const getCardBrandIcon = (brand: string) => {
     const brandLower = brand?.toLowerCase();
-    if (brandLower === 'visa') return '💳 Visa';
-    if (brandLower === 'mastercard') return '💳 Mastercard';
-    if (brandLower === 'amex') return '💳 Amex';
-    return '💳 Card';
+    switch (brandLower) {
+      case 'visa':
+        return <SiVisa className="w-8 h-8 text-[#1A1F71]" />;
+      case 'mastercard':
+        return <SiMastercard className="w-8 h-8 text-[#EB001B]" />;
+      case 'amex':
+      case 'american_express':
+        return <SiAmericanexpress className="w-8 h-8 text-[#006FCF]" />;
+      case 'discover':
+        return <SiDiscover className="w-8 h-8 text-[#FF6000]" />;
+      default:
+        return <CreditCard className="w-8 h-8 text-muted-foreground" />;
+    }
+  };
+
+  const getCardBrandName = (brand: string) => {
+    const brandLower = brand?.toLowerCase();
+    switch (brandLower) {
+      case 'visa': return 'Visa';
+      case 'mastercard': return 'Mastercard';
+      case 'amex':
+      case 'american_express': return 'American Express';
+      case 'discover': return 'Discover';
+      default: return 'Card';
+    }
   };
 
   const updateProfileMutation = useMutation({
@@ -599,52 +624,75 @@ export default function CustomerProfile() {
                 {savedCardsData.paymentMethods.map((card) => (
                   <div 
                     key={card.id}
-                    className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
+                    className={`relative flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
+                      card.isDefault 
+                        ? 'border-primary bg-primary/5' 
+                        : 'border-border hover:border-muted-foreground/30'
+                    }`}
                     data-testid={`card-payment-method-${card.id}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-primary" />
+                    {/* Card Brand Icon */}
+                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-white dark:bg-muted flex items-center justify-center shadow-sm border">
+                      {getCardBrandIcon(card.brand)}
+                    </div>
+                    
+                    {/* Card Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-foreground">
+                          {getCardBrandName(card.brand)}
+                        </span>
+                        <span className="text-muted-foreground">
+                          •••• {card.last4}
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-medium flex items-center gap-2">
-                          {getCardBrandIcon(card.brand)} •••• {card.last4}
-                          {card.isDefault && (
-                            <Badge variant="secondary" className="text-xs">
-                              <Star className="w-3 h-3 mr-1" />
-                              Default
-                            </Badge>
-                          )}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-sm text-muted-foreground">
                           Expires {card.expMonth.toString().padStart(2, '0')}/{card.expYear.toString().slice(-2)}
-                        </p>
+                        </span>
+                        {card.isDefault && (
+                          <div className="flex items-center gap-1 text-primary">
+                            <CheckCircle className="w-4 h-4" />
+                            <span className="text-xs font-medium">Default</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {!card.isDefault && (
+                    
+                    {/* Actions Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          onClick={() => setDefaultCardMutation.mutate(card.id)}
-                          disabled={setDefaultCardMutation.isPending}
-                          data-testid={`button-set-default-${card.id}`}
+                          size="icon"
+                          className="flex-shrink-0"
+                          data-testid={`button-card-menu-${card.id}`}
                         >
-                          Set Default
+                          <MoreVertical className="w-5 h-5" />
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteCardMutation.mutate(card.id)}
-                        disabled={deleteCardMutation.isPending}
-                        className="text-destructive hover:text-destructive"
-                        data-testid={`button-delete-card-${card.id}`}
-                        aria-label="Delete payment card"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {!card.isDefault && (
+                          <DropdownMenuItem
+                            onClick={() => setDefaultCardMutation.mutate(card.id)}
+                            disabled={setDefaultCardMutation.isPending}
+                            data-testid={`button-set-default-${card.id}`}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Set as default
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          onClick={() => deleteCardMutation.mutate(card.id)}
+                          disabled={deleteCardMutation.isPending}
+                          className="text-destructive focus:text-destructive"
+                          data-testid={`button-delete-card-${card.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Remove card
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 ))}
               </div>
