@@ -37,6 +37,9 @@ import { PhoneVerification } from "@/components/PhoneVerification";
 type Mover = {
   id: string;
   vehicleType: string;
+  vehiclePhoto?: string;
+  vehicleColor?: string;
+  licensePlate?: string;
   rating: string;
   totalMoves: number;
   completedTrips: number;
@@ -64,6 +67,13 @@ export default function MoverProfile() {
   const [phone, setPhone] = useState(user?.phone || "");
   const [address, setAddress] = useState(user?.address || "");
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Vehicle settings state
+  const [vehicleColor, setVehicleColor] = useState("");
+  const [licensePlate, setLicensePlate] = useState("");
+  const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(null);
+  const [isUploadingVehicle, setIsUploadingVehicle] = useState(false);
+  const vehicleFileInputRef = useRef<HTMLInputElement>(null);
   
   // Initialize notifications from user data (persisted in database)
   const [notifications, setNotifications] = useState<NotificationSettings>({
@@ -189,6 +199,104 @@ export default function MoverProfile() {
       description: "Your notification preference has been saved.",
     });
   };
+
+  // Initialize vehicle settings from moverData
+  const initializeVehicleSettings = () => {
+    if (moverData) {
+      setVehicleColor(moverData.vehicleColor || "");
+      setLicensePlate(moverData.licensePlate || "");
+      if (moverData.vehiclePhoto) {
+        setVehiclePhotoPreview(moverData.vehiclePhoto);
+      }
+    }
+  };
+
+  // Update vehicle settings mutation
+  const updateVehicleMutation = useMutation({
+    mutationFn: async (data: { vehicleColor?: string; licensePlate?: string; vehiclePhoto?: string }) => {
+      if (!moverData?.id) throw new Error("No mover profile found");
+      return apiRequest("PATCH", `/api/movers/${moverData.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers/me"] });
+      toast({
+        title: "Vehicle Updated",
+        description: "Your vehicle information has been saved.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Update Failed",
+        description: "Could not update vehicle information. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Upload vehicle photo mutation
+  const uploadVehiclePhotoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("images", file);
+      const response = await fetch("/api/upload/images", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+      return response.json();
+    },
+    onSuccess: async (data) => {
+      const photoUrl = data.urls?.[0];
+      if (photoUrl && moverData?.id) {
+        setVehiclePhotoPreview(photoUrl);
+        await updateVehicleMutation.mutateAsync({ vehiclePhoto: photoUrl });
+      }
+      setIsUploadingVehicle(false);
+    },
+    onError: () => {
+      toast({
+        title: "Upload Failed",
+        description: "Could not upload vehicle photo. Please try again.",
+        variant: "destructive",
+      });
+      setIsUploadingVehicle(false);
+    },
+  });
+
+  const handleVehiclePhotoClick = () => {
+    vehicleFileInputRef.current?.click();
+  };
+
+  const handleVehiclePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Please select an image under 10MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setIsUploadingVehicle(true);
+      uploadVehiclePhotoMutation.mutate(file);
+    }
+  };
+
+  const handleSaveVehicleSettings = () => {
+    updateVehicleMutation.mutate({ 
+      vehicleColor: vehicleColor || undefined, 
+      licensePlate: licensePlate || undefined 
+    });
+  };
+
+  // Initialize vehicle settings when moverData loads
+  if (moverData && !vehicleColor && !licensePlate && !vehiclePhotoPreview) {
+    initializeVehicleSettings();
+  }
 
   if (!user) {
     return (
@@ -375,6 +483,116 @@ export default function MoverProfile() {
             />
           </div>
         )}
+
+        {/* Vehicle Settings */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-blue-600" />
+              Vehicle Settings
+            </CardTitle>
+            <CardDescription>
+              Update your vehicle information - customers will see this when you're matched
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Vehicle Photo */}
+            <div className="space-y-2">
+              <Label>Vehicle Photo</Label>
+              <div 
+                className="relative w-full h-40 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer overflow-hidden transition-colors"
+                onClick={handleVehiclePhotoClick}
+                data-testid="button-upload-vehicle-photo"
+              >
+                {vehiclePhotoPreview || moverData?.vehiclePhoto ? (
+                  <img 
+                    src={vehiclePhotoPreview || moverData?.vehiclePhoto} 
+                    alt="Vehicle" 
+                    className="w-full h-full object-cover"
+                    data-testid="img-vehicle-preview"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                    <Camera className="w-8 h-8 mb-2" />
+                    <span className="text-sm">Click to upload vehicle photo</span>
+                  </div>
+                )}
+                {isUploadingVehicle && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-white animate-spin" />
+                  </div>
+                )}
+              </div>
+              <input
+                ref={vehicleFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleVehiclePhotoChange}
+                data-testid="input-vehicle-photo-upload"
+              />
+              <p className="text-xs text-muted-foreground">
+                Upload a clear photo of your vehicle. Customers will see this when browsing movers.
+              </p>
+            </div>
+
+            {/* Vehicle Color */}
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-color">Vehicle Color</Label>
+              <Input
+                id="vehicle-color"
+                value={vehicleColor}
+                onChange={(e) => setVehicleColor(e.target.value)}
+                placeholder="e.g., White, Black, Silver"
+                data-testid="input-vehicle-color"
+              />
+            </div>
+
+            {/* License Plate */}
+            <div className="space-y-2">
+              <Label htmlFor="license-plate">License Plate</Label>
+              <Input
+                id="license-plate"
+                value={licensePlate}
+                onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
+                placeholder="e.g., ABC-1234"
+                className="font-mono uppercase"
+                data-testid="input-license-plate"
+              />
+              <p className="text-xs text-muted-foreground">
+                Customers will see this to identify your vehicle during pickup.
+              </p>
+            </div>
+
+            {/* Vehicle Type Display */}
+            {moverData?.vehicleType && (
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2 text-sm">
+                  <Truck className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Vehicle Type:</span>
+                  <span className="font-medium">{moverData.vehicleType}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  To change your vehicle type, please contact support.
+                </p>
+              </div>
+            )}
+
+            <Button 
+              onClick={handleSaveVehicleSettings}
+              disabled={updateVehicleMutation.isPending}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              data-testid="button-save-vehicle-settings"
+            >
+              {updateVehicleMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Save Vehicle Settings
+            </Button>
+          </CardContent>
+        </Card>
 
         <Card className="mb-6">
           <CardHeader>
