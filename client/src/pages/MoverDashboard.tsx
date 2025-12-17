@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
@@ -1149,9 +1149,12 @@ export default function MoverDashboard() {
             {/* Welcome & Profile */}
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground text-2xl font-bold shadow-lg shadow-primary/20">
-                  {firstName.charAt(0).toUpperCase()}
-                </div>
+                <Avatar className="w-16 h-16 rounded-2xl shadow-lg shadow-primary/20">
+                  <AvatarImage src={mover?.moverImage || undefined} alt={user?.name || "Mover"} />
+                  <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-2xl font-bold">
+                    {firstName.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 {mover?.isAvailable && (
                   <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-background flex items-center justify-center">
                     <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
