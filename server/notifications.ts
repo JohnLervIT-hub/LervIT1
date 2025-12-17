@@ -1034,6 +1034,116 @@ class NotificationService {
       return false;
     }
   }
+
+  // Send role upgrade notification email
+  async sendRoleUpgradeEmail(user: User, newRole: 'mover' | 'admin'): Promise<void> {
+    const roleInfo = {
+      mover: {
+        title: 'Welcome to LervIT Mover Team!',
+        color: '#2196F3',
+        description: 'You have been upgraded to a mover account.',
+        nextSteps: [
+          'Complete your mover profile with vehicle details',
+          'Upload required verification documents (driver\'s license, insurance, etc.)',
+          'Set your availability to start receiving job requests',
+          'Review the mover guidelines and terms of service',
+        ],
+        cta: 'Go to Mover Dashboard',
+        ctaUrl: 'https://lervit.replit.app/mover-profile',
+      },
+      admin: {
+        title: 'Admin Access Granted',
+        color: '#9C27B0',
+        description: 'You have been granted administrative access to LervIT.',
+        nextSteps: [
+          'Review the admin dashboard features',
+          'Familiarize yourself with user management tools',
+          'Check the verification queue for pending documents',
+        ],
+        cta: 'Go to Admin Dashboard',
+        ctaUrl: 'https://lervit.replit.app/admin',
+      },
+    };
+
+    const info = roleInfo[newRole];
+    const subject = info.title;
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:${info.color};padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">${info.title}</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${user.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">${info.description}</p>
+              
+              <div style="background-color:#F0F9FF;border-left:4px solid ${info.color};padding:20px;margin:0 0 30px 0;border-radius:4px;">
+                <h3 style="color:#333333;font-size:16px;margin:0 0 15px 0;">Next Steps:</h3>
+                <ul style="color:#555555;font-size:15px;line-height:28px;margin:0;padding-left:20px;">
+                  ${info.nextSteps.map(step => `<li>${step}</li>`).join('')}
+                </ul>
+              </div>
+              
+              <table cellpadding="0" cellspacing="0" style="margin:25px 0;">
+                <tr>
+                  <td style="background-color:${info.color};border-radius:6px;padding:15px 30px;">
+                    <a href="${info.ctaUrl}" style="color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;display:inline-block;">${info.cta}</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color:#888888;font-size:14px;line-height:22px;margin:20px 0 0 0;">If you have any questions about your new role, please contact our support team at support@lervit.com.</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">© ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+              <p style="color:#aaaaaa;font-size:11px;margin:10px 0 0 0;">Calgary's Smart Moving Platform</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    await this.sendEmail({
+      to: user.email,
+      subject,
+      body,
+      type: 'status_update',
+    });
+
+    // Also send SMS if phone is available
+    if (user.phone) {
+      const smsMessage = newRole === 'mover'
+        ? `LervIT: Congratulations! You've been upgraded to a Mover account. Complete your profile and start earning: ${info.ctaUrl}`
+        : `LervIT: You've been granted admin access. Log in to access the admin dashboard.`;
+
+      await this.sendSMS({
+        to: user.phone,
+        message: smsMessage,
+        type: 'booking_update',
+      });
+    }
+
+    console.log(`[ROLE UPGRADE] Notification sent to ${user.email} for ${newRole} role`);
+  }
 }
 
 export const notificationService = new NotificationService();

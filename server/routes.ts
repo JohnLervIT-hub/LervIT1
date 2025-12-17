@@ -1906,6 +1906,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
+      const previousRole = existingUser[0].role;
+      const isUpgradeToMover = role === 'mover' && previousRole === 'customer';
+      
       // Prevent changing the last admin's role
       if (existingUser[0].role === 'admin' && role && role !== 'admin') {
         const adminCount = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
@@ -1933,10 +1936,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(usersTable.id, userId))
         .returning();
       
-      console.log(`[Admin] User ${userId} profile updated by admin`);
+      const updatedUser = result[0];
       
-      const { password: _, ...userWithoutPassword } = result[0];
-      res.json({ message: "User updated", user: userWithoutPassword });
+      // If upgrading from customer to mover, create mover profile if it doesn't exist
+      if (isUpgradeToMover) {
+        logger.info({
+          env: process.env.NODE_ENV,
+          event: "admin_role_upgrade",
+          userId,
+          previousRole,
+          newRole: 'mover',
+          action: 'checking_mover_profile'
+        });
+        
+        // Check if mover profile already exists
+        const existingMover = await db.select().from(moversTable)
+          .where(eq(moversTable.userId, userId))
+          .limit(1);
+        
+        if (existingMover.length === 0) {
+          // Create default mover profile with Calgary coordinates
+          const { generateRandomCalgaryCoordinates } = await import("@shared/geocoding");
+          const coords = generateRandomCalgaryCoordinates();
+          
+          const newMover = await db.insert(moversTable).values({
+            userId: userId,
+            vehicleType: "van",
+            isAvailable: true,
+            location: "Calgary, AB",
+            latitude: coords.lat,
+            longitude: coords.lng,
+            isVerified: false,
+            profileVerified: false,
+            documentsVerified: false,
+            rating: "0",
+            totalMoves: 0,
+            completedTrips: 0,
+            pilotStatus: "none",
+          }).returning();
+          
+          logger.info({
+            env: process.env.NODE_ENV,
+            event: "admin_role_upgrade",
+            userId,
+            moverId: newMover[0].id,
+            action: 'mover_profile_created'
+          });
+        } else {
+          logger.info({
+            env: process.env.NODE_ENV,
+            event: "admin_role_upgrade",
+            userId,
+            moverId: existingMover[0].id,
+            action: 'mover_profile_exists'
+          });
+        }
+        
+        // Send upgrade notification email
+        try {
+          await notificationService.sendRoleUpgradeEmail(updatedUser, 'mover');
+          logger.info({
+            env: process.env.NODE_ENV,
+            event: "admin_role_upgrade",
+            userId,
+            action: 'upgrade_email_sent'
+          });
+        } catch (emailError) {
+          logger.error({
+            env: process.env.NODE_ENV,
+            event: "admin_role_upgrade",
+            userId,
+            action: 'upgrade_email_failed',
+            error: emailError instanceof Error ? emailError.message : 'Unknown error'
+          });
+        }
+      }
+      
+      logger.info({
+        env: process.env.NODE_ENV,
+        event: "admin_user_update",
+        userId,
+        adminId: (req as any).user?.id,
+        changes: Object.keys(updateData),
+        roleChange: role !== undefined && role !== previousRole ? `${previousRole} -> ${role}` : null
+      });
+      
+      const { password: _, ...userWithoutPassword } = updatedUser;
+      res.json({ 
+        message: isUpgradeToMover 
+          ? "User upgraded to mover successfully. Mover profile created and notification sent." 
+          : "User updated", 
+        user: userWithoutPassword,
+        moverProfileCreated: isUpgradeToMover
+      });
     } catch (error) {
       console.error('Admin update user error:', error);
       res.status(500).json({ error: "Failed to update user" });
