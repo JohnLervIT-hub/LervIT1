@@ -52,6 +52,7 @@ const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const CustomerProfile = lazy(() => import("@/pages/CustomerProfile"));
 const MoverProfile = lazy(() => import("@/pages/MoverProfile"));
+const MoverVerification = lazy(() => import("@/pages/MoverVerification"));
 const Inbox = lazy(() => import("@/pages/Inbox"));
 
 function Router() {
@@ -124,6 +125,11 @@ function Router() {
         <Route path="/mover-settings">
           <ProtectedRoute allowedRoles={["mover"]}>
             <MoverProfile />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/mover-verification">
+          <ProtectedRoute allowedRoles={["mover"]}>
+            <MoverVerification />
           </ProtectedRoute>
         </Route>
 
