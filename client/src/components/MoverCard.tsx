@@ -20,6 +20,9 @@ interface MoverCardProps {
   onSelect: (id: string) => void;
   travelFee?: number;
   pilotApproved?: boolean;
+  vehiclePhoto?: string;
+  licensePlate?: string;
+  vehicleColor?: string;
 }
 
 // Helper function to calculate ETA based on distance
@@ -44,6 +47,9 @@ const MoverCard = memo(function MoverCard({
   onSelect,
   travelFee,
   pilotApproved,
+  vehiclePhoto,
+  licensePlate,
+  vehicleColor,
 }: MoverCardProps) {
   const eta = calculateETA(distance);
   
@@ -93,6 +99,35 @@ const MoverCard = memo(function MoverCard({
           </div>
         </div>
 
+        {/* Vehicle Photo Section - Uber Style */}
+        {vehiclePhoto && (
+          <div className="mb-4 rounded-lg overflow-hidden bg-muted" data-testid={`vehicle-photo-container-${id}`}>
+            <img 
+              src={vehiclePhoto} 
+              alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
+              className="w-full h-32 object-cover"
+              data-testid={`img-vehicle-${id}`}
+            />
+            <div className="flex items-center justify-between px-3 py-2 bg-card border-t">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {vehicleColor && <span className="capitalize">{vehicleColor} </span>}
+                  {vehicleType}
+                </span>
+              </div>
+              {licensePlate && (
+                <div 
+                  className="px-2 py-1 bg-muted rounded text-xs font-mono font-bold tracking-wider"
+                  data-testid={`text-license-plate-${id}`}
+                >
+                  {licensePlate.toUpperCase()}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Details - All left-aligned with standardized icons */}
         <div className="space-y-2.5 text-sm mb-6">
           <div className="flex items-center gap-2">
@@ -105,12 +140,16 @@ const MoverCard = memo(function MoverCard({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Truck className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground" data-testid={`text-vehicle-${id}`}>
-              {vehicleType}
-            </span>
-          </div>
+          {/* Only show vehicle type text if no vehicle photo */}
+          {!vehiclePhoto && (
+            <div className="flex items-center gap-2">
+              <Truck className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground" data-testid={`text-vehicle-${id}`}>
+                {vehicleColor && <span className="capitalize">{vehicleColor} </span>}
+                {vehicleType}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />

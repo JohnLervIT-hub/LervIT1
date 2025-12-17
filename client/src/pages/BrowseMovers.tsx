@@ -326,6 +326,9 @@ export default function BrowseMovers() {
                 verified={mover.isVerified}
                 completedMoves={mover.totalMoves || 0}
                 onSelect={handleSelectMover}
+                vehiclePhoto={mover.vehiclePhoto || undefined}
+                licensePlate={mover.licensePlate || undefined}
+                vehicleColor={mover.vehicleColor || undefined}
               />
             ))}
           </div>
