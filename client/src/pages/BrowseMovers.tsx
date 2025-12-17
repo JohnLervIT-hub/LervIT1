@@ -321,7 +321,7 @@ export default function BrowseMovers() {
                 rating={parseFloat(mover.rating) || 0}
                 reviewCount={mover.totalMoves || 0}
                 vehicleType={mover.vehicleType}
-                distance={mover.distance ? `${mover.distance} km away` : "Location unavailable"}
+                distance={mover.distance ? `${mover.distance} km away` : (mover.location || "Calgary, AB")}
                 price={0}
                 verified={mover.isVerified}
                 completedMoves={mover.totalMoves || 0}
