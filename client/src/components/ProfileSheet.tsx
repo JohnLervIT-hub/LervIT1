@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -33,7 +34,16 @@ export function ProfileSheet() {
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
 
+  // Fetch mover profile to get mover image for movers
+  const { data: moverData } = useQuery<{ moverImage?: string }>({
+    queryKey: ["/api/movers/me"],
+    enabled: !!user && user.role === "mover",
+  });
+
   if (!user) return null;
+
+  // Use mover image for movers, fallback to user avatarUrl
+  const avatarUrl = user.role === "mover" ? (moverData?.moverImage || user.avatarUrl) : user.avatarUrl;
 
   const handleLogout = async () => {
     setOpen(false);
@@ -99,7 +109,7 @@ export function ProfileSheet() {
           aria-label="Open profile menu"
         >
           <Avatar className="h-8 w-8">
-            <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
+            <AvatarImage src={avatarUrl || undefined} alt={user.name} />
             <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
               {getInitials(user.name)}
             </AvatarFallback>
@@ -110,7 +120,7 @@ export function ProfileSheet() {
         <SheetHeader className="p-6 pb-4">
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={user.avatarUrl || undefined} alt={user.name} />
+              <AvatarImage src={avatarUrl || undefined} alt={user.name} />
               <AvatarFallback className="bg-primary text-primary-foreground text-xl font-semibold">
                 {getInitials(user.name)}
               </AvatarFallback>
