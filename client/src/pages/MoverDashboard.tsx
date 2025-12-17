@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { getVehicleDisplayName } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { generatePriceExplanation } from "@shared/ai";
 import { useEffect, useState } from "react";
@@ -1164,7 +1165,7 @@ export default function MoverDashboard() {
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold">Hey {firstName}!</h1>
                 <p className="text-muted-foreground flex flex-wrap items-center gap-2">
-                  {mover?.vehicleType || 'Mover'}
+                  {getVehicleDisplayName(mover?.vehicleType) || 'Mover'}
                   {verificationStatus?.isComplete && (
                     <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 text-xs">
                       <CheckCircle className="w-3 h-3 mr-1" />

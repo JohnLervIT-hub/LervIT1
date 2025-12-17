@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { getVehicleDisplayName } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -278,7 +279,7 @@ export default function MoverProfile() {
               </span>
               <span className="flex items-center gap-1">
                 <Truck className="w-4 h-4" />
-                {moverData.vehicleType}
+                {getVehicleDisplayName(moverData.vehicleType)}
               </span>
             </div>
           )}
@@ -407,7 +408,7 @@ export default function MoverProfile() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="p-2 bg-muted/50 rounded">
                     <span className="text-muted-foreground">Type:</span>
-                    <span className="ml-2 font-medium">{moverData.vehicleType || "Not set"}</span>
+                    <span className="ml-2 font-medium">{getVehicleDisplayName(moverData.vehicleType)}</span>
                   </div>
                   <div className="p-2 bg-muted/50 rounded">
                     <span className="text-muted-foreground">Color:</span>

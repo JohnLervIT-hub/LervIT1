@@ -29,7 +29,13 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Upload, Truck, User, Phone } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
-const VEHICLE_TYPES = ["Car", "SUV", "Pickup", "Cargo Van", "Cube Truck", "Flatbed"];
+// Vehicle types aligned with Vision Engine categories for proper matching
+const VEHICLE_TYPES = [
+  { value: "car", label: "SUV / Small Vehicle" },
+  { value: "van", label: "Cargo Van" },
+  { value: "pickup", label: "Pickup Truck" },
+  { value: "truck", label: "Moving Truck" },
+];
 
 const profileSchema = z.object({
   vehicleType: z.string().min(1, "Vehicle type is required"),
@@ -358,8 +364,8 @@ export default function MoverProfileSetup() {
                         </FormControl>
                         <SelectContent>
                           {VEHICLE_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
                             </SelectItem>
                           ))}
                         </SelectContent>

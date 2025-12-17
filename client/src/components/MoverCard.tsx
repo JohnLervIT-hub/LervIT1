@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket } from "lucide-react";
+import { getVehicleDisplayName } from "@/lib/utils";
 
 interface MoverCardProps {
   id: string;
@@ -130,8 +131,8 @@ const MoverCard = memo(function MoverCard({
           {/* Vehicle Info Bar */}
           <div className="flex items-center justify-center gap-2 px-3 py-2.5 bg-card border-t">
             <Truck className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-semibold capitalize" data-testid={`text-vehicle-${id}`}>
-              {vehicleColor && `${vehicleColor} `}{vehicleType}
+            <span className="text-sm font-semibold" data-testid={`text-vehicle-${id}`}>
+              {vehicleColor && `${vehicleColor} `}{getVehicleDisplayName(vehicleType)}
             </span>
           </div>
         </div>
