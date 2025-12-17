@@ -99,38 +99,38 @@ const MoverCard = memo(function MoverCard({
           </div>
         </div>
 
-        {/* Vehicle Section - Always visible for consistent card height */}
+        {/* Vehicle Section - Full image display without cropping */}
         <div className="mb-4 rounded-lg overflow-hidden border bg-muted/30" data-testid={`vehicle-photo-container-${id}`}>
-          {/* Vehicle Image or Placeholder */}
-          <div className="relative h-28 bg-gradient-to-br from-muted/50 to-muted">
+          {/* Vehicle Image Container - 16:9 aspect ratio for full visibility */}
+          <div className="relative aspect-video bg-gradient-to-br from-muted to-muted/70">
             {vehiclePhoto ? (
               <img 
                 src={vehiclePhoto} 
                 alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 data-testid={`img-vehicle-${id}`}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <Truck className="w-12 h-12 text-muted-foreground/40" />
+                <Truck className="w-16 h-16 text-muted-foreground/30" />
               </div>
             )}
-            {/* License Plate Badge - Prominent overlay */}
+            {/* License Plate Badge - Prominent overlay at bottom center */}
             {licensePlate && (
               <div 
-                className="absolute bottom-2 right-2 px-3 py-1.5 bg-background/95 backdrop-blur-sm rounded-md border-2 border-primary/20 shadow-sm"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-2 bg-white dark:bg-gray-900 rounded-md border-2 border-gray-300 dark:border-gray-600 shadow-lg"
                 data-testid={`text-license-plate-${id}`}
               >
-                <span className="text-sm font-mono font-bold tracking-widest text-foreground">
+                <span className="text-base font-mono font-bold tracking-widest text-gray-900 dark:text-white">
                   {licensePlate.toUpperCase()}
                 </span>
               </div>
             )}
           </div>
           {/* Vehicle Info Bar */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-card/80 border-t">
+          <div className="flex items-center justify-center gap-2 px-3 py-2.5 bg-card border-t">
             <Truck className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-medium capitalize" data-testid={`text-vehicle-${id}`}>
+            <span className="text-sm font-semibold capitalize" data-testid={`text-vehicle-${id}`}>
               {vehicleColor && `${vehicleColor} `}{vehicleType}
             </span>
           </div>
