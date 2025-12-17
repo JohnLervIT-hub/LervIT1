@@ -1087,6 +1087,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/movers/me - Get current user's mover profile
+  app.get("/api/movers/me", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      if (user.role !== 'mover' && user.role !== 'admin') {
+        return res.status(403).json({ error: "Not a mover" });
+      }
+      
+      // Find mover profile by userId
+      const movers = await storage.getMovers({});
+      const mover = movers.find(m => m.userId === user.id);
+      
+      if (!mover) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      
+      res.json(mover);
+    } catch (error) {
+      console.error('Get mover/me error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/movers/:id", async (req: Request, res: Response) => {
     try {
       const mover = await storage.getMover(req.params.id);
