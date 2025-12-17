@@ -23,6 +23,13 @@ export interface SMSNotification {
   type: 'job_alert' | 'booking_update' | 'payment_confirmation' | 'pilot_status' | 'phone_verification';
 }
 
+// Helper function to extract first name from full name
+function getFirstName(fullName: string | null | undefined): string {
+  if (!fullName) return 'there';
+  const firstName = fullName.split(' ')[0];
+  return firstName || 'there';
+}
+
 class NotificationService {
   private fromEmail = 'LervIT <support@lervit.com>';
   
@@ -158,7 +165,7 @@ class NotificationService {
           <tr>
             <td style="padding:40px 30px;">
               <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Your Move is Confirmed!</h2>
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${customer.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(customer.name)},</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">Your booking has been confirmed and we're finding the best mover for you.</p>
               
               <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Booking Details:</h3>
@@ -239,7 +246,7 @@ class NotificationService {
           <!-- Content -->
           <tr>
             <td style="padding:30px;">
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${mover.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(mover.name)},</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">A customer near you needs help moving. Here are the details:</p>
               
               <h3 style="color:#333333;font-size:16px;margin:0 0 15px 0;border-bottom:1px solid #eee;padding-bottom:10px;">Job Details</h3>
@@ -346,7 +353,7 @@ class NotificationService {
           <tr>
             <td style="padding:40px 30px;">
               <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Payment Received</h2>
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${customer.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(customer.name)},</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">Thank you for your payment! Your move is all set.</p>
               
               <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Payment Details:</h3>
@@ -400,7 +407,7 @@ class NotificationService {
     const subject = `Booking Update - Move #${booking.id?.slice(0, 8)}`;
     const body = `
       <h2>Booking Status Update</h2>
-      <p>Hi ${user.name},</p>
+      <p>Hi ${getFirstName(user.name)},</p>
       <p>${statusMessages[newStatus] || 'Your booking status has been updated.'}</p>
       
       <h3>Booking Details:</h3>
@@ -884,7 +891,7 @@ class NotificationService {
           </tr>
           <tr>
             <td style="padding:30px;">
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${user.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(user.name)},</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">${statusInfo.message}</p>
               ${notes ? `
               <div style="background-color:#F3F4F6;border-left:4px solid ${statusInfo.color};padding:15px;margin:20px 0;border-radius:4px;">
@@ -984,7 +991,7 @@ class NotificationService {
           </tr>
           <tr>
             <td style="padding:40px 30px;">
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${recipientName},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(recipientName)},</p>
               <div style="color:#333333;font-size:16px;line-height:26px;">
                 ${content}
               </div>
@@ -1086,7 +1093,7 @@ class NotificationService {
           <tr>
             <td style="padding:40px 30px;">
               <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">${info.title}</h2>
-              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${user.name},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(user.name)},</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">${info.description}</p>
               
               <div style="background-color:#F0F9FF;border-left:4px solid ${info.color};padding:20px;margin:0 0 30px 0;border-radius:4px;">

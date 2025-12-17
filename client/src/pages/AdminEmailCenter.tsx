@@ -78,7 +78,7 @@ const EMAIL_TEMPLATES = [
   {
     name: "Account Type Update Request",
     subject: "Help Updating Your LervIT Account Type",
-    content: "Hi [Name],\n\nThanks for reaching out to LervIT Support.\n\nIt looks like your account was created as a Customer instead of a Mover. No worries — we can help fix that.\n\nPlease reply to this email to confirm you'd like your account updated to Mover, and we'll take care of it right away.\n\nIf you have any questions, feel free to let us know.\n\nBest regards,\nLervIT Support Team\nsupport@lervit.com",
+    content: "Thanks for reaching out to LervIT Support.\n\nIt looks like your account was created as a Customer instead of a Mover. No worries — we can help fix that.\n\nPlease reply to this email to confirm you'd like your account updated to Mover, and we'll take care of it right away.\n\nIf you have any questions, feel free to let us know.\n\nBest regards,\nLervIT Support Team\nsupport@lervit.com",
     type: "account_update",
   },
 ];
