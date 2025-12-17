@@ -463,16 +463,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Successful login - reset failed attempts counter
-      if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-        await db.update(usersTable)
-          .set({ 
-            failedLoginAttempts: 0,
-            lockedUntil: null,
-            lockReason: null
-          })
-          .where(eq(usersTable.id, user.id));
-      }
+      // Successful login - reset failed attempts counter and update last login time
+      await db.update(usersTable)
+        .set({ 
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          lockReason: null,
+          lastLoginAt: new Date()
+        })
+        .where(eq(usersTable.id, user.id));
       
       // Regenerate session to prevent session fixation attacks
       const userData = user;
@@ -499,7 +498,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Logout route
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
+  app.post("/api/auth/logout", async (req: Request, res: Response) => {
+    const userId = req.session?.userId;
+    
+    // Update last logout timestamp if user is logged in
+    if (userId) {
+      try {
+        await db.update(usersTable)
+          .set({ lastLogoutAt: new Date() })
+          .where(eq(usersTable.id, userId));
+      } catch (error) {
+        console.error("Failed to update logout timestamp:", error);
+      }
+    }
+    
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ error: "Failed to logout" });

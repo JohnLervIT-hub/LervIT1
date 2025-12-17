@@ -40,7 +40,10 @@ export const users = pgTable("users", {
   emailEarningsReports: boolean("email_earnings_reports").default(true).notNull(),
   emailPromotions: boolean("email_promotions").default(false).notNull(),
   pushNotifications: boolean("push_notifications").default(true).notNull(),
+  // Activity tracking timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+  lastLogoutAt: timestamp("last_logout_at"),
 });
 
 // Pre-signup phone verification for Uber-style OTP flow
