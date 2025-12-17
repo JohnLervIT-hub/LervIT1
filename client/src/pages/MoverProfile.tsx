@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -200,8 +200,8 @@ export default function MoverProfile() {
     });
   };
 
-  // Initialize vehicle settings from moverData
-  const initializeVehicleSettings = () => {
+  // Initialize vehicle settings from moverData when it loads
+  useEffect(() => {
     if (moverData) {
       setVehicleColor(moverData.vehicleColor || "");
       setLicensePlate(moverData.licensePlate || "");
@@ -209,7 +209,7 @@ export default function MoverProfile() {
         setVehiclePhotoPreview(moverData.vehiclePhoto);
       }
     }
-  };
+  }, [moverData]);
 
   // Update vehicle settings mutation
   const updateVehicleMutation = useMutation({
@@ -292,11 +292,6 @@ export default function MoverProfile() {
       licensePlate: licensePlate || undefined 
     });
   };
-
-  // Initialize vehicle settings when moverData loads
-  if (moverData && !vehicleColor && !licensePlate && !vehiclePhotoPreview) {
-    initializeVehicleSettings();
-  }
 
   if (!user) {
     return (
