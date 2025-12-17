@@ -8,6 +8,7 @@ interface LocationPromptProps {
   onDismiss?: () => void;
   variant?: "banner" | "card";
   showAlways?: boolean;
+  context?: "customer" | "mover";
 }
 
 type PermissionState = "prompt" | "granted" | "denied" | "unavailable" | "loading";
@@ -16,8 +17,10 @@ export function LocationPrompt({
   onLocationGranted, 
   onDismiss,
   variant = "banner",
-  showAlways = false 
+  showAlways = false,
+  context = "customer"
 }: LocationPromptProps) {
+  const isMover = context === "mover";
   const [permissionState, setPermissionState] = useState<PermissionState>("loading");
   const [isRequesting, setIsRequesting] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
@@ -94,7 +97,10 @@ export function LocationPrompt({
                     Location Access Blocked
                   </h3>
                   <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                    To find movers near you, please enable location in your browser settings, then refresh the page.
+                    {isMover 
+                      ? "To share your live location with customers during jobs, please enable location in your browser settings, then refresh the page."
+                      : "To find movers near you, please enable location in your browser settings, then refresh the page."
+                    }
                   </p>
                   <div className="mt-3 p-3 bg-orange-100 dark:bg-orange-900/40 rounded-lg text-xs text-orange-800 dark:text-orange-200">
                     <strong>How to enable:</strong> Click the lock/info icon in your browser's address bar → Site settings → Allow location
@@ -103,10 +109,13 @@ export function LocationPrompt({
               ) : (
                 <>
                   <h3 className="font-semibold text-orange-800 dark:text-orange-200">
-                    Enable Location for Better Results
+                    {isMover ? "Enable Location for Live Tracking" : "Enable Location for Better Results"}
                   </h3>
                   <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                    See movers closest to you with accurate distance and pricing.
+                    {isMover 
+                      ? "Allow location access so customers can track your arrival during active jobs."
+                      : "See movers closest to you with accurate distance and pricing."
+                    }
                   </p>
                   <Button
                     onClick={requestLocation}

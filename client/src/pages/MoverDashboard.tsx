@@ -28,6 +28,7 @@ import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidSta
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
 import { MoverWelcomeTutorial } from "@/components/MoverWelcomeTutorial";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
+import { LocationPrompt } from "@/components/LocationPrompt";
 
 type Booking = {
   id: string;
@@ -1264,6 +1265,15 @@ export default function MoverDashboard() {
           onComplete={handleTutorialComplete}
           userName={user?.name || "Mover"}
         />
+
+        {/* Location Permission Prompt for Movers */}
+        <div className="mb-4">
+          <LocationPrompt 
+            variant="card"
+            showAlways={false}
+            context="mover"
+          />
+        </div>
 
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
           <AlertDialogContent>
