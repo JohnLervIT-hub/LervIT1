@@ -396,11 +396,11 @@ export default function MoverProfile() {
             {moverData && (
               <div className="space-y-3">
                 {moverData.vehiclePhoto && (
-                  <div className="w-full h-32 rounded-lg overflow-hidden">
+                  <div className="w-full aspect-video bg-muted rounded-lg overflow-hidden">
                     <img 
                       src={moverData.vehiclePhoto} 
                       alt="Vehicle" 
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   </div>
                 )}

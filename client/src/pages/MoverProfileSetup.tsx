@@ -409,11 +409,13 @@ export default function MoverProfileSetup() {
                 <div className="space-y-2">
                   <Label htmlFor="vehicle-photo">Vehicle Photo</Label>
                   {(vehiclePhotoPreview || mover.vehiclePhoto) && (
-                    <img
-                      src={vehiclePhotoPreview || mover.vehiclePhoto}
-                      alt="Vehicle"
-                      className="w-full max-w-md h-48 object-cover rounded-md border"
-                    />
+                    <div className="w-full aspect-video bg-muted rounded-lg overflow-hidden border">
+                      <img
+                        src={vehiclePhotoPreview || mover.vehiclePhoto}
+                        alt="Vehicle"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
                   )}
                   <Label htmlFor="vehicle-photo" className="cursor-pointer">
                     <div className="flex items-center gap-2 px-4 py-2 border rounded-md hover-elevate active-elevate-2 inline-flex">
