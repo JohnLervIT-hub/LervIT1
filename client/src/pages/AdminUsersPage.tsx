@@ -63,6 +63,8 @@ type UserType = {
   role: string;
   phone?: string;
   createdAt: string;
+  lastLoginAt?: string;
+  lastLogoutAt?: string;
 };
 
 type Booking = {
@@ -350,6 +352,8 @@ export default function AdminUsersPage() {
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Joined</TableHead>
+                      <TableHead>Last Login</TableHead>
+                      <TableHead>Last Logout</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -368,6 +372,12 @@ export default function AdminUsersPage() {
                         <TableCell>{getRoleBadge(u.role)}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {u.createdAt ? format(new Date(u.createdAt), "MMM d, yyyy") : "N/A"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, yyyy h:mm a") : "Never"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {u.lastLogoutAt ? format(new Date(u.lastLogoutAt), "MMM d, yyyy h:mm a") : "N/A"}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -502,9 +512,21 @@ export default function AdminUsersPage() {
                         <p className="font-medium capitalize">{selectedUser.role}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Member Since</p>
+                        <p className="text-sm text-muted-foreground">Account Created</p>
                         <p className="font-medium">
-                          {selectedUser.createdAt ? format(new Date(selectedUser.createdAt), "MMM d, yyyy") : "N/A"}
+                          {selectedUser.createdAt ? format(new Date(selectedUser.createdAt), "MMM d, yyyy 'at' h:mm a") : "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Last Sign In</p>
+                        <p className="font-medium">
+                          {selectedUser.lastLoginAt ? format(new Date(selectedUser.lastLoginAt), "MMM d, yyyy 'at' h:mm a") : "Never"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Last Sign Out</p>
+                        <p className="font-medium">
+                          {selectedUser.lastLogoutAt ? format(new Date(selectedUser.lastLogoutAt), "MMM d, yyyy 'at' h:mm a") : "N/A"}
                         </p>
                       </div>
                     </div>
