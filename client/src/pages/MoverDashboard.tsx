@@ -1219,9 +1219,11 @@ export default function MoverDashboard() {
             <div className="bg-card/80 backdrop-blur rounded-xl p-4 border shadow-sm">
               <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium mb-1">
                 <DollarSign className="w-3.5 h-3.5" />
-                Earnings
+                {totalMoves > 0 ? 'Earnings' : 'Pending'}
               </div>
-              <p className="text-2xl font-bold">${earnings?.totalEarnings || '0'}</p>
+              <p className="text-2xl font-bold">
+                {totalMoves > 0 ? `$${earnings?.totalEarnings || '0'}` : `${activeBookings.length}`}
+              </p>
             </div>
             <div className="bg-card/80 backdrop-blur rounded-xl p-4 border shadow-sm">
               <div className="flex items-center gap-2 text-amber-500 text-xs font-medium mb-1">
@@ -1430,7 +1432,22 @@ export default function MoverDashboard() {
           </TabsContent>
 
           <TabsContent value="earnings" className="space-y-6">
-            {!earnings ? (
+            {totalMoves === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                    <DollarSign className="w-10 h-10 text-primary/60" />
+                  </div>
+                  <h3 className="font-semibold text-xl mb-2">No Earnings Yet</h3>
+                  <p className="text-muted-foreground max-w-sm mx-auto mb-6">
+                    Complete your first job to start tracking your earnings here. Accept available jobs to get started!
+                  </p>
+                  <Button variant="outline" onClick={() => handleTabChange("available")} className="rounded-full">
+                    Browse Available Jobs
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : !earnings ? (
               <Card>
                 <CardContent className="py-16 text-center">
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
