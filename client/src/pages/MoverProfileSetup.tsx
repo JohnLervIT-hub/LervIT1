@@ -92,14 +92,16 @@ export default function MoverProfileSetup() {
   const uploadImageMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
-      formData.append("photo", file);
-      const response = await fetch("/api/upload", {
+      formData.append("images", file);
+      const response = await fetch("/api/upload/images", {
         method: "POST",
         credentials: "include",
         body: formData,
       });
       if (!response.ok) throw new Error("Upload failed");
-      return response.json();
+      const data = await response.json();
+      // The endpoint returns { urls: [...] }, so we need to return { url: urls[0] }
+      return { url: data.urls?.[0] };
     },
   });
 
