@@ -99,37 +99,45 @@ const MoverCard = memo(function MoverCard({
           </div>
         </div>
 
-        {/* Vehicle Photo Section - Uber Style */}
-        {vehiclePhoto && (
-          <div className="mb-4 rounded-lg overflow-hidden bg-muted" data-testid={`vehicle-photo-container-${id}`}>
-            <img 
-              src={vehiclePhoto} 
-              alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
-              className="w-full h-32 object-cover"
-              data-testid={`img-vehicle-${id}`}
-            />
-            <div className="flex items-center justify-between px-3 py-2 bg-card border-t">
-              <div className="flex items-center gap-2">
-                <Truck className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium">
-                  {vehicleColor && <span className="capitalize">{vehicleColor} </span>}
-                  {vehicleType}
+        {/* Vehicle Section - Always visible for consistent card height */}
+        <div className="mb-4 rounded-lg overflow-hidden border bg-muted/30" data-testid={`vehicle-photo-container-${id}`}>
+          {/* Vehicle Image or Placeholder */}
+          <div className="relative h-28 bg-gradient-to-br from-muted/50 to-muted">
+            {vehiclePhoto ? (
+              <img 
+                src={vehiclePhoto} 
+                alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
+                className="w-full h-full object-cover"
+                data-testid={`img-vehicle-${id}`}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Truck className="w-12 h-12 text-muted-foreground/40" />
+              </div>
+            )}
+            {/* License Plate Badge - Prominent overlay */}
+            {licensePlate && (
+              <div 
+                className="absolute bottom-2 right-2 px-3 py-1.5 bg-background/95 backdrop-blur-sm rounded-md border-2 border-primary/20 shadow-sm"
+                data-testid={`text-license-plate-${id}`}
+              >
+                <span className="text-sm font-mono font-bold tracking-widest text-foreground">
+                  {licensePlate.toUpperCase()}
                 </span>
               </div>
-              {licensePlate && (
-                <div 
-                  className="px-2 py-1 bg-muted rounded text-xs font-mono font-bold tracking-wider"
-                  data-testid={`text-license-plate-${id}`}
-                >
-                  {licensePlate.toUpperCase()}
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        )}
+          {/* Vehicle Info Bar */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-card/80 border-t">
+            <Truck className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm font-medium capitalize" data-testid={`text-vehicle-${id}`}>
+              {vehicleColor && `${vehicleColor} `}{vehicleType}
+            </span>
+          </div>
+        </div>
 
-        {/* Details - All left-aligned with standardized icons */}
-        <div className="space-y-2.5 text-sm mb-6">
+        {/* Details - Rating and Location */}
+        <div className="space-y-2 text-sm mb-6">
           <div className="flex items-center gap-2">
             <Star className="w-4 h-4 fill-amber-500 text-amber-500 shrink-0" />
             <span className="font-medium" data-testid={`text-rating-${id}`}>
@@ -140,32 +148,17 @@ const MoverCard = memo(function MoverCard({
             </span>
           </div>
 
-          {/* Only show vehicle type text if no vehicle photo */}
-          {!vehiclePhoto && (
-            <div className="flex items-center gap-2">
-              <Truck className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground" data-testid={`text-vehicle-${id}`}>
-                {vehicleColor && <span className="capitalize">{vehicleColor} </span>}
-                {vehicleType}
-              </span>
-            </div>
-          )}
-
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground" data-testid={`text-distance-${id}`}>
               {distance}
             </span>
-          </div>
-
-          {eta !== null && (
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground" data-testid={`text-eta-${id}`}>
-                ETA: {eta} min
+            {eta !== null && (
+              <span className="text-muted-foreground">
+                · ETA {eta} min
               </span>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Select Button */}
