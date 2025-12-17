@@ -497,7 +497,7 @@ export default function Signup() {
                   data-testid="button-role-customer"
                 >
                   <Package className="w-6 h-6" />
-                  <span className="font-medium text-sm">Find Movers</span>
+                  <span className="font-medium text-sm">Book a Move</span>
                   <span className="text-xs text-muted-foreground">I need help moving</span>
                 </button>
                 <button
@@ -512,8 +512,8 @@ export default function Signup() {
                   data-testid="button-role-mover"
                 >
                   <Users className="w-6 h-6" />
-                  <span className="font-medium text-sm">Become a Mover</span>
-                  <span className="text-xs text-muted-foreground">Earn money moving</span>
+                  <span className="font-medium text-sm">Drive & Earn</span>
+                  <span className="text-xs text-muted-foreground">Make money as a mover</span>
                 </button>
               </div>
             </div>
