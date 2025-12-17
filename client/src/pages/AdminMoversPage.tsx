@@ -45,9 +45,10 @@ export default function AdminMoversPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
 
-  const { data: movers, isLoading } = useQuery<Mover[]>({
+  const { data: moversData, isLoading, error } = useQuery<Mover[]>({
     queryKey: ["/api/movers"],
   });
+  const movers = Array.isArray(moversData) ? moversData : [];
 
   if (!user || user.role !== "admin") {
     return (
@@ -59,7 +60,7 @@ export default function AdminMoversPage() {
     );
   }
 
-  const filteredMovers = movers?.filter(m => {
+  const filteredMovers = movers.filter(m => {
     const matchesSearch = 
       m.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -72,11 +73,11 @@ export default function AdminMoversPage() {
       (statusFilter === "available" && m.isAvailable);
     
     return matchesSearch && matchesStatus;
-  }) || [];
+  });
 
-  const verifiedCount = movers?.filter(m => m.isVerified).length || 0;
-  const unverifiedCount = movers?.filter(m => !m.isVerified).length || 0;
-  const availableCount = movers?.filter(m => m.isAvailable).length || 0;
+  const verifiedCount = movers.filter(m => m.isVerified).length;
+  const unverifiedCount = movers.filter(m => !m.isVerified).length;
+  const availableCount = movers.filter(m => m.isAvailable).length;
 
   return (
     <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-green-50/50 to-background dark:from-green-950/20">

@@ -74,20 +74,23 @@ export default function AdminDashboard() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const { toast } = useToast();
 
-  const { data: usersResponse, isLoading: usersLoading } = useQuery<{ data: User[], total: number }>({
+  const { data: usersResponse, isLoading: usersLoading, error: usersError } = useQuery<{ data: User[], total: number }>({
     queryKey: ["/api/users?limit=200&offset=0"],
   });
-  const users = usersResponse?.data;
+  const users = Array.isArray(usersResponse?.data) ? usersResponse.data : [];
 
-  const { data: movers, isLoading: moversLoading } = useQuery<Mover[]>({
+  const { data: moversData, isLoading: moversLoading, error: moversError } = useQuery<Mover[]>({
     queryKey: ["/api/movers"],
   });
+  const movers = Array.isArray(moversData) ? moversData : [];
 
-  const { data: bookings, isLoading: bookingsLoading } = useQuery<Booking[]>({
+  const { data: bookingsData, isLoading: bookingsLoading, error: bookingsError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
+  const bookings = Array.isArray(bookingsData) ? bookingsData : [];
 
   const isLoading = usersLoading || moversLoading || bookingsLoading;
+  const hasError = usersError || moversError || bookingsError;
 
   const cleanupMutation = useMutation({
     mutationFn: async () => {
@@ -164,12 +167,31 @@ export default function AdminDashboard() {
     return <AdminDashboardSkeleton />;
   }
 
-  const totalRevenue = bookings?.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0) || 0;
-  const completedBookings = bookings?.filter(b => b.status === "completed").length || 0;
-  const verifiedMovers = movers?.filter(m => m.isVerified).length || 0;
+  if (hasError) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <Card className="p-8">
+            <div className="flex flex-col items-center gap-4">
+              <AlertCircle className="w-12 h-12 text-destructive" />
+              <h2 className="text-xl font-semibold">Failed to load dashboard data</h2>
+              <p className="text-muted-foreground">Please try refreshing the page or check your connection.</p>
+              <Button onClick={() => window.location.reload()} data-testid="button-retry-dashboard">
+                Try Again
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
-  const pendingBookings = bookings?.filter(b => b.status === "pending").length || 0;
-  const activeBookings = bookings?.filter(b => b.status === "in_progress" || b.status === "accepted").length || 0;
+  const totalRevenue = bookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  const completedBookings = bookings.filter(b => b.status === "completed").length;
+  const verifiedMovers = movers.filter(m => m.isVerified).length;
+
+  const pendingBookings = bookings.filter(b => b.status === "pending").length;
+  const activeBookings = bookings.filter(b => b.status === "in_progress" || b.status === "accepted").length;
 
   return (
     <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">

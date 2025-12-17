@@ -100,12 +100,13 @@ export default function AdminUsersPage() {
     queryKey: [usersQueryKey],
   });
 
-  // Extract users from paginated response
-  const users = usersResponse?.data;
+  // Extract users from paginated response - ensure it's always an array
+  const users = Array.isArray(usersResponse?.data) ? usersResponse.data : [];
 
-  const { data: allBookings } = useQuery<Booking[]>({
+  const { data: bookingsData } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
   });
+  const allBookings = Array.isArray(bookingsData) ? bookingsData : [];
 
   const updateUserMutation = useMutation({
     mutationFn: async (data: { id: string; name: string; email: string; phone: string; role: string }) => {
@@ -163,7 +164,6 @@ export default function AdminUsersPage() {
   });
 
   const getUserBookings = (userId: string, role: string) => {
-    if (!allBookings) return [];
     if (role === "customer") {
       return allBookings.filter(b => b.customerId === userId);
     } else if (role === "mover") {
