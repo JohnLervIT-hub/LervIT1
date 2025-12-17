@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Upload, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Shield } from "lucide-react";
+import { Upload, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Shield, User, Car, DollarSign, HelpCircle, Phone, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 
@@ -35,85 +35,107 @@ type VerificationStatus = {
   canGoOnline: boolean;
 };
 
-const VERIFICATION_ITEMS = [
+const VERIFICATION_SECTIONS = [
   {
-    type: 'ID',
-    label: 'Government ID + Selfie',
-    description: 'Upload a clear photo of your government-issued ID and a selfie',
-    required: true,
-    fields: [
-      { name: 'fullName', label: 'Full Name', type: 'text' },
-      { name: 'idNumber', label: 'ID Number', type: 'text' },
-      { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
+    id: 'identity',
+    title: 'Identity Verification',
+    icon: User,
+    items: [
+      {
+        type: 'ID',
+        label: 'Government ID + Selfie',
+        description: 'Upload a clear photo of your government-issued ID and a selfie',
+        required: true,
+        fields: [
+          { name: 'fullName', label: 'Full Name', type: 'text' },
+          { name: 'idNumber', label: 'ID Number', type: 'text' },
+          { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
+        ],
+      },
+      {
+        type: 'DRIVERS_LICENSE',
+        label: "Driver's License",
+        description: 'Upload both sides of your valid driver\'s license',
+        required: true,
+        fields: [
+          { name: 'licenseNumber', label: 'License Number', type: 'text' },
+          { name: 'province', label: 'Province', type: 'text' },
+          { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
+        ],
+      },
+      {
+        type: 'BACKGROUND_CHECK',
+        label: 'Background Check',
+        description: 'Upload a recent criminal record check (within last 6 months)',
+        required: true,
+        fields: [
+          { name: 'checkDate', label: 'Check Date', type: 'date' },
+          { name: 'referenceNumber', label: 'Reference Number (optional)', type: 'text' },
+        ],
+      },
     ],
   },
   {
-    type: 'DRIVERS_LICENSE',
-    label: "Driver's License",
-    description: 'Upload both sides of your valid driver\'s license',
-    required: true,
-    fields: [
-      { name: 'licenseNumber', label: 'License Number', type: 'text' },
-      { name: 'province', label: 'Province', type: 'text' },
-      { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
+    id: 'vehicle',
+    title: 'Vehicle & Safety',
+    icon: Car,
+    items: [
+      {
+        type: 'VEHICLE_REGISTRATION',
+        label: 'Vehicle Registration',
+        description: 'Upload your vehicle registration document',
+        required: true,
+        fields: [
+          { name: 'plateNumber', label: 'License Plate', type: 'text' },
+          { name: 'vin', label: 'VIN (optional)', type: 'text' },
+        ],
+      },
+      {
+        type: 'VEHICLE_PHOTOS',
+        label: 'Vehicle Photos',
+        description: 'Upload photos of your vehicle (front, back, sides, cargo area)',
+        required: true,
+        fields: [],
+      },
+      {
+        type: 'INSURANCE',
+        label: 'Insurance Proof',
+        description: 'Upload proof of vehicle insurance with commercial/delivery coverage',
+        required: true,
+        fields: [
+          { name: 'policyNumber', label: 'Policy Number', type: 'text' },
+          { name: 'insurerName', label: 'Insurance Company', type: 'text' },
+          { name: 'effectiveDate', label: 'Effective Date', type: 'date' },
+          { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
+        ],
+      },
     ],
   },
   {
-    type: 'VEHICLE_REGISTRATION',
-    label: 'Vehicle Registration',
-    description: 'Upload your vehicle registration document',
-    required: true,
-    fields: [
-      { name: 'plateNumber', label: 'License Plate', type: 'text' },
-      { name: 'vin', label: 'VIN (optional)', type: 'text' },
-    ],
-  },
-  {
-    type: 'VEHICLE_PHOTOS',
-    label: 'Vehicle Photos',
-    description: 'Upload photos of your vehicle (front, back, sides, cargo area)',
-    required: true,
-    fields: [],
-  },
-  {
-    type: 'INSURANCE',
-    label: 'Insurance Proof',
-    description: 'Upload proof of vehicle insurance with commercial/delivery coverage',
-    required: true,
-    fields: [
-      { name: 'policyNumber', label: 'Policy Number', type: 'text' },
-      { name: 'insurerName', label: 'Insurance Company', type: 'text' },
-      { name: 'effectiveDate', label: 'Effective Date', type: 'date' },
-      { name: 'expiryDate', label: 'Expiry Date', type: 'date' },
-    ],
-  },
-  {
-    type: 'BACKGROUND_CHECK',
-    label: 'Background Check',
-    description: 'Upload a recent criminal record check (within last 6 months)',
-    required: true,
-    fields: [
-      { name: 'checkDate', label: 'Check Date', type: 'date' },
-      { name: 'referenceNumber', label: 'Reference Number (optional)', type: 'text' },
-    ],
-  },
-  {
-    type: 'PAYOUT_SETUP',
-    label: 'Bank/Payout Setup',
-    description: 'Provide your banking information for payouts',
-    required: true,
-    fields: [
-      { name: 'accountHolderName', label: 'Account Holder Name', type: 'text' },
-      { name: 'bankName', label: 'Bank Name', type: 'text' },
-      { name: 'transitNumber', label: 'Transit Number', type: 'text' },
-      { name: 'institutionNumber', label: 'Institution Number', type: 'text' },
-      { name: 'accountNumber', label: 'Account Number', type: 'text' },
+    id: 'earnings',
+    title: 'Earnings Setup',
+    icon: DollarSign,
+    items: [
+      {
+        type: 'PAYOUT_SETUP',
+        label: 'Bank/Payout Setup',
+        description: 'Provide your banking information for payouts',
+        required: true,
+        fields: [
+          { name: 'accountHolderName', label: 'Account Holder Name', type: 'text' },
+          { name: 'bankName', label: 'Bank Name', type: 'text' },
+          { name: 'transitNumber', label: 'Transit Number', type: 'text' },
+          { name: 'institutionNumber', label: 'Institution Number', type: 'text' },
+          { name: 'accountNumber', label: 'Account Number', type: 'text' },
+        ],
+      },
     ],
   },
 ];
 
+const ALL_ITEMS = VERIFICATION_SECTIONS.flatMap(section => section.items);
+
 function getStatusBadge(status: string) {
-  // Normalize status to lowercase for comparison
   const normalizedStatus = status.toLowerCase();
   
   const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; className?: string }> = {
@@ -142,7 +164,7 @@ function UploadDocumentDialog({
   existingItem, 
   moverId 
 }: { 
-  itemConfig: typeof VERIFICATION_ITEMS[0]; 
+  itemConfig: typeof ALL_ITEMS[0]; 
   existingItem?: VerificationItem;
   moverId: string;
 }) {
@@ -301,6 +323,63 @@ function UploadDocumentDialog({
   );
 }
 
+function VerificationItemCard({ 
+  itemConfig, 
+  existingItem, 
+  moverId 
+}: { 
+  itemConfig: typeof ALL_ITEMS[0]; 
+  existingItem?: VerificationItem;
+  moverId: string;
+}) {
+  const itemStatus = existingItem?.status || 'missing';
+  const normalizedStatus = itemStatus.toLowerCase();
+  const isApproved = normalizedStatus === 'approved';
+  const isRejected = normalizedStatus === 'rejected';
+
+  return (
+    <div 
+      data-testid={`card-verification-${itemConfig.type.toLowerCase()}`}
+      className={`p-4 rounded-lg border transition-all ${
+        isApproved 
+          ? 'border-green-500/30 bg-green-500/5' 
+          : isRejected 
+            ? 'border-destructive/30 bg-destructive/5' 
+            : 'border-border bg-card/50 hover:bg-card'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-medium text-sm">{itemConfig.label}</h4>
+            {getStatusBadge(itemStatus)}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{itemConfig.description}</p>
+          
+          {existingItem?.submittedAt && (
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Submitted {format(new Date(existingItem.submittedAt), 'MMM d, yyyy')}
+            </p>
+          )}
+          
+          {isRejected && existingItem?.rejectionReason && (
+            <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive">
+              {existingItem.rejectionReason}
+            </div>
+          )}
+        </div>
+        
+        <UploadDocumentDialog
+          itemConfig={itemConfig}
+          existingItem={existingItem}
+          moverId={moverId}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function MoverVerification() {
   const { user } = useAuth();
 
@@ -330,163 +409,156 @@ export default function MoverVerification() {
 
   if (!mover) {
     return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>Mover profile not found</AlertDescription>
-      </Alert>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>Mover profile not found</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   const approvedCount = items.filter(item => item.status?.toLowerCase() === 'approved').length;
-  const totalRequired = VERIFICATION_ITEMS.filter(item => item.required).length;
+  const totalRequired = ALL_ITEMS.filter(item => item.required).length;
   const progressPercentage = (approvedCount / totalRequired) * 100;
 
   return (
-    <div className="space-y-6">
-      {/* Premium Progress Header */}
-      <Card className={status?.isComplete ? "bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20" : "bg-gradient-to-br from-primary/5 to-transparent"}>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between gap-4 mb-6">
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
-                status?.isComplete 
-                  ? 'bg-green-500/20' 
-                  : 'bg-primary/10'
-              }`}>
-                <Shield className={`w-7 h-7 ${status?.isComplete ? 'text-green-500' : 'text-primary'}`} />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">Verification & Compliance</h2>
-                <p className="text-muted-foreground text-sm">
-                  {status?.isComplete 
-                    ? 'All requirements complete - you can go online!' 
-                    : 'Complete all requirements to start accepting jobs'}
-                </p>
-              </div>
+    <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Main Content - Left Column */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Header */}
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+              status?.isComplete 
+                ? 'bg-green-500/20' 
+                : 'bg-primary/10'
+            }`}>
+              <Shield className={`w-6 h-6 ${status?.isComplete ? 'text-green-500' : 'text-primary'}`} />
             </div>
-            {status?.isComplete && (
-              <Badge variant="default" className="bg-green-500 hover:bg-green-600 px-3 py-1">
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Verified
-              </Badge>
-            )}
-          </div>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Verification Progress</span>
-              <span className="font-semibold text-lg">{approvedCount}/{totalRequired}</span>
-            </div>
-            <div className="relative">
-              <Progress value={progressPercentage} className="h-3" data-testid="progress-verification" />
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{approvedCount} approved</span>
-              <span>{totalRequired - approvedCount} remaining</span>
-            </div>
-          </div>
-
-          {!status?.isComplete && (
-            <div className="mt-4 bg-amber-500/10 rounded-xl p-4 flex items-center gap-3 border border-amber-500/20">
-              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
+            <div>
+              <h1 className="text-xl font-bold">Verification & Compliance</h1>
               <p className="text-sm text-muted-foreground">
-                Complete all verification items to go online and start earning.
+                Complete all requirements to start accepting jobs
               </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
 
-      {/* Verification Items List */}
-      <div className="space-y-3">
-        <h3 className="font-semibold text-lg px-1">Required Documents</h3>
-        {VERIFICATION_ITEMS.map((itemConfig, index) => {
-          const existingItem = items.find(item => item.type === itemConfig.type);
-          const itemStatus = existingItem?.status || 'missing';
-          const normalizedStatus = itemStatus.toLowerCase();
-          const isApproved = normalizedStatus === 'approved';
-          const isRejected = normalizedStatus === 'rejected';
-
-          return (
-            <Card 
-              key={itemConfig.type} 
-              data-testid={`card-verification-${itemConfig.type.toLowerCase()}`}
-              className={`transition-all hover-elevate ${
-                isApproved 
-                  ? 'border-green-500/30 bg-green-500/5' 
-                  : isRejected 
-                    ? 'border-destructive/30 bg-destructive/5' 
-                    : ''
-              }`}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Step Number / Status Icon */}
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    isApproved 
-                      ? 'bg-green-500/20 text-green-500' 
-                      : isRejected 
-                        ? 'bg-destructive/20 text-destructive'
-                        : 'bg-muted text-muted-foreground'
-                  }`}>
-                    {isApproved ? (
-                      <CheckCircle className="w-5 h-5" />
-                    ) : (
-                      <span className="font-bold">{index + 1}</span>
-                    )}
-                  </div>
-                  
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold flex items-center gap-2">
-                          {itemConfig.label}
-                          {itemConfig.required && (
-                            <Badge variant="outline" className="text-xs font-normal">Required</Badge>
-                          )}
-                        </h4>
-                        <p className="text-sm text-muted-foreground mt-0.5">{itemConfig.description}</p>
-                        
-                        {existingItem && (
-                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                            {existingItem.submittedAt && (
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {format(new Date(existingItem.submittedAt), 'MMM d, yyyy')}
-                              </span>
-                            )}
-                            {existingItem.expiryDate && (
-                              <span>Expires: {format(new Date(existingItem.expiryDate), 'MMM d, yyyy')}</span>
-                            )}
-                          </div>
-                        )}
-                        
-                        {existingItem?.status?.toLowerCase() === 'rejected' && existingItem.rejectionReason && (
-                          <div className="mt-3 bg-destructive/10 rounded-lg p-3 border border-destructive/20">
-                            <p className="text-sm text-destructive font-medium">Rejection Reason:</p>
-                            <p className="text-sm text-muted-foreground mt-1">{existingItem.rejectionReason}</p>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2 shrink-0">
-                        {getStatusBadge(itemStatus)}
-                        <UploadDocumentDialog
-                          itemConfig={itemConfig}
-                          existingItem={existingItem}
-                          moverId={mover.id}
-                        />
-                      </div>
+          {/* Verification Sections */}
+          {VERIFICATION_SECTIONS.map((section) => {
+            const SectionIcon = section.icon;
+            const sectionApproved = section.items.filter(item => {
+              const existingItem = items.find(i => i.type === item.type);
+              return existingItem?.status?.toLowerCase() === 'approved';
+            }).length;
+            
+            return (
+              <Card key={section.id} className="overflow-hidden">
+                <CardHeader className="pb-3 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <SectionIcon className="w-4 h-4 text-muted-foreground" />
+                      <CardTitle className="text-base">{section.title}</CardTitle>
                     </div>
+                    <Badge variant="outline" className="text-xs">
+                      {sectionApproved}/{section.items.length}
+                    </Badge>
                   </div>
+                </CardHeader>
+                <CardContent className="p-3 space-y-2">
+                  {section.items.map((itemConfig) => {
+                    const existingItem = items.find(item => item.type === itemConfig.type);
+                    return (
+                      <VerificationItemCard
+                        key={itemConfig.type}
+                        itemConfig={itemConfig}
+                        existingItem={existingItem}
+                        moverId={mover.id}
+                      />
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Sidebar - Right Column */}
+        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          {/* Progress Card */}
+          <Card className={status?.isComplete ? "border-green-500/30 bg-green-500/5" : ""}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                {status?.isComplete ? (
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                ) : (
+                  <Clock className="w-5 h-5 text-muted-foreground" />
+                )}
+                Verification Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-semibold">{approvedCount}/{totalRequired}</span>
                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+                <Progress value={progressPercentage} className="h-2" data-testid="progress-verification" />
+              </div>
+              
+              {status?.isComplete ? (
+                <div className="p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                  <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                    All verified! You can now go online.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    {totalRequired - approvedCount} items remaining
+                  </p>
+                </div>
+              )}
+
+              {status?.isComplete && (
+                <Button className="w-full" data-testid="button-go-online">
+                  Go Online
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Help Card */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-muted-foreground" />
+                Need Help?
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Having trouble with your documents? Our support team is here to help.
+              </p>
+              <div className="space-y-2">
+                <Button variant="outline" size="sm" className="w-full justify-start" data-testid="button-chat-support">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Chat with Support
+                </Button>
+                <Button variant="outline" size="sm" className="w-full justify-start" data-testid="button-call-support">
+                  <Phone className="w-4 h-4 mr-2" />
+                  Call (403) 555-0123
+                </Button>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  Need an RCMP background check?{" "}
+                  <a href="#" className="text-primary hover:underline">Learn how to get one</a>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
