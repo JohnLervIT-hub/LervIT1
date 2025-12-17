@@ -91,3 +91,18 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **AddressAutocomplete Debounce:** Fixed debounce logic using `autocompleteJustFired` ref to allow manual address edits after place selection without duplicate callbacks.
 *   **Circuit Breaker System:** Implemented `CircuitBreaker` class in `server/circuit-breaker.ts` for external API resilience (Stripe, OpenAI, Telnyx) with configurable failure thresholds and recovery timeouts.
 *   **Vision Queue:** Async job processing system in `server/vision-queue.ts` for background HEIC conversion and OpenAI Vision API calls.
+
+## Recent Changes (Dec 17, 2025)
+
+### Real-Time WebSocket Notification System for Movers
+*   **Token-Based Authentication:** WebSocket connections require short-lived (5-min) tokens obtained via authenticated REST endpoint `/api/movers/me/ws-token`.
+*   **Security Features:**
+    - Tokens are single-use (deleted after validation)
+    - Origin validation on WebSocket handshake
+    - Session-based token generation (requires authenticated user)
+    - Tokens include userId and moverId for verification
+*   **Client Hook:** `useMoverWebSocket.ts` handles token fetching, WebSocket connection, automatic reconnection, and message parsing.
+*   **Audio Notifications:** `JobNotificationSound.tsx` component plays sound alerts using singleton AudioContext pattern to prevent memory leaks.
+*   **ID Matching Contract:** Job notifications use `mover.userId` (the user's ID) as the moverId. WebSocket clients are matched by `client.userId` to ensure proper delivery.
+*   **Broadcasting:** New bookings trigger WebSocket notifications to all matched movers via `moverWebSocket.notifyMover(mover.userId, ...)`.
+*   **Scalability Note:** Token store is in-memory (MVP limitation). For horizontal scaling, requires distributed storage (Redis).

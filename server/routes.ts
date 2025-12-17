@@ -39,6 +39,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
+import { moverWebSocket, generateWebSocketToken } from "./websocket";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -1120,6 +1121,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(mover);
     } catch (error) {
       console.error('Get mover/me error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+  
+  // GET /api/movers/me/ws-token - Get WebSocket authentication token for real-time notifications
+  app.get("/api/movers/me/ws-token", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      if (user.role !== 'mover') {
+        return res.status(403).json({ error: "Only movers can receive job notifications" });
+      }
+      
+      // Find mover profile by userId
+      const movers = await storage.getMovers({});
+      const mover = movers.find(m => m.userId === user.id);
+      
+      if (!mover) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      
+      // Generate short-lived token for WebSocket authentication
+      const token = generateWebSocketToken(user.id, mover.id);
+      
+      res.json({ token, expiresIn: 300 }); // 5 minutes
+    } catch (error) {
+      console.error('Get WebSocket token error:', error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -3331,6 +3360,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               expiresAt,
             });
             
+            // Send real-time WebSocket notification to mover
+            moverWebSocket.notifyMover(mover.userId, {
+              type: 'job_notification',
+              bookingId: booking.id,
+              pickupAddress: booking.pickupAddress || '',
+              dropoffAddress: booking.dropoffAddress || '',
+              price: booking.price || '0',
+              expiresAt,
+            });
+            
             // Send email notification to mover
             const moverUser = await storage.getUser(mover.userId);
             if (moverUser) {
@@ -3345,7 +3384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
           }
-          console.log(`[Payment] Notified ${moversToNotify.length} movers about job (with emails)`);
+          console.log(`[Payment] Notified ${moversToNotify.length} movers about job (with emails + WebSocket)`);
         }
       } catch (moverErr) {
         console.error("[Payment] Failed to notify movers:", moverErr);
@@ -3586,13 +3625,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const availableMovers = allMovers.filter(m => m.isAvailable);
         const moversToNotify = availableMovers.slice(0, 5);
         for (const mover of moversToNotify) {
+          const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
           await storage.createJobNotification({
             moverId: mover.userId,
             bookingId: booking.id,
             status: 'pending',
-            expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+            expiresAt,
             distanceToPickup: '0',
             estimatedEarnings: booking.price || '0',
+          });
+          
+          // Send real-time WebSocket notification to mover
+          moverWebSocket.notifyMover(mover.userId, {
+            type: 'job_notification',
+            bookingId: booking.id,
+            pickupAddress: booking.pickupAddress || '',
+            dropoffAddress: booking.dropoffAddress || '',
+            price: booking.price || '0',
+            expiresAt,
           });
           
           // Send email notification to mover
@@ -3965,6 +4015,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     })
                   )
                 );
+                
+                // Send real-time WebSocket notifications to movers
+                nearestMovers.forEach((mover: any) => {
+                  moverWebSocket.notifyMover(mover.moverId, {
+                    type: 'job_notification',
+                    bookingId: booking.id,
+                    pickupAddress: booking.pickupAddress || '',
+                    dropoffAddress: booking.dropoffAddress || '',
+                    price: toDecimalString(mover.estimatedEarnings),
+                    estimatedTime: `${Math.round(mover.distanceToPickup)} km`,
+                    expiresAt,
+                  });
+                });
               
               // Send job assignment emails to movers (wrapped separately for isolation)
               try {
@@ -3986,7 +4049,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               logEvent.payment('movers_notified', { 
                 bookingId: booking.id, 
-                moversNotified: nearestMovers.length 
+                moversNotified: nearestMovers.length,
+                websocketNotified: moverWebSocket.getConnectedMoversCount()
               });
               } // End of else block for proximity matching
             } catch (moverNotifyErr) {
@@ -6718,5 +6782,9 @@ Respond with VALID JSON only:
   });
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket server for real-time mover notifications
+  moverWebSocket.initialize(httpServer);
+  
   return httpServer;
 }

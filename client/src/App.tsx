@@ -13,6 +13,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageLoader } from "@/components/PageLoader";
+import { JobNotificationSound } from "@/components/JobNotificationSound";
 import Header from "@/components/Header";
 import SplashScreen from "@/components/SplashScreen";
 
@@ -222,6 +223,7 @@ function App() {
                   </PageTransition>
                 </div>
                 <MobileBottomNav />
+                <JobNotificationSound />
               </ErrorBoundary>
               <Toaster />
             </TooltipProvider>
