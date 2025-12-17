@@ -765,13 +765,37 @@ export default function MoverDashboard() {
               </div>
             </div>
             <div className="flex-1 space-y-6">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Pickup</p>
-                <p className="font-medium" data-testid={`text-pickup-${booking.id}`}>{booking.pickupAddress}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Pickup</p>
+                  <p className="font-medium" data-testid={`text-pickup-${booking.id}`}>{booking.pickupAddress}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="shrink-0 gap-1.5"
+                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(booking.pickupAddress)}`, '_blank')}
+                  data-testid={`button-navigate-pickup-${booking.id}`}
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  Navigate
+                </Button>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Dropoff</p>
-                <p className="font-medium" data-testid={`text-dropoff-${booking.id}`}>{booking.dropoffAddress}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Dropoff</p>
+                  <p className="font-medium" data-testid={`text-dropoff-${booking.id}`}>{booking.dropoffAddress}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="shrink-0 gap-1.5"
+                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(booking.dropoffAddress)}`, '_blank')}
+                  data-testid={`button-navigate-dropoff-${booking.id}`}
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  Navigate
+                </Button>
               </div>
             </div>
           </div>
