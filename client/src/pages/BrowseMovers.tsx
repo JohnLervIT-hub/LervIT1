@@ -24,6 +24,15 @@ import { Search, SlidersHorizontal, MapPin, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { LocationPrompt } from "@/components/LocationPrompt";
+import { getVehicleDisplayName } from "@/lib/utils";
+
+// Vehicle type filter options with display name and normalized DB values
+const VEHICLE_TYPE_FILTERS = [
+  { display: "SUV / Small Vehicle", dbValues: ["car", "suv", "small"] },
+  { display: "Cargo Van", dbValues: ["van", "cargo van"] },
+  { display: "Pickup Truck", dbValues: ["pickup", "pickup truck"] },
+  { display: "Moving Truck", dbValues: ["truck", "moving truck", "large truck"] },
+];
 
 function MoverCardSkeleton() {
   return (
@@ -52,8 +61,6 @@ function MoverCardSkeleton() {
     </Card>
   );
 }
-
-const VEHICLE_TYPES = ["Cargo Van", "Pickup Truck", "Large Truck", "SUV"];
 
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
@@ -125,9 +132,16 @@ export default function BrowseMovers() {
       
       if (selectedVehicleTypes.length > 0) {
         const moverVehicle = mover.vehicleType?.toLowerCase() || "";
-        const matchesVehicle = selectedVehicleTypes.some(type => 
-          moverVehicle.includes(type.toLowerCase())
-        );
+        // Check if mover's vehicle matches any of the selected filter types
+        const matchesVehicle = selectedVehicleTypes.some(selectedDisplay => {
+          // Find the filter config for this display name
+          const filterConfig = VEHICLE_TYPE_FILTERS.find(f => f.display === selectedDisplay);
+          if (!filterConfig) return false;
+          // Check if mover's vehicle matches any of the DB values for this filter
+          return filterConfig.dbValues.some(dbVal => 
+            moverVehicle.includes(dbVal.toLowerCase()) || dbVal.toLowerCase().includes(moverVehicle)
+          );
+        });
         if (!matchesVehicle) return false;
       }
       
@@ -218,19 +232,19 @@ export default function BrowseMovers() {
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Vehicle Type</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    {VEHICLE_TYPES.map((type) => (
-                      <div key={type} className="flex items-center space-x-2">
+                    {VEHICLE_TYPE_FILTERS.map((filter) => (
+                      <div key={filter.display} className="flex items-center space-x-2">
                         <Checkbox
-                          id={`vehicle-${type}`}
-                          checked={selectedVehicleTypes.includes(type)}
-                          onCheckedChange={() => toggleVehicleType(type)}
-                          data-testid={`checkbox-vehicle-${type.toLowerCase().replace(/\s+/g, '-')}`}
+                          id={`vehicle-${filter.display}`}
+                          checked={selectedVehicleTypes.includes(filter.display)}
+                          onCheckedChange={() => toggleVehicleType(filter.display)}
+                          data-testid={`checkbox-vehicle-${filter.display.toLowerCase().replace(/[\s\/]+/g, '-')}`}
                         />
                         <Label 
-                          htmlFor={`vehicle-${type}`} 
+                          htmlFor={`vehicle-${filter.display}`} 
                           className="text-sm font-normal cursor-pointer"
                         >
-                          {type}
+                          {filter.display}
                         </Label>
                       </div>
                     ))}
