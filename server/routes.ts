@@ -5988,10 +5988,13 @@ Respond with VALID JSON only:
       // Record earnings using persisted commission data from booking
       const earnings = await recordMoverEarnings(bookingId, booking.moverId!, updatedBooking);
       
-      // Increment mover's completed trips
+      // Increment mover's completed trips AND total moves (keep both in sync)
       const mover = movers[0];
       await db.update(moversTable)
-        .set({ completedTrips: (mover.completedTrips || 0) + 1 })
+        .set({ 
+          completedTrips: (mover.completedTrips || 0) + 1,
+          totalMoves: (mover.totalMoves || 0) + 1 
+        })
         .where(eq(moversTable.id, mover.id));
       
       res.json({

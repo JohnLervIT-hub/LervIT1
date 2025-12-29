@@ -132,6 +132,8 @@ export default function BrowseMovers() {
       
       if (selectedVehicleTypes.length > 0) {
         const moverVehicle = mover.vehicleType?.toLowerCase() || "";
+        // If mover has no vehicle type, exclude them when filters are active
+        if (!moverVehicle) return false;
         // Check if mover's vehicle matches any of the selected filter types
         const matchesVehicle = selectedVehicleTypes.some(selectedDisplay => {
           // Find the filter config for this display name
