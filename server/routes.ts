@@ -6784,6 +6784,70 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: SYNC MOVER TRIP COUNTERS =====
+  // One-time sync to update completedTrips and totalMoves based on actual completed bookings
+  app.post("/api/admin/sync-mover-counters", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get all movers
+      const allMovers = await db.select().from(moversTable);
+      
+      // Get count of completed bookings per mover
+      const completedCounts = await db
+        .select({
+          moverId: bookings.moverId,
+          count: sql<number>`COUNT(*)::int`
+        })
+        .from(bookings)
+        .where(eq(bookings.status, 'completed'))
+        .groupBy(bookings.moverId);
+      
+      // Build a map of moverId -> completed count
+      const countMap = new Map<string, number>();
+      for (const row of completedCounts) {
+        if (row.moverId) {
+          countMap.set(row.moverId, row.count);
+        }
+      }
+      
+      let updatedCount = 0;
+      const updates: { moverId: string; previousTrips: number; newTrips: number }[] = [];
+      
+      // Update all movers (including those with 0 completions)
+      for (const mover of allMovers) {
+        const currentTrips = mover.completedTrips || 0;
+        const actualTrips = countMap.get(mover.id) || 0;
+        
+        // Only update if there's a mismatch
+        if (currentTrips !== actualTrips) {
+          await db.update(moversTable)
+            .set({ 
+              completedTrips: actualTrips,
+              totalMoves: actualTrips 
+            })
+            .where(eq(moversTable.id, mover.id));
+          
+          updates.push({
+            moverId: mover.id,
+            previousTrips: currentTrips,
+            newTrips: actualTrips
+          });
+          updatedCount++;
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Synced ${updatedCount} mover(s) with correct trip counts`,
+        updates
+      });
+    } catch (error) {
+      console.error('[Admin] Sync mover counters error:', error);
+      res.status(500).json({ error: "Failed to sync mover counters" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time mover notifications

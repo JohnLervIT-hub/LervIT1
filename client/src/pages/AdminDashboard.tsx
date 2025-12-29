@@ -112,6 +112,26 @@ export default function AdminDashboard() {
     },
   });
 
+  const syncCountersMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/admin/sync-mover-counters");
+    },
+    onSuccess: async (response: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      toast({
+        title: "Sync Complete",
+        description: response.message || "Mover trip counters have been synced.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Sync Failed",
+        description: "Could not sync mover trip counters. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Helper functions
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -204,19 +224,34 @@ export default function AdminDashboard() {
               </div>
               <h1 className="text-3xl md:text-4xl font-bold">Admin Dashboard</h1>
             </div>
-            <Button
-              variant="destructive"
-              onClick={() => cleanupMutation.mutate()}
-              disabled={cleanupMutation.isPending}
-              data-testid="button-cleanup-bookings"
-            >
-              {cleanupMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4 mr-2" />
-              )}
-              Clean Broken Bookings
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => syncCountersMutation.mutate()}
+                disabled={syncCountersMutation.isPending}
+                data-testid="button-sync-mover-counters"
+              >
+                {syncCountersMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                )}
+                Sync Trip Counters
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => cleanupMutation.mutate()}
+                disabled={cleanupMutation.isPending}
+                data-testid="button-cleanup-bookings"
+              >
+                {cleanupMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                Clean Broken Bookings
+              </Button>
+            </div>
           </div>
           <p className="text-muted-foreground text-lg">Platform overview and management</p>
         </div>
