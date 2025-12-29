@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `lervit-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `lervit-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `lervit-api-${CACHE_VERSION}`;
@@ -6,6 +6,11 @@ const API_CACHE = `lervit-api-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
   '/favicon.png',
+  '/favicon-16.png',
+  '/favicon-32.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
   '/manifest.json'
 ];
 
