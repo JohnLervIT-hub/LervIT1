@@ -558,10 +558,10 @@ export default function MoverVerification() {
                   size="sm" 
                   className="w-full justify-start" 
                   data-testid="button-call-support"
-                  onClick={() => window.open("tel:+14035550123", "_self")}
+                  onClick={() => window.open("tel:+18889820885", "_self")}
                 >
                   <Phone className="w-4 h-4 mr-2" />
-                  Call (403) 555-0123
+                  Call 1-888-982-0885
                 </Button>
               </div>
               <div className="pt-2 border-t">
