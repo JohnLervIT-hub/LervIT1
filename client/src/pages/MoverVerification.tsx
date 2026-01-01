@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -382,6 +383,7 @@ function VerificationItemCard({
 
 export default function MoverVerification() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
 
   const { data: mover } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
@@ -541,11 +543,23 @@ export default function MoverVerification() {
                 Having trouble with your documents? Our support team is here to help.
               </p>
               <div className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start" data-testid="button-chat-support">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start" 
+                  data-testid="button-chat-support"
+                  onClick={() => navigate("/support")}
+                >
                   <MessageSquare className="w-4 h-4 mr-2" />
                   Chat with Support
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start" data-testid="button-call-support">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start" 
+                  data-testid="button-call-support"
+                  onClick={() => window.open("tel:+14035550123", "_self")}
+                >
                   <Phone className="w-4 h-4 mr-2" />
                   Call (403) 555-0123
                 </Button>
@@ -553,7 +567,14 @@ export default function MoverVerification() {
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
                   Need an RCMP background check?{" "}
-                  <a href="#" className="text-primary hover:underline">Learn how to get one</a>
+                  <a 
+                    href="https://www.rcmp-grc.gc.ca/en/criminal-record-checks" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Learn how to get one
+                  </a>
                 </p>
               </div>
             </CardContent>
