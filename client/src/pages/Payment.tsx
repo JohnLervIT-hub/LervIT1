@@ -60,13 +60,25 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
           variant: "destructive",
         });
       } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        // Payment succeeded - update booking status immediately
-        try {
-          await apiRequest("POST", `/api/bookings/${bookingId}/confirm-payment`, {
-            paymentIntentId: paymentIntent.id
-          });
-        } catch {
-          // Payment confirmed via webhook
+        // Payment succeeded - update booking status immediately (fallback for webhook)
+        // This ensures the booking is confirmed even if webhook fails
+        let confirmationSucceeded = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await apiRequest("POST", `/api/bookings/${bookingId}/confirm-payment`, {
+              paymentIntentId: paymentIntent.id
+            });
+            confirmationSucceeded = true;
+            break;
+          } catch (confirmErr) {
+            console.warn(`Payment confirmation attempt ${attempt + 1} failed:`, confirmErr);
+            // Wait briefly before retry
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+        
+        if (!confirmationSucceeded) {
+          console.error("All confirmation attempts failed - webhook should handle it");
         }
         
         toast({
@@ -75,6 +87,7 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
         });
         queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
         queryClient.invalidateQueries({ queryKey: [`/api/bookings?customerId=${userId}`] });
+        queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
         setTimeout(() => setLocation("/my-bookings"), 1500);
       } else if (paymentIntent && paymentIntent.status === 'processing') {
         toast({

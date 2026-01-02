@@ -1,9 +1,10 @@
 import cron from 'node-cron';
 import { db } from './db';
-import { bookings, jobNotifications, users } from '@shared/schema';
-import { eq, lt, and, inArray, gte } from 'drizzle-orm';
+import { bookings, jobNotifications, users, BOOKING_STATUSES } from '@shared/schema';
+import { eq, lt, and, inArray, gte, isNotNull } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
+import { stripe } from './config/stripe';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -26,6 +27,11 @@ export function initBackgroundJobs() {
   // Send payment reminders every 2 minutes
   cron.schedule('*/2 * * * *', async () => {
     await sendPaymentReminders();
+  });
+  
+  // Detect and recover orphaned payments every 10 minutes
+  cron.schedule('*/10 * * * *', async () => {
+    await recoverOrphanedPayments();
   });
 
   cron.schedule('0 3 * * *', async () => {
@@ -175,6 +181,92 @@ async function sendPaymentReminders() {
     return remindersSent;
   } catch (error) {
     logEvent.error('sendPaymentReminders', error);
+    return 0;
+  }
+}
+
+// Detect bookings with successful Stripe payments but not updated in database
+async function recoverOrphanedPayments() {
+  try {
+    // Find bookings that have payment intent but status is still pending_payment
+    // These might have been paid but webhook failed
+    const potentialOrphans = await db
+      .select({
+        id: bookings.id,
+        customerId: bookings.customerId,
+        stripePaymentIntentId: bookings.stripePaymentIntentId,
+        status: bookings.status,
+        paymentStatus: bookings.paymentStatus,
+        createdAt: bookings.createdAt,
+      })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.status, 'pending_payment'),
+          isNotNull(bookings.stripePaymentIntentId)
+        )
+      )
+      .limit(50); // Process in batches
+    
+    let recovered = 0;
+    
+    for (const booking of potentialOrphans) {
+      if (!booking.stripePaymentIntentId) continue;
+      
+      try {
+        // Check Stripe for actual payment status
+        const paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+        
+        if (paymentIntent.status === 'succeeded') {
+          // Payment was successful but booking wasn't updated - recover it!
+          // Use PENDING status (awaiting mover matching) - this is correct per booking state machine
+          const [updatedBooking] = await db
+            .update(bookings)
+            .set({
+              status: BOOKING_STATUSES.PENDING,
+              paymentStatus: 'succeeded',
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, booking.id))
+            .returning();
+          
+          recovered++;
+          
+          logEvent.payment('orphan_recovered', {
+            bookingId: booking.id,
+            paymentIntentId: booking.stripePaymentIntentId,
+            customerId: booking.customerId,
+          });
+          
+          // Notify customer that their booking is now confirmed
+          // Use updated booking object for correct status in email
+          const [customer] = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, booking.customerId));
+          
+          if (customer && updatedBooking) {
+            try {
+              await notificationService.sendBookingConfirmation(customer, updatedBooking);
+            } catch (emailErr) {
+              logEvent.error('orphan_recovery_email', emailErr);
+            }
+          }
+        }
+      } catch (stripeErr) {
+        // Payment intent might not exist or other Stripe error - skip
+        logEvent.error('orphan_check_stripe', stripeErr, { bookingId: booking.id });
+      }
+    }
+    
+    if (recovered > 0) {
+      logEvent.cleanup('orphan_payments_recovered', { recovered });
+      logger.info({ event: 'orphan_recovery', recovered }, `Recovered ${recovered} orphaned payments`);
+    }
+    
+    return recovered;
+  } catch (error) {
+    logEvent.error('recoverOrphanedPayments', error);
     return 0;
   }
 }
