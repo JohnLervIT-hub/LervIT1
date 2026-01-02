@@ -3765,12 +3765,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
             fraudFlagged
           });
           
-          // Find booking by payment intent ID
-          const successBookings = await db
+          // Find booking by payment intent ID (primary lookup)
+          let successBookings = await db
             .select()
             .from(bookings)
             .where(eq(bookings.stripePaymentIntentId, paymentIntent.id))
             .limit(1);
+          
+          // FALLBACK: If not found by payment intent ID, try by bookingId from metadata
+          // This catches race conditions where the payment intent ID wasn't saved yet
+          if (successBookings.length === 0 && paymentIntent.metadata?.bookingId) {
+            logEvent.payment('webhook_fallback_lookup', {
+              paymentIntentId: paymentIntent.id,
+              metadataBookingId: paymentIntent.metadata.bookingId,
+            });
+            
+            successBookings = await db
+              .select()
+              .from(bookings)
+              .where(eq(bookings.id, paymentIntent.metadata.bookingId))
+              .limit(1);
+            
+            // If found via metadata, update the booking with the payment intent ID
+            if (successBookings.length > 0) {
+              await db.update(bookings)
+                .set({ stripePaymentIntentId: paymentIntent.id })
+                .where(eq(bookings.id, paymentIntent.metadata.bookingId));
+              
+              logEvent.payment('webhook_fallback_success', {
+                bookingId: paymentIntent.metadata.bookingId,
+                paymentIntentId: paymentIntent.id,
+              });
+            }
+          }
           
           if (successBookings.length > 0) {
             const booking = successBookings[0];
