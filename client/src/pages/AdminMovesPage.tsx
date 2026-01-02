@@ -97,6 +97,39 @@ export default function AdminMovesPage() {
     },
   });
 
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ bookingId, status, paymentStatus }: { bookingId: string; status: string; paymentStatus: string }) => {
+      return apiRequest("PATCH", `/api/admin/bookings/${bookingId}/status`, {
+        status,
+        paymentStatus,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Booking Updated",
+        description: "The booking status has been updated.",
+      });
+      setEditingBooking(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleMarkRefunded = () => {
+    if (!editingBooking) return;
+    updateStatusMutation.mutate({
+      bookingId: editingBooking.id,
+      status: 'cancelled',
+      paymentStatus: 'refunded',
+    });
+  };
+
   const openEditDialog = (booking: Booking) => {
     setEditingBooking(booking);
     setEditPickup(booking.pickupAddress);
@@ -349,7 +382,18 @@ export default function AdminMovesPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="destructive"
+              onClick={handleMarkRefunded}
+              disabled={updateStatusMutation.isPending || editingBooking?.status === 'cancelled'}
+              data-testid="button-mark-refunded"
+              className="sm:mr-auto"
+            >
+              {updateStatusMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <XCircle className="w-4 h-4 mr-2" />
+              Mark as Refunded
+            </Button>
             <Button
               variant="outline"
               onClick={() => setEditingBooking(null)}
