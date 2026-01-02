@@ -294,6 +294,7 @@ export default function AdminMovesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Booking ID</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Mover</TableHead>
                       <TableHead>Pickup</TableHead>
@@ -307,6 +308,9 @@ export default function AdminMovesPage() {
                   <TableBody>
                     {filteredBookings.map((b) => (
                       <TableRow key={b.id} data-testid={`row-booking-${b.id}`}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {b.id.slice(0, 8)}...
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div>{b.customer?.name || "Unknown Customer"}</div>
                           <div className="text-xs text-muted-foreground">{b.customer?.email || "No email"}</div>
