@@ -268,7 +268,8 @@ export default function AdminMovesPage() {
                     {filteredBookings.map((b) => (
                       <TableRow key={b.id} data-testid={`row-booking-${b.id}`}>
                         <TableCell className="font-medium">
-                          {b.customer?.name || "Unknown Customer"}
+                          <div>{b.customer?.name || "Unknown Customer"}</div>
+                          <div className="text-xs text-muted-foreground">{b.customer?.email || "No email"}</div>
                         </TableCell>
                         <TableCell>
                           {b.mover?.user?.name ? b.mover.user.name : <span className="text-muted-foreground">Unassigned</span>}
