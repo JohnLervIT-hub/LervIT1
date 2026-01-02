@@ -6144,6 +6144,121 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: RECOVER BOOKING FROM STRIPE PAYMENT =====
+  // Use this when a payment was successful but booking wasn't updated
+  app.post("/api/admin/recover-booking", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // SECURITY: Only admins can recover bookings
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const { paymentIntentId } = req.body;
+      
+      if (!paymentIntentId) {
+        return res.status(400).json({ error: "Payment intent ID is required (starts with pi_)" });
+      }
+      
+      // Fetch payment intent from Stripe
+      let paymentIntent;
+      try {
+        paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      } catch (stripeErr) {
+        return res.status(404).json({ error: "Payment intent not found in Stripe" });
+      }
+      
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(400).json({ 
+          error: `Payment not successful. Current status: ${paymentIntent.status}` 
+        });
+      }
+      
+      // Try to find booking by payment intent ID
+      const existingBookings = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.stripePaymentIntentId, paymentIntentId))
+        .limit(1);
+      
+      if (existingBookings.length > 0) {
+        const booking = existingBookings[0];
+        
+        // Booking exists but might not be updated
+        if (booking.paymentStatus !== 'succeeded') {
+          await storage.updateBooking(booking.id, {
+            paymentStatus: 'succeeded',
+            status: BOOKING_STATUSES.PENDING,
+          });
+          
+          logEvent.payment('booking_recovered', { 
+            bookingId: booking.id, 
+            paymentIntentId,
+            adminUserId: user.id 
+          });
+          
+          return res.json({ 
+            success: true, 
+            message: "Booking found and payment status updated",
+            bookingId: booking.id,
+            previousStatus: booking.status,
+            newStatus: 'pending'
+          });
+        }
+        
+        return res.json({ 
+          success: true, 
+          message: "Booking already confirmed with successful payment",
+          bookingId: booking.id,
+          status: booking.status
+        });
+      }
+      
+      // Booking not found - check metadata for bookingId
+      const bookingIdFromMetadata = paymentIntent.metadata?.bookingId;
+      
+      if (bookingIdFromMetadata) {
+        // Try to find by booking ID from metadata
+        const bookingById = await storage.getBooking(bookingIdFromMetadata);
+        
+        if (bookingById) {
+          await storage.updateBooking(bookingById.id, {
+            stripePaymentIntentId: paymentIntentId,
+            paymentStatus: 'succeeded',
+            status: BOOKING_STATUSES.PENDING,
+          });
+          
+          logEvent.payment('booking_recovered_by_metadata', { 
+            bookingId: bookingById.id, 
+            paymentIntentId,
+            adminUserId: user.id 
+          });
+          
+          return res.json({ 
+            success: true, 
+            message: "Booking recovered using payment metadata",
+            bookingId: bookingById.id
+          });
+        }
+      }
+      
+      return res.status(404).json({ 
+        error: "Could not find matching booking",
+        paymentIntentId,
+        bookingIdFromMetadata: bookingIdFromMetadata || null,
+        amount: paymentIntent.amount / 100,
+        currency: paymentIntent.currency,
+        suggestion: "Please check if the booking was created. If not, you may need to create one manually and link it."
+      });
+      
+    } catch (error) {
+      logEvent.error('admin_recover_booking', error);
+      res.status(500).json({ error: "Failed to recover booking" });
+    }
+  });
+
   // ===== REAL-TIME LOCATION TRACKING =====
   
   // Update mover's current location during active trip
