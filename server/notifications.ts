@@ -395,6 +395,84 @@ class NotificationService {
     });
   }
 
+  // Payment reminder email/SMS to customer (15 minutes before expiry)
+  async sendPaymentReminder(customer: User, booking: Partial<Booking>): Promise<void> {
+    const subject = `Complete Payment - Your booking expires in 15 minutes!`;
+    const paymentUrl = `https://lervit.replit.app/payment/${booking.id}`;
+    const firstName = getFirstName(customer.name);
+    
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#f97316;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+              <p style="color:#ffffff;margin:10px 0 0 0;font-size:16px;">Urgent: Complete Your Payment</p>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Your Booking Expires Soon!</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${firstName},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">Your booking will expire in 15 minutes if payment is not completed. Complete payment now to notify movers in your area.</p>
+              
+              <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Move Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Price:</strong> $${booking.price || '0'} CAD</li>
+                <li><strong>Pickup:</strong> ${booking.pickupAddress}</li>
+                <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
+              </ul>
+              
+              <table cellpadding="0" cellspacing="0" style="margin:30px 0;">
+                <tr>
+                  <td style="background-color:#f97316;border-radius:6px;padding:14px 28px;">
+                    <a href="${paymentUrl}" style="color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;">Complete Payment Now</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color:#888888;font-size:14px;line-height:20px;margin:0;">If you no longer need this move, you can ignore this email and the booking will be automatically cancelled.</p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    await this.sendEmail({
+      to: customer.email,
+      subject,
+      body,
+      type: 'status_update',
+    });
+    
+    // Also send SMS reminder if customer has a phone number
+    if (customer.phone) {
+      const smsMessage = `LervIT: Your booking expires in 15 min! Complete payment now to book your move: ${paymentUrl}`;
+      await this.sendSMS({
+        to: customer.phone,
+        message: smsMessage,
+        type: 'booking_update',
+      });
+    }
+  }
+
   // Status update email
   async sendStatusUpdate(user: User, booking: Partial<Booking>, newStatus: string): Promise<void> {
     const statusMessages: Record<string, string> = {

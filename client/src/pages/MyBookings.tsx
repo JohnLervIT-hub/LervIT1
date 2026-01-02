@@ -12,9 +12,12 @@ import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { generatePriceExplanation } from "@shared/ai";
 import EditBookingForm from "@/components/EditBookingForm";
+
+// Constants for pending payment timeout (must match server)
+const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours
 
 type Booking = {
   id: string;
@@ -74,6 +77,37 @@ export default function MyBookings() {
   // State for edit booking dialog
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   
+  // State for countdown timer refresh
+  const [countdownTick, setCountdownTick] = useState(0);
+  
+  // Update countdown every 30 seconds for pending_payment bookings
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdownTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Calculate remaining time for pending_payment bookings
+  const getCountdownInfo = useCallback((createdAt: string) => {
+    const created = new Date(createdAt).getTime();
+    const expiresAt = created + PENDING_PAYMENT_TIMEOUT_MINUTES * 60 * 1000;
+    const remaining = expiresAt - Date.now();
+    
+    if (remaining <= 0) {
+      return { expired: true, minutes: 0, text: "Expired" };
+    }
+    
+    const minutes = Math.floor(remaining / 60000);
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    
+    if (hours > 0) {
+      return { expired: false, minutes, text: `${hours}h ${mins}m remaining` };
+    }
+    return { expired: false, minutes, text: `${mins} min remaining` };
+  }, [countdownTick]);
+  
   // Parse URL for specific booking
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -100,26 +134,37 @@ export default function MyBookings() {
   const sortedBookings = bookings
     ?.filter(b => {
       if (!b) return false;
-      // Filter out expired pending/confirmed bookings (keep in_transit and payment_failed as they're active)
-      const isActiveStatus = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"].includes(b.status);
+      // Always keep pending_payment bookings - they need to show the payment button
+      if (b.status === "pending_payment") return true;
       // Also keep bookings with failed payment status
       if (b.paymentStatus === "failed") return true;
-      if (isActiveStatus && b.status !== "in_transit" && b.status !== "payment_failed" && safeParseDate(b.preferredDate) < now) {
+      // Keep in_transit and payment_failed as they're active
+      if (b.status === "in_transit" || b.status === "payment_failed") return true;
+      // Filter out expired pending/confirmed bookings only
+      const isActiveStatus = ["pending", "confirmed"].includes(b.status);
+      if (isActiveStatus && safeParseDate(b.preferredDate) < now) {
         return false;
       }
       return true;
     })
     .sort((a, b) => {
-      // Active bookings first (including payment_failed for retry), sorted by date ascending
-      const aIsActive = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"].includes(a.status) && 
-        (a.status === "in_transit" || a.status === "payment_failed" || a.paymentStatus === "failed" || safeParseDate(a.preferredDate) >= now);
-      const bIsActive = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"].includes(b.status) && 
-        (b.status === "in_transit" || b.status === "payment_failed" || b.paymentStatus === "failed" || safeParseDate(b.preferredDate) >= now);
+      // Pending payment bookings go first (urgent - need to pay)
+      if (a.status === "pending_payment" && b.status !== "pending_payment") return -1;
+      if (b.status === "pending_payment" && a.status !== "pending_payment") return 1;
+      
+      // Then other active bookings
+      const aIsActive = ["pending", "confirmed", "in_transit", "payment_failed"].includes(a.status) || a.paymentStatus === "failed";
+      const bIsActive = ["pending", "confirmed", "in_transit", "payment_failed"].includes(b.status) || b.paymentStatus === "failed";
       
       if (aIsActive && !bIsActive) return -1;
       if (!aIsActive && bIsActive) return 1;
       
-      // Within same group, sort by date
+      // Within same group, sort by created date (newest first for pending_payment)
+      if (a.status === "pending_payment" && b.status === "pending_payment") {
+        return safeParseDate(b.createdAt).getTime() - safeParseDate(a.createdAt).getTime();
+      }
+      
+      // Active: sort by preferred date ascending
       if (aIsActive && bIsActive) {
         return safeParseDate(a.preferredDate).getTime() - safeParseDate(b.preferredDate).getTime();
       }
@@ -284,6 +329,35 @@ export default function MyBookings() {
                   booking.status === 'in_transit' ? 'bg-primary' :
                   booking.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
                 }`} />
+                
+                {/* Urgent Payment Banner for pending_payment bookings */}
+                {booking.status === 'pending_payment' && (
+                  <div className="bg-orange-500/10 border-b border-orange-500/20 px-6 py-3" data-testid={`banner-payment-countdown-${booking.id}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-orange-600 animate-pulse" />
+                        <span className="text-sm font-medium text-orange-600">
+                          Complete payment to notify movers
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge className="bg-orange-500/20 text-orange-700 border-orange-500/30">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {getCountdownInfo(booking.createdAt).text}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          onClick={() => setLocation(`/payment/${booking.id}`)}
+                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                          data-testid={`button-urgent-pay-${booking.id}`}
+                        >
+                          <CreditCard className="w-3 h-3 mr-1" />
+                          Pay Now
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <CardContent className="p-6">
                   {/* Header */}
