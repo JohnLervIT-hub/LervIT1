@@ -1,9 +1,10 @@
 // PERFORMANCE: React.memo optimization to prevent unnecessary re-renders
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket } from "lucide-react";
 import { getVehicleDisplayName } from "@/lib/utils";
 
@@ -53,6 +54,8 @@ const MoverCard = memo(function MoverCard({
   vehicleColor,
 }: MoverCardProps) {
   const eta = calculateETA(distance);
+  const [vehicleImageLoaded, setVehicleImageLoaded] = useState(false);
+  const [vehicleImageError, setVehicleImageError] = useState(false);
   
   return (
     <Card className="hover-elevate p-6 shadow-sm" data-testid={`card-mover-${id}`}>
@@ -104,13 +107,28 @@ const MoverCard = memo(function MoverCard({
         <div className="mb-4 rounded-lg overflow-hidden border bg-muted/30" data-testid={`vehicle-photo-container-${id}`}>
           {/* Vehicle Image Container - 16:9 aspect ratio for full visibility */}
           <div className="relative aspect-video bg-gradient-to-br from-muted to-muted/70">
-            {vehiclePhoto ? (
-              <img 
-                src={vehiclePhoto} 
-                alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
-                className="w-full h-full object-contain"
-                data-testid={`img-vehicle-${id}`}
-              />
+            {vehiclePhoto && !vehicleImageError ? (
+              <>
+                {/* Loading skeleton shown while image loads */}
+                {!vehicleImageLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Skeleton className="w-full h-full" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Truck className="w-12 h-12 text-muted-foreground/40 animate-pulse" />
+                    </div>
+                  </div>
+                )}
+                <img 
+                  src={vehiclePhoto} 
+                  alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
+                  className={`w-full h-full object-contain transition-opacity duration-300 ${vehicleImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  loading="lazy"
+                  decoding="async"
+                  onLoad={() => setVehicleImageLoaded(true)}
+                  onError={() => setVehicleImageError(true)}
+                  data-testid={`img-vehicle-${id}`}
+                />
+              </>
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <Truck className="w-16 h-16 text-muted-foreground/30" />
