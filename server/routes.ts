@@ -4056,6 +4056,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch (moverNotifyErr) {
               logEvent.error('webhook_mover_notifications', moverNotifyErr, { bookingId: booking.id });
             }
+          } else {
+            // CRITICAL: No booking found for this payment intent - this is the lost booking scenario!
+            // This should never happen if the payment flow is working correctly.
+            logEvent.error('webhook_booking_not_found', new Error('Payment succeeded but no booking found'), {
+              paymentIntentId: paymentIntent.id,
+              amount: String(paymentIntent.amount / 100),
+              metadataBookingId: paymentIntent.metadata?.bookingId || 'none',
+              metadataCustomerId: paymentIntent.metadata?.customerId || 'none',
+            });
           }
           break;
           
