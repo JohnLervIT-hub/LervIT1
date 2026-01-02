@@ -208,9 +208,9 @@ class PostgresStorage implements IStorage {
     const countResult = await db.select({ count: sql<number>`count(*)::int` }).from(bookings);
     const total = countResult[0]?.count ?? 0;
     
-    // Get paginated data
+    // Get paginated data - most recently created first for admin view
     const data = await db.select().from(bookings)
-      .orderBy(desc(bookings.preferredDate), desc(bookings.createdAt))
+      .orderBy(desc(bookings.createdAt))
       .limit(limit)
       .offset(offset);
     
