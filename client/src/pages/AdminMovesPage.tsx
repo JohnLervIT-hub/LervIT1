@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2 } from "lucide-react";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -170,17 +170,24 @@ export default function AdminMovesPage() {
 
   const completedCount = bookings?.filter(b => b.status === "completed").length || 0;
   const pendingCount = bookings?.filter(b => b.status === "pending").length || 0;
-  const inProgressCount = bookings?.filter(b => b.status === "in_progress" || b.status === "accepted").length || 0;
+  const pendingPaymentCount = bookings?.filter(b => b.status === "pending_payment" || b.status === "payment_failed").length || 0;
+  const inProgressCount = bookings?.filter(b => b.status === "in_progress" || b.status === "accepted" || b.status === "confirmed").length || 0;
   const cancelledCount = bookings?.filter(b => b.status === "cancelled").length || 0;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "pending_payment":
+        return <Badge className="bg-orange-500 text-white"><CreditCard className="w-3 h-3 mr-1" />Awaiting Payment</Badge>;
+      case "payment_failed":
+        return <Badge className="bg-red-500 text-white"><AlertTriangle className="w-3 h-3 mr-1" />Payment Failed</Badge>;
       case "completed":
         return <Badge className="bg-green-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
       case "in_progress":
         return <Badge className="bg-blue-500 text-white"><Truck className="w-3 h-3 mr-1" />In Progress</Badge>;
       case "accepted":
         return <Badge className="bg-blue-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Accepted</Badge>;
+      case "confirmed":
+        return <Badge className="bg-blue-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Confirmed</Badge>;
       case "pending":
         return <Badge className="bg-yellow-500 text-white"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
       case "cancelled":

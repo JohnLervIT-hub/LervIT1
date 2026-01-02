@@ -227,8 +227,14 @@ export default function CustomerDashboard() {
   // 6-stage move progress statuses that indicate an active/ongoing move
   const inProgressStatuses = ['en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'in_transit'];
   
+  // Payment-related statuses that need customer attention
+  const paymentStatuses = ['pending_payment', 'payment_failed'];
+  
   // Filter and sort active bookings: exclude expired bookings, sort by date/time
   const activeBookings = bookings?.filter((b) => {
+    // Always include payment-related statuses - they need immediate attention
+    if (paymentStatuses.includes(b.status)) return true;
+    
     const isActiveStatus = b.status === "pending" || b.status === "confirmed" || inProgressStatuses.includes(b.status);
     if (!isActiveStatus) return false;
     
@@ -239,7 +245,16 @@ export default function CustomerDashboard() {
     }
     return true;
   })
-    .sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
+    .sort((a, b) => {
+      // Pending payment bookings go first (urgent - need to pay)
+      if (a.status === "pending_payment" && b.status !== "pending_payment") return -1;
+      if (b.status === "pending_payment" && a.status !== "pending_payment") return 1;
+      // Payment failed goes next
+      if (a.status === "payment_failed" && b.status !== "payment_failed") return -1;
+      if (b.status === "payment_failed" && a.status !== "payment_failed") return 1;
+      // Then by date
+      return new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime();
+    }) || [];
 
   // Sort past bookings by date (most recent first)
   const pastBookings = bookings?.filter((b) => 
@@ -281,6 +296,8 @@ export default function CustomerDashboard() {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
+      case "pending_payment": return "Awaiting payment";
+      case "payment_failed": return "Payment failed";
       case "pending": return "Finding your mover";
       case "confirmed": return "Mover confirmed";
       case "en_route_to_pickup": return "Mover on the way";
@@ -296,6 +313,8 @@ export default function CustomerDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "pending_payment": return "bg-orange-500/10 text-orange-600";
+      case "payment_failed": return "bg-red-500/10 text-red-600";
       case "pending": return "bg-amber-500/10 text-amber-600";
       case "confirmed": return "bg-blue-500/10 text-blue-600";
       case "en_route_to_pickup": return "bg-green-500/10 text-green-600";
@@ -311,6 +330,10 @@ export default function CustomerDashboard() {
 
   const getNextAction = (booking: Booking) => {
     switch (booking.status) {
+      case "pending_payment":
+        return { text: "Complete payment", icon: AlertTriangle, action: () => setLocation(`/payment/${booking.id}`) };
+      case "payment_failed":
+        return { text: "Retry payment", icon: AlertTriangle, action: () => setLocation(`/payment/${booking.id}`) };
       case "pending":
         return { text: "We're finding nearby movers", icon: Clock, action: null };
       case "confirmed":
