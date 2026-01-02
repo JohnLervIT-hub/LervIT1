@@ -70,6 +70,21 @@ function validateBody<T>(schema: z.ZodSchema<T>, data: unknown): T {
   return schema.parse(data);
 }
 
+// Helper to format phone number for display (e.g., +18335551234 -> 1-833-555-1234)
+function formatPhoneNumber(phone: string): string {
+  // Remove + if present
+  const cleaned = phone.replace(/^\+/, '');
+  // US/Canada format: 1-XXX-XXX-XXXX
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return `1-${cleaned.slice(1, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+  }
+  // 10 digit format: XXX-XXX-XXXX
+  if (cleaned.length === 10) {
+    return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  }
+  return phone;
+}
+
 // Auth middleware to attach user to req (session-based)
 async function authMiddleware(req: Request, res: Response, next: Function) {
   // Check session first (secure method)
@@ -147,6 +162,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Register auth middleware globally
   app.use(authMiddleware);
+  
+  // ===== PUBLIC CONFIG ROUTES (no auth required) =====
+  // Expose support phone number for display on frontend
+  app.get("/api/config/support-phone", (_req: Request, res: Response) => {
+    const phoneNumber = process.env.TELNYX_PHONE_NUMBER || "";
+    // Return formatted phone number for display
+    res.json({ 
+      phoneNumber: phoneNumber,
+      formattedPhone: phoneNumber ? formatPhoneNumber(phoneNumber) : "1-833-LERVIT"
+    });
+  });
   
   // Serve uploaded files statically with express.static (secure against path traversal)
   const express = await import('express');

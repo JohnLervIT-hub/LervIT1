@@ -397,10 +397,14 @@ export default function Support() {
               <Mail className="w-4 h-4 text-primary" />
               <span>support@lervit.com</span>
             </div>
-            <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full text-sm">
+            <a 
+              href="tel:+18336362879" 
+              className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full text-sm hover:bg-muted transition-colors"
+              data-testid="link-support-phone"
+            >
               <Phone className="w-4 h-4 text-primary" />
-              <span>1-800-LERVIT</span>
-            </div>
+              <span>1-833-636-2879</span>
+            </a>
           </div>
         </div>
 

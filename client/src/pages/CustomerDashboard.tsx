@@ -635,19 +635,23 @@ export default function CustomerDashboard() {
         {/* Help Strip */}
         <Card className="mt-8 bg-muted/30">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                   <Phone className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <p className="font-medium text-sm">Need help?</p>
-                  <p className="text-xs text-muted-foreground">We're here for you</p>
+                  <p className="text-xs text-muted-foreground">
+                    Call us: <a href="tel:+18336362879" className="text-primary font-medium hover:underline" data-testid="link-toll-free">1-833-636-2879</a>
+                  </p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/support")}>
-                Contact Us
-                <ChevronRight className="w-4 h-4 ml-1" />
+              <Button variant="ghost" size="sm" asChild>
+                <a href="/support" data-testid="link-contact-support">
+                  Contact Us
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </a>
               </Button>
             </div>
           </CardContent>
