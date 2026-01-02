@@ -2886,6 +2886,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin-only endpoint to force-update booking status (for refunds/corrections)
+  app.patch("/api/admin/bookings/:id/status", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const statusSchema = z.object({
+        status: z.string().optional(),
+        paymentStatus: z.string().optional(),
+      });
+      
+      const updates = validateBody(statusSchema, req.body);
+      
+      if (!updates.status && !updates.paymentStatus) {
+        return res.status(400).json({ error: "Provide status and/or paymentStatus" });
+      }
+      
+      const bookingId = req.params.id;
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const booking = await storage.updateBooking(bookingId, updates);
+      
+      console.log(`[Admin] Force-updated booking ${bookingId}: status=${updates.status || 'unchanged'}, paymentStatus=${updates.paymentStatus || 'unchanged'}`);
+      
+      res.json({
+        success: true,
+        booking,
+        previousStatus: existingBooking.status,
+        previousPaymentStatus: existingBooking.paymentStatus
+      });
+    } catch (error) {
+      console.error('[Admin] Force-update booking error:', error);
+      res.status(500).json({ error: "Failed to update booking" });
+    }
+  });
+
   // Admin-only endpoint to update booking addresses
   app.patch("/api/admin/bookings/:id/addresses", async (req: Request, res: Response) => {
     try {
