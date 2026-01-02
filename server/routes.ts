@@ -6639,6 +6639,11 @@ Respond with VALID JSON only:
       // Find bookings with NULL/empty images OR old /uploads/ paths (which don't persist after deploy)
       const allBookingsResult = await storage.getAllBookings({ limit: 200 });
       const brokenBookings = allBookingsResult.data.filter((b: any) => {
+        // CRITICAL SAFETY: NEVER delete bookings that have payment intents (customer may have paid)
+        if (b.stripePaymentIntentId) return false;
+        // CRITICAL SAFETY: NEVER delete bookings with succeeded payments
+        if (b.paymentStatus === 'succeeded') return false;
+        
         if (!b.images || b.images.length === 0) return true;
         // Check if any image uses old /uploads/ path (not cloud storage)
         return b.images.some((img: string) => img.startsWith('/uploads/') && !img.startsWith('/objects/'));

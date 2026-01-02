@@ -73,27 +73,84 @@ async function expireStaleBookings() {
   try {
     const cutoffTime = new Date(Date.now() - PENDING_PAYMENT_TIMEOUT_MINUTES * 60 * 1000);
     
-    const staleBookings = await db
-      .update(bookings)
-      .set({ 
-        status: 'payment_failed',
-        paymentStatus: 'failed'
+    // First, get stale bookings WITHOUT updating them
+    const staleBookingCandidates = await db
+      .select({
+        id: bookings.id,
+        stripePaymentIntentId: bookings.stripePaymentIntentId,
+        customerId: bookings.customerId,
       })
+      .from(bookings)
       .where(
         and(
           eq(bookings.status, 'pending_payment'),
           lt(bookings.createdAt, cutoffTime)
         )
-      )
-      .returning({ id: bookings.id });
+      );
     
-    const count = staleBookings.length;
+    let expiredCount = 0;
+    let recoveredCount = 0;
     
-    if (count > 0) {
-      logEvent.cleanup('expire_stale_bookings', { staleBookings: count });
+    for (const booking of staleBookingCandidates) {
+      // CRITICAL SAFETY CHECK: Before expiring, verify with Stripe that payment hasn't succeeded
+      if (booking.stripePaymentIntentId) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+          
+          if (paymentIntent.status === 'succeeded') {
+            // Payment ACTUALLY SUCCEEDED - recover it instead of expiring!
+            // Use PENDING status (awaiting mover matching) - correct per booking state machine
+            // Note: Email is NOT sent here to avoid duplicates - recoverOrphanedPayments handles that
+            await db
+              .update(bookings)
+              .set({
+                status: BOOKING_STATUSES.PENDING,
+                paymentStatus: 'succeeded',
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(bookings.id, booking.id),
+                  eq(bookings.paymentStatus, 'pending') // Only update if not already succeeded
+                )
+              );
+            
+            recoveredCount++;
+            
+            logEvent.payment('stale_booking_recovered', {
+              bookingId: booking.id,
+              paymentIntentId: booking.stripePaymentIntentId,
+              reason: 'payment_succeeded_before_expiry',
+            });
+            
+            continue; // Don't expire this booking
+          }
+        } catch (stripeErr) {
+          // Stripe error - safe to expire (payment likely doesn't exist or failed)
+          logEvent.error('stale_booking_stripe_check', stripeErr, { bookingId: booking.id });
+        }
+      }
+      
+      // No successful payment found - safe to expire
+      await db
+        .update(bookings)
+        .set({ 
+          status: 'payment_failed',
+          paymentStatus: 'failed'
+        })
+        .where(eq(bookings.id, booking.id));
+      
+      expiredCount++;
     }
     
-    return count;
+    if (expiredCount > 0 || recoveredCount > 0) {
+      logEvent.cleanup('expire_stale_bookings', { 
+        expiredBookings: expiredCount,
+        recoveredBookings: recoveredCount,
+      });
+    }
+    
+    return expiredCount;
   } catch (error) {
     logEvent.error('expireStaleBookings', error);
     return 0;
