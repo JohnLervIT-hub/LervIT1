@@ -7004,6 +7004,83 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: BACKFILL MISSING MOVER EARNINGS =====
+  // Creates mover_earnings records for completed bookings that don't have them
+  app.post("/api/admin/backfill-mover-earnings", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get all completed bookings with movers assigned
+      const completedBookings = await db.select()
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.status, 'completed'),
+            sql`${bookings.moverId} IS NOT NULL`
+          )
+        );
+      
+      // Get existing earnings records
+      const existingEarnings = await db.select({ bookingId: moverEarnings.bookingId })
+        .from(moverEarnings);
+      
+      const existingBookingIds = new Set(existingEarnings.map(e => e.bookingId));
+      
+      // Find bookings missing earnings
+      const missingBookings = completedBookings.filter(b => !existingBookingIds.has(b.id));
+      
+      if (missingBookings.length === 0) {
+        return res.json({ 
+          success: true, 
+          message: "All completed bookings already have earnings records",
+          created: 0
+        });
+      }
+      
+      const created: { bookingId: string; moverId: string; netAmount: string }[] = [];
+      
+      for (const booking of missingBookings) {
+        if (!booking.moverId || !booking.price) continue;
+        
+        const grossAmount = parseFloat(booking.price);
+        const platformFeeAmount = grossAmount * (PLATFORM_COMMISSION_PERCENT / 100);
+        const netAmount = grossAmount - platformFeeAmount;
+        
+        try {
+          await db.insert(moverEarnings).values({
+            id: crypto.randomUUID(),
+            bookingId: booking.id,
+            moverId: booking.moverId,
+            grossAmount: grossAmount.toFixed(2),
+            platformFeePercent: PLATFORM_COMMISSION_PERCENT.toString(),
+            platformFeeAmount: platformFeeAmount.toFixed(2),
+            netAmount: netAmount.toFixed(2),
+            status: 'pending',
+            availableAt: new Date(),
+            createdAt: new Date(),
+          });
+          
+          created.push({
+            bookingId: booking.id,
+            moverId: booking.moverId,
+            netAmount: netAmount.toFixed(2)
+          });
+        } catch (err) {
+          console.error(`[Admin] Failed to create earnings for booking ${booking.id}:`, err);
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Created ${created.length} missing earnings records`,
+        created
+      });
+    } catch (error) {
+      console.error('[Admin] Backfill earnings error:', error);
+      res.status(500).json({ error: "Failed to backfill earnings" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time mover notifications
