@@ -119,11 +119,13 @@ export default function TrackTrip() {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string; durationMinutes: number } | null>(null);
   
-  // Animation state
+  // Animation state - use refs to avoid re-render dependency issues
   const [animatedPosition, setAnimatedPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [vehicleRotation, setVehicleRotation] = useState(0);
-  const previousPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const targetPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const currentAnimatedRef = useRef<{ lat: number; lng: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const isFirstPositionRef = useRef(true);
 
   // Use resilient polling with exponential backoff
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
@@ -146,6 +148,9 @@ export default function TrackTrip() {
   useEffect(() => {
     if (!locationData?.currentLocation) {
       setAnimatedPosition(null);
+      currentAnimatedRef.current = null;
+      targetPositionRef.current = null;
+      isFirstPositionRef.current = true;
       return;
     }
 
@@ -154,21 +159,38 @@ export default function TrackTrip() {
       lng: locationData.currentLocation.longitude,
     };
 
-    // Calculate rotation based on movement direction
-    if (previousPositionRef.current) {
-      const bearing = calculateBearing(previousPositionRef.current, newPosition);
-      setVehicleRotation(bearing);
-    }
-
-    // If no previous position, snap to current
-    if (!previousPositionRef.current || !animatedPosition) {
-      setAnimatedPosition(newPosition);
-      previousPositionRef.current = newPosition;
+    // Skip if position hasn't changed
+    if (
+      targetPositionRef.current &&
+      targetPositionRef.current.lat === newPosition.lat &&
+      targetPositionRef.current.lng === newPosition.lng
+    ) {
       return;
     }
 
-    // Animate from current animated position to new position
-    const startPosition = animatedPosition;
+    // Calculate rotation based on movement direction
+    if (currentAnimatedRef.current) {
+      const bearing = calculateBearing(currentAnimatedRef.current, newPosition);
+      setVehicleRotation(bearing);
+    }
+
+    // First position - snap immediately
+    if (isFirstPositionRef.current || !currentAnimatedRef.current) {
+      setAnimatedPosition(newPosition);
+      currentAnimatedRef.current = newPosition;
+      targetPositionRef.current = newPosition;
+      isFirstPositionRef.current = false;
+      return;
+    }
+
+    // Cancel any existing animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    // Store the start and target positions
+    const startPosition = { ...currentAnimatedRef.current };
+    targetPositionRef.current = newPosition;
     const startTime = performance.now();
     const duration = 2000; // 2 second smooth transition
 
@@ -181,17 +203,16 @@ export default function TrackTrip() {
       
       const interpolated = interpolatePosition(startPosition, newPosition, easeProgress);
       setAnimatedPosition(interpolated);
+      currentAnimatedRef.current = interpolated;
 
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        previousPositionRef.current = newPosition;
+        // Animation complete - update refs
+        currentAnimatedRef.current = newPosition;
       }
     };
 
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
     animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
