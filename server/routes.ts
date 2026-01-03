@@ -2575,11 +2575,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get assigned bookings
         const assignedBookings = await storage.getBookingsByMover(moverId);
         
-        // Get all pending/confirmed bookings (available to accept)
-        // Include both "pending" and "confirmed" (paid) jobs without a mover
-        const allPendingBookingsResult = await storage.getAllBookings({ limit: 200 });
-        const availableBookings = allPendingBookingsResult.data.filter(
-          (b: any) => (b.status === "pending" || b.status === "confirmed") && b.moverId === null
+        // Get all PAID bookings available for acceptance
+        // Only show "confirmed" status (paid jobs) without a mover assigned
+        // Do NOT show "pending" or "pending_payment" as those haven't paid yet
+        const allBookingsResult = await storage.getAllBookings({ limit: 200 });
+        const availableBookings = allBookingsResult.data.filter(
+          (b: any) => b.status === "confirmed" && b.moverId === null && b.paymentStatus === "succeeded"
         );
         
         // Combine both sets (remove duplicates)
@@ -2686,6 +2687,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const booking = await storage.getBooking(bookingId);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // CRITICAL: Only allow accepting PAID bookings
+      if (booking.paymentStatus !== 'succeeded') {
+        return res.status(400).json({ error: "Cannot accept booking - payment not completed" });
       }
       
       // Check if already accepted by someone (race condition check)
