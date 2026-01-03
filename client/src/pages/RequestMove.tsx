@@ -612,6 +612,17 @@ export default function RequestMove() {
   };
 
   const handleNext = () => {
+    // DEBUG: Show current state when Next is clicked
+    console.log('[RequestMove] handleNext called:', {
+      currentStep: step,
+      hasUser: !!user,
+      userId: user?.id,
+      hasImages: images?.length || 0,
+      pickupAddress,
+      dropoffAddress,
+      preSelectedMoverId
+    });
+    
     // Step 1: Validate addresses (MANDATORY)
     if (step === 1) {
       if (!pickupAddress || pickupAddress.trim() === "") {
@@ -661,10 +672,17 @@ export default function RequestMove() {
 
     // Step 2: Validate photos (MANDATORY)
     if (step === 2) {
+      console.log('[RequestMove] Step 2 validation - checking photos:', {
+        images,
+        imageCount: images?.length || 0,
+        user: !!user
+      });
+      
       if (!images || images.length === 0) {
         // For unauthenticated users, save data and redirect to login
         // They can upload photos after logging in
         if (!user) {
+          console.log('[RequestMove] No user detected - saving data and redirecting to login');
           toast({
             title: "Login Required",
             description: "Please log in to upload photos and complete your booking.",
