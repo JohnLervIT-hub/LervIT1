@@ -1,5 +1,5 @@
 // LervIT Uber-Style Live Tracking with smooth animations
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRoute } from "wouter";
 import { GoogleMap, Marker, DirectionsRenderer, OverlayView } from "@react-google-maps/api";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { ArrowLeft, MapPin, Navigation, Wifi, WifiOff, Phone, MessageCircle } fr
 import { Link } from "wouter";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, type BookingStatus } from "@shared/schema";
 import { useResilientPolling, getConnectionStatusText } from "@/hooks/useResilientPolling";
+import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 
 interface LocationData {
   bookingId: string;
@@ -40,24 +41,17 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-// Uber-style dark map options
-const mapOptions: google.maps.MapOptions = {
-  disableDefaultUI: true,
-  zoomControl: false,
-  mapTypeControl: false,
-  streetViewControl: false,
-  fullscreenControl: false,
-  styles: [
-    { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-    { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-    { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-    { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-    { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
-    { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
-    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
-  ],
-};
+// Map styles defined as plain object (no google.maps type reference at module level)
+const MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
+];
 
 // Custom car SVG icon (Uber-style) - simple version without comments
 const createCarIcon = (rotation: number = 0) => {
@@ -97,6 +91,27 @@ export default function TrackTrip() {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string; durationMinutes: number } | null>(null);
+  
+  // Google Maps loading
+  const { isLoaded, loadMaps, loadError } = useGoogleMaps();
+  
+  // Trigger Google Maps loading on mount
+  useEffect(() => {
+    loadMaps();
+  }, [loadMaps]);
+  
+  // Map options - created inside component after google is loaded
+  const mapOptions = useMemo(() => {
+    if (!isLoaded) return {};
+    return {
+      disableDefaultUI: true,
+      zoomControl: false,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      styles: MAP_STYLES,
+    };
+  }, [isLoaded]);
   
   // Animation state - use refs to avoid re-render dependency issues
   const [animatedPosition, setAnimatedPosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -285,12 +300,28 @@ export default function TrackTrip() {
     setMap(map);
   }, []);
 
-  if (isLoading || !locationData) {
+  // Show loading if Google Maps or location data not ready
+  if (!isLoaded || isLoading || !locationData) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading trip details...</p>
+          <p className="text-muted-foreground">
+            {!isLoaded ? "Loading map..." : "Loading trip details..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <p className="text-destructive">Failed to load map. Please try again.</p>
+          <Link href="/my-bookings">
+            <Button className="mt-4">Back to Bookings</Button>
+          </Link>
         </div>
       </div>
     );
