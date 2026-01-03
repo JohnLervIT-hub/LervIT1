@@ -27,14 +27,6 @@ interface MoverCardProps {
   vehicleColor?: string;
 }
 
-// Helper function to calculate ETA based on distance
-function calculateETA(distanceStr: string): number | null {
-  const match = distanceStr.match(/(\d+\.?\d*)/);
-  if (!match) return null;
-  const km = parseFloat(match[1]);
-  return Math.ceil(km * 2.2); // ~2.2 min per km in Calgary traffic
-}
-
 const MoverCard = memo(function MoverCard({
   id,
   name,
@@ -53,7 +45,6 @@ const MoverCard = memo(function MoverCard({
   licensePlate,
   vehicleColor,
 }: MoverCardProps) {
-  const eta = calculateETA(distance);
   const [vehicleImageLoaded, setVehicleImageLoaded] = useState(false);
   const [vehicleImageError, setVehicleImageError] = useState(false);
   
@@ -172,11 +163,6 @@ const MoverCard = memo(function MoverCard({
             <span className="text-muted-foreground" data-testid={`text-distance-${id}`}>
               {distance}
             </span>
-            {eta !== null && (
-              <span className="text-muted-foreground">
-                · ETA {eta} min
-              </span>
-            )}
           </div>
         </div>
 
