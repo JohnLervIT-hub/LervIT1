@@ -15,8 +15,9 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageLoader } from "@/components/PageLoader";
 import Header from "@/components/Header";
 
-// Lazy load non-critical components
-const JobNotificationSound = lazy(() => import("@/components/JobNotificationSound").then(m => ({ default: m.JobNotificationSound })));
+// Import directly to avoid HMR timing issues
+import { JobNotificationSound } from "@/components/JobNotificationSound";
+// Lazy load splash screen
 const SplashScreen = lazy(() => import("@/components/SplashScreen"));
 
 // Eagerly load critical public pages
@@ -243,9 +244,7 @@ function App() {
                   </PageTransition>
                 </div>
                 <MobileBottomNav />
-                <Suspense fallback={null}>
-                  <JobNotificationSound />
-                </Suspense>
+                <JobNotificationSound />
               </ErrorBoundary>
               <Toaster />
             </TooltipProvider>
