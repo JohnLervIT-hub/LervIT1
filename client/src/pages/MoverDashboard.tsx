@@ -1074,8 +1074,8 @@ export default function MoverDashboard() {
                 </Button>
               )}
               
-              {/* Start Trip - Confirmed status */}
-              {booking.status === "confirmed" && (
+              {/* Start Trip - Confirmed status AND assigned to this mover (not available jobs) */}
+              {booking.status === "confirmed" && booking.moverId && !showActions && (
                 <Button
                   variant="default"
                   onClick={() => startTripMutation.mutate(booking.id)}
