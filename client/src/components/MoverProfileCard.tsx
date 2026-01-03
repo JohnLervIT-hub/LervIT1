@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Star, Truck, CheckCircle, MapPin } from "lucide-react";
+import { getVehicleDisplayName, getVehicleBasePrice } from "@/lib/utils";
 
 type MoverProfileCardProps = {
   mover: {
@@ -111,12 +112,17 @@ export default function MoverProfileCard({ mover, showContactInfo = false }: Mov
               <div className="space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="secondary" data-testid="badge-vehicle-type">
-                    {mover.vehicleType}
+                    {getVehicleDisplayName(mover.vehicleType)}
                   </Badge>
                   {mover.vehicleColor && (
                     <Badge variant="outline" data-testid="badge-vehicle-color">
                       {mover.vehicleColor}
                     </Badge>
+                  )}
+                  {getVehicleBasePrice(mover.vehicleType) !== null && (
+                    <span className="text-xs text-muted-foreground" data-testid="text-base-price">
+                      From ${getVehicleBasePrice(mover.vehicleType)?.toFixed(2)}
+                    </span>
                   )}
                 </div>
                 

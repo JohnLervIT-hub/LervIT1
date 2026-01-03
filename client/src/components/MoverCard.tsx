@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket } from "lucide-react";
-import { getVehicleDisplayName } from "@/lib/utils";
+import { getVehicleDisplayName, getVehicleBasePrice } from "@/lib/utils";
 
 interface MoverCardProps {
   id: string;
@@ -138,11 +138,18 @@ const MoverCard = memo(function MoverCard({
             )}
           </div>
           {/* Vehicle Info Bar */}
-          <div className="flex items-center justify-center gap-2 px-3 py-2.5 bg-card border-t">
-            <Truck className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-semibold" data-testid={`text-vehicle-${id}`}>
-              {vehicleColor && `${vehicleColor} `}{getVehicleDisplayName(vehicleType)}
-            </span>
+          <div className="flex items-center justify-between px-3 py-2.5 bg-card border-t">
+            <div className="flex items-center gap-2">
+              <Truck className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-sm font-semibold" data-testid={`text-vehicle-${id}`}>
+                {vehicleColor && `${vehicleColor} `}{getVehicleDisplayName(vehicleType)}
+              </span>
+            </div>
+            {getVehicleBasePrice(vehicleType) !== null && (
+              <span className="text-xs text-muted-foreground" data-testid={`text-base-price-${id}`}>
+                From ${getVehicleBasePrice(vehicleType)?.toFixed(2)}
+              </span>
+            )}
           </div>
         </div>
 
