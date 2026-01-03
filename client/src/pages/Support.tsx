@@ -315,8 +315,8 @@ export default function Support() {
           a: "Upload photos of your items during booking, and our AI analyzes them to auto-fill load size, detect heavy items, and recommend the number of movers you'll need. This makes booking faster and more accurate!"
         },
         {
-          q: "Can I get explanations for my price?",
-          a: "Yes! Click 'AI Explain My Price' to get a detailed, natural language breakdown of all 7 pricing components in plain English."
+          q: "How is my price calculated?",
+          a: "Your price includes: base fee, distance fee, load size, pickup/dropoff difficulty, heavy item fee (if applicable), and mover travel fee. View the price breakdown in your booking details to see each component."
         },
       ]
     },

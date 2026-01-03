@@ -25,7 +25,7 @@ import { useLocation, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { aiPredictPrice, generatePriceExplanation, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
+import { aiPredictPrice, generatePriceExplanation, AI_FEATURES, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
@@ -1068,27 +1068,31 @@ export default function RequestMove() {
                   </div>
                 </div>
                 
-                {/* AI Feature 2: Price Explanation Button */}
-                <Button
-                  variant="outline"
-                  onClick={() => setShowPriceExplanation(!showPriceExplanation)}
-                  className="w-full mt-3"
-                  data-testid="button-ai-explain-price"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  {showPriceExplanation ? "Hide" : "AI Explain My Price"}
-                </Button>
-                
-                {showPriceExplanation && priceExplanation && (
-                  <div className="mt-3 p-4 bg-accent/10 border border-accent/30 rounded-lg">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="w-4 h-4 text-accent-foreground" />
-                      <h4 className="font-semibold text-sm">AI Price Explanation</h4>
-                    </div>
-                    <div className="text-sm whitespace-pre-line text-muted-foreground">
-                      {priceExplanation}
-                    </div>
-                  </div>
+                {/* AI Feature 2: Price Explanation Button - ARCHIVED */}
+                {AI_FEATURES.PRICE_BREAKDOWN_EXPLAINER && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowPriceExplanation(!showPriceExplanation)}
+                      className="w-full mt-3"
+                      data-testid="button-ai-explain-price"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      {showPriceExplanation ? "Hide" : "AI Explain My Price"}
+                    </Button>
+                    
+                    {showPriceExplanation && priceExplanation && (
+                      <div className="mt-3 p-4 bg-accent/10 border border-accent/30 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Sparkles className="w-4 h-4 text-accent-foreground" />
+                          <h4 className="font-semibold text-sm">AI Price Explanation</h4>
+                        </div>
+                        <div className="text-sm whitespace-pre-line text-muted-foreground">
+                          {priceExplanation}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 

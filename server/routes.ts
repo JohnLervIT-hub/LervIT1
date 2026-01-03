@@ -6380,9 +6380,14 @@ Respond with VALID JSON only:
     }
   });
 
-  // Seed endpoint - ADMIN ONLY (for demo/development)
+  // Seed endpoint - ADMIN ONLY, DEVELOPMENT ONLY
   app.post("/api/seed", async (req: Request, res: Response) => {
     try {
+      // SECURITY: Block in production environment
+      if (process.env.NODE_ENV === "production") {
+        return res.status(404).json({ error: "Not found" });
+      }
+      
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
       

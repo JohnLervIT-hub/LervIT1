@@ -39,10 +39,7 @@ const AdminUsersPage = lazy(() => import("@/pages/AdminUsersPage"));
 const AdminMoversPage = lazy(() => import("@/pages/AdminMoversPage"));
 const AdminMovesPage = lazy(() => import("@/pages/AdminMovesPage"));
 const AdminRevenuePage = lazy(() => import("@/pages/AdminRevenuePage"));
-const ProximityDemo = lazy(() => import("@/pages/ProximityDemo"));
-const LifecycleDemo = lazy(() => import("@/pages/LifecycleDemo"));
-const MoverLifecycleDemo = lazy(() => import("@/pages/MoverLifecycleDemo"));
-const VideoPreview = lazy(() => import("@/pages/VideoPreview"));
+// Demo pages removed for production - archived in client/src/pages/archived/
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
@@ -69,10 +66,6 @@ function Router() {
         
         {/* Public Routes - Lazy loaded */}
         <Route path="/website" component={LandingPage} />
-        <Route path="/demo" component={ProximityDemo} />
-        <Route path="/lifecycle" component={LifecycleDemo} />
-        <Route path="/mover-lifecycle" component={MoverLifecycleDemo} />
-        <Route path="/video-preview" component={VideoPreview} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route path="/verify-email" component={VerifyEmail} />

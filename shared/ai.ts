@@ -1,5 +1,12 @@
 import { toDecimalString } from "./utils";
 
+// Feature flags for AI features
+export const AI_FEATURES = {
+  AUTO_QUOTE_PREDICTOR: true,    // AI Feature 1: Price range prediction
+  PRICE_BREAKDOWN_EXPLAINER: false, // AI Feature 2: ARCHIVED - Natural language price explanation
+  ITEM_DETECTION: true,          // AI Feature 3: Photo-based item detection
+};
+
 // AI Feature 1: Auto-Quote Predictor Types
 export interface AIEstimateInput {
   pickupAddress: string;

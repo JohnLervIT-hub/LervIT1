@@ -13,7 +13,7 @@ import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
-import { generatePriceExplanation } from "@shared/ai";
+import { generatePriceExplanation, AI_FEATURES } from "@shared/ai";
 import EditBookingForm from "@/components/EditBookingForm";
 
 // Constants for pending payment timeout (must match server)
@@ -608,43 +608,46 @@ export default function MyBookings() {
                             <span className="text-primary" data-testid={`text-breakdown-total-${booking.id}`}>${Number(booking.price).toFixed(2)} CAD</span>
                           </div>
                           
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const pickupDifficulty = parseFloat(booking.pickupDifficultyFee || "0") === 10 ? "basement" :
-                                parseFloat(booking.pickupDifficultyFee || "0") === 5 ? "stairs" :
-                                parseFloat(booking.pickupDifficultyFee || "0") === 8 ? "elevator" : "ground";
-                              const dropoffDifficulty = parseFloat(booking.dropoffDifficultyFee || "0") === 10 ? "basement" :
-                                parseFloat(booking.dropoffDifficultyFee || "0") === 5 ? "stairs" :
-                                parseFloat(booking.dropoffDifficultyFee || "0") === 8 ? "elevator" : "ground";
-                              const heavyItem = parseFloat(booking.heavyItemFee || "0") > 0;
-                              
-                              const explanation = generatePriceExplanation({
-                                baseFee: parseFloat(booking.baseFee || "30"),
-                                distanceFee: parseFloat(booking.distanceFee || "0"),
-                                loadFee: parseFloat(booking.loadFee || "0"),
-                                pickupDifficultyFee: parseFloat(booking.pickupDifficultyFee || "0"),
-                                dropoffDifficultyFee: parseFloat(booking.dropoffDifficultyFee || "0"),
-                                heavyItemFee: parseFloat(booking.heavyItemFee || "0"),
-                                moverTravelFee: parseFloat(booking.moverTravelFee || "0"),
-                                subtotal: parseFloat(booking.subtotal || "0"),
-                                numberOfMovers: booking.numberOfMovers || 1,
-                                finalTotal: parseFloat(booking.price || "0"),
-                                distance: parseFloat(booking.distance || "0"),
-                                loadSize: booking.loadSize || "small",
-                                pickupDifficulty,
-                                dropoffDifficulty,
-                                heavyItem
-                              });
-                              alert(explanation);
-                            }}
-                            className="w-full mt-3"
-                            data-testid={`button-ai-explain-${booking.id}`}
-                          >
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            AI Explain My Price
-                          </Button>
+                          {/* AI Feature 2: Price Explanation - ARCHIVED */}
+                          {AI_FEATURES.PRICE_BREAKDOWN_EXPLAINER && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const pickupDifficulty = parseFloat(booking.pickupDifficultyFee || "0") === 10 ? "basement" :
+                                  parseFloat(booking.pickupDifficultyFee || "0") === 5 ? "stairs" :
+                                  parseFloat(booking.pickupDifficultyFee || "0") === 8 ? "elevator" : "ground";
+                                const dropoffDifficulty = parseFloat(booking.dropoffDifficultyFee || "0") === 10 ? "basement" :
+                                  parseFloat(booking.dropoffDifficultyFee || "0") === 5 ? "stairs" :
+                                  parseFloat(booking.dropoffDifficultyFee || "0") === 8 ? "elevator" : "ground";
+                                const heavyItem = parseFloat(booking.heavyItemFee || "0") > 0;
+                                
+                                const explanation = generatePriceExplanation({
+                                  baseFee: parseFloat(booking.baseFee || "30"),
+                                  distanceFee: parseFloat(booking.distanceFee || "0"),
+                                  loadFee: parseFloat(booking.loadFee || "0"),
+                                  pickupDifficultyFee: parseFloat(booking.pickupDifficultyFee || "0"),
+                                  dropoffDifficultyFee: parseFloat(booking.dropoffDifficultyFee || "0"),
+                                  heavyItemFee: parseFloat(booking.heavyItemFee || "0"),
+                                  moverTravelFee: parseFloat(booking.moverTravelFee || "0"),
+                                  subtotal: parseFloat(booking.subtotal || "0"),
+                                  numberOfMovers: booking.numberOfMovers || 1,
+                                  finalTotal: parseFloat(booking.price || "0"),
+                                  distance: parseFloat(booking.distance || "0"),
+                                  loadSize: booking.loadSize || "small",
+                                  pickupDifficulty,
+                                  dropoffDifficulty,
+                                  heavyItem
+                                });
+                                alert(explanation);
+                              }}
+                              className="w-full mt-3"
+                              data-testid={`button-ai-explain-${booking.id}`}
+                            >
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              AI Explain My Price
+                            </Button>
+                          )}
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
