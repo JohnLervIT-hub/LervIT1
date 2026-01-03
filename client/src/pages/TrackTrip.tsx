@@ -53,11 +53,18 @@ const MAP_STYLES = [
   { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
 ];
 
-// Custom car SVG icon (Uber-style) - simple version without comments
-const createCarIcon = (rotation: number = 0) => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><g transform="rotate(${rotation} 20 20)"><ellipse cx="20" cy="32" rx="10" ry="2" fill="rgba(0,0,0,0.15)"/><rect x="10" y="8" width="20" height="22" rx="4" fill="#1a1a1a"/><rect x="12" y="12" width="16" height="8" rx="2" fill="#333"/><rect x="13" y="6" width="14" height="5" rx="2" fill="#5599dd"/><rect x="13" y="24" width="14" height="4" rx="1" fill="#5599dd"/><circle cx="13" cy="5" r="2" fill="#ffeb3b"/><circle cx="27" cy="5" r="2" fill="#ffeb3b"/><rect x="12" y="28" width="4" height="2" rx="1" fill="#ff4444"/><rect x="24" y="28" width="4" height="2" rx="1" fill="#ff4444"/></g></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-};
+// Simple car icon as base64 encoded SVG (more reliable across browsers)
+const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <circle cx="24" cy="24" r="22" fill="#1a1a1a"/>
+  <circle cx="24" cy="24" r="18" fill="#2d2d2d"/>
+  <path d="M16 28 L16 22 L18 16 L30 16 L32 22 L32 28 L30 30 L18 30 Z" fill="#4a90d9"/>
+  <rect x="17" y="17" width="14" height="6" rx="1" fill="#87ceeb"/>
+  <circle cx="18" cy="28" r="2" fill="#333"/>
+  <circle cx="30" cy="28" r="2" fill="#333"/>
+  <circle cx="24" cy="12" r="3" fill="#4CAF50"/>
+</svg>`;
+
+const CAR_ICON_URL = `data:image/svg+xml;base64,${btoa(CAR_ICON_SVG)}`;
 
 // Smooth interpolation between positions
 function interpolatePosition(
@@ -393,9 +400,9 @@ export default function TrackTrip() {
           <Marker
             position={animatedPosition}
             icon={{
-              url: createCarIcon(vehicleRotation),
-              scaledSize: new google.maps.Size(40, 40),
-              anchor: new google.maps.Point(20, 20),
+              url: CAR_ICON_URL,
+              scaledSize: new google.maps.Size(48, 48),
+              anchor: new google.maps.Point(24, 24),
             }}
             data-testid="marker-mover"
           />
