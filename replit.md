@@ -136,3 +136,10 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Preconnect Hints:** Added preconnect for Google Maps and Stripe domains to reduce DNS/TLS latency.
 *   **React Query Caching:** Configured with `staleTime: Infinity` and 10-minute garbage collection for optimal caching.
 *   **Upload Caching:** Static uploads cached for 1 year with `max-age=31536000`.
+
+### Login-First Mover Selection Flow (Jan 3, 2026)
+*   **Simplified Booking Flow:** When an unauthenticated user selects a mover from Browse Movers, they are redirected to login first.
+*   **URL-Based Redirect:** Login page receives `/login?redirect=/request-move?moverId=XYZ` and redirects back after authentication.
+*   **Dual URL Param Reading:** RequestMove uses both wouter's `useSearch` hook AND `window.location.search` as fallback to reliably capture moverId.
+*   **Pre-Selected Mover Display:** After login, the booking page loads with the selected mover already displayed in a card.
+*   **Key Benefit:** No form data persistence needed - the user hasn't filled anything yet when they select a mover.
