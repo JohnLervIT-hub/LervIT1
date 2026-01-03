@@ -108,6 +108,95 @@ function toRadians(degrees: number): number {
 }
 
 /**
+ * Get driving distances from one origin to multiple destinations in a single API call
+ * More efficient than calling getDrivingDistance multiple times
+ * Distance Matrix API supports up to 25 destinations per request
+ */
+export async function getBatchDrivingDistances(
+  origin: Coordinates,
+  destinations: Array<{ id: string; coords: Coordinates }>
+): Promise<Map<string, DrivingDistance>> {
+  const results = new Map<string, DrivingDistance>();
+  
+  // Handle empty destinations
+  if (destinations.length === 0) {
+    return results;
+  }
+  
+  // Filter out destinations with invalid coordinates
+  const validDestinations = destinations.filter(d => 
+    d.coords.lat !== null && d.coords.lng !== null && 
+    !isNaN(d.coords.lat) && !isNaN(d.coords.lng)
+  );
+  
+  if (validDestinations.length === 0) {
+    return results;
+  }
+  
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn("[Google Maps] API key not configured, using fallback for batch distances");
+    validDestinations.forEach(dest => {
+      results.set(dest.id, fallbackDistance(origin, dest.coords));
+    });
+    return results;
+  }
+
+  try {
+    // Format destinations for API (max 25 per request)
+    const destinationStrings = validDestinations.map(d => `${d.coords.lat},${d.coords.lng}`);
+    
+    const response = await client.distancematrix({
+      params: {
+        origins: [`${origin.lat},${origin.lng}`],
+        destinations: destinationStrings,
+        mode: TravelMode.driving,
+        units: UnitSystem.metric,
+        key: GOOGLE_MAPS_API_KEY,
+      },
+      timeout: 10000, // Longer timeout for batch requests
+    });
+
+    if (response.data.status !== "OK") {
+      console.warn(`[Google Maps] Batch Distance Matrix API returned non-OK status: ${response.data.status}, falling back`);
+      validDestinations.forEach(dest => {
+        results.set(dest.id, fallbackDistance(origin, dest.coords));
+      });
+      return results;
+    }
+
+    const elements = response.data.rows[0]?.elements || [];
+    
+    validDestinations.forEach((dest, index) => {
+      const element = elements[index];
+      
+      if (element && element.status === "OK") {
+        const distanceKm = element.distance.value / 1000;
+        const durationMinutes = element.duration.value / 60;
+        
+        results.set(dest.id, {
+          distanceKm: Math.round(distanceKm * 100) / 100,
+          durationMinutes: Math.round(durationMinutes),
+          success: true,
+        });
+      } else {
+        // Fallback for this specific destination
+        results.set(dest.id, fallbackDistance(origin, dest.coords));
+      }
+    });
+    
+    console.log(`[Google Maps] ✓ Batch distance calculation: ${results.size} destinations processed`);
+    
+    return results;
+  } catch (error) {
+    console.error("[Google Maps] Batch Distance Matrix API error, using fallback:", error instanceof Error ? error.message : String(error));
+    validDestinations.forEach(dest => {
+      results.set(dest.id, fallbackDistance(origin, dest.coords));
+    });
+    return results;
+  }
+}
+
+/**
  * Geocode an address to get coordinates using Google Geocoding API
  * Falls back to mock geocoding if API fails
  */

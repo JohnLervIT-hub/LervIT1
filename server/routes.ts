@@ -1102,24 +1102,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       
-      // Enrich movers with user data and calculate distance
+      // Calculate driving distances using Google Maps API (batch request for efficiency)
+      let drivingDistances: Map<string, { distanceKm: number; durationMinutes: number }> = new Map();
+      
+      if (userLat && userLng) {
+        const { getBatchDrivingDistances } = await import("./google-maps");
+        
+        // Prepare destinations for batch API call
+        const destinations = movers
+          .filter(m => m.latitude !== null && m.longitude !== null)
+          .map(m => ({
+            id: m.id,
+            coords: { lat: m.latitude!, lng: m.longitude! }
+          }));
+        
+        // Get driving distances in a single API call
+        drivingDistances = await getBatchDrivingDistances(
+          { lat: userLat, lng: userLng },
+          destinations
+        );
+      }
+      
+      // Enrich movers with user data and driving distance
       let enrichedMovers = await Promise.all(
         movers.map(async (mover) => {
           const user = await storage.getUser(mover.userId);
           
-          let distance: number | null = null;
-          if (userLat && userLng && mover.latitude !== null && mover.longitude !== null) {
-            distance = calculateDistance(
-              userLat,
-              userLng,
-              mover.latitude,
-              mover.longitude
-            );
-          }
+          // Get driving distance from batch results
+          const drivingData = drivingDistances.get(mover.id);
+          const distance = drivingData?.distanceKm ?? null;
+          const drivingMinutes = drivingData?.durationMinutes ?? null;
           
           return {
             ...mover,
             distance,
+            drivingMinutes,
             user: user ? { name: user.name, email: user.email, phone: user.phone } : null
           };
         })
@@ -1136,6 +1153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(enrichedMovers);
     } catch (error) {
+      console.error('Get movers error:', error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

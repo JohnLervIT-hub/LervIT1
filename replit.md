@@ -123,3 +123,9 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Decline Button:** Movers can now decline job offers from their dashboard.
 *   **API Endpoint:** `POST /api/bookings/:id/decline` marks job notification as declined.
 *   **Prevents Re-acceptance:** Declined jobs no longer appear in available jobs list.
+
+### Improved Proximity & Mover Selection
+*   **Accurate Driving Distances:** Browse Movers page now uses Google Maps Distance Matrix API for real driving distances (not straight-line). Implemented batch API call (`getBatchDrivingDistances`) for efficiency.
+*   **Driving Time Display:** Movers now show "X km · Y min drive" format for accurate ETAs.
+*   **Pre-Selected Mover UI:** RequestMove page now displays a card showing the customer's selected mover (name, rating, vehicle type, completed moves) with option to change or remove selection.
+*   **Direct Mover Assignment:** When customer selects a mover from Browse Movers, that mover is directly assigned after payment (no proximity matching).

@@ -328,25 +328,37 @@ export default function BrowseMovers() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMovers.map((mover: any) => (
-              <MoverCard
-                key={mover.id}
-                id={mover.id}
-                name={mover.user?.name || "Unknown"}
-                photo={mover.moverImage || undefined}
-                rating={parseFloat(mover.rating) || 0}
-                reviewCount={mover.totalMoves || 0}
-                vehicleType={mover.vehicleType}
-                distance={mover.distance ? `${mover.distance} km away` : (mover.location || "Calgary, AB")}
-                price={0}
-                verified={mover.isVerified}
-                completedMoves={mover.totalMoves || 0}
-                onSelect={handleSelectMover}
-                vehiclePhoto={mover.vehiclePhoto || undefined}
-                licensePlate={mover.licensePlate || undefined}
-                vehicleColor={mover.vehicleColor || undefined}
-              />
-            ))}
+            {filteredMovers.map((mover: any) => {
+              // Format distance with driving time if available
+              let distanceDisplay = mover.location || "Calgary, AB";
+              if (mover.distance !== null && mover.distance !== undefined) {
+                if (mover.drivingMinutes !== null && mover.drivingMinutes !== undefined) {
+                  distanceDisplay = `${mover.distance} km · ${mover.drivingMinutes} min drive`;
+                } else {
+                  distanceDisplay = `${mover.distance} km away`;
+                }
+              }
+              
+              return (
+                <MoverCard
+                  key={mover.id}
+                  id={mover.id}
+                  name={mover.user?.name || "Unknown"}
+                  photo={mover.moverImage || undefined}
+                  rating={parseFloat(mover.rating) || 0}
+                  reviewCount={mover.totalMoves || 0}
+                  vehicleType={mover.vehicleType}
+                  distance={distanceDisplay}
+                  price={0}
+                  verified={mover.isVerified}
+                  completedMoves={mover.totalMoves || 0}
+                  onSelect={handleSelectMover}
+                  vehiclePhoto={mover.vehiclePhoto || undefined}
+                  licensePlate={mover.licensePlate || undefined}
+                  vehicleColor={mover.vehicleColor || undefined}
+                />
+              );
+            })}
           </div>
         )}
         

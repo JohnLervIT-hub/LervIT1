@@ -1,7 +1,8 @@
 // PERFORMANCE: Preload Payment page when step >= 2
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -102,6 +103,18 @@ export default function RequestMove() {
   
   // Pre-selected mover from Browse Movers page
   const [preSelectedMoverId, setPreSelectedMoverId] = useState<string | null>(null);
+  
+  // Fetch pre-selected mover details
+  const { data: selectedMover } = useQuery({
+    queryKey: ['/api/movers', preSelectedMoverId],
+    queryFn: async () => {
+      if (!preSelectedMoverId) return null;
+      const res = await fetch(`/api/movers/${preSelectedMoverId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!preSelectedMoverId,
+  });
   
   // Location permission state
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
@@ -1044,6 +1057,51 @@ export default function RequestMove() {
                 </h2>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Selected Mover Display */}
+                {selectedMover && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4" data-testid="selected-mover-card">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-12 h-12">
+                          <AvatarImage src={selectedMover.moverImage} alt={selectedMover.user?.name} />
+                          <AvatarFallback className="bg-primary text-primary-foreground">
+                            {selectedMover.user?.name?.charAt(0)?.toUpperCase() || 'M'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold" data-testid="text-selected-mover-name">
+                              {selectedMover.user?.name || 'Selected Mover'}
+                            </span>
+                            <div className="flex items-center text-sm text-muted-foreground">
+                              <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400 mr-0.5" />
+                              {parseFloat(selectedMover.rating || '0').toFixed(1)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Truck className="w-3.5 h-3.5" />
+                            <span className="capitalize">{selectedMover.vehicleType || 'Vehicle'}</span>
+                            <span>•</span>
+                            <span>{selectedMover.totalMoves || 0} moves completed</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => setPreSelectedMoverId(null)}
+                        className="text-muted-foreground hover:text-destructive"
+                        data-testid="button-remove-mover"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      This mover will be directly assigned after payment. <a href="/browse-movers" className="text-primary underline">Change mover</a>
+                    </p>
+                  </div>
+                )}
+                
                 {step === 1 && (
                   <>
                     {/* Grand Location Selector */}
