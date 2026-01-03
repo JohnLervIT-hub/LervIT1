@@ -134,17 +134,13 @@ export default function MyBookings() {
   const sortedBookings = bookings
     ?.filter(b => {
       if (!b) return false;
-      // Always keep pending_payment bookings - they need to show the payment button
-      if (b.status === "pending_payment") return true;
+      // Always show active bookings - status-based display, no date filtering
+      // This prevents timezone issues from hiding valid bookings
+      const activeStatuses = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"];
+      if (activeStatuses.includes(b.status)) return true;
       // Also keep bookings with failed payment status
       if (b.paymentStatus === "failed") return true;
-      // Keep in_transit and payment_failed as they're active
-      if (b.status === "in_transit" || b.status === "payment_failed") return true;
-      // Filter out expired pending/confirmed bookings only
-      const isActiveStatus = ["pending", "confirmed"].includes(b.status);
-      if (isActiveStatus && safeParseDate(b.preferredDate) < now) {
-        return false;
-      }
+      // Show completed/cancelled bookings as history
       return true;
     })
     .sort((a, b) => {
