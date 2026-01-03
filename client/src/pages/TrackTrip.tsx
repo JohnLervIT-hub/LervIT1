@@ -59,31 +59,10 @@ const mapOptions: google.maps.MapOptions = {
   ],
 };
 
-// Custom white car SVG icon (Uber-style)
+// Custom car SVG icon (Uber-style) - simple version without comments
 const createCarIcon = (rotation: number = 0) => {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-      <g transform="rotate(${rotation}, 24, 24)">
-        <!-- Car body shadow -->
-        <ellipse cx="24" cy="38" rx="12" ry="3" fill="rgba(0,0,0,0.2)"/>
-        <!-- Car body -->
-        <rect x="14" y="16" width="20" height="24" rx="4" fill="#1a1a1a"/>
-        <!-- Car roof -->
-        <rect x="16" y="20" width="16" height="10" rx="2" fill="#2a2a2a"/>
-        <!-- Windshield -->
-        <rect x="17" y="14" width="14" height="6" rx="2" fill="#4a90d9"/>
-        <!-- Rear window -->
-        <rect x="17" y="32" width="14" height="4" rx="1" fill="#4a90d9"/>
-        <!-- Headlights -->
-        <rect x="16" y="12" width="4" height="2" rx="1" fill="#ffeb3b"/>
-        <rect x="28" y="12" width="4" height="2" rx="1" fill="#ffeb3b"/>
-        <!-- Taillights -->
-        <rect x="16" y="38" width="4" height="2" rx="1" fill="#f44336"/>
-        <rect x="28" y="38" width="4" height="2" rx="1" fill="#f44336"/>
-      </g>
-    </svg>
-  `;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><g transform="rotate(${rotation} 20 20)"><ellipse cx="20" cy="32" rx="10" ry="2" fill="rgba(0,0,0,0.15)"/><rect x="10" y="8" width="20" height="22" rx="4" fill="#1a1a1a"/><rect x="12" y="12" width="16" height="8" rx="2" fill="#333"/><rect x="13" y="6" width="14" height="5" rx="2" fill="#5599dd"/><rect x="13" y="24" width="14" height="4" rx="1" fill="#5599dd"/><circle cx="13" cy="5" r="2" fill="#ffeb3b"/><circle cx="27" cy="5" r="2" fill="#ffeb3b"/><rect x="12" y="28" width="4" height="2" rx="1" fill="#ff4444"/><rect x="24" y="28" width="4" height="2" rx="1" fill="#ff4444"/></g></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
 
 // Smooth interpolation between positions
@@ -384,8 +363,8 @@ export default function TrackTrip() {
             position={animatedPosition}
             icon={{
               url: createCarIcon(vehicleRotation),
-              scaledSize: new google.maps.Size(48, 48),
-              anchor: new google.maps.Point(24, 24),
+              scaledSize: new google.maps.Size(40, 40),
+              anchor: new google.maps.Point(20, 20),
             }}
             data-testid="marker-mover"
           />

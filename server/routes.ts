@@ -6410,8 +6410,9 @@ Respond with VALID JSON only:
         return res.status(403).json({ error: "You are not authorized to update location for this booking" });
       }
       
-      if (booking.status !== 'in_transit') {
-        return res.status(400).json({ error: "Booking is not in transit" });
+      // Allow location updates for all active statuses (en_route, loading, unloading, etc.)
+      if (!ACTIVE_STATUSES.includes(booking.status as any)) {
+        return res.status(400).json({ error: "Location updates only allowed during active trip statuses" });
       }
       
       // Update location
