@@ -230,20 +230,21 @@ export default function CustomerDashboard() {
   // Payment-related statuses that need customer attention
   const paymentStatuses = ['pending_payment', 'payment_failed'];
   
-  // Filter and sort active bookings: exclude expired bookings, sort by date/time
+  // Filter and sort active bookings: show all non-completed/cancelled bookings
+  // Critical: Always show payment-related and pending statuses regardless of date
+  // so customers can complete payment or see their waiting bookings
   const activeBookings = bookings?.filter((b) => {
     // Always include payment-related statuses - they need immediate attention
     if (paymentStatuses.includes(b.status)) return true;
     
-    const isActiveStatus = b.status === "pending" || b.status === "confirmed" || inProgressStatuses.includes(b.status);
-    if (!isActiveStatus) return false;
+    // Always include pending/confirmed - customer needs visibility until mover completes or cancels
+    if (b.status === "pending" || b.status === "confirmed") return true;
     
-    // Exclude any active booking where the scheduled date has passed
-    // Exception: in-progress bookings are kept since the move is actively happening
-    if (!inProgressStatuses.includes(b.status) && new Date(b.preferredDate) < now) {
-      return false;
-    }
-    return true;
+    // Include in-progress statuses (active moves)
+    if (inProgressStatuses.includes(b.status)) return true;
+    
+    // Exclude completed/cancelled (they go to past bookings)
+    return false;
   })
     .sort((a, b) => {
       // Pending payment bookings go first (urgent - need to pay)

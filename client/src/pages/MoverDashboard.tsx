@@ -325,21 +325,23 @@ export default function MoverDashboard() {
   // Auto-filter expired bookings and sort by preferredDate (soonest first)
   const now = new Date();
   
-  // Active bookings: assigned to this mover, not completed/cancelled, and not expired
-  // Exception: active status bookings are kept since the move is actively happening
+  // Active bookings: assigned to this mover, not completed/cancelled
+  // Show all assigned jobs regardless of date - mover needs visibility until completion
   const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
     ?.filter((b) => {
       const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
-      if (!isActiveStatus) return false;
-      // Keep active statuses regardless of date, filter out expired confirmed
-      const isCurrentlyActive = ACTIVE_STATUSES.includes(b.status as BookingStatus) || b.status === "in_transit";
-      if (!isCurrentlyActive && new Date(b.preferredDate) < now) {
-        return false;
-      }
-      return true;
+      return isActiveStatus;
     })
-    ?.sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
+    ?.sort((a, b) => {
+      // Sort upcoming first, then past-dated at the end
+      const aDate = new Date(a.preferredDate);
+      const bDate = new Date(b.preferredDate);
+      const aIsPast = aDate < now;
+      const bIsPast = bDate < now;
+      if (aIsPast !== bIsPast) return aIsPast ? 1 : -1;
+      return aDate.getTime() - bDate.getTime();
+    }) || [];
   
   // Past bookings: completed or cancelled, sorted by most recent first
   const pastBookings = allBookings
@@ -350,11 +352,20 @@ export default function MoverDashboard() {
   const bookings = [...activeBookings, ...pastBookings];
   
   // Show both "pending" and "confirmed" (paid) jobs that don't have a mover assigned yet
-  // Filter out expired pickup schedules (preferredDate is in the past)
+  // Don't filter by preferredDate - movers should see all available jobs
+  // Customers may reschedule, or bookings may need manual handling
+  // Jobs are only hidden after explicit cancellation/expiration by backend
   const availableBookings = allBookings
     ?.filter((b) => (b.status === "pending" || b.status === "confirmed") && !b.moverId)
-    ?.filter((b) => new Date(b.preferredDate) >= now) // Hide expired pickups
-    ?.sort((a, b) => new Date(a.preferredDate).getTime() - new Date(b.preferredDate).getTime()) || [];
+    ?.sort((a, b) => {
+      // Sort upcoming jobs first, then past-dated jobs at the end
+      const aDate = new Date(a.preferredDate);
+      const bDate = new Date(b.preferredDate);
+      const aIsPast = aDate < now;
+      const bIsPast = bDate < now;
+      if (aIsPast !== bIsPast) return aIsPast ? 1 : -1; // Future dates first
+      return aDate.getTime() - bDate.getTime();
+    }) || [];
   
   // Check if mover already has a trip in progress (to block starting multiple trips)
   const hasActiveTrip = bookings.some((b) => 
