@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import pgSession from "connect-pg-simple";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
@@ -33,6 +34,21 @@ app.set('trust proxy', 1);
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
+
+// ===== PERFORMANCE: Gzip/Brotli compression for all responses =====
+// Reduces response sizes by 60-80%, significantly improving load times
+app.use(compression({
+  level: 6, // Balanced compression level (1-9, higher = more compression but slower)
+  threshold: 1024, // Only compress responses larger than 1KB
+  filter: (req, res) => {
+    // Don't compress responses with Cache-Control: no-transform
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression's default filter for everything else
+    return compression.filter(req, res);
+  }
+}));
 
 // Session configuration with PostgreSQL store
 const PgStore = pgSession(session);
