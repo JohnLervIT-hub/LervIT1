@@ -343,7 +343,7 @@ export default function TrackTrip() {
     : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
 
   return (
-    <div className="h-screen w-full relative overflow-hidden bg-background">
+    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-background">
       {/* Full-screen Google Map */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
