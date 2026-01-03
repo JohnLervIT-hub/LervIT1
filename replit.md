@@ -128,7 +128,12 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Accurate Driving Distances:** Browse Movers page now uses Google Maps Distance Matrix API for real driving distances (not straight-line). Implemented batch API call (`getBatchDrivingDistances`) for efficiency.
 *   **Driving Time Display:** Movers now show "X km · Y min drive" format for accurate ETAs.
 *   **Pre-Selected Mover UI:** RequestMove page now displays a card showing the customer's selected mover (name, rating, vehicle type, completed moves) with option to change or remove selection.
-*   **Direct Mover Assignment:** When customer selects a mover from Browse Movers, that mover is directly assigned after payment (no proximity matching).
+*   **Two-Stage Assignment Flow:** When customer pre-selects a mover:
+    1. After payment, the pre-selected mover receives a PENDING notification (not auto-assigned)
+    2. Mover dashboard shows "Priority Request" badge (orange gradient with star icon) for pre-selected jobs
+    3. Mover must explicitly accept or decline the job
+    4. If declined, system clears preSelectedMoverId and triggers proximity matching to find other movers
+*   **Decline Fallback Logic:** When pre-selected mover declines, system automatically notifies 5 nearest available movers within 15-50km radius.
 
 ### Performance Optimizations
 *   **Gzip/Brotli Compression:** Added compression middleware to reduce API response sizes by 60-80%.
