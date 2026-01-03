@@ -32,7 +32,15 @@ export default function Login() {
       const params = new URLSearchParams(window.location.search);
       const redirectPath = params.get('redirect');
       
+      console.log('[Login] Redirect check:', {
+        user: !!user,
+        isLoading,
+        redirectPath,
+        fullSearch: window.location.search
+      });
+      
       if (redirectPath) {
+        console.log('[Login] Redirecting to:', redirectPath);
         setLocation(redirectPath);
       } else {
         if (user.role === "customer") {

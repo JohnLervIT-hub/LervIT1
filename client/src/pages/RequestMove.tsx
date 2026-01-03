@@ -124,7 +124,8 @@ export default function RequestMove() {
   const isRestoringRef = useRef(false);
   
   // Check on mount if we have pending booking data (synchronous check before effects run)
-  const hasPendingBooking = useRef(!!sessionStorage.getItem('pendingBooking'));
+  // Use localStorage instead of sessionStorage for better persistence across redirects
+  const hasPendingBooking = useRef(!!localStorage.getItem('pendingBooking'));
 
   // Check location permission on mount - but skip if restoring saved data
   useEffect(() => {
@@ -200,14 +201,21 @@ export default function RequestMove() {
     // Prevent double restoration on strict mode or fast re-renders
     if (hasRestoredRef.current) return;
     
-    // First, check for pending booking data from sessionStorage (user returned from login)
-    const pendingBookingData = sessionStorage.getItem('pendingBooking');
+    // First, check for pending booking data from localStorage (user returned from login)
+    const pendingBookingData = localStorage.getItem('pendingBooking');
+    console.log('[RequestMove] Restoration check:', { 
+      hasPendingData: !!pendingBookingData,
+      hasRestoredRef: hasRestoredRef.current,
+      rawData: pendingBookingData 
+    });
+    
     if (pendingBookingData) {
       hasRestoredRef.current = true;
       isRestoringRef.current = true;
       
       try {
         const data = JSON.parse(pendingBookingData);
+        console.log('[RequestMove] Restoring data:', data);
         
         // Batch all state updates together
         setPickupAddress(data.pickupAddress || "");
@@ -228,7 +236,7 @@ export default function RequestMove() {
         
         // Use requestAnimationFrame to ensure React has flushed all state updates
         requestAnimationFrame(() => {
-          sessionStorage.removeItem('pendingBooking');
+          localStorage.removeItem('pendingBooking');
           hasPendingBooking.current = false;
           isRestoringRef.current = false;
           window.scrollTo({ top: 0, behavior: "smooth" });
@@ -241,7 +249,7 @@ export default function RequestMove() {
         return;
       } catch (error) {
         console.error("Failed to restore pending booking:", error);
-        sessionStorage.removeItem('pendingBooking');
+        localStorage.removeItem('pendingBooking');
         hasPendingBooking.current = false;
         isRestoringRef.current = false;
       }
@@ -663,8 +671,16 @@ export default function RequestMove() {
       setStep(step + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
+      console.log('[RequestMove] handleNext on Step 3 - checking conditions:', {
+        step,
+        date,
+        user: !!user,
+        userId: user?.id
+      });
+      
       // Validate date before submission
       if (!date) {
+        console.log('[RequestMove] Date validation failed');
         toast({
           title: "Date required",
           description: "Please select a preferred date and time.",
@@ -681,7 +697,7 @@ export default function RequestMove() {
           variant: "destructive",
         });
         // Store current form data in sessionStorage so user can resume after login
-        sessionStorage.setItem('pendingBooking', JSON.stringify({
+        const pendingData = {
           pickupAddress,
           dropoffAddress,
           pickupDifficulty,
@@ -693,7 +709,11 @@ export default function RequestMove() {
           images,
           date,
           preSelectedMoverId: preSelectedMoverId || null
-        }));
+        };
+        console.log('[RequestMove] Saving pending booking:', pendingData);
+        localStorage.setItem('pendingBooking', JSON.stringify(pendingData));
+        // Verify it was saved
+        console.log('[RequestMove] Verified saved:', localStorage.getItem('pendingBooking'));
         // Redirect to login with return path (include moverId if selected)
         const returnPath = preSelectedMoverId 
           ? `/request-move?moverId=${preSelectedMoverId}`
