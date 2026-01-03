@@ -217,6 +217,10 @@ export default function RequestMove() {
         const data = JSON.parse(pendingBookingData);
         console.log('[RequestMove] Restoring data:', data);
         
+        // Clear localStorage FIRST to prevent double-restoration in StrictMode
+        localStorage.removeItem('pendingBooking');
+        console.log('[RequestMove] Cleared localStorage, now restoring state...');
+        
         // Batch all state updates together
         setPickupAddress(data.pickupAddress || "");
         setDropoffAddress(data.dropoffAddress || "");
@@ -235,16 +239,19 @@ export default function RequestMove() {
         // Resume at the appropriate step - default to step 3 if they completed everything
         // If they were blocked at step 2 (no photos), resume there
         const resumeStep = data.resumeStep || (data.images && data.images.length > 0 && data.date ? 3 : 2);
-        console.log('[RequestMove] Resuming at step:', resumeStep);
+        console.log('[RequestMove] Resuming at step:', resumeStep, 'with data:', {
+          pickupAddress: data.pickupAddress,
+          dropoffAddress: data.dropoffAddress,
+          preSelectedMoverId: data.preSelectedMoverId
+        });
         setStep(resumeStep);
         
-        // Use requestAnimationFrame to ensure React has flushed all state updates
-        requestAnimationFrame(() => {
-          localStorage.removeItem('pendingBooking');
+        // Use setTimeout to ensure state is set before cleanup
+        setTimeout(() => {
           hasPendingBooking.current = false;
           isRestoringRef.current = false;
           window.scrollTo({ top: 0, behavior: "smooth" });
-        });
+        }, 100);
         
         toast({
           title: "Welcome Back!",
