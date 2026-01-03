@@ -124,8 +124,10 @@ export default function RequestMove() {
   const isRestoringRef = useRef(false);
   
   // Check on mount if we have pending booking data (synchronous check before effects run)
-  // Use localStorage instead of sessionStorage for better persistence across redirects
-  const hasPendingBooking = useRef(!!localStorage.getItem('pendingBooking'));
+  // Try both localStorage and sessionStorage for maximum compatibility
+  const hasPendingBooking = useRef(
+    !!(localStorage.getItem('pendingBooking') || sessionStorage.getItem('pendingBooking'))
+  );
 
   // Check location permission on mount - but skip if restoring saved data
   useEffect(() => {
@@ -201,12 +203,30 @@ export default function RequestMove() {
     // Prevent double restoration on strict mode or fast re-renders
     if (hasRestoredRef.current) return;
     
-    // First, check for pending booking data from localStorage (user returned from login)
-    const pendingBookingData = localStorage.getItem('pendingBooking');
+    // First, check for pending booking data from storage (user returned from login)
+    // Check both localStorage and sessionStorage for maximum compatibility
+    let pendingBookingData: string | null = null;
+    let storageSource: string = 'none';
+    try {
+      pendingBookingData = localStorage.getItem('pendingBooking');
+      if (pendingBookingData) {
+        storageSource = 'localStorage';
+      } else {
+        pendingBookingData = sessionStorage.getItem('pendingBooking');
+        if (pendingBookingData) {
+          storageSource = 'sessionStorage';
+        }
+      }
+    } catch (e) {
+      console.error('[RequestMove] storage.getItem error:', e);
+    }
     console.log('[RequestMove] Restoration check:', { 
       hasPendingData: !!pendingBookingData,
       hasRestoredRef: hasRestoredRef.current,
-      rawData: pendingBookingData 
+      rawDataLength: pendingBookingData?.length || 0,
+      storageSource,
+      localStorageKeys: Object.keys(localStorage),
+      sessionStorageKeys: Object.keys(sessionStorage)
     });
     
     if (pendingBookingData) {
@@ -217,9 +237,10 @@ export default function RequestMove() {
         const data = JSON.parse(pendingBookingData);
         console.log('[RequestMove] Restoring data:', data);
         
-        // Clear localStorage FIRST to prevent double-restoration in StrictMode
+        // Clear storage FIRST to prevent double-restoration in StrictMode
         localStorage.removeItem('pendingBooking');
-        console.log('[RequestMove] Cleared localStorage, now restoring state...');
+        sessionStorage.removeItem('pendingBooking');
+        console.log('[RequestMove] Cleared storage, now restoring state...');
         
         // Batch all state updates together
         setPickupAddress(data.pickupAddress || "");
@@ -261,18 +282,55 @@ export default function RequestMove() {
       } catch (error) {
         console.error("Failed to restore pending booking:", error);
         localStorage.removeItem('pendingBooking');
+        sessionStorage.removeItem('pendingBooking');
         hasPendingBooking.current = false;
         isRestoringRef.current = false;
       }
     }
 
-    // If no pending booking, check URL parameters (from hero form or Browse Movers page)
+    // If no pending booking, check URL parameters (from hero form, Browse Movers, or redirect after login)
     const params = new URLSearchParams(window.location.search);
     const pickup = params.get('pickup');
     const dropoff = params.get('dropoff');
     const preferredDate = params.get('date');
     const moverId = params.get('moverId');
+    const pickupAccess = params.get('pickupAccess');
+    const dropoffAccess = params.get('dropoffAccess');
+    const urlLoadSize = params.get('loadSize');
+    const resumeStepParam = params.get('resumeStep');
 
+    console.log('[RequestMove] URL params check:', {
+      pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam
+    });
+
+    // Check if this is a return from login with full booking data
+    const isReturningFromLogin = !!(pickup && dropoff && resumeStepParam);
+    
+    if (isReturningFromLogin) {
+      console.log('[RequestMove] Restoring from URL params (returned from login)');
+      hasRestoredRef.current = true;
+      
+      setPickupAddress(pickup);
+      setDropoffAddress(dropoff);
+      if (pickupAccess) setPickupDifficulty(pickupAccess);
+      if (dropoffAccess) setDropoffDifficulty(dropoffAccess);
+      if (urlLoadSize) setLoadSize(urlLoadSize);
+      if (moverId) setPreSelectedMoverId(moverId);
+      
+      const resumeStep = parseInt(resumeStepParam) || 2;
+      setStep(resumeStep);
+      
+      toast({
+        title: "Welcome Back!",
+        description: "Your booking details have been restored. You can now complete your request.",
+      });
+      
+      // Clean up URL params after restoration
+      window.history.replaceState({}, '', '/request-move' + (moverId ? `?moverId=${moverId}` : ''));
+      return;
+    }
+
+    // Simple pre-fill from hero or Browse Movers
     if (pickup) {
       setPickupAddress(pickup);
     }
@@ -287,7 +345,7 @@ export default function RequestMove() {
     }
 
     // Show a toast if data was pre-filled from hero
-    if (pickup && dropoff) {
+    if (pickup && dropoff && !resumeStepParam) {
       toast({
         title: "Quote Form Pre-filled",
         description: "Your addresses have been loaded. Complete the details below to request your move.",
@@ -711,12 +769,41 @@ export default function RequestMove() {
             resumeStep: 2 // Resume at step 2 to upload photos
           };
           console.log('[RequestMove] Saving pending booking (Step 2):', pendingData);
-          localStorage.setItem('pendingBooking', JSON.stringify(pendingData));
-          console.log('[RequestMove] Verified saved:', localStorage.getItem('pendingBooking'));
-          // Redirect to login with return path
-          const returnPath = preSelectedMoverId 
-            ? `/request-move?moverId=${preSelectedMoverId}`
-            : '/request-move';
+          try {
+            const jsonData = JSON.stringify(pendingData);
+            // Save to BOTH localStorage and sessionStorage for maximum compatibility
+            localStorage.setItem('pendingBooking', jsonData);
+            sessionStorage.setItem('pendingBooking', jsonData);
+            const verifiedLocal = localStorage.getItem('pendingBooking');
+            const verifiedSession = sessionStorage.getItem('pendingBooking');
+            console.log('[RequestMove] Save verification:', {
+              attempted: jsonData.substring(0, 100),
+              localStorageSaved: verifiedLocal?.length || 0,
+              sessionStorageSaved: verifiedSession?.length || 0,
+              anySuccess: !!(verifiedLocal || verifiedSession)
+            });
+            if (!verifiedLocal && !verifiedSession) {
+              console.error('[RequestMove] BOTH storage methods FAILED - data not persisted!');
+              alert('ERROR: Could not save booking data. Your browser may be blocking storage. Please check your privacy settings.');
+              return;
+            }
+          } catch (e) {
+            console.error('[RequestMove] storage error:', e);
+            alert('ERROR: Could not save booking data: ' + (e as Error).message);
+            return;
+          }
+          // Redirect to login with return path - include essential data in URL
+          // This ensures data survives even if browser storage is cleared
+          const params = new URLSearchParams();
+          if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
+          params.set('pickup', pickupAddress);
+          params.set('dropoff', dropoffAddress);
+          params.set('pickupAccess', pickupDifficulty || '');
+          params.set('dropoffAccess', dropoffDifficulty || '');
+          params.set('loadSize', loadSize);
+          params.set('resumeStep', '2');
+          const returnPath = `/request-move?${params.toString()}`;
+          console.log('[RequestMove] Redirecting to login with return path:', returnPath);
           setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
           return;
         }
