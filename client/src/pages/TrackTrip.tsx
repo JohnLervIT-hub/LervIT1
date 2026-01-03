@@ -299,7 +299,7 @@ export default function TrackTrip() {
         });
       }
       
-      map.fitBounds(bounds, { top: 120, bottom: 280, left: 40, right: 40 });
+      map.fitBounds(bounds, { top: 120, bottom: 350, left: 40, right: 40 });
     }
   }, [map, locationData]);
 
