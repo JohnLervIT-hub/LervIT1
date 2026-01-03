@@ -480,8 +480,13 @@ export default function TrackTrip() {
                 <p className="text-3xl font-bold" data-testid="text-eta-large">{routeInfo.duration}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-muted-foreground">Distance</p>
+                <p className="text-sm text-muted-foreground">
+                  {currentLocation ? "Mover's route" : "Trip distance"}
+                </p>
                 <p className="text-xl font-semibold" data-testid="text-distance">{routeInfo.distance}</p>
+                {currentLocation && (
+                  <p className="text-xs text-muted-foreground">Includes travel to pickup</p>
+                )}
               </div>
             </div>
           )}
