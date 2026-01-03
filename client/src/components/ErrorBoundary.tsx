@@ -78,6 +78,11 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      // For HMR errors, render nothing instead of error UI (non-critical components)
+      if (this.state.error && isHMRError(this.state.error)) {
+        return null;
+      }
+
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-background">
           <Card className="max-w-md w-full">
