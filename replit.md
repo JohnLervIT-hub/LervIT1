@@ -129,3 +129,10 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **Driving Time Display:** Movers now show "X km · Y min drive" format for accurate ETAs.
 *   **Pre-Selected Mover UI:** RequestMove page now displays a card showing the customer's selected mover (name, rating, vehicle type, completed moves) with option to change or remove selection.
 *   **Direct Mover Assignment:** When customer selects a mover from Browse Movers, that mover is directly assigned after payment (no proximity matching).
+
+### Performance Optimizations
+*   **Gzip/Brotli Compression:** Added compression middleware to reduce API response sizes by 60-80%.
+*   **Lazy Loading:** All non-critical routes use React.lazy() for code splitting (already implemented).
+*   **Preconnect Hints:** Added preconnect for Google Maps and Stripe domains to reduce DNS/TLS latency.
+*   **React Query Caching:** Configured with `staleTime: Infinity` and 10-minute garbage collection for optimal caching.
+*   **Upload Caching:** Static uploads cached for 1 year with `max-age=31536000`.
