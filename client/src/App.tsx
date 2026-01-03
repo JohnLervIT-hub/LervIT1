@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -13,9 +13,11 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageLoader } from "@/components/PageLoader";
-import { JobNotificationSound } from "@/components/JobNotificationSound";
 import Header from "@/components/Header";
-import SplashScreen from "@/components/SplashScreen";
+
+// Lazy load non-critical components
+const JobNotificationSound = lazy(() => import("@/components/JobNotificationSound").then(m => ({ default: m.JobNotificationSound })));
+const SplashScreen = lazy(() => import("@/components/SplashScreen"));
 
 // Eagerly load critical public pages
 import Home from "@/pages/Home";
@@ -196,15 +198,40 @@ function Router() {
 }
 
 function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  // Skip splash for returning users (visited within last 24 hours)
+  const hasVisitedRecently = () => {
+    try {
+      const lastVisit = sessionStorage.getItem('lervit_last_visit');
+      if (lastVisit) {
+        const elapsed = Date.now() - parseInt(lastVisit, 10);
+        return elapsed < 24 * 60 * 60 * 1000; // 24 hours
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  };
 
-  // Show splash screen initially
+  const [showSplash, setShowSplash] = useState(!hasVisitedRecently());
+
+  // Mark visit for future splash skip
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('lervit_last_visit', Date.now().toString());
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Show splash screen for first-time visitors (reduced to 800ms)
   if (showSplash) {
     return (
-      <SplashScreen 
-        onComplete={() => setShowSplash(false)} 
-        minDisplayTime={1500}
-      />
+      <Suspense fallback={<PageLoader />}>
+        <SplashScreen 
+          onComplete={() => setShowSplash(false)} 
+          minDisplayTime={800}
+        />
+      </Suspense>
     );
   }
 
@@ -223,7 +250,9 @@ function App() {
                   </PageTransition>
                 </div>
                 <MobileBottomNav />
-                <JobNotificationSound />
+                <Suspense fallback={null}>
+                  <JobNotificationSound />
+                </Suspense>
               </ErrorBoundary>
               <Toaster />
             </TooltipProvider>
