@@ -14,22 +14,21 @@ import type { Booking } from "@shared/schema";
 
 // Lazy-load Stripe with key from server (handles dev/prod automatically)
 let stripePromise: Promise<Stripe | null> | null = null;
-const getStripe = async (): Promise<Stripe | null> => {
+const getStripe = (): Promise<Stripe | null> => {
   if (!stripePromise) {
-    stripePromise = (async () => {
-      try {
-        const res = await fetch('/api/config/stripe-public-key');
-        const data = await res.json();
+    stripePromise = fetch('/api/config/stripe-public-key')
+      .then(res => res.json())
+      .then(data => {
         if (!data.publicKey) {
           console.error('Missing Stripe public key from server');
           return null;
         }
         return loadStripe(data.publicKey);
-      } catch (err) {
+      })
+      .catch(err => {
         console.error('Failed to fetch Stripe config:', err);
         return null;
-      }
-    })();
+      });
   }
   return stripePromise;
 };

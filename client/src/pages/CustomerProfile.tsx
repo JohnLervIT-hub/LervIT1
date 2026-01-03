@@ -58,22 +58,26 @@ type SavedCard = {
 
 // Lazy-load Stripe with key from server (handles dev/prod automatically)
 let stripePromiseCache: ReturnType<typeof loadStripe> | null = null;
-const getStripePromise = async () => {
+const getStripePromise = (): ReturnType<typeof loadStripe> => {
   if (!stripePromiseCache) {
-    try {
-      const res = await fetch('/api/config/stripe-public-key');
-      const data = await res.json();
-      if (data.publicKey) {
-        stripePromiseCache = loadStripe(data.publicKey);
-      }
-    } catch (err) {
-      console.error('Failed to fetch Stripe config:', err);
-    }
+    stripePromiseCache = fetch('/api/config/stripe-public-key')
+      .then(res => res.json())
+      .then(data => {
+        if (!data.publicKey) {
+          console.error('Missing Stripe public key from server');
+          return null;
+        }
+        return loadStripe(data.publicKey);
+      })
+      .catch(err => {
+        console.error('Failed to fetch Stripe config:', err);
+        return null;
+      });
   }
   return stripePromiseCache;
 };
 
-// For backward compatibility, initialize immediately
+// Initialize immediately for Elements component
 const stripePromise = getStripePromise();
 
 function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
