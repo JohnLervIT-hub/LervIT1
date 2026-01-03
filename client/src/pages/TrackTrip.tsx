@@ -41,25 +41,17 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-// Uber-style dark map theme
-const UBER_MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#212121" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
-  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#757575" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#181818" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#2c2c2c" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#373737" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3c3c3c" }] },
-  { featureType: "road.highway.controlled_access", elementType: "geometry", stylers: [{ color: "#4e4e4e" }] },
-  { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#000000" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3d3d3d" }] },
+// Clean light map theme
+const LIGHT_MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
 ];
 
 // Car icon SVG - Uber style black car
@@ -132,7 +124,7 @@ export default function TrackTrip() {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      styles: UBER_MAP_STYLES,
+      styles: LIGHT_MAP_STYLES,
     };
   }, [isLoaded]);
   
@@ -328,10 +320,10 @@ export default function TrackTrip() {
   // Loading states
   if (!isLoaded || isLoading || !locationData) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1a1a1a]">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-white/70">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">
             {!isLoaded ? "Loading map..." : "Loading trip details..."}
           </p>
         </div>
@@ -341,9 +333,9 @@ export default function TrackTrip() {
   
   if (loadError) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1a1a1a]">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
-          <p className="text-red-400">Failed to load map. Please try again.</p>
+          <p className="text-destructive">Failed to load map. Please try again.</p>
           <Link href="/my-bookings">
             <Button className="mt-4">Back to Bookings</Button>
           </Link>
@@ -363,8 +355,8 @@ export default function TrackTrip() {
     : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
 
   return (
-    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-[#1a1a1a]">
-      {/* Full-screen Google Map with dark theme */}
+    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-gray-100">
+      {/* Full-screen Google Map with light theme */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
