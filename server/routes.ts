@@ -2851,6 +2851,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(jobNotifications.id, moverNotification.id));
       
+      // Check if this was a pre-selected mover declining - trigger proximity matching fallback
+      const booking = await storage.getBooking(bookingId);
+      if (booking && booking.preSelectedMoverId === moverId) {
+        logEvent.booking('preselected_mover_declined', {
+          bookingId,
+          moverId,
+          triggeringProximityMatching: true,
+        });
+        
+        // Clear the preSelectedMoverId since they declined
+        await storage.updateBooking(bookingId, { preSelectedMoverId: null });
+        
+        // Trigger proximity matching to find other available movers
+        try {
+          const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+          const { toDecimalString } = await import("@shared/utils");
+          
+          const pickupCoords = {
+            lat: parseFloat(String(booking.pickupLatitude || '0')),
+            lng: parseFloat(String(booking.pickupLongitude || '0')),
+          };
+          const dropoffCoords = {
+            lat: parseFloat(String(booking.dropoffLatitude || '0')),
+            lng: parseFloat(String(booking.dropoffLongitude || '0')),
+          };
+          
+          const allMovers = await storage.getOperationalMovers();
+          const moversWithUserData = await Promise.all(
+            allMovers.map(async (m: any) => {
+              // Exclude the mover who just declined
+              if (m.id === moverId) return null;
+              
+              const moverUser = await storage.getUser(m.userId);
+              if (!moverUser || m.latitude === null || m.longitude === null) {
+                return null;
+              }
+              return {
+                moverId: m.id,
+                userId: m.userId,
+                name: moverUser.name,
+                vehicleType: m.vehicleType,
+                rating: m.rating || '0',
+                totalMoves: m.totalMoves,
+                isAvailable: m.isAvailable,
+                latitude: m.latitude as number,
+                longitude: m.longitude as number,
+              };
+            })
+          ).then(results => results.filter((m: any): m is NonNullable<typeof m> => m !== null));
+          
+          const nearestMovers = findNearestMovers(
+            pickupCoords,
+            dropoffCoords,
+            (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+            moversWithUserData,
+            {},
+            booking.aiRecommendedVehicle || null
+          );
+          
+          if (nearestMovers.length > 0) {
+            // Create job notifications for nearby movers
+            const expiresAt = calculateExpiryTime(10);
+            await Promise.all(
+              nearestMovers.map(async (mover: any) => {
+                await storage.createJobNotification({
+                  bookingId: booking.id,
+                  moverId: mover.moverId,
+                  distanceToPickup: toDecimalString(mover.distanceToPickup),
+                  estimatedEarnings: toDecimalString(mover.estimatedEarnings),
+                  status: 'pending',
+                  expiresAt,
+                });
+                
+                // Send WebSocket notification
+                moverWebSocket.notifyMover(mover.userId, {
+                  type: 'job_notification',
+                  bookingId: booking.id,
+                  estimatedEarnings: mover.estimatedEarnings.toFixed(2),
+                  pickupAddress: booking.pickupAddress,
+                  dropoffAddress: booking.dropoffAddress,
+                });
+                
+                // Send SMS if available
+                const moverUserData = await storage.getUser(mover.userId);
+                if (moverUserData?.phone) {
+                  const baseUrl = process.env.BASE_URL || 
+                    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+                  const smsMessage = `LervIT: New job available! Earn $${mover.estimatedEarnings.toFixed(2)} CAD. Accept now: ${baseUrl}/mover-dashboard`;
+                  await notificationService.sendSMS({
+                    to: moverUserData.phone,
+                    message: smsMessage,
+                    type: 'job_alert',
+                  });
+                }
+              })
+            );
+            
+            logEvent.booking('proximity_matching_fallback_success', {
+              bookingId,
+              moversNotified: nearestMovers.length,
+            });
+            
+            // Notify customer that we're finding other movers
+            const customer = await storage.getUser(booking.customerId);
+            if (customer) {
+              await storage.createNotification({
+                userId: customer.id,
+                type: 'booking_update',
+                title: 'Finding Other Movers',
+                message: 'Your selected mover is unavailable. We\'re finding other great movers nearby.',
+                bookingId: booking.id,
+                actionUrl: '/my-bookings',
+                isRead: false,
+              });
+            }
+          } else {
+            logEvent.booking('proximity_matching_fallback_no_movers', { bookingId });
+          }
+        } catch (matchingError) {
+          logEvent.error('proximity_matching_fallback_failed', matchingError instanceof Error ? matchingError : new Error('Unknown error'), { bookingId });
+        }
+      }
+      
       res.json({ message: "Job declined successfully" });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -3996,8 +4119,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Check if customer pre-selected a mover from Browse Movers page
               if (booking.preSelectedMoverId) {
-                // DIRECT MOVER SELECTION: Assign the pre-selected mover directly
-                logEvent.booking('direct_mover_assignment', {
+                // PRIORITY NOTIFICATION: Notify pre-selected mover first (they must accept/decline)
+                // If they decline or timeout, system will fall back to proximity matching
+                logEvent.booking('priority_mover_notification', {
                   bookingId: booking.id,
                   preSelectedMoverId: booking.preSelectedMoverId,
                 });
@@ -4005,99 +4129,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Get the pre-selected mover's details
                 const preSelectedMover = await storage.getMover(booking.preSelectedMoverId);
                 if (preSelectedMover) {
-                  // Assign the mover directly to the booking and clear preSelectedMoverId to prevent duplicate processing
-                  await storage.updateBooking(booking.id, {
-                    moverId: booking.preSelectedMoverId,
-                    preSelectedMoverId: null, // Clear after assignment to prevent duplicate processing on webhook retries
-                    status: BOOKING_STATUSES.CONFIRMED,
-                    acceptedAt: new Date(),
-                  });
-                  
-                  // Calculate mover earnings and commission using platform fee calculator
+                  // Calculate mover earnings for display
                   const bookingPrice = parseFloat(booking.price || '0');
                   const feeBreakdown = calculatePlatformFee(bookingPrice);
-                  const platformFeeAmount = feeBreakdown.platformFeeCents / 100;
                   const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
                   
-                  await storage.updateBooking(booking.id, {
-                    platformFeeAmount: toDecimalString(platformFeeAmount),
-                    moverNetAmount: toDecimalString(moverNetAmount),
-                  });
-                  
-                  // Create a job notification for the pre-selected mover (for tracking/history)
-                  const expiresAt = calculateExpiryTime(10);
+                  // Create PENDING job notification for the pre-selected mover (they must accept)
+                  // Mark as priority so UI can show "Priority Request" badge
+                  const expiresAt = calculateExpiryTime(10); // 10 minutes to accept
                   await storage.createJobNotification({
                     bookingId: booking.id,
                     moverId: booking.preSelectedMoverId,
-                    distanceToPickup: toDecimalString(0), // Direct selection, distance not relevant
+                    distanceToPickup: toDecimalString(0),
                     estimatedEarnings: toDecimalString(moverNetAmount),
-                    status: 'accepted',
+                    status: 'pending', // PENDING - mover must accept, not auto-assigned
                     expiresAt,
                   });
                   
-                  // Notify the selected mover via email and SMS
+                  // Notify the selected mover via email, SMS, and WebSocket
                   const moverUser = await storage.getUser(preSelectedMover.userId);
                   if (moverUser) {
                     const earningsStr = moverNetAmount.toFixed(2);
+                    
+                    // Send email with priority messaging (use sendJobAssignment with modified message)
                     await notificationService.sendJobAssignment(moverUser, booking, earningsStr);
-                    // Send SMS notification
+                    
+                    // Send SMS notification with priority messaging
                     if (moverUser.phone) {
                       const baseUrl = process.env.BASE_URL || 
                         (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-                      const smsMessage = `LervIT: You've been assigned a job! Earn $${earningsStr} CAD. From: ${booking.pickupAddress}. Open app to view: ${baseUrl}/mover-dashboard`;
+                      const smsMessage = `LervIT PRIORITY: A customer selected YOU for their move! Earn $${earningsStr} CAD. Accept within 10 min: ${baseUrl}/mover-dashboard`;
                       await notificationService.sendSMS({
                         to: moverUser.phone,
                         message: smsMessage,
                         type: 'job_alert',
                       });
                     }
-                    logEvent.notification('direct_mover_notified', {
+                    
+                    // Send real-time WebSocket notification
+                    moverWebSocket.notifyMover(moverUser.id, {
+                      type: 'job_notification',
+                      bookingId: booking.id,
+                      isPriority: true, // Flag for UI to show priority badge
+                      estimatedEarnings: earningsStr,
+                      pickupAddress: booking.pickupAddress,
+                      dropoffAddress: booking.dropoffAddress,
+                    });
+                    
+                    logEvent.notification('priority_mover_notified', {
                       bookingId: booking.id,
                       moverId: booking.preSelectedMoverId,
                       moverUserId: moverUser.id,
                     });
                     
-                    // Create in-app notification for the mover (non-blocking)
+                    // Create in-app notification for the mover
                     try {
                       await storage.createNotification({
                         userId: moverUser.id,
                         type: 'job_opportunity',
-                        title: 'New Job Assigned',
-                        message: `You've been assigned a new job! Earn $${earningsStr} CAD.`,
+                        title: 'Priority Job Request!',
+                        message: `A customer specifically chose you! Earn $${earningsStr} CAD. Accept within 10 minutes.`,
                         bookingId: booking.id,
                         actionUrl: '/mover-dashboard',
                         isRead: false,
                       });
                     } catch (notifErr) {
-                      logEvent.error('mover_assignment_notification_failed', notifErr, { bookingId: booking.id, moverId: moverUser.id });
+                      logEvent.error('priority_mover_notification_failed', notifErr, { bookingId: booking.id, moverId: moverUser.id });
                     }
                   }
                   
-                  // Create in-app notification for customer about mover assignment (non-blocking)
+                  // Create in-app notification for customer about pending mover response
                   try {
-                    const assignedCustomer = await storage.getUser(booking.customerId);
-                    if (assignedCustomer) {
+                    const pendingCustomer = await storage.getUser(booking.customerId);
+                    if (pendingCustomer) {
                       await storage.createNotification({
-                        userId: assignedCustomer.id,
-                        type: 'mover_assigned',
-                        title: 'Mover Assigned',
-                        message: `Great news! A mover has been assigned to your move.`,
+                        userId: pendingCustomer.id,
+                        type: 'booking_update',
+                        title: 'Waiting for Mover',
+                        message: `Your selected mover has been notified. We'll update you when they respond.`,
                         bookingId: booking.id,
                         actionUrl: '/my-bookings',
                         isRead: false,
                       });
                     }
                   } catch (notifErr) {
-                    logEvent.error('customer_mover_assigned_notification_failed', notifErr, { bookingId: booking.id, customerId: booking.customerId });
+                    logEvent.error('customer_pending_notification_failed', notifErr, { bookingId: booking.id, customerId: booking.customerId });
                   }
                 } else {
                   // Pre-selected mover not found - fall back to proximity matching
-                  logEvent.error('direct_mover_not_found', new Error('Pre-selected mover not found'), {
+                  logEvent.error('priority_mover_not_found', new Error('Pre-selected mover not found'), {
                     bookingId: booking.id,
                     preSelectedMoverId: booking.preSelectedMoverId,
                   });
+                  // Clear the invalid preSelectedMoverId and continue to proximity matching
+                  await storage.updateBooking(booking.id, { preSelectedMoverId: null });
                 }
-              } else {
+              }
+              
+              // PROXIMITY MATCHING: Only run if no pre-selected mover OR pre-selected mover was invalid
+              if (!booking.preSelectedMoverId) {
                 // PROXIMITY MATCHING: Find nearest available movers (normal flow)
                 const allMovers = await storage.getOperationalMovers();
                 const moversWithUserData = await Promise.all(

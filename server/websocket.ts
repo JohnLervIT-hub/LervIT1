@@ -191,7 +191,9 @@ class MoverWebSocketServer {
     dropoffAddress?: string;
     price?: string;
     estimatedTime?: string;
+    estimatedEarnings?: string;
     expiresAt?: Date;
+    isPriority?: boolean;
     data?: any;
   }) {
     let sentCount = 0;
