@@ -116,7 +116,7 @@ export default function MyBookings() {
   }, [location]);
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
-    queryKey: [`/api/bookings?customerId=${user?.id}`],
+    queryKey: ["/api/bookings"],
     enabled: !!user?.id,
   });
   
