@@ -2980,6 +2980,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete a failed/cancelled booking (customer only)
+  app.delete("/api/bookings/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Only the customer who created the booking can delete it
+      if (booking.customerId !== user.id) {
+        return res.status(403).json({ error: "You are not authorized to delete this booking" });
+      }
+      
+      // Only allow deleting bookings with failed payment or cancelled status
+      const deletableStatuses = ["payment_failed", "cancelled"];
+      const hasFailedPayment = booking.paymentStatus === "failed";
+      
+      if (!deletableStatuses.includes(booking.status) && !hasFailedPayment) {
+        return res.status(400).json({ 
+          error: "Only failed or cancelled bookings can be deleted" 
+        });
+      }
+      
+      // SAFETY: Never delete bookings with successful payments
+      if (booking.paymentStatus === "succeeded") {
+        return res.status(400).json({ 
+          error: "Cannot delete a booking with a successful payment. Please contact support." 
+        });
+      }
+      
+      logEvent.booking('customer_delete_booking', { 
+        bookingId, 
+        customerId: user.id,
+        status: booking.status,
+        paymentStatus: booking.paymentStatus 
+      });
+      
+      // Delete related records first (foreign key constraints)
+      await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+      await db.delete(messages).where(eq(messages.bookingId, bookingId));
+      await db.delete(reviews).where(eq(reviews.bookingId, bookingId));
+      await db.delete(identifiedItems).where(eq(identifiedItems.bookingId, bookingId));
+      await db.delete(aiRuns).where(eq(aiRuns.bookingId, bookingId));
+      
+      // Delete the booking
+      await db.delete(bookings).where(eq(bookings.id, bookingId));
+      
+      res.json({ message: "Booking deleted successfully" });
+    } catch (error) {
+      logEvent.error('delete_booking_failed', error instanceof Error ? error : new Error('Unknown error'), { 
+        bookingId: req.params.id 
+      });
+      res.status(500).json({ error: "Failed to delete booking" });
+    }
+  });
+
   app.patch("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
       // Validate allowed update fields - moverId allowed for direct job acceptance

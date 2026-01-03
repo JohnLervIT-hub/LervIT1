@@ -62,6 +62,8 @@ export default function Login() {
 
     try {
       await login(email, password);
+      // Mark that we just logged in to prevent false "Access Denied" toasts
+      sessionStorage.setItem('justLoggedIn', 'true');
       setIsLoading(false);
       toast({
         title: "Welcome back!",

@@ -134,38 +134,25 @@ export default function MyBookings() {
   const sortedBookings = bookings
     ?.filter(b => {
       if (!b) return false;
-      // Always show active bookings - status-based display, no date filtering
-      // This prevents timezone issues from hiding valid bookings
-      const activeStatuses = ["pending_payment", "pending", "confirmed", "in_transit", "payment_failed"];
-      if (activeStatuses.includes(b.status)) return true;
-      // Also keep bookings with failed payment status
-      if (b.paymentStatus === "failed") return true;
-      // Show completed/cancelled bookings as history
-      return true;
+      return true; // Show all bookings
     })
     .sort((a, b) => {
-      // Pending payment bookings go first (urgent - need to pay)
+      // Priority 1: Pending payment bookings go first (urgent - need to pay)
       if (a.status === "pending_payment" && b.status !== "pending_payment") return -1;
       if (b.status === "pending_payment" && a.status !== "pending_payment") return 1;
       
-      // Then other active bookings
+      // Priority 2: Active bookings before completed/cancelled
       const aIsActive = ["pending", "confirmed", "in_transit", "payment_failed"].includes(a.status) || a.paymentStatus === "failed";
       const bIsActive = ["pending", "confirmed", "in_transit", "payment_failed"].includes(b.status) || b.paymentStatus === "failed";
       
       if (aIsActive && !bIsActive) return -1;
       if (!aIsActive && bIsActive) return 1;
       
-      // Within same group, sort by created date (newest first for pending_payment)
-      if (a.status === "pending_payment" && b.status === "pending_payment") {
-        return safeParseDate(b.createdAt).getTime() - safeParseDate(a.createdAt).getTime();
-      }
-      
-      // Active: sort by preferred date ascending
-      if (aIsActive && bIsActive) {
-        return safeParseDate(a.preferredDate).getTime() - safeParseDate(b.preferredDate).getTime();
-      }
-      // Past bookings: most recent first
-      return safeParseDate(b.preferredDate).getTime() - safeParseDate(a.preferredDate).getTime();
+      // Within same priority group: sort by date descending (newest first)
+      // Use preferredDate for scheduling context, fallback to createdAt
+      const aDate = safeParseDate(a.preferredDate || a.createdAt).getTime();
+      const bDate = safeParseDate(b.preferredDate || b.createdAt).getTime();
+      return bDate - aDate; // Descending order (newest first)
     }) || [];
     
   // Filter to show only focused booking if URL param exists
@@ -201,10 +188,36 @@ export default function MyBookings() {
       return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "cancelled" });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/bookings?customerId=${user?.id}`] });
+      // Invalidate all booking-related queries
+      queryClient.invalidateQueries({ predicate: (query) => 
+        query.queryKey[0]?.toString().includes('/api/bookings')
+      });
       toast({
         title: "Booking cancelled",
         description: "Your booking has been cancelled successfully.",
+      });
+    },
+  });
+  
+  const deleteBookingMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      return apiRequest("DELETE", `/api/bookings/${bookingId}`);
+    },
+    onSuccess: () => {
+      // Invalidate all booking-related queries
+      queryClient.invalidateQueries({ predicate: (query) => 
+        query.queryKey[0]?.toString().includes('/api/bookings')
+      });
+      toast({
+        title: "Booking deleted",
+        description: "The booking has been removed from your list.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Failed to delete booking",
+        variant: "destructive",
       });
     },
   });
@@ -736,6 +749,18 @@ export default function MyBookings() {
                       >
                         {cancelBookingMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
                         Cancel Booking
+                      </Button>
+                    )}
+                    {(booking.status === "payment_failed" || booking.status === "cancelled" || booking.paymentStatus === "failed") && (
+                      <Button
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950"
+                        onClick={() => deleteBookingMutation.mutate(booking.id)}
+                        disabled={deleteBookingMutation.isPending}
+                        data-testid={`button-delete-${booking.id}`}
+                      >
+                        {deleteBookingMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <X className="w-4 h-4 mr-2" />}
+                        Delete
                       </Button>
                     )}
                     {booking.mover && booking.status !== "cancelled" && (

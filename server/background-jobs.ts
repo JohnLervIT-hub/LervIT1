@@ -37,6 +37,11 @@ export function initBackgroundJobs() {
   cron.schedule('0 3 * * *', async () => {
     await dailyCleanup();
   });
+  
+  // Expire past scheduled job notifications every 15 minutes
+  cron.schedule('*/15 * * * *', async () => {
+    await expirePastScheduledJobs();
+  });
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
 }
@@ -324,6 +329,53 @@ async function recoverOrphanedPayments() {
     return recovered;
   } catch (error) {
     logEvent.error('recoverOrphanedPayments', error);
+    return 0;
+  }
+}
+
+// Expire job notifications for bookings with past scheduled dates
+async function expirePastScheduledJobs() {
+  try {
+    const now = new Date();
+    // Add a grace period of 2 hours after scheduled time
+    const gracePeriodMs = 2 * 60 * 60 * 1000;
+    const cutoffTime = new Date(now.getTime() - gracePeriodMs);
+    
+    // Find pending job notifications for bookings with past scheduled dates
+    const pastJobNotifications = await db
+      .select({
+        notificationId: jobNotifications.id,
+        bookingId: jobNotifications.bookingId,
+        preferredDate: bookings.preferredDate,
+      })
+      .from(jobNotifications)
+      .innerJoin(bookings, eq(jobNotifications.bookingId, bookings.id))
+      .where(
+        and(
+          eq(jobNotifications.status, 'pending'),
+          lt(bookings.preferredDate, cutoffTime)
+        )
+      );
+    
+    if (pastJobNotifications.length === 0) {
+      return 0;
+    }
+    
+    const notificationIds = pastJobNotifications.map(n => n.notificationId);
+    
+    // Expire these notifications
+    await db
+      .update(jobNotifications)
+      .set({ status: 'expired' })
+      .where(inArray(jobNotifications.id, notificationIds));
+    
+    logEvent.cleanup('expire_past_scheduled_jobs', { 
+      expiredCount: notificationIds.length 
+    });
+    
+    return notificationIds.length;
+  } catch (error) {
+    logEvent.error('expirePastScheduledJobs', error);
     return 0;
   }
 }
