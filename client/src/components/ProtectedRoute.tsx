@@ -18,7 +18,9 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo, requireEmai
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        setLocation("/login");
+        // Preserve the current URL so user returns here after login
+        const currentPath = window.location.pathname + window.location.search;
+        setLocation(`/login?redirect=${encodeURIComponent(currentPath)}`);
       } else if (!allowedRoles.includes(user.role)) {
         const roleRedirects: Record<string, string> = {
           customer: "/dashboard",

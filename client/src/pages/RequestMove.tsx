@@ -1,5 +1,5 @@
 // PERFORMANCE: Preload Payment page when step >= 2
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -119,9 +119,18 @@ export default function RequestMove() {
   // Location permission state
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [showLocationDialog, setShowLocationDialog] = useState(false);
+  
+  // Track if we're restoring from sessionStorage - prevents location dialog from showing during restoration
+  const isRestoringRef = useRef(false);
+  
+  // Check on mount if we have pending booking data (synchronous check before effects run)
+  const hasPendingBooking = useRef(!!sessionStorage.getItem('pendingBooking'));
 
-  // Check location permission on mount
+  // Check location permission on mount - but skip if restoring saved data
   useEffect(() => {
+    // Skip location dialog if we're restoring a saved booking
+    if (hasPendingBooking.current) return;
+    
     const checkLocationPermission = async () => {
       try {
         // Check if geolocation is supported
@@ -183,13 +192,24 @@ export default function RequestMove() {
     }
   }, [step]);
 
+  // Track if we've already restored from sessionStorage to prevent double-restoration
+  const hasRestoredRef = useRef(false);
+  
   // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
   useEffect(() => {
+    // Prevent double restoration on strict mode or fast re-renders
+    if (hasRestoredRef.current) return;
+    
     // First, check for pending booking data from sessionStorage (user returned from login)
     const pendingBookingData = sessionStorage.getItem('pendingBooking');
     if (pendingBookingData) {
+      hasRestoredRef.current = true;
+      isRestoringRef.current = true;
+      
       try {
         const data = JSON.parse(pendingBookingData);
+        
+        // Batch all state updates together
         setPickupAddress(data.pickupAddress || "");
         setDropoffAddress(data.dropoffAddress || "");
         setPickupDifficulty(data.pickupDifficulty || "");
@@ -200,10 +220,19 @@ export default function RequestMove() {
         setDescription(data.description || "");
         setImages(data.images || []);
         setDate(data.date || "");
+        // Restore selected mover if one was chosen
+        if (data.preSelectedMoverId) {
+          setPreSelectedMoverId(data.preSelectedMoverId);
+        }
         setStep(3); // Jump to final step since they already filled everything
-        window.scrollTo({ top: 0, behavior: "smooth" });
         
-        sessionStorage.removeItem('pendingBooking');
+        // Use requestAnimationFrame to ensure React has flushed all state updates
+        requestAnimationFrame(() => {
+          sessionStorage.removeItem('pendingBooking');
+          hasPendingBooking.current = false;
+          isRestoringRef.current = false;
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
         
         toast({
           title: "Welcome Back!",
@@ -213,6 +242,8 @@ export default function RequestMove() {
       } catch (error) {
         console.error("Failed to restore pending booking:", error);
         sessionStorage.removeItem('pendingBooking');
+        hasPendingBooking.current = false;
+        isRestoringRef.current = false;
       }
     }
 
@@ -660,10 +691,14 @@ export default function RequestMove() {
           numberOfMovers,
           description,
           images,
-          date
+          date,
+          preSelectedMoverId: preSelectedMoverId || null
         }));
-        // Redirect to login with return path
-        setLocation('/login?redirect=/request-move');
+        // Redirect to login with return path (include moverId if selected)
+        const returnPath = preSelectedMoverId 
+          ? `/request-move?moverId=${preSelectedMoverId}`
+          : '/request-move';
+        setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
         return;
       }
 
