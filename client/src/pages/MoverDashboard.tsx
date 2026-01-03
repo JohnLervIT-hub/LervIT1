@@ -424,6 +424,33 @@ export default function MoverDashboard() {
     acceptBookingMutation.mutate(bookingId);
   };
 
+  const declineBookingMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/decline`, {
+        moverId: mover?.id,
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to decline booking");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Job declined",
+        description: "You've declined this job. It will no longer appear in your available jobs.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to decline job",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const completeBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
@@ -1062,16 +1089,28 @@ export default function MoverDashboard() {
             <Separator />
             <div className="flex flex-wrap gap-3">
               {showActions && (
-                <Button
-                  variant="default"
-                  onClick={() => handleAcceptBooking(booking.id)}
-                  disabled={acceptBookingMutation.isPending}
-                  data-testid={`button-accept-${booking.id}`}
-                  className="flex-1 sm:flex-none"
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  {acceptBookingMutation.isPending ? "Accepting..." : "Accept Booking"}
-                </Button>
+                <>
+                  <Button
+                    variant="default"
+                    onClick={() => handleAcceptBooking(booking.id)}
+                    disabled={acceptBookingMutation.isPending || declineBookingMutation.isPending}
+                    data-testid={`button-accept-${booking.id}`}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {acceptBookingMutation.isPending ? "Accepting..." : "Accept Booking"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => declineBookingMutation.mutate(booking.id)}
+                    disabled={acceptBookingMutation.isPending || declineBookingMutation.isPending}
+                    data-testid={`button-decline-${booking.id}`}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    {declineBookingMutation.isPending ? "Declining..." : "Decline"}
+                  </Button>
+                </>
               )}
               
               {/* Start Trip - Confirmed status AND assigned to this mover (not available jobs) */}
