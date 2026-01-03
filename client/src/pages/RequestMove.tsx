@@ -21,7 +21,7 @@ import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,6 +54,7 @@ function requiresTwoMovers(loadSize: string, heavyItem: boolean): boolean {
 
 export default function RequestMove() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { user } = useAuth();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -205,7 +206,8 @@ export default function RequestMove() {
     if (hasRestoredRef.current) return;
     
     // PRIORITY 1: Check URL parameters FIRST (most reliable - survives any navigation)
-    const params = new URLSearchParams(window.location.search);
+    // Use searchString from wouter's useSearch hook for reliable reading after client-side navigation
+    const params = new URLSearchParams(searchString);
     const pickup = params.get('pickup');
     const dropoff = params.get('dropoff');
     const preferredDate = params.get('date');
@@ -215,7 +217,8 @@ export default function RequestMove() {
     const urlLoadSize = params.get('loadSize');
     const resumeStepParam = params.get('resumeStep');
 
-    console.log('[RequestMove] URL params check:', {
+    console.log('[RequestMove] URL params check (from useSearch):', {
+      searchString,
       pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam
     });
 
@@ -313,7 +316,7 @@ export default function RequestMove() {
         description: "Your addresses have been loaded. Complete the details below to request your move.",
       });
     }
-  }, [toast]);
+  }, [toast, searchString]);
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
