@@ -1,12 +1,12 @@
-// LervIT Uber-Style Live Tracking with smooth animations
+// LervIT Uber-Style Live Tracking - Premium Experience
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRoute } from "wouter";
 import { GoogleMap, Marker, DirectionsRenderer, OverlayView } from "@react-google-maps/api";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Navigation, Wifi, WifiOff, Phone, MessageCircle } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ArrowLeft, Phone, MessageCircle, Star, Truck, ChevronUp, ChevronDown, MapPin, Navigation2 } from "lucide-react";
 import { Link } from "wouter";
-import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, type BookingStatus } from "@shared/schema";
+import { ACTIVE_STATUSES, type BookingStatus } from "@shared/schema";
 import { useResilientPolling, getConnectionStatusText } from "@/hooks/useResilientPolling";
 import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 
@@ -41,30 +41,59 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-// Map styles defined as plain object (no google.maps type reference at module level)
-const MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
+// Uber-style dark map theme
+const UBER_MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#212121" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
+  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#757575" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#181818" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#2c2c2c" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#373737" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3c3c3c" }] },
+  { featureType: "road.highway.controlled_access", elementType: "geometry", stylers: [{ color: "#4e4e4e" }] },
+  { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#000000" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3d3d3d" }] },
 ];
 
-// Simple car icon as base64 encoded SVG (more reliable across browsers)
-const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <circle cx="24" cy="24" r="22" fill="#1a1a1a"/>
-  <circle cx="24" cy="24" r="18" fill="#2d2d2d"/>
-  <path d="M16 28 L16 22 L18 16 L30 16 L32 22 L32 28 L30 30 L18 30 Z" fill="#4a90d9"/>
-  <rect x="17" y="17" width="14" height="6" rx="1" fill="#87ceeb"/>
-  <circle cx="18" cy="28" r="2" fill="#333"/>
-  <circle cx="30" cy="28" r="2" fill="#333"/>
-  <circle cx="24" cy="12" r="3" fill="#4CAF50"/>
+// Car icon SVG - Uber style black car
+const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="18" fill="#000000"/>
+  <circle cx="20" cy="20" r="15" fill="#1a1a1a"/>
+  <path d="M13 22 L13 18 L15 13 L25 13 L27 18 L27 22 L25 24 L15 24 Z" fill="#ffffff"/>
+  <rect x="14" y="14" width="12" height="5" rx="1" fill="#87CEEB"/>
+  <circle cx="15" cy="22" r="1.5" fill="#333"/>
+  <circle cx="25" cy="22" r="1.5" fill="#333"/>
 </svg>`;
 
 const CAR_ICON_URL = `data:image/svg+xml;base64,${btoa(CAR_ICON_SVG)}`;
+
+// Status-based messaging
+function getStatusMessage(status: string, moverName?: string): { title: string; subtitle: string } {
+  const name = moverName || "Your mover";
+  switch (status) {
+    case "en_route_to_pickup":
+      return { title: `${name} is on the way`, subtitle: "Arriving at pickup location" };
+    case "loading":
+      return { title: "Loading in progress", subtitle: `${name} is loading your items` };
+    case "en_route_to_dropoff":
+      return { title: "On the way to destination", subtitle: "Your items are being transported" };
+    case "unloading":
+      return { title: "Almost done!", subtitle: `${name} is unloading at destination` };
+    case "completed":
+      return { title: "Move completed", subtitle: "Thank you for using LervIT!" };
+    case "confirmed":
+      return { title: "Waiting for mover", subtitle: "Your mover will start soon" };
+    default:
+      return { title: "Tracking your move", subtitle: "Live updates when mover starts" };
+  }
+}
 
 // Smooth interpolation between positions
 function interpolatePosition(
@@ -78,19 +107,6 @@ function interpolatePosition(
   };
 }
 
-// Calculate bearing between two points
-function calculateBearing(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
-  const lat1 = (from.lat * Math.PI) / 180;
-  const lat2 = (to.lat * Math.PI) / 180;
-  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
-  
-  const y = Math.sin(dLng) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-  
-  let bearing = (Math.atan2(y, x) * 180) / Math.PI;
-  return (bearing + 360) % 360;
-}
-
 export default function TrackTrip() {
   const [, params] = useRoute("/track-trip/:bookingId");
   const bookingId = params?.bookingId;
@@ -98,16 +114,16 @@ export default function TrackTrip() {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string; durationMinutes: number } | null>(null);
+  const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   
   // Google Maps loading
   const { isLoaded, loadMaps, loadError } = useGoogleMaps();
   
-  // Trigger Google Maps loading on mount
   useEffect(() => {
     loadMaps();
   }, [loadMaps]);
   
-  // Map options - created inside component after google is loaded
+  // Map options with Uber dark theme
   const mapOptions = useMemo(() => {
     if (!isLoaded) return {};
     return {
@@ -116,19 +132,18 @@ export default function TrackTrip() {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      styles: MAP_STYLES,
+      styles: UBER_MAP_STYLES,
     };
   }, [isLoaded]);
   
-  // Animation state - use refs to avoid re-render dependency issues
+  // Animation state
   const [animatedPosition, setAnimatedPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [vehicleRotation, setVehicleRotation] = useState(0);
   const targetPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const currentAnimatedRef = useRef<{ lat: number; lng: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const isFirstPositionRef = useRef(true);
 
-  // Use resilient polling with exponential backoff
+  // Resilient polling
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
     ["/api/bookings", bookingId, "location"],
     {},
@@ -160,7 +175,6 @@ export default function TrackTrip() {
       lng: locationData.currentLocation.longitude,
     };
 
-    // Skip if position hasn't changed
     if (
       targetPositionRef.current &&
       targetPositionRef.current.lat === newPosition.lat &&
@@ -169,13 +183,6 @@ export default function TrackTrip() {
       return;
     }
 
-    // Calculate rotation based on movement direction
-    if (currentAnimatedRef.current) {
-      const bearing = calculateBearing(currentAnimatedRef.current, newPosition);
-      setVehicleRotation(bearing);
-    }
-
-    // First position - snap immediately
     if (isFirstPositionRef.current || !currentAnimatedRef.current) {
       setAnimatedPosition(newPosition);
       currentAnimatedRef.current = newPosition;
@@ -184,22 +191,18 @@ export default function TrackTrip() {
       return;
     }
 
-    // Cancel any existing animation
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
 
-    // Store the start and target positions
     const startPosition = { ...currentAnimatedRef.current };
     targetPositionRef.current = newPosition;
     const startTime = performance.now();
-    const duration = 2000; // 2 second smooth transition
+    const duration = 2000;
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
-      // Ease out cubic for smooth deceleration
       const easeProgress = 1 - Math.pow(1 - progress, 3);
       
       const interpolated = interpolatePosition(startPosition, newPosition, easeProgress);
@@ -209,7 +212,6 @@ export default function TrackTrip() {
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Animation complete - update refs
         currentAnimatedRef.current = newPosition;
       }
     };
@@ -223,9 +225,9 @@ export default function TrackTrip() {
     };
   }, [locationData?.currentLocation?.latitude, locationData?.currentLocation?.longitude]);
 
-  // Calculate driving directions
+  // Calculate directions
   useEffect(() => {
-    if (!locationData) return;
+    if (!locationData || !isLoaded) return;
 
     const directionsService = new google.maps.DirectionsService();
 
@@ -233,40 +235,56 @@ export default function TrackTrip() {
       ? { lat: locationData.currentLocation.latitude, lng: locationData.currentLocation.longitude }
       : { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude };
 
-    if (locationData.currentLocation) {
+    const destination = { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude };
+
+    if (locationData.currentLocation && locationData.status === "en_route_to_pickup") {
+      // Mover going to pickup
       directionsService.route(
         {
           origin: origin,
-          destination: { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude },
-          waypoints: [
-            { location: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude }, stopover: true }
-          ],
+          destination: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude },
           travelMode: google.maps.TravelMode.DRIVING,
-          optimizeWaypoints: false,
         },
         (result, status) => {
           if (status === google.maps.DirectionsStatus.OK && result) {
             setDirections(result);
-            let totalDistance = 0;
-            let totalDuration = 0;
-            result.routes[0].legs.forEach(leg => {
-              totalDistance += leg.distance?.value || 0;
-              totalDuration += leg.duration?.value || 0;
-            });
-            const durationMinutes = Math.ceil(totalDuration / 60);
+            const leg = result.routes[0].legs[0];
+            const durationMinutes = Math.ceil((leg.duration?.value || 0) / 60);
             setRouteInfo({
-              distance: (totalDistance / 1000).toFixed(1) + ' km',
-              duration: durationMinutes + ' min',
+              distance: leg.distance?.text || '',
+              duration: leg.duration?.text || '',
+              durationMinutes,
+            });
+          }
+        }
+      );
+    } else if (locationData.currentLocation) {
+      // Mover going to dropoff
+      directionsService.route(
+        {
+          origin: origin,
+          destination: destination,
+          travelMode: google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            setDirections(result);
+            const leg = result.routes[0].legs[0];
+            const durationMinutes = Math.ceil((leg.duration?.value || 0) / 60);
+            setRouteInfo({
+              distance: leg.distance?.text || '',
+              duration: leg.duration?.text || '',
               durationMinutes,
             });
           }
         }
       );
     } else {
+      // No live location - show pickup to dropoff
       directionsService.route(
         {
           origin: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude },
-          destination: { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude },
+          destination: destination,
           travelMode: google.maps.TravelMode.DRIVING,
         },
         (result, status) => {
@@ -283,7 +301,7 @@ export default function TrackTrip() {
         }
       );
     }
-  }, [locationData]);
+  }, [locationData, isLoaded]);
 
   // Update map bounds
   useEffect(() => {
@@ -299,21 +317,21 @@ export default function TrackTrip() {
         });
       }
       
-      map.fitBounds(bounds, { top: 120, bottom: 350, left: 40, right: 40 });
+      map.fitBounds(bounds, { top: 100, bottom: isSheetExpanded ? 380 : 200, left: 40, right: 40 });
     }
-  }, [map, locationData]);
+  }, [map, locationData, isSheetExpanded]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     setMap(map);
   }, []);
 
-  // Show loading if Google Maps or location data not ready
+  // Loading states
   if (!isLoaded || isLoading || !locationData) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex items-center justify-center min-h-screen bg-[#1a1a1a]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white/70">
             {!isLoaded ? "Loading map..." : "Loading trip details..."}
           </p>
         </div>
@@ -323,9 +341,9 @@ export default function TrackTrip() {
   
   if (loadError) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex items-center justify-center min-h-screen bg-[#1a1a1a]">
         <div className="text-center">
-          <p className="text-destructive">Failed to load map. Please try again.</p>
+          <p className="text-red-400">Failed to load map. Please try again.</p>
           <Link href="/my-bookings">
             <Button className="mt-4">Back to Bookings</Button>
           </Link>
@@ -337,14 +355,16 @@ export default function TrackTrip() {
   const pickup = locationData.pickup;
   const dropoff = locationData.dropoff;
   const currentLocation = locationData.currentLocation;
+  const statusMessage = getStatusMessage(locationData.status, locationData.mover?.name);
+  const isLive = !!currentLocation && ACTIVE_STATUSES.includes(locationData.status as BookingStatus);
 
   const center = currentLocation
     ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
     : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
 
   return (
-    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-background">
-      {/* Full-screen Google Map */}
+    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-[#1a1a1a]">
+      {/* Full-screen Google Map with dark theme */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
@@ -352,30 +372,30 @@ export default function TrackTrip() {
         options={mapOptions}
         onLoad={onMapLoad}
       >
-        {/* Dark route line (Uber-style) */}
+        {/* Route line - Uber cyan/teal color */}
         {directions && (
           <DirectionsRenderer
             directions={directions}
             options={{
               suppressMarkers: true,
               polylineOptions: {
-                strokeColor: "#1a1a1a",
-                strokeWeight: 5,
+                strokeColor: "#276EF1",
+                strokeWeight: 4,
                 strokeOpacity: 1,
               },
             }}
           />
         )}
 
-        {/* Pickup marker - Custom black dot with white ring */}
+        {/* Pickup marker - White dot with black ring */}
         <Marker
           position={{ lat: pickup.latitude, lng: pickup.longitude }}
           icon={{
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
+            scale: 8,
             fillColor: "#ffffff",
             fillOpacity: 1,
-            strokeColor: "#1a1a1a",
+            strokeColor: "#000000",
             strokeWeight: 3,
           }}
           data-testid="marker-pickup"
@@ -385,178 +405,181 @@ export default function TrackTrip() {
         <Marker
           position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
           icon={{
-            path: "M -6,-6 L 6,-6 L 6,6 L -6,6 Z",
+            path: "M -5,-5 L 5,-5 L 5,5 L -5,5 Z",
             scale: 1,
-            fillColor: "#1a1a1a",
+            fillColor: "#000000",
             fillOpacity: 1,
-            strokeColor: "#1a1a1a",
-            strokeWeight: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2,
           }}
           data-testid="marker-dropoff"
         />
 
-        {/* Animated vehicle marker */}
+        {/* Vehicle marker */}
         {animatedPosition && (
           <Marker
             position={animatedPosition}
             icon={{
               url: CAR_ICON_URL,
-              scaledSize: new google.maps.Size(48, 48),
-              anchor: new google.maps.Point(24, 24),
+              scaledSize: new google.maps.Size(40, 40),
+              anchor: new google.maps.Point(20, 20),
             }}
             data-testid="marker-mover"
           />
         )}
 
-        {/* ETA Overlay on map (Uber-style floating badge) */}
+        {/* ETA bubble on map */}
         {routeInfo && currentLocation && (
           <OverlayView
             position={animatedPosition || { lat: currentLocation.latitude, lng: currentLocation.longitude }}
             mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
           >
-            <div className="relative -translate-x-1/2 -translate-y-20">
-              <div className="bg-black text-white px-3 py-1.5 rounded-lg shadow-lg text-center min-w-[60px]">
-                <div className="text-lg font-bold" data-testid="text-eta-badge">{routeInfo.durationMinutes}</div>
-                <div className="text-xs opacity-80">MIN</div>
+            <div className="relative -translate-x-1/2 -translate-y-16">
+              <div className="bg-white text-black px-3 py-1 rounded-full shadow-lg text-center font-bold text-sm">
+                {routeInfo.durationMinutes} min
               </div>
-              <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[8px] border-l-transparent border-r-transparent border-t-black"></div>
             </div>
           </OverlayView>
         )}
       </GoogleMap>
 
-      {/* Top navigation bar */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none">
-        <div className="flex items-center justify-between pointer-events-auto">
-          <Link href="/my-bookings">
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              className="bg-white shadow-lg hover:bg-gray-50 rounded-full h-10 w-10"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5 text-gray-800" />
-            </Button>
-          </Link>
-          
-          <div className="flex items-center gap-2">
-            {/* Connection status */}
-            <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full shadow-lg" data-testid="connection-status">
-              {pollingState.status === 'connected' ? (
-                <Wifi className="w-4 h-4 text-green-500" />
-              ) : (
-                <WifiOff className="w-4 h-4 text-gray-400" />
-              )}
-              <span className="text-xs font-medium text-gray-700">
-                {pollingState.status === 'connected' ? 'LIVE' : getConnectionStatusText(pollingState.status)}
-              </span>
-              {pollingState.status === 'connected' && (
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              )}
-            </div>
-            
-            {/* Status badge */}
-            <Badge 
-              variant={ACTIVE_STATUSES.includes(locationData.status as BookingStatus) ? "default" : "secondary"}
-              className="bg-white text-gray-800 shadow-lg"
-              data-testid={`badge-status-${locationData.status}`}
-            >
-              {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.label || locationData.status}
-            </Badge>
+      {/* Top bar - Back button and live status */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+        <Link href="/my-bookings">
+          <Button 
+            variant="secondary" 
+            size="icon" 
+            className="bg-white shadow-lg hover:bg-gray-100 rounded-full h-10 w-10"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-5 w-5 text-black" />
+          </Button>
+        </Link>
+        
+        {/* Live indicator */}
+        {isLive && (
+          <div className="bg-black/80 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2 shadow-lg" data-testid="live-indicator">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            <span className="text-white text-sm font-medium">LIVE</span>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Bottom card with trip details (Uber-style) */}
-      <div className="absolute bottom-0 left-0 right-0 z-10">
-        <div className="bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl p-6 space-y-4">
-          {/* ETA Header */}
-          {routeInfo && (
-            <div className="flex items-center justify-between border-b pb-4">
+      {/* Bottom sheet - Uber style */}
+      <div className={`absolute bottom-0 left-0 right-0 z-10 transition-transform duration-300 ${isSheetExpanded ? 'translate-y-0' : 'translate-y-[180px]'}`}>
+        <div className="bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl">
+          {/* Handle bar */}
+          <button 
+            onClick={() => setIsSheetExpanded(!isSheetExpanded)}
+            className="w-full py-3 flex justify-center"
+            data-testid="button-toggle-sheet"
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+          </button>
+          
+          <div className="px-6 pb-6 space-y-4">
+            {/* Status header */}
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">
-                  {currentLocation ? "Arriving in" : "Estimated trip time"}
+                <h2 className="text-xl font-bold text-foreground" data-testid="text-status-title">
+                  {statusMessage.title}
+                </h2>
+                <p className="text-sm text-muted-foreground" data-testid="text-status-subtitle">
+                  {statusMessage.subtitle}
                 </p>
-                <p className="text-3xl font-bold" data-testid="text-eta-large">{routeInfo.duration}</p>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-muted-foreground">
-                  {currentLocation ? "Mover's route" : "Trip distance"}
-                </p>
-                <p className="text-xl font-semibold" data-testid="text-distance">{routeInfo.distance}</p>
+              {routeInfo && (
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground" data-testid="text-eta">
+                    {routeInfo.durationMinutes}
+                  </p>
+                  <p className="text-xs text-muted-foreground uppercase">min</p>
+                </div>
+              )}
+            </div>
+
+            {/* Mover card */}
+            {locationData.mover && (
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-2xl">
+                <Avatar className="h-14 w-14">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+                    {locationData.mover.name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-foreground truncate" data-testid="text-mover-name">
+                    {locationData.mover.name}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <span data-testid="text-mover-rating">{locationData.mover.rating.toFixed(1)}</span>
+                    <span className="mx-1">•</span>
+                    <Truck className="w-4 h-4" />
+                    <span className="capitalize">{locationData.mover.vehicleType}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="icon" 
+                    variant="outline"
+                    className="rounded-full h-10 w-10"
+                    data-testid="button-call"
+                  >
+                    <Phone className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    size="icon" 
+                    variant="outline"
+                    className="rounded-full h-10 w-10"
+                    data-testid="button-message"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Trip details */}
+            <div className="space-y-3">
+              {/* Pickup */}
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-center pt-1">
+                  <div className="w-3 h-3 rounded-full bg-foreground border-2 border-background shadow"></div>
+                  <div className="w-0.5 h-8 bg-muted-foreground/30"></div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Pickup</p>
+                  <p className="text-sm font-medium text-foreground truncate" data-testid="text-pickup">
+                    {pickup.address}
+                  </p>
+                </div>
+              </div>
+
+              {/* Dropoff */}
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-center pt-1">
+                  <div className="w-3 h-3 bg-foreground"></div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Dropoff</p>
+                  <p className="text-sm font-medium text-foreground truncate" data-testid="text-dropoff">
+                    {dropoff.address}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Distance info */}
+            {routeInfo && (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground pt-2 border-t">
+                <Navigation2 className="w-4 h-4" />
+                <span data-testid="text-distance">{routeInfo.distance}</span>
                 {currentLocation && (
-                  <p className="text-xs text-muted-foreground">Includes travel to pickup</p>
+                  <span className="text-xs">(to destination)</span>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Trip route visualization */}
-          <div className="space-y-3">
-            {/* Pickup */}
-            <div className="flex items-start gap-3">
-              <div className="flex flex-col items-center">
-                <div className="w-3 h-3 rounded-full bg-gray-800 border-2 border-white shadow"></div>
-                <div className="w-0.5 h-8 bg-gray-300"></div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Pickup</p>
-                <p className="text-sm font-medium truncate" data-testid="text-pickup-address">{pickup.address}</p>
-              </div>
-            </div>
-
-            {/* Dropoff */}
-            <div className="flex items-start gap-3">
-              <div className="flex flex-col items-center">
-                <div className="w-3 h-3 bg-gray-800"></div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Dropoff</p>
-                <p className="text-sm font-medium truncate" data-testid="text-dropoff-address">{dropoff.address}</p>
-              </div>
-            </div>
+            )}
           </div>
-
-          {/* Live status indicator */}
-          {currentLocation && (
-            <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/30 p-3 rounded-xl">
-              <div className="bg-green-500/20 p-2 rounded-full">
-                <Navigation className="h-4 w-4 text-green-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-green-800 dark:text-green-200 text-sm">Mover is on the way</p>
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  Updated {new Date(currentLocation.updatedAt).toLocaleTimeString()}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span className="text-xs font-bold text-green-600">LIVE</span>
-              </div>
-            </div>
-          )}
-
-          {/* Contact mover buttons */}
-          {currentLocation && (
-            <div className="flex gap-3 pt-2">
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                data-testid="button-call-mover"
-              >
-                <Phone className="w-4 h-4 mr-2" />
-                Call Mover
-              </Button>
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                data-testid="button-message-mover"
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Message
-              </Button>
-            </div>
-          )}
         </div>
       </div>
     </div>
