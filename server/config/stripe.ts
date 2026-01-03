@@ -19,22 +19,28 @@
 
 import Stripe from "stripe";
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// In development mode, use testing keys if available
+const isDevelopment = process.env.NODE_ENV === 'development';
+const stripeSecretKey = isDevelopment && process.env.TESTING_STRIPE_SECRET_KEY
+  ? process.env.TESTING_STRIPE_SECRET_KEY
+  : process.env.STRIPE_SECRET_KEY;
+
+if (!stripeSecretKey) {
+  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY (or TESTING_STRIPE_SECRET_KEY in development)');
 }
 
-if (process.env.STRIPE_SECRET_KEY.startsWith('pk_')) {
+if (stripeSecretKey.startsWith('pk_')) {
   throw new Error(
     'STRIPE_SECRET_KEY must be a secret key (starts with sk_), not a publishable key (starts with pk_). Please update the secret.'
   );
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+export const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2024-10-28.acacia" as any,
 });
 
-export const isLiveMode = process.env.STRIPE_SECRET_KEY.startsWith('sk_live_');
-export const isTestMode = process.env.STRIPE_SECRET_KEY.startsWith('sk_test_');
+export const isLiveMode = stripeSecretKey.startsWith('sk_live_');
+export const isTestMode = stripeSecretKey.startsWith('sk_test_');
 
 export const STRIPE_CONFIG = {
   currency: 'cad' as const,

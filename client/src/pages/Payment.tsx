@@ -12,16 +12,24 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield } from "lucide-react";
 import type { Booking } from "@shared/schema";
 
-// Lazy-load Stripe only when payment page is accessed
+// Lazy-load Stripe with key from server (handles dev/prod automatically)
 let stripePromise: Promise<Stripe | null> | null = null;
-const getStripe = () => {
+const getStripe = async (): Promise<Stripe | null> => {
   if (!stripePromise) {
-    const key = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-    if (!key) {
-      console.error('Missing VITE_STRIPE_PUBLIC_KEY');
-      return Promise.resolve(null);
-    }
-    stripePromise = loadStripe(key);
+    stripePromise = (async () => {
+      try {
+        const res = await fetch('/api/config/stripe-public-key');
+        const data = await res.json();
+        if (!data.publicKey) {
+          console.error('Missing Stripe public key from server');
+          return null;
+        }
+        return loadStripe(data.publicKey);
+      } catch (err) {
+        console.error('Failed to fetch Stripe config:', err);
+        return null;
+      }
+    })();
   }
   return stripePromise;
 };

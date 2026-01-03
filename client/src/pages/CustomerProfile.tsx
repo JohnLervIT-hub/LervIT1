@@ -56,7 +56,25 @@ type SavedCard = {
   isDefault: boolean;
 };
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+// Lazy-load Stripe with key from server (handles dev/prod automatically)
+let stripePromiseCache: ReturnType<typeof loadStripe> | null = null;
+const getStripePromise = async () => {
+  if (!stripePromiseCache) {
+    try {
+      const res = await fetch('/api/config/stripe-public-key');
+      const data = await res.json();
+      if (data.publicKey) {
+        stripePromiseCache = loadStripe(data.publicKey);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Stripe config:', err);
+    }
+  }
+  return stripePromiseCache;
+};
+
+// For backward compatibility, initialize immediately
+const stripePromise = getStripePromise();
 
 function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
   const stripe = useStripe();

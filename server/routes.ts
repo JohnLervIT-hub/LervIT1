@@ -174,6 +174,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
   
+  // Return the correct Stripe public key based on environment
+  // Development uses test keys, production uses live keys
+  app.get("/api/config/stripe-public-key", (_req: Request, res: Response) => {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const testKey = process.env.TESTING_VITE_STRIPE_PUBLIC_KEY;
+    const liveKey = process.env.VITE_STRIPE_PUBLIC_KEY;
+    const publicKey = isDevelopment && testKey ? testKey : liveKey;
+    
+    res.json({ 
+      publicKey: publicKey || '',
+      isTestMode: isDevelopment && !!testKey
+    });
+  });
+  
   // Serve uploaded files statically with express.static (secure against path traversal)
   const express = await import('express');
   app.use('/uploads', express.default.static(uploadDir, {
