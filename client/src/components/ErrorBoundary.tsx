@@ -11,24 +11,60 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  retryCount: number;
+}
+
+const HMR_ERROR_PATTERNS = [
+  'dispatcher.useState',
+  'dispatcher.useEffect', 
+  'dispatcher.useRef',
+  'dispatcher.useCallback',
+  'No QueryClient set',
+  'Invalid hook call',
+];
+
+function isHMRError(error: Error): boolean {
+  const message = error.message || '';
+  const stack = error.stack || '';
+  return HMR_ERROR_PATTERNS.some(pattern => 
+    message.includes(pattern) || stack.includes(pattern)
+  );
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private retryTimeout: ReturnType<typeof setTimeout> | null = null;
+
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    if (isHMRError(error) && this.state.retryCount < 3) {
+      this.retryTimeout = setTimeout(() => {
+        this.setState(prev => ({ 
+          hasError: false, 
+          error: null, 
+          retryCount: prev.retryCount + 1 
+        }));
+      }, 100);
+      return;
+    }
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
+  componentWillUnmount(): void {
+    if (this.retryTimeout) {
+      clearTimeout(this.retryTimeout);
+    }
+  }
+
   handleReset = (): void => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, retryCount: 0 });
   };
 
   handleGoHome = (): void => {
