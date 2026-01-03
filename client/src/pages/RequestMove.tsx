@@ -102,6 +102,63 @@ export default function RequestMove() {
   
   // Pre-selected mover from Browse Movers page
   const [preSelectedMoverId, setPreSelectedMoverId] = useState<string | null>(null);
+  
+  // Location permission state
+  const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
+
+  // Check location permission on mount
+  useEffect(() => {
+    const checkLocationPermission = async () => {
+      try {
+        // Check if geolocation is supported
+        if (!navigator.geolocation) {
+          setLocationStatus('denied');
+          setShowLocationDialog(true);
+          return;
+        }
+        
+        // Check permission status if available
+        if (navigator.permissions) {
+          const result = await navigator.permissions.query({ name: 'geolocation' });
+          setLocationStatus(result.state as 'granted' | 'denied' | 'prompt');
+          
+          if (result.state !== 'granted') {
+            setShowLocationDialog(true);
+          }
+          
+          // Listen for permission changes
+          result.onchange = () => {
+            setLocationStatus(result.state as 'granted' | 'denied' | 'prompt');
+            if (result.state === 'granted') {
+              setShowLocationDialog(false);
+            }
+          };
+        } else {
+          // Fallback: try to get position to check permission
+          navigator.geolocation.getCurrentPosition(
+            () => {
+              setLocationStatus('granted');
+            },
+            (error) => {
+              if (error.code === error.PERMISSION_DENIED) {
+                setLocationStatus('denied');
+              } else {
+                setLocationStatus('prompt');
+              }
+              setShowLocationDialog(true);
+            },
+            { timeout: 5000 }
+          );
+        }
+      } catch (error) {
+        setLocationStatus('prompt');
+        setShowLocationDialog(true);
+      }
+    };
+    
+    checkLocationPermission();
+  }, []);
 
   // PERFORMANCE: Preload Payment page when user reaches step 2 for instant navigation
   useEffect(() => {
@@ -638,8 +695,104 @@ export default function RequestMove() {
     }
   };
 
+  // Request location permission
+  const requestLocationPermission = () => {
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        setLocationStatus('granted');
+        setShowLocationDialog(false);
+        toast({
+          title: "Location Enabled",
+          description: "You can now book a move with accurate location services.",
+        });
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationStatus('denied');
+          toast({
+            title: "Location Denied",
+            description: "You can still book, but enabling location improves accuracy.",
+            variant: "destructive",
+          });
+        }
+      }
+    );
+  };
+
   return (
     <>
+      {/* Location Permission Dialog */}
+      <Dialog open={showLocationDialog} onOpenChange={setShowLocationDialog}>
+        <DialogContent className="max-w-md" data-testid="dialog-location-permission">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <MapPin className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <DialogTitle>Enable Location Services</DialogTitle>
+                <DialogDescription>
+                  For the best booking experience
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              We recommend enabling location to:
+            </p>
+            <ul className="text-sm space-y-2">
+              <li className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                <span>Find movers nearest to you faster</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                <span>Auto-fill your pickup address</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                <span>Get accurate distance and pricing</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                <span>Track your mover in real-time</span>
+              </li>
+            </ul>
+            
+            {locationStatus === 'denied' && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Location is blocked. Please enable it in your browser settings for the best experience.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="flex gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setShowLocationDialog(false)}
+                data-testid="button-skip-location"
+              >
+                Skip for Now
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={requestLocationPermission}
+                disabled={locationStatus === 'denied'}
+                data-testid="button-enable-location"
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                Enable Location
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <DialogContent className="max-w-2xl" data-testid="dialog-booking-success">
           <DialogHeader>
