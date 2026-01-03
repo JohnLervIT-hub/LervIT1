@@ -106,3 +106,20 @@ The platform features a mobile-first design using shadcn/ui components for a res
 *   **ID Matching Contract:** Job notifications use `mover.userId` (the user's ID) as the moverId. WebSocket clients are matched by `client.userId` to ensure proper delivery.
 *   **Broadcasting:** New bookings trigger WebSocket notifications to all matched movers via `moverWebSocket.notifyMover(mover.userId, ...)`.
 *   **Scalability Note:** Token store is in-memory (MVP limitation). For horizontal scaling, requires distributed storage (Redis).
+
+## Recent Changes (Jan 3, 2026)
+
+### Uber-Style Live Tracking Map
+*   **Full-Screen Map Experience:** Replaced card-based map with immersive full-screen Google Map like Uber.
+*   **Custom Vehicle Icon:** SVG-based car icon with rotation based on travel direction (calculates bearing between positions).
+*   **Smooth Vehicle Animation:** requestAnimationFrame-based interpolation with ease-out cubic easing for smooth 2-second transitions between GPS updates.
+*   **Dark Route Line:** Black/dark gray polyline styling matching Uber's design language.
+*   **Floating ETA Badge:** OverlayView component displays ETA minutes directly above the vehicle marker.
+*   **Bottom Sheet UI:** Rounded card with trip details (ETA, distance, pickup/dropoff addresses) slides up from bottom.
+*   **Live Status Indicator:** Green pulsing dot with "LIVE" label when mover is sharing location.
+*   **Light Map Styling:** Custom Google Maps styles for clean, minimal appearance.
+
+### Mover Job Decline Feature
+*   **Decline Button:** Movers can now decline job offers from their dashboard.
+*   **API Endpoint:** `POST /api/bookings/:id/decline` marks job notification as declined.
+*   **Prevents Re-acceptance:** Declined jobs no longer appear in available jobs list.
