@@ -206,19 +206,23 @@ export default function RequestMove() {
     if (hasRestoredRef.current) return;
     
     // PRIORITY 1: Check URL parameters FIRST (most reliable - survives any navigation)
-    // Use searchString from wouter's useSearch hook for reliable reading after client-side navigation
-    const params = new URLSearchParams(searchString);
-    const pickup = params.get('pickup');
-    const dropoff = params.get('dropoff');
-    const preferredDate = params.get('date');
-    const moverId = params.get('moverId');
-    const pickupAccess = params.get('pickupAccess');
-    const dropoffAccess = params.get('dropoffAccess');
-    const urlLoadSize = params.get('loadSize');
-    const resumeStepParam = params.get('resumeStep');
+    // Use BOTH searchString from wouter AND window.location.search as fallback
+    const wouterParams = new URLSearchParams(searchString);
+    const windowParams = new URLSearchParams(window.location.search);
+    
+    // Use wouter params first, fall back to window.location.search
+    const pickup = wouterParams.get('pickup') || windowParams.get('pickup');
+    const dropoff = wouterParams.get('dropoff') || windowParams.get('dropoff');
+    const preferredDate = wouterParams.get('date') || windowParams.get('date');
+    const moverId = wouterParams.get('moverId') || windowParams.get('moverId');
+    const pickupAccess = wouterParams.get('pickupAccess') || windowParams.get('pickupAccess');
+    const dropoffAccess = wouterParams.get('dropoffAccess') || windowParams.get('dropoffAccess');
+    const urlLoadSize = wouterParams.get('loadSize') || windowParams.get('loadSize');
+    const resumeStepParam = wouterParams.get('resumeStep') || windowParams.get('resumeStep');
 
-    console.log('[RequestMove] URL params check (from useSearch):', {
-      searchString,
+    console.log('[RequestMove] URL params check:', {
+      wouterSearch: searchString,
+      windowSearch: window.location.search,
       pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam
     });
 

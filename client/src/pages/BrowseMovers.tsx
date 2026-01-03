@@ -23,6 +23,7 @@ import {
 import { Search, SlidersHorizontal, MapPin, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { LocationPrompt } from "@/components/LocationPrompt";
 import { getVehicleDisplayName } from "@/lib/utils";
 
@@ -64,6 +65,7 @@ function MoverCardSkeleton() {
 
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
@@ -167,7 +169,20 @@ export default function BrowseMovers() {
   }, [movers, searchQuery, selectedVehicleTypes, minRating, verifiedOnly, sortBy]);
 
   const handleSelectMover = (id: string) => {
-    setLocation(`/request-move?moverId=${id}`);
+    const bookingPath = `/request-move?moverId=${id}`;
+    
+    if (!user) {
+      // Not authenticated - redirect to login first, then to booking page
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to book this mover.",
+      });
+      setLocation(`/login?redirect=${encodeURIComponent(bookingPath)}`);
+      return;
+    }
+    
+    // User is authenticated - go directly to booking page
+    setLocation(bookingPath);
   };
 
   return (
