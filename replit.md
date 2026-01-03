@@ -23,17 +23,19 @@ The platform features a responsive, mobile-first design utilizing shadcn/ui comp
 *   **Performance:** Gzip/Brotli compression, lazy loading for routes, preconnect hints, React Query caching, and static upload caching.
 *   **Real-Time Communication:** WebSocket notification system for movers with token-based authentication and audio alerts.
 *   **Resilience:** Circuit Breaker system for external API calls and an async Vision Queue for background image processing.
+*   **Production Security:** `/api/seed` endpoint returns 404 in production (NODE_ENV check).
+*   **Archived Pages:** Demo pages (ProximityDemo, LifecycleDemo, MoverLifecycleDemo, VideoPreview) moved to `client/src/pages/archived/`.
 
 ### Feature Specifications
 *   **Uber-Style Proximity Matching:** Uses Google Maps Distance Matrix API for geocoding, a 7-component dynamic pricing model, and an algorithm to rank the top 5 nearest available movers (15-50km radius) with a 10-minute job notification expiration.
 *   **Vehicle Matching:** A smart system classifies vehicles by volume and allows only a single-tier upgrade, normalizing types and providing user-friendly suggestions.
 *   **Enhanced Mover Display:** `MoverCard` provides detailed mover information, including verification status, ratings, vehicle details, ETA, and pricing.
 *   **Booking Flow:** A multi-step process for locations, load details (mandatory photo upload), and scheduling.
-*   **AI-Powered Features:**
-    *   **AI Auto-Quote Predictor:** Provides instant price estimates with confidence levels.
-    *   **AI Price Breakdown Explainer:** Natural language explanations for pricing components.
-    *   **Vision Engine 2.0 (AI Product Identifier):** A 3-layer system for furniture identification using GPT-4o Vision, a ground-truth database, text-based similarity matching, and dimension correction rules for volume/load size estimation and vehicle recommendation.
-    *   **AI Support Copilot:** Analyzes support tickets using GPT-4o for summaries, classification, priority, root cause, recommendations, and suggested responses.
+*   **AI-Powered Features:** Controlled via `AI_FEATURES` flags in `shared/ai.ts` for easy enable/disable.
+    *   **AI Auto-Quote Predictor:** Provides instant price estimates with confidence levels. (Active)
+    *   **AI Price Breakdown Explainer:** Natural language explanations for pricing components. (Archived - feature flag disabled)
+    *   **Vision Engine 2.0 (AI Product Identifier):** A 3-layer system for furniture identification using GPT-4o Vision, a ground-truth database, text-based similarity matching, and dimension correction rules for volume/load size estimation and vehicle recommendation. (Active)
+    *   **AI Support Copilot:** Analyzes support tickets using GPT-4o for summaries, classification, priority, root cause, recommendations, and suggested responses. (Active)
 *   **Image Upload:** Frontend drag-and-drop with validation and Multer-based API handling.
 *   **Role-Specific UX:** `ProtectedRoute` for access control and dynamic navigation.
 *   **Customer Support:** Ticketing system with FAQ and admin dashboard.
