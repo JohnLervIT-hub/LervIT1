@@ -3436,7 +3436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
           for (const mover of moversToNotify) {
             await storage.createJobNotification({
-              moverId: mover.userId,
+              moverId: mover.id,  // Use mover.id (movers table PK), NOT mover.userId
               bookingId: booking.id,
               status: 'pending',
               distanceToPickup: '0',
@@ -3444,7 +3444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               expiresAt,
             });
             
-            // Send real-time WebSocket notification to mover
+            // Send real-time WebSocket notification to mover (uses userId for WebSocket client matching)
             moverWebSocket.notifyMover(mover.userId, {
               type: 'job_notification',
               bookingId: booking.id,
