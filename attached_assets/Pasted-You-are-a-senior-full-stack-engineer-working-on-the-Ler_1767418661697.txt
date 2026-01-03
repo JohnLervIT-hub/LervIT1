@@ -1,0 +1,63 @@
+You are a senior full-stack engineer working on the Lervit web app (app.lervit.com). 
+Problem: From Find Movers → Booking page, user selects a mover, fills booking form, taps “Find Mover”, and gets an alert to sign in. After signing in, user returns to booking page but all previously-entered fields are blank. We must preserve the selected mover and booking form inputs across auth redirect.
+
+GOAL
+Implement reliable form persistence + auth gating so booking inputs are restored after login and user never re-enters data.
+
+REQUIREMENTS (DO ALL)
+1) Auth gating on Booking page:
+   - If user is not authenticated when Booking page loads, do NOT allow the user to fill the form and lose it later.
+   - Show a “Sign in to continue” state (or auto-redirect to /login) while preserving moverId and any draft (see below).
+   - After successful login, redirect back to Booking page with the same mover selected.
+
+2) Draft persistence (sessionStorage preferred):
+   - Before redirecting user to login (or when API returns 401), save the current booking form data + moverId into sessionStorage.
+   - Use a stable key format like: `lervit_booking_draft_${moverId || "none"}`.
+   - Save JSON with: { moverId, formData, createdAt, version }.
+   - Add expiry: if draft older than 2 hours, ignore and remove it.
+
+3) Draft restore:
+   - On Booking page mount, attempt to load a draft from sessionStorage for the current moverId (or last moverId saved).
+   - If found and not expired, auto-populate the form fields and ensure the selected mover is retained.
+   - Show a small toast/banner: “Your booking details were restored.”
+
+4) Handle 401 on submit:
+   - When user clicks “Find Mover” (submit), if the API responds 401 Unauthorized:
+     a) Save draft to sessionStorage immediately
+     b) Redirect to login with a `next=` query param pointing back to booking page (include moverId in the URL).
+   - After login success, use `next` to return to booking page.
+
+5) Clear draft on success:
+   - When booking is successfully created (200/201), remove the draft from sessionStorage to avoid stale restores.
+
+6) URL state:
+   - Ensure mover selection persists via URL param: `/booking?moverId=XYZ` (or existing routing scheme).
+   - If user selected a mover on Find Movers page, include moverId in the route transition.
+
+IMPLEMENTATION DETAILS
+- Use client-side navigation (router.push / navigate) not `window.location` unless unavoidable.
+- If using React Hook Form, restore using `reset(restoredValues)`; if using Formik, use `setValues`.
+- Persist on:
+  a) Submit attempt (always)
+  b) Additionally, persist on field change with a debounce (optional but nice). If you do this, debounce 500–800ms.
+
+DELIVERABLES
+- Code changes in:
+  - Find Movers page: route to Booking with moverId in URL
+  - Booking page: load + restore draft, auth gate, save draft on 401 and before redirect
+  - Login flow: respect `next` parameter and redirect after login
+- Add a small helper module:
+  - `bookingDraft.ts` or `bookingDraft.js` with functions:
+    * saveDraft(moverId, formData)
+    * loadDraft(moverId)
+    * clearDraft(moverId)
+    * isExpired(createdAt)
+- Add minimal tests or test steps.
+
+TEST STEPS (MUST PASS)
+1) Logged out user selects mover → booking page → enters all fields → clicks Find Mover → redirected to login → logs in → returns to booking page → all fields restored + same mover selected.
+2) Draft expires after 2 hours → no restore occurs.
+3) Successful booking clears draft (refresh does not repopulate old data).
+4) If API returns 401 on submit, draft is still saved and restored.
+
+Before coding: search codebase for the booking form component, the submit handler for “Find Mover”, and the auth guard/login redirect logic. Then implement changes with clear, commented commits.

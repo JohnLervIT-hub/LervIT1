@@ -32,6 +32,7 @@ import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
+import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -198,97 +199,12 @@ export default function RequestMove() {
   // Track if we've already restored from sessionStorage to prevent double-restoration
   const hasRestoredRef = useRef(false);
   
-  // Pre-fill form from URL query parameters (from hero form) or sessionStorage (after login)
+  // Pre-fill form from URL query parameters (PRIORITY 1 - most reliable) or sessionStorage (after login)
   useEffect(() => {
     // Prevent double restoration on strict mode or fast re-renders
     if (hasRestoredRef.current) return;
     
-    // First, check for pending booking data from storage (user returned from login)
-    // Check both localStorage and sessionStorage for maximum compatibility
-    let pendingBookingData: string | null = null;
-    let storageSource: string = 'none';
-    try {
-      pendingBookingData = localStorage.getItem('pendingBooking');
-      if (pendingBookingData) {
-        storageSource = 'localStorage';
-      } else {
-        pendingBookingData = sessionStorage.getItem('pendingBooking');
-        if (pendingBookingData) {
-          storageSource = 'sessionStorage';
-        }
-      }
-    } catch (e) {
-      console.error('[RequestMove] storage.getItem error:', e);
-    }
-    console.log('[RequestMove] Restoration check:', { 
-      hasPendingData: !!pendingBookingData,
-      hasRestoredRef: hasRestoredRef.current,
-      rawDataLength: pendingBookingData?.length || 0,
-      storageSource,
-      localStorageKeys: Object.keys(localStorage),
-      sessionStorageKeys: Object.keys(sessionStorage)
-    });
-    
-    if (pendingBookingData) {
-      hasRestoredRef.current = true;
-      isRestoringRef.current = true;
-      
-      try {
-        const data = JSON.parse(pendingBookingData);
-        console.log('[RequestMove] Restoring data:', data);
-        
-        // Clear storage FIRST to prevent double-restoration in StrictMode
-        localStorage.removeItem('pendingBooking');
-        sessionStorage.removeItem('pendingBooking');
-        console.log('[RequestMove] Cleared storage, now restoring state...');
-        
-        // Batch all state updates together
-        setPickupAddress(data.pickupAddress || "");
-        setDropoffAddress(data.dropoffAddress || "");
-        setPickupDifficulty(data.pickupDifficulty || "");
-        setDropoffDifficulty(data.dropoffDifficulty || "");
-        setLoadSize(data.loadSize || "medium");
-        setHeavyItem(data.heavyItem || false);
-        setNumberOfMovers(data.numberOfMovers || 1);
-        setDescription(data.description || "");
-        setImages(data.images || []);
-        setDate(data.date || "");
-        // Restore selected mover if one was chosen
-        if (data.preSelectedMoverId) {
-          setPreSelectedMoverId(data.preSelectedMoverId);
-        }
-        // Resume at the appropriate step - default to step 3 if they completed everything
-        // If they were blocked at step 2 (no photos), resume there
-        const resumeStep = data.resumeStep || (data.images && data.images.length > 0 && data.date ? 3 : 2);
-        console.log('[RequestMove] Resuming at step:', resumeStep, 'with data:', {
-          pickupAddress: data.pickupAddress,
-          dropoffAddress: data.dropoffAddress,
-          preSelectedMoverId: data.preSelectedMoverId
-        });
-        setStep(resumeStep);
-        
-        // Use setTimeout to ensure state is set before cleanup
-        setTimeout(() => {
-          hasPendingBooking.current = false;
-          isRestoringRef.current = false;
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }, 100);
-        
-        toast({
-          title: "Welcome Back!",
-          description: "Your booking details have been restored. You can now complete your request.",
-        });
-        return;
-      } catch (error) {
-        console.error("Failed to restore pending booking:", error);
-        localStorage.removeItem('pendingBooking');
-        sessionStorage.removeItem('pendingBooking');
-        hasPendingBooking.current = false;
-        isRestoringRef.current = false;
-      }
-    }
-
-    // If no pending booking, check URL parameters (from hero form, Browse Movers, or redirect after login)
+    // PRIORITY 1: Check URL parameters FIRST (most reliable - survives any navigation)
     const params = new URLSearchParams(window.location.search);
     const pickup = params.get('pickup');
     const dropoff = params.get('dropoff');
@@ -303,7 +219,7 @@ export default function RequestMove() {
       pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam
     });
 
-    // Check if this is a return from login with full booking data
+    // Check if this is a return from login with full booking data (URL params)
     const isReturningFromLogin = !!(pickup && dropoff && resumeStepParam);
     
     if (isReturningFromLogin) {
@@ -320,17 +236,63 @@ export default function RequestMove() {
       const resumeStep = parseInt(resumeStepParam) || 2;
       setStep(resumeStep);
       
+      // Also clear any drafts from storage to avoid confusion
+      clearDraft(moverId);
+      
       toast({
         title: "Welcome Back!",
         description: "Your booking details have been restored. You can now complete your request.",
       });
       
-      // Clean up URL params after restoration
+      // Clean up URL params after restoration (keep only moverId)
       window.history.replaceState({}, '', '/request-move' + (moverId ? `?moverId=${moverId}` : ''));
       return;
     }
 
-    // Simple pre-fill from hero or Browse Movers
+    // PRIORITY 2: Check sessionStorage draft using bookingDraft module
+    const draft = loadDraft(moverId);
+    if (draft) {
+      console.log('[RequestMove] Restoring from bookingDraft module');
+      hasRestoredRef.current = true;
+      isRestoringRef.current = true;
+      
+      const data = draft.formData;
+      setPickupAddress(data.pickupAddress || "");
+      setDropoffAddress(data.dropoffAddress || "");
+      setPickupDifficulty(data.pickupDifficulty || "");
+      setDropoffDifficulty(data.dropoffDifficulty || "");
+      setLoadSize(data.loadSize || "medium");
+      setHeavyItem(data.heavyItem || false);
+      setNumberOfMovers(data.numberOfMovers || 1);
+      setDescription(data.description || "");
+      setImages(data.images || []);
+      setDate(data.date || "");
+      
+      if (draft.moverId) {
+        setPreSelectedMoverId(draft.moverId);
+      }
+      
+      // Resume at step 2 if they had entered data but no photos
+      const resumeStep = data.images && data.images.length > 0 && data.date ? 3 : 2;
+      setStep(resumeStep);
+      
+      // Clear the draft after restoration
+      clearDraft(draft.moverId);
+      
+      setTimeout(() => {
+        hasPendingBooking.current = false;
+        isRestoringRef.current = false;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }, 100);
+      
+      toast({
+        title: "Welcome Back!",
+        description: "Your booking details have been restored. You can now complete your request.",
+      });
+      return;
+    }
+
+    // Simple pre-fill from hero or Browse Movers (no resumeStep param)
     if (pickup) {
       setPickupAddress(pickup);
     }
@@ -345,7 +307,7 @@ export default function RequestMove() {
     }
 
     // Show a toast if data was pre-filled from hero
-    if (pickup && dropoff && !resumeStepParam) {
+    if (pickup && dropoff) {
       toast({
         title: "Quote Form Pre-filled",
         description: "Your addresses have been loaded. Complete the details below to request your move.",
@@ -753,8 +715,9 @@ export default function RequestMove() {
             description: "Please log in to upload photos and complete your booking.",
             variant: "destructive",
           });
-          // Save current progress so they can continue after login
-          const pendingData = {
+          
+          // Save current progress using bookingDraft module
+          const draftData: BookingDraftData = {
             pickupAddress,
             dropoffAddress,
             pickupDifficulty,
@@ -763,37 +726,12 @@ export default function RequestMove() {
             heavyItem,
             numberOfMovers,
             description,
-            images: [], // No images yet
-            date: "", // No date yet
-            preSelectedMoverId: preSelectedMoverId || null,
-            resumeStep: 2 // Resume at step 2 to upload photos
+            images: [],
+            date: ""
           };
-          console.log('[RequestMove] Saving pending booking (Step 2):', pendingData);
-          try {
-            const jsonData = JSON.stringify(pendingData);
-            // Save to BOTH localStorage and sessionStorage for maximum compatibility
-            localStorage.setItem('pendingBooking', jsonData);
-            sessionStorage.setItem('pendingBooking', jsonData);
-            const verifiedLocal = localStorage.getItem('pendingBooking');
-            const verifiedSession = sessionStorage.getItem('pendingBooking');
-            console.log('[RequestMove] Save verification:', {
-              attempted: jsonData.substring(0, 100),
-              localStorageSaved: verifiedLocal?.length || 0,
-              sessionStorageSaved: verifiedSession?.length || 0,
-              anySuccess: !!(verifiedLocal || verifiedSession)
-            });
-            if (!verifiedLocal && !verifiedSession) {
-              console.error('[RequestMove] BOTH storage methods FAILED - data not persisted!');
-              alert('ERROR: Could not save booking data. Your browser may be blocking storage. Please check your privacy settings.');
-              return;
-            }
-          } catch (e) {
-            console.error('[RequestMove] storage error:', e);
-            alert('ERROR: Could not save booking data: ' + (e as Error).message);
-            return;
-          }
-          // Redirect to login with return path - include essential data in URL
-          // This ensures data survives even if browser storage is cleared
+          saveDraft(preSelectedMoverId, draftData);
+          
+          // Build redirect URL with essential data encoded (survives storage clearing)
           const params = new URLSearchParams();
           if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
           params.set('pickup', pickupAddress);
