@@ -7,8 +7,24 @@ import {
   ToastTitle,
   ToastViewport,
 } from "@/components/ui/toast"
+import { Component, type ReactNode } from "react"
 
-export function Toaster() {
+class ToasterErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {}
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+function ToasterContent() {
   const { toasts } = useToast()
 
   return (
@@ -29,5 +45,13 @@ export function Toaster() {
       })}
       <ToastViewport />
     </ToastProvider>
+  )
+}
+
+export function Toaster() {
+  return (
+    <ToasterErrorBoundary>
+      <ToasterContent />
+    </ToasterErrorBoundary>
   )
 }

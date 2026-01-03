@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, Component, type ReactNode } from 'react';
 import { useMoverWebSocket } from '@/hooks/useMoverWebSocket';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -27,7 +27,22 @@ interface JobNotification {
   timestamp?: string;
 }
 
-export function JobNotificationSound() {
+class NotificationErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {}
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+function JobNotificationSoundContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -302,5 +317,13 @@ export function JobNotificationSound() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export function JobNotificationSound() {
+  return (
+    <NotificationErrorBoundary>
+      <JobNotificationSoundContent />
+    </NotificationErrorBoundary>
   );
 }
