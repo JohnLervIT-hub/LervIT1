@@ -1,15 +1,13 @@
-// LervIT final hardening: Resilient polling with exponential backoff
-import { useEffect, useState, useCallback } from "react";
+// LervIT Uber-Style Live Tracking with smooth animations
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRoute } from "wouter";
-import { GoogleMap, Marker, InfoWindow, TrafficLayer, DirectionsRenderer } from "@react-google-maps/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GoogleMap, Marker, DirectionsRenderer, OverlayView } from "@react-google-maps/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Package, Navigation, Clock, Route, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, MapPin, Navigation, Wifi, WifiOff, Phone, MessageCircle } from "lucide-react";
 import { Link } from "wouter";
-import MoveProgressIndicator from "@/components/MoveProgressIndicator";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, type BookingStatus } from "@shared/schema";
-import { useResilientPolling, getConnectionStatusColor, getConnectionStatusText } from "@/hooks/useResilientPolling";
+import { useResilientPolling, getConnectionStatusText } from "@/hooks/useResilientPolling";
 
 interface LocationData {
   bookingId: string;
@@ -29,6 +27,12 @@ interface LocationData {
     longitude: number;
     updatedAt: string;
   } | null;
+  mover?: {
+    name: string;
+    phone: string;
+    vehicleType: string;
+    rating: number;
+  };
 }
 
 const mapContainerStyle = {
@@ -36,27 +40,92 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-const mapOptions = {
-  disableDefaultUI: false,
-  zoomControl: true,
+// Uber-style dark map options
+const mapOptions: google.maps.MapOptions = {
+  disableDefaultUI: true,
+  zoomControl: false,
   mapTypeControl: false,
   streetViewControl: false,
-  fullscreenControl: true,
+  fullscreenControl: false,
+  styles: [
+    { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
+  ],
 };
+
+// Custom white car SVG icon (Uber-style)
+const createCarIcon = (rotation: number = 0) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+      <g transform="rotate(${rotation}, 24, 24)">
+        <!-- Car body shadow -->
+        <ellipse cx="24" cy="38" rx="12" ry="3" fill="rgba(0,0,0,0.2)"/>
+        <!-- Car body -->
+        <rect x="14" y="16" width="20" height="24" rx="4" fill="#1a1a1a"/>
+        <!-- Car roof -->
+        <rect x="16" y="20" width="16" height="10" rx="2" fill="#2a2a2a"/>
+        <!-- Windshield -->
+        <rect x="17" y="14" width="14" height="6" rx="2" fill="#4a90d9"/>
+        <!-- Rear window -->
+        <rect x="17" y="32" width="14" height="4" rx="1" fill="#4a90d9"/>
+        <!-- Headlights -->
+        <rect x="16" y="12" width="4" height="2" rx="1" fill="#ffeb3b"/>
+        <rect x="28" y="12" width="4" height="2" rx="1" fill="#ffeb3b"/>
+        <!-- Taillights -->
+        <rect x="16" y="38" width="4" height="2" rx="1" fill="#f44336"/>
+        <rect x="28" y="38" width="4" height="2" rx="1" fill="#f44336"/>
+      </g>
+    </svg>
+  `;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
+// Smooth interpolation between positions
+function interpolatePosition(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  progress: number
+): { lat: number; lng: number } {
+  return {
+    lat: from.lat + (to.lat - from.lat) * progress,
+    lng: from.lng + (to.lng - from.lng) * progress,
+  };
+}
+
+// Calculate bearing between two points
+function calculateBearing(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+  
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  
+  let bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  return (bearing + 360) % 360;
+}
 
 export default function TrackTrip() {
   const [, params] = useRoute("/track-trip/:bookingId");
   const bookingId = params?.bookingId;
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [map, setMap] = useState<google.maps.Map | null>(null);
-  const [selectedMarker, setSelectedMarker] = useState<'pickup' | 'dropoff' | 'mover' | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string; durationMinutes: number } | null>(null);
+  
+  // Animation state
+  const [animatedPosition, setAnimatedPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [vehicleRotation, setVehicleRotation] = useState(0);
+  const previousPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  // Google Maps API is loaded globally in App.tsx
-  // No need to load it again here
-
-  // Use resilient polling with exponential backoff for connection issues
+  // Use resilient polling with exponential backoff
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
     ["/api/bookings", bookingId, "location"],
     {},
@@ -73,21 +142,76 @@ export default function TrackTrip() {
     }
   }, [locationData?.status]);
 
-  // Calculate driving directions when location data changes
+  // Smooth animation of vehicle position
+  useEffect(() => {
+    if (!locationData?.currentLocation) {
+      setAnimatedPosition(null);
+      return;
+    }
+
+    const newPosition = {
+      lat: locationData.currentLocation.latitude,
+      lng: locationData.currentLocation.longitude,
+    };
+
+    // Calculate rotation based on movement direction
+    if (previousPositionRef.current) {
+      const bearing = calculateBearing(previousPositionRef.current, newPosition);
+      setVehicleRotation(bearing);
+    }
+
+    // If no previous position, snap to current
+    if (!previousPositionRef.current || !animatedPosition) {
+      setAnimatedPosition(newPosition);
+      previousPositionRef.current = newPosition;
+      return;
+    }
+
+    // Animate from current animated position to new position
+    const startPosition = animatedPosition;
+    const startTime = performance.now();
+    const duration = 2000; // 2 second smooth transition
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out cubic for smooth deceleration
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      
+      const interpolated = interpolatePosition(startPosition, newPosition, easeProgress);
+      setAnimatedPosition(interpolated);
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        previousPositionRef.current = newPosition;
+      }
+    };
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [locationData?.currentLocation?.latitude, locationData?.currentLocation?.longitude]);
+
+  // Calculate driving directions
   useEffect(() => {
     if (!locationData) return;
 
     const directionsService = new google.maps.DirectionsService();
 
-    // Determine origin based on mover's current location or pickup
     const origin = locationData.currentLocation 
       ? { lat: locationData.currentLocation.latitude, lng: locationData.currentLocation.longitude }
       : { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude };
 
-    // If mover has current location, route from mover to pickup to dropoff
-    // Otherwise, route from pickup to dropoff
     if (locationData.currentLocation) {
-      // Mover is on the way - show route from mover to dropoff via pickup
       directionsService.route(
         {
           origin: origin,
@@ -101,22 +225,22 @@ export default function TrackTrip() {
         (result, status) => {
           if (status === google.maps.DirectionsStatus.OK && result) {
             setDirections(result);
-            // Calculate total distance and duration
             let totalDistance = 0;
             let totalDuration = 0;
             result.routes[0].legs.forEach(leg => {
               totalDistance += leg.distance?.value || 0;
               totalDuration += leg.duration?.value || 0;
             });
+            const durationMinutes = Math.ceil(totalDuration / 60);
             setRouteInfo({
               distance: (totalDistance / 1000).toFixed(1) + ' km',
-              duration: Math.ceil(totalDuration / 60) + ' min',
+              duration: durationMinutes + ' min',
+              durationMinutes,
             });
           }
         }
       );
     } else {
-      // No mover location yet - show route from pickup to dropoff
       directionsService.route(
         {
           origin: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude },
@@ -127,9 +251,11 @@ export default function TrackTrip() {
           if (status === google.maps.DirectionsStatus.OK && result) {
             setDirections(result);
             const leg = result.routes[0].legs[0];
+            const durationMinutes = Math.ceil((leg.duration?.value || 0) / 60);
             setRouteInfo({
               distance: leg.distance?.text || '',
               duration: leg.duration?.text || '',
+              durationMinutes,
             });
           }
         }
@@ -137,7 +263,7 @@ export default function TrackTrip() {
     }
   }, [locationData]);
 
-  // Update map bounds when location changes
+  // Update map bounds
   useEffect(() => {
     if (map && locationData) {
       const bounds = new google.maps.LatLngBounds();
@@ -151,7 +277,7 @@ export default function TrackTrip() {
         });
       }
       
-      map.fitBounds(bounds, 50);
+      map.fitBounds(bounds, { top: 120, bottom: 280, left: 40, right: 40 });
     }
   }, [map, locationData]);
 
@@ -159,11 +285,9 @@ export default function TrackTrip() {
     setMap(map);
   }, []);
 
-  // Google Maps API is loaded globally in App.tsx, so no need to check loadError here
-
   if (isLoading || !locationData) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading trip details...</p>
@@ -176,239 +300,221 @@ export default function TrackTrip() {
   const dropoff = locationData.dropoff;
   const currentLocation = locationData.currentLocation;
 
-  const center = {
-    lat: (pickup.latitude + dropoff.latitude) / 2,
-    lng: (pickup.longitude + dropoff.longitude) / 2,
-  };
+  const center = currentLocation
+    ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
+    : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="bg-card border-b sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto p-4 flex items-center gap-4">
+    <div className="h-screen w-full relative overflow-hidden bg-background">
+      {/* Full-screen Google Map */}
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={center}
+        zoom={14}
+        options={mapOptions}
+        onLoad={onMapLoad}
+      >
+        {/* Dark route line (Uber-style) */}
+        {directions && (
+          <DirectionsRenderer
+            directions={directions}
+            options={{
+              suppressMarkers: true,
+              polylineOptions: {
+                strokeColor: "#1a1a1a",
+                strokeWeight: 5,
+                strokeOpacity: 1,
+              },
+            }}
+          />
+        )}
+
+        {/* Pickup marker - Custom black dot with white ring */}
+        <Marker
+          position={{ lat: pickup.latitude, lng: pickup.longitude }}
+          icon={{
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+            strokeColor: "#1a1a1a",
+            strokeWeight: 3,
+          }}
+          data-testid="marker-pickup"
+        />
+
+        {/* Dropoff marker - Black square */}
+        <Marker
+          position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
+          icon={{
+            path: "M -6,-6 L 6,-6 L 6,6 L -6,6 Z",
+            scale: 1,
+            fillColor: "#1a1a1a",
+            fillOpacity: 1,
+            strokeColor: "#1a1a1a",
+            strokeWeight: 1,
+          }}
+          data-testid="marker-dropoff"
+        />
+
+        {/* Animated vehicle marker */}
+        {animatedPosition && (
+          <Marker
+            position={animatedPosition}
+            icon={{
+              url: createCarIcon(vehicleRotation),
+              scaledSize: new google.maps.Size(48, 48),
+              anchor: new google.maps.Point(24, 24),
+            }}
+            data-testid="marker-mover"
+          />
+        )}
+
+        {/* ETA Overlay on map (Uber-style floating badge) */}
+        {routeInfo && currentLocation && (
+          <OverlayView
+            position={animatedPosition || { lat: currentLocation.latitude, lng: currentLocation.longitude }}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div className="relative -translate-x-1/2 -translate-y-20">
+              <div className="bg-black text-white px-3 py-1.5 rounded-lg shadow-lg text-center min-w-[60px]">
+                <div className="text-lg font-bold" data-testid="text-eta-badge">{routeInfo.durationMinutes}</div>
+                <div className="text-xs opacity-80">MIN</div>
+              </div>
+              <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[8px] border-l-transparent border-r-transparent border-t-black"></div>
+            </div>
+          </OverlayView>
+        )}
+      </GoogleMap>
+
+      {/* Top navigation bar */}
+      <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none">
+        <div className="flex items-center justify-between pointer-events-auto">
           <Link href="/my-bookings">
-            <Button variant="ghost" size="icon" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back" aria-label="Go back to bookings">
-              <ArrowLeft className="h-5 w-5" />
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              className="bg-white shadow-lg hover:bg-gray-50 rounded-full h-10 w-10"
+              data-testid="button-back"
+            >
+              <ArrowLeft className="h-5 w-5 text-gray-800" />
             </Button>
           </Link>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold">Track Your Move</h1>
-            <p className="text-sm text-muted-foreground">Live location tracking</p>
-          </div>
-          <Badge 
-            variant={ACTIVE_STATUSES.includes(locationData.status as BookingStatus) || locationData.status === "in_transit" ? "default" : "secondary"} 
-            data-testid={`badge-status-${locationData.status}`}
-          >
-            {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.label || locationData.status}
-          </Badge>
-          {/* Connection status indicator */}
-          <div className="flex items-center gap-1.5" data-testid="connection-status" aria-label={getConnectionStatusText(pollingState.status)}>
-            {pollingState.status === 'connected' ? (
-              <Wifi className="w-4 h-4 text-green-500" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-muted-foreground" />
-            )}
-            <span className="text-xs text-muted-foreground">
-              {getConnectionStatusText(pollingState.status)}
-            </span>
+          
+          <div className="flex items-center gap-2">
+            {/* Connection status */}
+            <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full shadow-lg" data-testid="connection-status">
+              {pollingState.status === 'connected' ? (
+                <Wifi className="w-4 h-4 text-green-500" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-gray-400" />
+              )}
+              <span className="text-xs font-medium text-gray-700">
+                {pollingState.status === 'connected' ? 'LIVE' : getConnectionStatusText(pollingState.status)}
+              </span>
+              {pollingState.status === 'connected' && (
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              )}
+            </div>
+            
+            {/* Status badge */}
+            <Badge 
+              variant={ACTIVE_STATUSES.includes(locationData.status as BookingStatus) ? "default" : "secondary"}
+              className="bg-white text-gray-800 shadow-lg"
+              data-testid={`badge-status-${locationData.status}`}
+            >
+              {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.label || locationData.status}
+            </Badge>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto p-4 space-y-4">
-        {/* Move Progress Indicator */}
-        <Card>
-          <CardContent className="pt-6">
-            <MoveProgressIndicator currentStatus={locationData.status} />
-          </CardContent>
-        </Card>
-
-        {/* Route Info Card */}
-        {routeInfo && (
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-around">
-                <div className="flex items-center gap-2">
-                  <Route className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Distance</p>
-                    <p className="font-semibold text-lg" data-testid="text-route-distance">{routeInfo.distance}</p>
-                  </div>
-                </div>
-                <div className="w-px h-10 bg-border" />
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">ETA</p>
-                    <p className="font-semibold text-lg" data-testid="text-route-duration">{routeInfo.duration}</p>
-                  </div>
-                </div>
+      {/* Bottom card with trip details (Uber-style) */}
+      <div className="absolute bottom-0 left-0 right-0 z-10">
+        <div className="bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl p-6 space-y-4">
+          {/* ETA Header */}
+          {routeInfo && (
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {currentLocation ? "Arriving in" : "Estimated trip time"}
+                </p>
+                <p className="text-3xl font-bold" data-testid="text-eta-large">{routeInfo.duration}</p>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Location Info Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-green-600" />
-                Pickup Location
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm" data-testid="text-pickup-address">{pickup.address}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Package className="h-4 w-4 text-red-600" />
-                Dropoff Location
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm" data-testid="text-dropoff-address">{dropoff.address}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Current Location Status */}
-        {currentLocation && (
-          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-500/20 p-2 rounded-full">
-                  <Navigation className="h-5 w-5 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-green-800 dark:text-green-200">Mover is on the way!</p>
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    Last updated: {new Date(currentLocation.updatedAt).toLocaleTimeString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" data-testid="indicator-live"></div>
-                  <span className="text-sm font-medium text-green-600">LIVE</span>
-                </div>
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">Distance</p>
+                <p className="text-xl font-semibold" data-testid="text-distance">{routeInfo.distance}</p>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Google Map with Driving Directions */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="h-[500px] w-full relative overflow-hidden rounded-lg" data-testid="map-container">
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={center}
-                zoom={12}
-                options={mapOptions}
-                onLoad={onMapLoad}
-              >
-                {/* Render driving directions */}
-                {directions && (
-                  <DirectionsRenderer
-                    directions={directions}
-                    options={{
-                      suppressMarkers: true,
-                      polylineOptions: {
-                        strokeColor: "#3b82f6",
-                        strokeWeight: 5,
-                        strokeOpacity: 0.8,
-                      },
-                    }}
-                  />
-                )}
-
-                {/* Pickup marker (green) */}
-                <Marker
-                  position={{ lat: pickup.latitude, lng: pickup.longitude }}
-                  icon={{
-                    url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-                  }}
-                  onClick={() => setSelectedMarker('pickup')}
-                  data-testid="marker-pickup"
-                />
-                {selectedMarker === 'pickup' && (
-                  <InfoWindow
-                    position={{ lat: pickup.latitude, lng: pickup.longitude }}
-                    onCloseClick={() => setSelectedMarker(null)}
-                  >
-                    <div>
-                      <strong>Pickup</strong><br />
-                      {pickup.address}
-                    </div>
-                  </InfoWindow>
-                )}
-
-                {/* Dropoff marker (red) */}
-                <Marker
-                  position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
-                  icon={{
-                    url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                  }}
-                  onClick={() => setSelectedMarker('dropoff')}
-                  data-testid="marker-dropoff"
-                />
-                {selectedMarker === 'dropoff' && (
-                  <InfoWindow
-                    position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
-                    onCloseClick={() => setSelectedMarker(null)}
-                  >
-                    <div>
-                      <strong>Dropoff</strong><br />
-                      {dropoff.address}
-                    </div>
-                  </InfoWindow>
-                )}
-
-                {/* Current mover location marker (blue truck icon) */}
-                {currentLocation && (
-                  <>
-                    <Marker
-                      key={`mover-${currentLocation.latitude}-${currentLocation.longitude}`}
-                      position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-                      icon={{
-                        url: "https://maps.google.com/mapfiles/ms/icons/truck.png",
-                        scaledSize: new google.maps.Size(40, 40),
-                      }}
-                      onClick={() => setSelectedMarker('mover')}
-                      data-testid="marker-mover"
-                    />
-                    {selectedMarker === 'mover' && (
-                      <InfoWindow
-                        position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-                        onCloseClick={() => setSelectedMarker(null)}
-                      >
-                        <div>
-                          <strong>Mover Location</strong><br />
-                          Updated: {new Date(currentLocation.updatedAt).toLocaleTimeString()}
-                        </div>
-                      </InfoWindow>
-                    )}
-                  </>
-                )}
-
-                {/* Real-time traffic layer */}
-                <TrafficLayer />
-              </GoogleMap>
             </div>
-          </CardContent>
-        </Card>
+          )}
 
-        {/* Status Info - Only show for non-active statuses */}
-        {!ACTIVE_STATUSES.includes(locationData.status as BookingStatus) && locationData.status !== "in_transit" && (
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-center text-muted-foreground" data-testid="text-status-info">
-                {BOOKING_STATUS_INFO[locationData.status as BookingStatus]?.description || `Status: ${locationData.status}`}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+          {/* Trip route visualization */}
+          <div className="space-y-3">
+            {/* Pickup */}
+            <div className="flex items-start gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-3 h-3 rounded-full bg-gray-800 border-2 border-white shadow"></div>
+                <div className="w-0.5 h-8 bg-gray-300"></div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Pickup</p>
+                <p className="text-sm font-medium truncate" data-testid="text-pickup-address">{pickup.address}</p>
+              </div>
+            </div>
+
+            {/* Dropoff */}
+            <div className="flex items-start gap-3">
+              <div className="flex flex-col items-center">
+                <div className="w-3 h-3 bg-gray-800"></div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Dropoff</p>
+                <p className="text-sm font-medium truncate" data-testid="text-dropoff-address">{dropoff.address}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Live status indicator */}
+          {currentLocation && (
+            <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/30 p-3 rounded-xl">
+              <div className="bg-green-500/20 p-2 rounded-full">
+                <Navigation className="h-4 w-4 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-green-800 dark:text-green-200 text-sm">Mover is on the way</p>
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  Updated {new Date(currentLocation.updatedAt).toLocaleTimeString()}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span className="text-xs font-bold text-green-600">LIVE</span>
+              </div>
+            </div>
+          )}
+
+          {/* Contact mover buttons */}
+          {currentLocation && (
+            <div className="flex gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                data-testid="button-call-mover"
+              >
+                <Phone className="w-4 h-4 mr-2" />
+                Call Mover
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                data-testid="button-message-mover"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Message
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
