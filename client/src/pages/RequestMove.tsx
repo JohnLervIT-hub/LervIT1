@@ -232,7 +232,11 @@ export default function RequestMove() {
         if (data.preSelectedMoverId) {
           setPreSelectedMoverId(data.preSelectedMoverId);
         }
-        setStep(3); // Jump to final step since they already filled everything
+        // Resume at the appropriate step - default to step 3 if they completed everything
+        // If they were blocked at step 2 (no photos), resume there
+        const resumeStep = data.resumeStep || (data.images && data.images.length > 0 && data.date ? 3 : 2);
+        console.log('[RequestMove] Resuming at step:', resumeStep);
+        setStep(resumeStep);
         
         // Use requestAnimationFrame to ensure React has flushed all state updates
         requestAnimationFrame(() => {
@@ -658,6 +662,40 @@ export default function RequestMove() {
     // Step 2: Validate photos (MANDATORY)
     if (step === 2) {
       if (!images || images.length === 0) {
+        // For unauthenticated users, save data and redirect to login
+        // They can upload photos after logging in
+        if (!user) {
+          toast({
+            title: "Login Required",
+            description: "Please log in to upload photos and complete your booking.",
+            variant: "destructive",
+          });
+          // Save current progress so they can continue after login
+          const pendingData = {
+            pickupAddress,
+            dropoffAddress,
+            pickupDifficulty,
+            dropoffDifficulty,
+            loadSize,
+            heavyItem,
+            numberOfMovers,
+            description,
+            images: [], // No images yet
+            date: "", // No date yet
+            preSelectedMoverId: preSelectedMoverId || null,
+            resumeStep: 2 // Resume at step 2 to upload photos
+          };
+          console.log('[RequestMove] Saving pending booking (Step 2):', pendingData);
+          localStorage.setItem('pendingBooking', JSON.stringify(pendingData));
+          console.log('[RequestMove] Verified saved:', localStorage.getItem('pendingBooking'));
+          // Redirect to login with return path
+          const returnPath = preSelectedMoverId 
+            ? `/request-move?moverId=${preSelectedMoverId}`
+            : '/request-move';
+          setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
+          return;
+        }
+        
         toast({
           title: "Photos required",
           description: "Please upload at least one photo of your items to continue.",
