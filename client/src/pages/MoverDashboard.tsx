@@ -351,19 +351,29 @@ export default function MoverDashboard() {
   // Combined bookings for display: active first, then past
   const bookings = [...activeBookings, ...pastBookings];
   
-  // Show both "pending" and "confirmed" (paid) jobs that don't have a mover assigned yet
-  // Don't filter by preferredDate - movers should see all available jobs
-  // Customers may reschedule, or bookings may need manual handling
-  // Jobs are only hidden after explicit cancellation/expiration by backend
+  // Show only PAID jobs that are available for acceptance
+  // Must have: payment succeeded, no mover assigned, pending/confirmed status, and not a past date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Start of today for date comparison
+  
   const availableBookings = allBookings
-    ?.filter((b) => (b.status === "pending" || b.status === "confirmed") && !b.moverId)
+    ?.filter((b) => {
+      // Must be a paid job
+      if (b.paymentStatus !== 'succeeded') return false;
+      // Must not have a mover assigned
+      if (b.moverId) return false;
+      // Must be pending or confirmed status
+      if (b.status !== "pending" && b.status !== "confirmed") return false;
+      // Must be today or in the future (not old jobs)
+      const jobDate = new Date(b.preferredDate);
+      jobDate.setHours(0, 0, 0, 0);
+      if (jobDate < today) return false;
+      return true;
+    })
     ?.sort((a, b) => {
-      // Sort upcoming jobs first, then past-dated jobs at the end
+      // Sort by soonest date first
       const aDate = new Date(a.preferredDate);
       const bDate = new Date(b.preferredDate);
-      const aIsPast = aDate < now;
-      const bIsPast = bDate < now;
-      if (aIsPast !== bIsPast) return aIsPast ? 1 : -1; // Future dates first
       return aDate.getTime() - bDate.getTime();
     }) || [];
   

@@ -2736,6 +2736,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // SINGLE ACTIVE JOB ENFORCEMENT: Check if mover already has an active job
+      const moverBookings = await storage.getBookingsByMover(moverId);
+      const activeJobStatuses = ['confirmed', 'en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading'];
+      const existingActiveJob = moverBookings.find(b => 
+        activeJobStatuses.includes(b.status) && b.paymentStatus === 'succeeded'
+      );
+      
+      if (existingActiveJob) {
+        return res.status(409).json({ 
+          error: "You already have an active job. Complete your current job before accepting another.",
+          activeBookingId: existingActiveJob.id
+        });
+      }
+      
       // Check if mover was actually notified
       const notifications = await db
         .select()
