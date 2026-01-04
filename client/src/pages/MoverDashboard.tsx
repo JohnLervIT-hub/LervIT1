@@ -644,10 +644,15 @@ export default function MoverDashboard() {
   useEffect(() => {
     if (!locationSharing) return;
 
+    let permissionDeniedShown = false;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 5;
+
     const shareLocation = () => {
       if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
+            consecutiveErrors = 0; // Reset on success
             try {
               await apiRequest("POST", `/api/bookings/${locationSharing}/location`, {
                 latitude: position.coords.latitude,
@@ -658,15 +663,52 @@ export default function MoverDashboard() {
             }
           },
           (error) => {
-            console.error("Geolocation error:", error);
-            toast({
-              title: "Location access denied",
-              description: "Please enable location services to share your location with customers.",
-              variant: "destructive",
-            });
-            setLocationSharing(null);
+            console.error("Geolocation error:", error.code, error.message);
+            consecutiveErrors++;
+            
+            // Handle different error types
+            switch (error.code) {
+              case 1: // PERMISSION_DENIED
+                if (!permissionDeniedShown) {
+                  permissionDeniedShown = true;
+                  toast({
+                    title: "Location permission denied",
+                    description: "Please allow location access in your browser settings, then try starting the trip again.",
+                    variant: "destructive",
+                  });
+                  setLocationSharing(null);
+                }
+                break;
+              case 2: // POSITION_UNAVAILABLE
+                console.log("Position unavailable, will retry...");
+                // Don't stop sharing, just log - GPS might be temporarily unavailable
+                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                  toast({
+                    title: "Location unavailable",
+                    description: "Unable to get your location. Please check your GPS is enabled and you have a clear view of the sky.",
+                    variant: "destructive",
+                  });
+                }
+                break;
+              case 3: // TIMEOUT
+                console.log("Location request timed out, will retry...");
+                // Don't stop sharing, just retry on next interval
+                break;
+            }
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000, // 10 second timeout
+            maximumAge: 5000 // Accept cached position up to 5 seconds old
           }
         );
+      } else {
+        toast({
+          title: "Geolocation not supported",
+          description: "Your browser doesn't support location services.",
+          variant: "destructive",
+        });
+        setLocationSharing(null);
       }
     };
 
