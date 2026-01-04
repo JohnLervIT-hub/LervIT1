@@ -24,6 +24,7 @@ The platform features a responsive, mobile-first design utilizing shadcn/ui comp
 *   **Real-Time Communication:** WebSocket notification system for movers with token-based authentication and audio alerts.
 *   **Resilience:** Circuit Breaker system for external API calls and an async Vision Queue for background image processing.
 *   **Production Security:** `/api/seed` endpoint returns 404 in production (NODE_ENV check).
+*   **Admin Single-Session Enforcement:** When an admin logs in, all their previous sessions are automatically invalidated, preventing concurrent admin sessions across devices/browsers.
 *   **Archived Pages:** Demo pages (ProximityDemo, LifecycleDemo, MoverLifecycleDemo, VideoPreview) moved to `client/src/pages/archived/`.
 
 ### Feature Specifications

@@ -38,7 +38,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { moverWebSocket, generateWebSocketToken } from "./websocket";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
@@ -513,6 +513,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastLoginAt: new Date()
         })
         .where(eq(usersTable.id, user.id));
+      
+      // Admin single-session enforcement: invalidate all previous sessions
+      if (user.role === 'admin') {
+        try {
+          // Delete all existing sessions for this admin user from the session store
+          // The sess column is JSONB and contains userId
+          await pool.query(
+            `DELETE FROM user_sessions WHERE sess->>'userId' = $1`,
+            [user.id]
+          );
+          console.log(`[Security] Invalidated previous sessions for admin: ${user.email}`);
+        } catch (sessionErr) {
+          console.error('[Security] Failed to invalidate admin sessions:', sessionErr);
+          // Continue with login even if session cleanup fails
+        }
+      }
       
       // Regenerate session to prevent session fixation attacks
       const userData = user;
