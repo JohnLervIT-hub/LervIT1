@@ -343,13 +343,11 @@ export default function MoverDashboard() {
       return aDate.getTime() - bDate.getTime();
     }) || [];
   
-  // Past bookings: completed or cancelled, sorted by most recent first
-  const pastBookings = allBookings
-    ?.filter((b) => b.moverId === mover?.id && (b.status === "completed" || b.status === "cancelled"))
-    ?.sort((a, b) => new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime()) || [];
+  // Past bookings are auto-hidden from "Your Bookings" - movers only see active jobs
+  // Completed/cancelled bookings are tracked in earnings history instead
   
-  // Combined bookings for display: active first, then past
-  const bookings = [...activeBookings, ...pastBookings];
+  // Only show active bookings in "Your Bookings" section
+  const bookings = activeBookings;
   
   // Show only PAID jobs that are available for acceptance
   // Must have: payment succeeded, no mover assigned, pending/confirmed status, and not a past date
