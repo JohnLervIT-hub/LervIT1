@@ -65,6 +65,7 @@ type Booking = {
   preferredDate: string;
   status: string;
   price: string | null;
+  hasReview?: boolean;
   mover?: {
     id: string;
     userId: string;
@@ -663,7 +664,7 @@ export default function CustomerDashboard() {
                       </p>
                     )}
 
-                    {booking.status === "completed" && (
+                    {booking.status === "completed" && !booking.hasReview && (
                       <div className="flex items-center justify-end mt-3 pt-3 border-t">
                         <Button 
                           variant="outline" 
@@ -674,6 +675,12 @@ export default function CustomerDashboard() {
                           <Star className="w-4 h-4 mr-1" />
                           Leave Feedback
                         </Button>
+                      </div>
+                    )}
+                    {booking.status === "completed" && booking.hasReview && (
+                      <div className="flex items-center justify-end mt-3 pt-3 border-t text-sm text-muted-foreground">
+                        <CheckCircle2 className="w-4 h-4 mr-1 text-green-500" />
+                        Review submitted
                       </div>
                     )}
                   </CardContent>

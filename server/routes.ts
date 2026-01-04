@@ -2641,6 +2641,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
+      // For customers, get all their reviews to check which bookings have been reviewed
+      let reviewedBookingIds = new Set<string>();
+      if (user.role === "customer") {
+        const customerReviews = await db.select({ bookingId: reviews.bookingId })
+          .from(reviews)
+          .where(eq(reviews.customerId, user.id));
+        reviewedBookingIds = new Set(customerReviews.map(r => r.bookingId));
+      }
+      
       // Enrich with customer and mover data
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
@@ -2650,6 +2659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           return {
             ...booking,
+            hasReview: reviewedBookingIds.has(booking.id),
             customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
             mover: mover && moverUser ? {
               id: mover.id,
