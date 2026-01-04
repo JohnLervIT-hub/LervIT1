@@ -43,7 +43,7 @@ import { moverWebSocket, generateWebSocketToken } from "./websocket";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray, sql, desc } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc, inArray, lt } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -7005,6 +7005,51 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Cleanup error:', error);
       res.status(500).json({ error: "Failed to cleanup bookings" });
+    }
+  });
+
+  // Admin: Cancel all past-dated bookings (manual trigger for cleanup)
+  app.post("/api/admin/cancel-past-dated", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // All active statuses that should be cancelled if past-dated
+      const activeStatuses = [
+        'pending', 
+        'confirmed', 
+        'pending_payment',
+        'en_route_to_pickup',
+        'loading',
+        'en_route_to_dropoff',
+        'unloading',
+        'in_transit'
+      ];
+      
+      const pastBookings = await db
+        .update(bookings)
+        .set({ 
+          status: 'cancelled',
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            inArray(bookings.status, activeStatuses),
+            lt(bookings.preferredDate, today)
+          )
+        )
+        .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
+      
+      res.json({ 
+        message: `Cancelled ${pastBookings.length} past-dated bookings`,
+        cancelled: pastBookings.length,
+        bookings: pastBookings.map(b => ({ id: b.id.slice(0, 8), date: b.preferredDate }))
+      });
+    } catch (error) {
+      console.error('[Admin] Cancel past-dated error:', error);
+      res.status(500).json({ error: "Failed to cancel past-dated bookings" });
     }
   });
 
