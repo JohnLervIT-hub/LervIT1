@@ -4748,43 +4748,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/reviews", async (req: Request, res: Response) => {
+    console.log('[Reviews] POST /api/reviews - Request body:', JSON.stringify(req.body));
     try {
       const reviewData = validateBody(insertReviewSchema, req.body);
+      console.log('[Reviews] Validated review data:', JSON.stringify(reviewData));
       
       // Validate that the booking is completed before allowing a review
       const booking = await storage.getBooking(reviewData.bookingId);
+      console.log('[Reviews] Booking lookup result:', booking ? `Found (status: ${booking.status})` : 'Not found');
+      
       if (!booking) {
+        console.log('[Reviews] ERROR: Booking not found for id:', reviewData.bookingId);
         return res.status(404).json({ error: "Booking not found" });
       }
       
       if (booking.status !== "completed") {
+        console.log('[Reviews] ERROR: Booking status is not completed:', booking.status);
         return res.status(400).json({ error: "You can only leave a review after the move is completed" });
       }
       
+      console.log('[Reviews] Creating review in database...');
       const review = await storage.createReview(reviewData);
+      console.log('[Reviews] Review created with id:', review.id);
       
       // IMPORTANT: Update mover's average rating after new review
       const allReviews = await storage.getReviewsByMover(review.moverId);
+      console.log('[Reviews] Found', allReviews.length, 'total reviews for mover', review.moverId);
+      
       if (allReviews.length > 0) {
         const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
         const averageRating = (totalRating / allReviews.length).toFixed(1);
         
+        console.log('[Reviews] Updating mover rating to', averageRating);
         // Update mover's rating
         await storage.updateMover(review.moverId, { 
           rating: averageRating,
           completedTrips: allReviews.length
         });
         
-        console.log(`[Reviews] Updated mover ${review.moverId} rating to ${averageRating} (${allReviews.length} reviews)`);
+        console.log(`[Reviews] SUCCESS: Updated mover ${review.moverId} rating to ${averageRating} (${allReviews.length} reviews)`);
       }
       
       const customer = await storage.getUser(review.customerId);
-      res.json({
+      const response = {
         ...review,
         customer: customer ? { id: customer.id, name: customer.name } : null
-      });
+      };
+      console.log('[Reviews] Sending response:', JSON.stringify(response));
+      res.json(response);
     } catch (error) {
-      console.error('[Reviews] Error creating review:', error);
+      console.error('[Reviews] ERROR creating review:', error);
+      console.error('[Reviews] Error stack:', error instanceof Error ? error.stack : 'No stack');
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });

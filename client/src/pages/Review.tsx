@@ -38,20 +38,35 @@ export default function Review() {
 
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/reviews", {
+      console.log('[Review] Submitting review:', { bookingId, moverId: booking?.moverId, customerId: user?.id, rating });
+      const response = await apiRequest("POST", "/api/reviews", {
         bookingId,
         moverId: booking?.moverId,
         customerId: user?.id,
         rating,
         comment: comment || null,
       });
+      console.log('[Review] Review submitted successfully:', response);
+      return response;
     },
     onSuccess: () => {
       toast({
         title: "Review submitted",
         description: "Thank you for your feedback!",
       });
+      // Invalidate mover profile cache to show updated rating
+      queryClient.invalidateQueries({ queryKey: ['/api/movers'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/movers/${booking?.moverId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reviews'] });
       setLocation("/my-bookings");
+    },
+    onError: (error: Error) => {
+      console.error('[Review] Error submitting review:', error);
+      toast({
+        title: "Failed to submit review",
+        description: error.message || "Please try again later.",
+        variant: "destructive",
+      });
     },
   });
 
