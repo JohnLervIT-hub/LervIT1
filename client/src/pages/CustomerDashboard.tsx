@@ -223,6 +223,8 @@ export default function CustomerDashboard() {
   };
 
   const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Start of today for date comparisons
   
   // 6-stage move progress statuses that indicate an active/ongoing move
   const inProgressStatuses = ['en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'in_transit'];
@@ -230,17 +232,23 @@ export default function CustomerDashboard() {
   // Payment-related statuses that need customer attention
   const paymentStatuses = ['pending_payment', 'payment_failed'];
   
-  // Filter and sort active bookings: show all non-completed/cancelled bookings
-  // Critical: Always show payment-related and pending statuses regardless of date
-  // so customers can complete payment or see their waiting bookings
+  // Filter and sort active bookings: show all non-completed/cancelled bookings with future/today dates
+  // Critical: Always show payment-related statuses regardless of date so customers can complete payment
   const activeBookings = bookings?.filter((b) => {
+    const bookingDate = new Date(b.preferredDate);
+    bookingDate.setHours(0, 0, 0, 0);
+    const isPastDate = bookingDate < today;
+    
     // Always include payment-related statuses - they need immediate attention
     if (paymentStatuses.includes(b.status)) return true;
     
-    // Always include pending/confirmed - customer needs visibility until mover completes or cancels
-    if (b.status === "pending" || b.status === "confirmed") return true;
+    // For pending/confirmed: only show if date is today or future
+    // Past-dated pending/confirmed bookings should go to Past section
+    if (b.status === "pending" || b.status === "confirmed") {
+      return !isPastDate; // Only show if NOT past
+    }
     
-    // Include in-progress statuses (active moves)
+    // Include in-progress statuses (active moves) regardless of date
     if (inProgressStatuses.includes(b.status)) return true;
     
     // Exclude completed/cancelled (they go to past bookings)
@@ -258,9 +266,22 @@ export default function CustomerDashboard() {
     }) || [];
 
   // Sort past bookings by date (most recent first)
-  const pastBookings = bookings?.filter((b) => 
-    b.status === "completed" || b.status === "cancelled"
-  )
+  // Include: completed, cancelled, AND past-dated pending/confirmed bookings
+  const pastBookings = bookings?.filter((b) => {
+    // Always include completed/cancelled
+    if (b.status === "completed" || b.status === "cancelled") return true;
+    
+    // Include past-dated pending/confirmed (jobs that never happened)
+    const bookingDate = new Date(b.preferredDate);
+    bookingDate.setHours(0, 0, 0, 0);
+    const isPastDate = bookingDate < today;
+    
+    if ((b.status === "pending" || b.status === "confirmed") && isPastDate) {
+      return true;
+    }
+    
+    return false;
+  })
     .sort((a, b) => new Date(b.preferredDate).getTime() - new Date(a.preferredDate).getTime()) || [];
 
   // Get the next upcoming booking (soonest date that hasn't passed)
