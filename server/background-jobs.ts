@@ -392,9 +392,18 @@ async function cancelPastDatedBookings() {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Start of today
     
-    // Find bookings with past dates that are still pending/confirmed (not completed)
-    // These are jobs that never happened and should be cancelled
-    const activeStatuses = ['pending', 'confirmed', 'pending_payment'];
+    // All statuses that should be auto-cancelled if past-dated
+    // Includes pending, confirmed, payment states, AND in-progress move states
+    const activeStatuses = [
+      'pending', 
+      'confirmed', 
+      'pending_payment',
+      'en_route_to_pickup',
+      'loading',
+      'en_route_to_dropoff',
+      'unloading',
+      'in_transit'
+    ];
     
     const pastBookings = await db
       .update(bookings)
@@ -408,12 +417,13 @@ async function cancelPastDatedBookings() {
           lt(bookings.preferredDate, today)
         )
       )
-      .returning({ id: bookings.id, preferredDate: bookings.preferredDate });
+      .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
     
     if (pastBookings.length > 0) {
       logEvent.cleanup('cancel_past_dated_bookings', { 
         cancelledCount: pastBookings.length,
         bookingIds: pastBookings.map(b => b.id),
+        statuses: pastBookings.map(b => b.status),
       });
       
       logger.info({ 

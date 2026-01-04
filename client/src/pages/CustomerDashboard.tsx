@@ -248,8 +248,11 @@ export default function CustomerDashboard() {
       return !isPastDate; // Only show if NOT past
     }
     
-    // Include in-progress statuses (active moves) regardless of date
-    if (inProgressStatuses.includes(b.status)) return true;
+    // Include in-progress statuses only if date is today or future
+    // Past-dated in-progress bookings should go to Past section (missed moves)
+    if (inProgressStatuses.includes(b.status)) {
+      return !isPastDate;
+    }
     
     // Exclude completed/cancelled (they go to past bookings)
     return false;
@@ -277,6 +280,12 @@ export default function CustomerDashboard() {
     const isPastDate = bookingDate < today;
     
     if ((b.status === "pending" || b.status === "confirmed") && isPastDate) {
+      return true;
+    }
+    
+    // Include past-dated in-progress bookings (missed moves)
+    const inProgressStatuses = ['en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'in_transit'];
+    if (inProgressStatuses.includes(b.status) && isPastDate) {
       return true;
     }
     
