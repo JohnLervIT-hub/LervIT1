@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { queryClient } from "@/lib/queryClient";
 
 interface User {
   id: string;
@@ -152,6 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       emailPromotions: userData.emailPromotions ?? false,
       pushNotifications: userData.pushNotifications ?? true,
     });
+    
+    // Clear all cached queries to ensure fresh data for the new user
+    queryClient.clear();
   };
 
   const signup = async (name: string, email: string, password: string, role: string = "customer", phone?: string, phoneVerificationToken?: string) => {
@@ -232,6 +236,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear on network error to prevent stuck state
       setUser(null);
     }
+    
+    // Always clear cached queries on logout to prevent data leakage to next user
+    queryClient.clear();
   };
 
   return (
