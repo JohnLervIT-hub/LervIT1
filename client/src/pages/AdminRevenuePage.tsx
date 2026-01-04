@@ -68,6 +68,12 @@ export default function AdminRevenuePage() {
 
   const completedBookings = bookings?.filter(b => b.status === "completed") || [];
   const paidBookings = bookings?.filter(b => b.paymentStatus === "paid" || b.paymentStatus === "succeeded") || [];
+  // Bookings that are both paid AND completed (actual earned revenue)
+  const earnedBookings = bookings?.filter(b => 
+    (b.paymentStatus === "paid" || b.paymentStatus === "succeeded") && b.status === "completed"
+  ) || [];
+  // Bookings that were paid but NOT completed (potential refunds/issues)
+  const paidNotCompletedBookings = paidBookings.filter(b => b.status !== "completed");
   
   // Filter completed bookings based on selected period for table display
   const filteredCompletedBookings = completedBookings.filter(b => {
@@ -80,9 +86,12 @@ export default function AdminRevenuePage() {
   // Calculate revenue based on filtered bookings for the table
   const filteredRevenue = filteredCompletedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
   
-  // Total revenue is still all completed bookings for metrics
-  const totalRevenue = completedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
-  const paidRevenue = paidBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  // Earned revenue = paid AND completed (actual money kept)
+  const earnedRevenue = earnedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  // Total paid = all payments received (including potential refunds)
+  const totalPaidRevenue = paidBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  // Paid but not completed (potential refund liability)
+  const pendingRefundAmount = paidNotCompletedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
   
   const revenueThisWeek = completedBookings
     .filter(b => b.createdAt && isAfter(new Date(b.createdAt), last7Days))
@@ -92,8 +101,8 @@ export default function AdminRevenuePage() {
     .filter(b => b.createdAt && isAfter(new Date(b.createdAt), last30Days))
     .reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
 
-  const avgBookingValue = filteredCompletedBookings.length > 0 
-    ? filteredRevenue / filteredCompletedBookings.length 
+  const avgBookingValue = earnedBookings.length > 0 
+    ? earnedRevenue / earnedBookings.length 
     : 0;
 
   return (
@@ -118,12 +127,12 @@ export default function AdminRevenuePage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
           <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-amber-100">Total Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium text-amber-100">Earned Revenue</CardTitle>
               <DollarSign className="w-5 h-5 text-amber-200" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold" data-testid="stat-total-revenue">
-                ${totalRevenue.toFixed(2)}
+                ${earnedRevenue.toFixed(2)}
               </div>
               <p className="text-xs text-amber-200 mt-1">CAD from completed moves</p>
             </CardContent>
@@ -174,17 +183,19 @@ export default function AdminRevenuePage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Paid Bookings</span>
-                  <span className="font-bold text-green-600">{paidBookings.length}</span>
+                  <span className="text-muted-foreground">Total Payments Received</span>
+                  <span className="font-bold text-green-600">${totalPaidRevenue.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Paid Revenue</span>
-                  <span className="font-bold text-green-600">${paidRevenue.toFixed(2)}</span>
+                  <span className="text-muted-foreground">Completed & Earned</span>
+                  <span className="font-bold text-green-600">${earnedRevenue.toFixed(2)}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Completed Moves</span>
-                  <span className="font-bold">{completedBookings.length}</span>
-                </div>
+                {pendingRefundAmount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Paid Not Completed</span>
+                    <span className="font-bold text-amber-600">${pendingRefundAmount.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -193,18 +204,18 @@ export default function AdminRevenuePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-amber-500" />
-                Revenue Metrics
+                Booking Stats
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Lifetime Revenue</span>
-                  <span className="font-bold">${totalRevenue.toFixed(2)}</span>
+                  <span className="text-muted-foreground">Paid Bookings</span>
+                  <span className="font-bold">{paidBookings.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Collection Rate</span>
-                  <span className="font-bold">{totalRevenue > 0 ? ((paidRevenue / totalRevenue) * 100).toFixed(1) : 0}%</span>
+                  <span className="text-muted-foreground">Completed Moves</span>
+                  <span className="font-bold">{earnedBookings.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Avg. per Completed Move</span>
