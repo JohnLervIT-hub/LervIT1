@@ -1,12 +1,55 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar } from "lucide-react";
-import { useState } from "react";
+import { Calendar, MapPin } from "lucide-react";
+import { useState, Component, lazy, Suspense, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { useToast } from "@/hooks/use-toast";
 import heroImage from "@assets/generated_images/moving_truck_calgary_hero.png";
+
+// Lazy load CustomAddressInput to avoid initialization issues
+const CustomAddressInput = lazy(() => import("@/components/CustomAddressInput").then(m => ({ default: m.CustomAddressInput })));
+
+// Error boundary for address inputs
+class AddressInputErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error) {
+    console.error('[AddressInput] Error caught:', error);
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+// Simple fallback input for when CustomAddressInput fails
+function FallbackAddressInput({ value, onChange, placeholder, id, "data-testid": testId }: {
+  value: string;
+  onChange: (address: string) => void;
+  placeholder?: string;
+  id?: string;
+  "data-testid"?: string;
+}) {
+  return (
+    <div className="relative">
+      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10 pointer-events-none" />
+      <Input
+        id={id}
+        placeholder={placeholder}
+        className="pl-10 h-12"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        data-testid={testId}
+      />
+    </div>
+  );
+}
 
 export default function HeroSection() {
   const [, setLocation] = useLocation();
@@ -79,26 +122,70 @@ export default function HeroSection() {
                 <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
                   Pickup Location
                 </Label>
-                <CustomAddressInput
-                  id="pickup"
-                  value={pickupAddress}
-                  onChange={(address) => setPickupAddress(address)}
-                  placeholder="Enter pickup address in Calgary"
-                  data-testid="input-pickup"
-                />
+                <AddressInputErrorBoundary 
+                  fallback={
+                    <FallbackAddressInput 
+                      id="pickup"
+                      value={pickupAddress}
+                      onChange={setPickupAddress}
+                      placeholder="Enter pickup address in Calgary"
+                      data-testid="input-pickup"
+                    />
+                  }
+                >
+                  <Suspense fallback={
+                    <FallbackAddressInput 
+                      id="pickup"
+                      value={pickupAddress}
+                      onChange={setPickupAddress}
+                      placeholder="Enter pickup address in Calgary"
+                      data-testid="input-pickup"
+                    />
+                  }>
+                    <CustomAddressInput
+                      id="pickup"
+                      value={pickupAddress}
+                      onChange={(address) => setPickupAddress(address)}
+                      placeholder="Enter pickup address in Calgary"
+                      data-testid="input-pickup"
+                    />
+                  </Suspense>
+                </AddressInputErrorBoundary>
               </div>
 
               <div>
                 <Label htmlFor="dropoff" className="text-base font-semibold mb-2 block">
                   Dropoff Location
                 </Label>
-                <CustomAddressInput
-                  id="dropoff"
-                  value={dropoffAddress}
-                  onChange={(address) => setDropoffAddress(address)}
-                  placeholder="Enter dropoff address in Calgary"
-                  data-testid="input-dropoff"
-                />
+                <AddressInputErrorBoundary 
+                  fallback={
+                    <FallbackAddressInput 
+                      id="dropoff"
+                      value={dropoffAddress}
+                      onChange={setDropoffAddress}
+                      placeholder="Enter dropoff address in Calgary"
+                      data-testid="input-dropoff"
+                    />
+                  }
+                >
+                  <Suspense fallback={
+                    <FallbackAddressInput 
+                      id="dropoff"
+                      value={dropoffAddress}
+                      onChange={setDropoffAddress}
+                      placeholder="Enter dropoff address in Calgary"
+                      data-testid="input-dropoff"
+                    />
+                  }>
+                    <CustomAddressInput
+                      id="dropoff"
+                      value={dropoffAddress}
+                      onChange={(address) => setDropoffAddress(address)}
+                      placeholder="Enter dropoff address in Calgary"
+                      data-testid="input-dropoff"
+                    />
+                  </Suspense>
+                </AddressInputErrorBoundary>
               </div>
 
               <div>
