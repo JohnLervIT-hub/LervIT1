@@ -84,8 +84,9 @@ export function matchVehicleForVolume(
   // Try to find an available mover for each candidate type (in order)
   for (const vehicleType of candidateTypes) {
     // Filter movers by vehicle type and availability, then sort by distance
+    // Use case-insensitive comparison to handle mixed case in database
     const candidates = onlineMovers
-      .filter(mover => mover.vehicleType === vehicleType && mover.isAvailable)
+      .filter(mover => mover.vehicleType.toLowerCase() === vehicleType.toLowerCase() && mover.isAvailable)
       .sort((a, b) => a.distanceKm - b.distanceKm); // Closest first
     
     if (candidates.length > 0) {

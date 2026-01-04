@@ -106,8 +106,9 @@ export function findNearestMovers(
   const jobDistance = calculateDistance(pickupCoords, dropoffCoords);
   
   // Get compatible vehicle types if recommendation provided
+  // Normalize to lowercase for case-insensitive matching
   const compatibleVehicles = recommendedVehicle 
-    ? (VEHICLE_TYPE_COMPATIBILITY[recommendedVehicle] || [recommendedVehicle])
+    ? (VEHICLE_TYPE_COMPATIBILITY[recommendedVehicle] || [recommendedVehicle.toLowerCase()])
     : null;
   
   // Calculate distance for each mover and enrich with earnings
@@ -119,8 +120,10 @@ export function findNearestMovers(
       }
       
       // Filter by compatible vehicle types if recommendation exists
+      // Use case-insensitive comparison to handle mixed case in database
       if (compatibleVehicles && m.vehicleType) {
-        return compatibleVehicles.includes(m.vehicleType);
+        const moverVehicleLower = m.vehicleType.toLowerCase();
+        return compatibleVehicles.some(cv => cv.toLowerCase() === moverVehicleLower);
       }
       
       return true;
