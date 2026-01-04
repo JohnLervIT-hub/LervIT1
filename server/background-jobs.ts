@@ -43,8 +43,13 @@ export function initBackgroundJobs() {
     await expirePastScheduledJobs();
   });
   
-  // Auto-cancel past-dated bookings every hour (clears mover dashboards)
+  // Auto-complete past-dated paid bookings every hour (enables reviews)
   cron.schedule('0 * * * *', async () => {
+    await autoCompletePastPaidBookings();
+  });
+  
+  // Auto-cancel unpaid past-dated bookings every hour (clears mover dashboards)
+  cron.schedule('5 * * * *', async () => {
     await cancelPastDatedBookings();
   });
 
@@ -385,6 +390,51 @@ async function expirePastScheduledJobs() {
   }
 }
 
+// Auto-complete past-dated bookings that were paid
+// This enables customers to leave reviews for completed moves
+async function autoCompletePastPaidBookings() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    
+    // Find paid bookings that are past-dated and still in active states
+    const paidStatuses = ['paid', 'succeeded'];
+    const activeStatuses = ['confirmed', 'en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'in_transit'];
+    
+    const completedBookings = await db
+      .update(bookings)
+      .set({ 
+        status: 'completed',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(bookings.status, activeStatuses),
+          inArray(bookings.paymentStatus, paidStatuses),
+          lt(bookings.preferredDate, today)
+        )
+      )
+      .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
+    
+    if (completedBookings.length > 0) {
+      logEvent.cleanup('auto_complete_paid_bookings', { 
+        completedCount: completedBookings.length,
+        bookingIds: completedBookings.map(b => b.id),
+      });
+      
+      logger.info({ 
+        event: 'auto_complete_paid_bookings', 
+        count: completedBookings.length 
+      }, `Auto-completed ${completedBookings.length} past-dated paid bookings`);
+    }
+    
+    return completedBookings.length;
+  } catch (error) {
+    logEvent.error('autoCompletePastPaidBookings', error);
+    return 0;
+  }
+}
+
 // Auto-cancel bookings with past dates that weren't completed
 // This clears them from all mover dashboards in production
 async function cancelPastDatedBookings() {
@@ -468,11 +518,13 @@ async function dailyCleanup() {
 export async function runManualCleanup() {
   const expiredNotifs = await expireOldNotifications();
   const staleBooks = await expireStaleBookings();
+  const autoCompleted = await autoCompletePastPaidBookings();
   const pastDatedBooks = await cancelPastDatedBookings();
   
   return {
     expiredNotifications: expiredNotifs,
     staleBookings: staleBooks,
+    autoCompletedBookings: autoCompleted,
     cancelledPastDatedBookings: pastDatedBooks,
     timestamp: new Date().toISOString(),
   };
