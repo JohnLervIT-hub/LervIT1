@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,7 +13,14 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { DollarSign, ArrowLeft, TrendingUp, Calendar, CreditCard, CheckCircle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DollarSign, ArrowLeft, TrendingUp, Calendar, CreditCard, CheckCircle, Filter } from "lucide-react";
 import { format, subDays, isAfter } from "date-fns";
 
 type Booking = {
@@ -22,7 +30,7 @@ type Booking = {
   paymentStatus: string | null;
   pickupAddress: string;
   dropoffAddress: string;
-  scheduledDate: string;
+  preferredDate: string;
   createdAt: string;
   customer: {
     id?: string;
@@ -31,15 +39,14 @@ type Booking = {
   } | null;
   mover: {
     id?: string;
-    user?: {
-      id?: string;
-      name?: string;
-    };
+    name?: string;
+    vehicleType?: string;
   } | null;
 };
 
 export default function AdminRevenuePage() {
   const { user } = useAuth();
+  const [filterPeriod, setFilterPeriod] = useState<string>("week");
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
@@ -55,15 +62,27 @@ export default function AdminRevenuePage() {
     );
   }
 
-  const completedBookings = bookings?.filter(b => b.status === "completed") || [];
-  const paidBookings = bookings?.filter(b => b.paymentStatus === "paid" || b.paymentStatus === "succeeded") || [];
-  
-  const totalRevenue = completedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
-  const paidRevenue = paidBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
-  
   const today = new Date();
   const last7Days = subDays(today, 7);
   const last30Days = subDays(today, 30);
+
+  const completedBookings = bookings?.filter(b => b.status === "completed") || [];
+  const paidBookings = bookings?.filter(b => b.paymentStatus === "paid" || b.paymentStatus === "succeeded") || [];
+  
+  // Filter completed bookings based on selected period for table display
+  const filteredCompletedBookings = completedBookings.filter(b => {
+    if (filterPeriod === "all") return true;
+    if (filterPeriod === "week") return b.createdAt && isAfter(new Date(b.createdAt), last7Days);
+    if (filterPeriod === "month") return b.createdAt && isAfter(new Date(b.createdAt), last30Days);
+    return true;
+  });
+  
+  // Calculate revenue based on filtered bookings for the table
+  const filteredRevenue = filteredCompletedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  
+  // Total revenue is still all completed bookings for metrics
+  const totalRevenue = completedBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  const paidRevenue = paidBookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
   
   const revenueThisWeek = completedBookings
     .filter(b => b.createdAt && isAfter(new Date(b.createdAt), last7Days))
@@ -73,8 +92,8 @@ export default function AdminRevenuePage() {
     .filter(b => b.createdAt && isAfter(new Date(b.createdAt), last30Days))
     .reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
 
-  const avgBookingValue = completedBookings.length > 0 
-    ? totalRevenue / completedBookings.length 
+  const avgBookingValue = filteredCompletedBookings.length > 0 
+    ? filteredRevenue / filteredCompletedBookings.length 
     : 0;
 
   return (
@@ -197,13 +216,33 @@ export default function AdminRevenuePage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Recent Completed Moves</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-muted-foreground" />
+              Completed Moves
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Period:</span>
+              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                <SelectTrigger className="w-[130px]" data-testid="select-filter-period">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center justify-between mb-4 p-3 bg-muted/50 rounded-lg">
+              <span className="text-sm font-medium">Filtered Total:</span>
+              <span className="text-lg font-bold text-green-600">${filteredRevenue.toFixed(2)}</span>
+            </div>
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">Loading...</div>
-            ) : completedBookings.length > 0 ? (
+            ) : filteredCompletedBookings.length > 0 ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -217,16 +256,16 @@ export default function AdminRevenuePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {completedBookings.slice(0, 10).map((b) => (
+                    {filteredCompletedBookings.slice(0, 10).map((b) => (
                       <TableRow key={b.id} data-testid={`row-revenue-${b.id}`}>
                         <TableCell>
-                          {b.scheduledDate ? format(new Date(b.scheduledDate), "MMM d, yyyy") : "N/A"}
+                          {b.preferredDate ? format(new Date(b.preferredDate), "MMM d, yyyy") : "N/A"}
                         </TableCell>
                         <TableCell className="font-medium">
                           {b.customer?.name || "Unknown Customer"}
                         </TableCell>
                         <TableCell>
-                          {b.mover?.user?.name || "N/A"}
+                          {b.mover?.name || "N/A"}
                         </TableCell>
                         <TableCell className="max-w-[200px]">
                           <div className="truncate text-sm" title={b.pickupAddress}>
@@ -254,7 +293,17 @@ export default function AdminRevenuePage() {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <DollarSign className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No completed moves yet</p>
+                <p>No completed moves {filterPeriod === "week" ? "this week" : filterPeriod === "month" ? "this month" : ""}</p>
+                {filterPeriod !== "all" && completedBookings.length > 0 && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setFilterPeriod("all")}
+                    className="mt-2 text-primary"
+                  >
+                    View all completed moves
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>
