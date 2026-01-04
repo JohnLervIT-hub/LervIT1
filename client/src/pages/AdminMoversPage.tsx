@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,8 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star } from "lucide-react";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type Mover = {
   id: string;
@@ -39,6 +41,7 @@ type Mover = {
 
 export default function AdminMoversPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get("status") || "all";
   
@@ -49,6 +52,27 @@ export default function AdminMoversPage() {
     queryKey: ["/api/movers"],
   });
   const movers = Array.isArray(moversData) ? moversData : [];
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/sync-mover-counters");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      toast({
+        title: "Mover counts synced",
+        description: `Updated ${data.updates?.length || 0} mover(s) with correct trip counts`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Sync failed",
+        description: "Could not sync mover counts. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   if (!user || user.role !== "admin") {
     return (
@@ -89,11 +113,23 @@ export default function AdminMoversPage() {
               Back to Dashboard
             </Button>
           </Link>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-green-600 rounded-lg">
-              <Truck className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-600 rounded-lg">
+                <Truck className="w-6 h-6 text-white" />
+              </div>
+              <h1 className="text-3xl md:text-4xl font-bold">All Movers</h1>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold">All Movers</h1>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+              data-testid="button-sync-mover-counts"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+              {syncMutation.isPending ? 'Syncing...' : 'Sync Mover Counts'}
+            </Button>
           </div>
           <p className="text-muted-foreground text-lg">Manage registered movers and their verification status</p>
         </div>
