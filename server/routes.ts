@@ -7389,17 +7389,21 @@ Respond with VALID JSON only:
       
       console.log('[Admin Sync] Booking status distribution:', statusCounts);
       
-      // Get count of completed bookings per mover
+      // Get count of completed bookings per mover (matching earnings endpoint logic)
+      // Must have status='completed' AND paymentStatus='succeeded' to match dashboard
       const completedCounts = await db
         .select({
           moverId: bookings.moverId,
           count: sql<number>`COUNT(*)::int`
         })
         .from(bookings)
-        .where(eq(bookings.status, 'completed'))
+        .where(and(
+          eq(bookings.status, 'completed'),
+          eq(bookings.paymentStatus, 'succeeded')
+        ))
         .groupBy(bookings.moverId);
       
-      console.log('[Admin Sync] Completed bookings by moverId:', completedCounts);
+      console.log('[Admin Sync] Completed bookings (status=completed + payment=succeeded) by moverId:', completedCounts);
       console.log('[Admin Sync] Total movers in system:', allMovers.length);
       
       // Build a map of moverId -> completed count
