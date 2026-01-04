@@ -46,6 +46,7 @@ type Booking = {
   heavyItem?: boolean;
   paymentStatus: string | null;
   createdAt: string;
+  hasReview?: boolean;
   mover: {
     id: string;
     name: string;
@@ -752,7 +753,7 @@ export default function MyBookings() {
                         Message Mover
                       </Button>
                     )}
-                    {booking.status === "completed" && booking.mover && (
+                    {booking.status === "completed" && booking.mover && !booking.hasReview && (
                       <Button
                         onClick={() => setLocation(`/review/${booking.id}`)}
                         data-testid={`button-review-${booking.id}`}
@@ -760,6 +761,12 @@ export default function MyBookings() {
                         <Star className="w-4 h-4 mr-2" />
                         Leave Review
                       </Button>
+                    )}
+                    {booking.status === "completed" && booking.hasReview && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        Review submitted
+                      </div>
                     )}
                   </div>
                 </CardContent>
