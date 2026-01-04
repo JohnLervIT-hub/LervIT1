@@ -42,6 +42,11 @@ export function initBackgroundJobs() {
   cron.schedule('*/15 * * * *', async () => {
     await expirePastScheduledJobs();
   });
+  
+  // Auto-cancel past-dated bookings every hour (clears mover dashboards)
+  cron.schedule('0 * * * *', async () => {
+    await cancelPastDatedBookings();
+  });
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
 }
@@ -380,6 +385,50 @@ async function expirePastScheduledJobs() {
   }
 }
 
+// Auto-cancel bookings with past dates that weren't completed
+// This clears them from all mover dashboards in production
+async function cancelPastDatedBookings() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    
+    // Find bookings with past dates that are still pending/confirmed (not completed)
+    // These are jobs that never happened and should be cancelled
+    const activeStatuses = ['pending', 'confirmed', 'pending_payment'];
+    
+    const pastBookings = await db
+      .update(bookings)
+      .set({ 
+        status: 'cancelled',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(bookings.status, activeStatuses),
+          lt(bookings.preferredDate, today)
+        )
+      )
+      .returning({ id: bookings.id, preferredDate: bookings.preferredDate });
+    
+    if (pastBookings.length > 0) {
+      logEvent.cleanup('cancel_past_dated_bookings', { 
+        cancelledCount: pastBookings.length,
+        bookingIds: pastBookings.map(b => b.id),
+      });
+      
+      logger.info({ 
+        event: 'past_dated_cleanup', 
+        count: pastBookings.length 
+      }, `Auto-cancelled ${pastBookings.length} past-dated bookings`);
+    }
+    
+    return pastBookings.length;
+  } catch (error) {
+    logEvent.error('cancelPastDatedBookings', error);
+    return 0;
+  }
+}
+
 async function dailyCleanup() {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -409,10 +458,12 @@ async function dailyCleanup() {
 export async function runManualCleanup() {
   const expiredNotifs = await expireOldNotifications();
   const staleBooks = await expireStaleBookings();
+  const pastDatedBooks = await cancelPastDatedBookings();
   
   return {
     expiredNotifications: expiredNotifs,
     staleBookings: staleBooks,
+    cancelledPastDatedBookings: pastDatedBooks,
     timestamp: new Date().toISOString(),
   };
 }
