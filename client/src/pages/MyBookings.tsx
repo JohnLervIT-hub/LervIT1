@@ -713,6 +713,17 @@ export default function MyBookings() {
                         Track Trip Live
                       </Button>
                     )}
+                    {booking.status === "confirmed" && booking.moverId && (
+                      <Button
+                        variant="outline"
+                        disabled
+                        className="opacity-70"
+                        data-testid={`button-track-pending-${booking.id}`}
+                      >
+                        <Clock className="w-4 h-4 mr-2" />
+                        Tracking Available When Mover Starts
+                      </Button>
+                    )}
                     {(booking.status === "confirmed" || booking.status === "pending" || booking.status === "pending_payment") && booking.paymentStatus !== "succeeded" && booking.price && (
                       <Button
                         onClick={() => setLocation(`/payment/${booking.id}`)}
