@@ -2697,8 +2697,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mover = booking.moverId ? await storage.getMover(booking.moverId) : null;
       const moverUser = mover ? await storage.getUser(mover.userId) : null;
       
+      // Check if this booking has a review
+      const existingReview = await db.select({ id: reviews.id })
+        .from(reviews)
+        .where(eq(reviews.bookingId, booking.id))
+        .limit(1);
+      const hasReview = existingReview.length > 0;
+      
       res.json({
         ...booking,
+        hasReview,
         customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
         mover: mover && moverUser ? {
           id: mover.id,
