@@ -4763,12 +4763,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const review = await storage.createReview(reviewData);
       
+      // IMPORTANT: Update mover's average rating after new review
+      const allReviews = await storage.getReviewsByMover(review.moverId);
+      if (allReviews.length > 0) {
+        const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
+        const averageRating = (totalRating / allReviews.length).toFixed(1);
+        
+        // Update mover's rating
+        await storage.updateMover(review.moverId, { 
+          rating: averageRating,
+          completedTrips: allReviews.length
+        });
+        
+        console.log(`[Reviews] Updated mover ${review.moverId} rating to ${averageRating} (${allReviews.length} reviews)`);
+      }
+      
       const customer = await storage.getUser(review.customerId);
       res.json({
         ...review,
         customer: customer ? { id: customer.id, name: customer.name } : null
       });
     } catch (error) {
+      console.error('[Reviews] Error creating review:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
     }
   });
