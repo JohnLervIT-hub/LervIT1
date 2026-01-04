@@ -198,29 +198,6 @@ export default function MyBookings() {
       });
     },
   });
-  
-  const deleteBookingMutation = useMutation({
-    mutationFn: async (bookingId: string) => {
-      return apiRequest("DELETE", `/api/bookings/${bookingId}`);
-    },
-    onSuccess: () => {
-      // Invalidate all booking-related queries
-      queryClient.invalidateQueries({ predicate: (query) => 
-        query.queryKey[0]?.toString().includes('/api/bookings')
-      });
-      toast({
-        title: "Booking deleted",
-        description: "The booking has been removed from your list.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Delete failed",
-        description: error instanceof Error ? error.message : "Failed to delete booking",
-        variant: "destructive",
-      });
-    },
-  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -763,18 +740,6 @@ export default function MyBookings() {
                       >
                         {cancelBookingMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
                         Cancel Booking
-                      </Button>
-                    )}
-                    {(booking.status === "payment_failed" || booking.status === "cancelled" || booking.paymentStatus === "failed") && (
-                      <Button
-                        variant="outline"
-                        className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950"
-                        onClick={() => deleteBookingMutation.mutate(booking.id)}
-                        disabled={deleteBookingMutation.isPending}
-                        data-testid={`button-delete-${booking.id}`}
-                      >
-                        {deleteBookingMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <X className="w-4 h-4 mr-2" />}
-                        Delete
                       </Button>
                     )}
                     {booking.mover && booking.status !== "cancelled" && (
