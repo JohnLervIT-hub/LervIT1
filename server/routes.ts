@@ -3132,11 +3132,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (newStatus !== BOOKING_STATUSES.CONFIRMED && newStatus !== BOOKING_STATUSES.CANCELLED) {
           // Validate mover authorization for active status changes
           if (!booking.moverId) {
+            console.log(`[Status Update] DENIED - No mover assigned. BookingId: ${booking.id}, UserId: ${user.id}, NewStatus: ${newStatus}`);
             return res.status(403).json({ error: "No mover assigned to this booking" });
           }
           
           const mover = await storage.getMover(booking.moverId);
+          console.log(`[Status Update] Auth check - BookingId: ${booking.id}, UserId: ${user.id}, BookingMoverId: ${booking.moverId}, MoverUserId: ${mover?.userId}, Match: ${mover?.userId === user.id}`);
           if (!mover || mover.userId !== user.id) {
+            console.log(`[Status Update] DENIED - Mover mismatch. BookingId: ${booking.id}, UserId: ${user.id}, MoverUserId: ${mover?.userId}`);
             return res.status(403).json({ error: "You are not authorized to update this booking status" });
           }
           
