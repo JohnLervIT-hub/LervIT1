@@ -507,7 +507,7 @@ export default function MyBookings() {
                         )}
                       </div>
 
-                      {booking.mover.phone && (
+                      {booking.mover.phone && booking.status !== "completed" && booking.status !== "cancelled" && (
                         <>
                           <Separator className="my-4" />
                           <Button 
@@ -743,7 +743,7 @@ export default function MyBookings() {
                         Cancel Booking
                       </Button>
                     )}
-                    {booking.mover && booking.status !== "cancelled" && (
+                    {booking.mover && booking.status !== "cancelled" && booking.status !== "completed" && (
                       <Button
                         variant="outline"
                         onClick={() => setLocation(`/messages/${booking.id}`)}
