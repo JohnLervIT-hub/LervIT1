@@ -157,29 +157,49 @@ export default function CustomerDashboard() {
     mutationFn: async (data: { bookingId: string; rating: number; actualLoadSize: string; comment: string }) => {
       const booking = bookings?.find(b => b.id === data.bookingId);
       if (!booking) throw new Error("Booking not found");
+      if (!booking.moverId) throw new Error("No mover assigned to this booking");
       
-      const loadSizeChanged = data.actualLoadSize && data.actualLoadSize !== booking.loadSize;
-      
-      return await apiRequest("POST", "/api/learning/booking-metrics", {
+      // First, save the actual review to update mover's rating
+      console.log('[Feedback] Submitting review:', { bookingId: data.bookingId, moverId: booking.moverId, rating: data.rating });
+      await apiRequest("POST", "/api/reviews", {
         bookingId: data.bookingId,
-        estimatedVehicleClass: getClassFromLoadSize(booking.loadSize),
-        actualVehicleClass: data.actualLoadSize ? getClassFromLoadSize(data.actualLoadSize) : getClassFromLoadSize(booking.loadSize),
-        customerRating: data.rating,
-        loadSizeAccurate: !loadSizeChanged,
-        feedbackNotes: data.comment || undefined,
+        moverId: booking.moverId,
+        customerId: user?.id,
+        rating: data.rating,
+        comment: data.comment || null,
       });
+      
+      // Then send learning metrics for AI training (optional, don't fail if this fails)
+      const loadSizeChanged = data.actualLoadSize && data.actualLoadSize !== booking.loadSize;
+      try {
+        await apiRequest("POST", "/api/learning/booking-metrics", {
+          bookingId: data.bookingId,
+          estimatedVehicleClass: getClassFromLoadSize(booking.loadSize),
+          actualVehicleClass: data.actualLoadSize ? getClassFromLoadSize(data.actualLoadSize) : getClassFromLoadSize(booking.loadSize),
+          customerRating: data.rating,
+          loadSizeAccurate: !loadSizeChanged,
+          feedbackNotes: data.comment || undefined,
+        });
+      } catch (e) {
+        console.log('[Feedback] Learning metrics optional, continuing...');
+      }
+      
+      return { success: true };
     },
     onSuccess: () => {
       toast({
-        title: "Thank You!",
-        description: "Your feedback helps us improve our service.",
+        title: "Review Submitted!",
+        description: "Thank you for your feedback. The mover's rating has been updated.",
       });
       setFeedbackDialogOpen(false);
       setFeedbackBooking(null);
       resetFeedbackForm();
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews"] });
     },
     onError: (error: Error) => {
+      console.error('[Feedback] Error submitting review:', error);
       toast({
         title: "Feedback Failed",
         description: error.message || "Unable to submit feedback. Please try again.",
