@@ -7370,8 +7370,24 @@ Respond with VALID JSON only:
     try {
       if (!requireAdmin(req, res)) return;
       
-      // Get all movers
-      const allMovers = await db.select().from(moversTable);
+      // Get all movers with user info for logging
+      const allMovers = await db.select({
+        id: moversTable.id,
+        userId: moversTable.userId,
+        completedTrips: moversTable.completedTrips,
+        totalMoves: moversTable.totalMoves
+      }).from(moversTable);
+      
+      // Get all booking statuses for diagnostics
+      const statusCounts = await db
+        .select({
+          status: bookings.status,
+          count: sql<number>`COUNT(*)::int`
+        })
+        .from(bookings)
+        .groupBy(bookings.status);
+      
+      console.log('[Admin Sync] Booking status distribution:', statusCounts);
       
       // Get count of completed bookings per mover
       const completedCounts = await db
@@ -7383,6 +7399,9 @@ Respond with VALID JSON only:
         .where(eq(bookings.status, 'completed'))
         .groupBy(bookings.moverId);
       
+      console.log('[Admin Sync] Completed bookings by moverId:', completedCounts);
+      console.log('[Admin Sync] Total movers in system:', allMovers.length);
+      
       // Build a map of moverId -> completed count
       const countMap = new Map<string, number>();
       for (const row of completedCounts) {
@@ -7393,11 +7412,19 @@ Respond with VALID JSON only:
       
       let updatedCount = 0;
       const updates: { moverId: string; previousTrips: number; newTrips: number }[] = [];
+      const diagnostics: { moverId: string; currentTrips: number; actualTrips: number; match: boolean }[] = [];
       
       // Update all movers (including those with 0 completions)
       for (const mover of allMovers) {
         const currentTrips = mover.completedTrips || 0;
         const actualTrips = countMap.get(mover.id) || 0;
+        
+        diagnostics.push({
+          moverId: mover.id,
+          currentTrips,
+          actualTrips,
+          match: currentTrips === actualTrips
+        });
         
         // Only update if there's a mismatch
         if (currentTrips !== actualTrips) {
@@ -7417,10 +7444,19 @@ Respond with VALID JSON only:
         }
       }
       
+      console.log('[Admin Sync] Diagnostics:', diagnostics);
+      console.log('[Admin Sync] Updates made:', updates);
+      
       res.json({
         success: true,
         message: `Synced ${updatedCount} mover(s) with correct trip counts`,
-        updates
+        updates,
+        diagnostics: {
+          totalMovers: allMovers.length,
+          bookingStatusCounts: statusCounts,
+          completedByMover: completedCounts,
+          moverComparison: diagnostics
+        }
       });
     } catch (error) {
       console.error('[Admin] Sync mover counters error:', error);

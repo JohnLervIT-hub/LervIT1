@@ -60,9 +60,17 @@ export default function AdminMoversPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      
+      // Log diagnostics to console for debugging
+      console.log('[Sync Diagnostics]', data.diagnostics);
+      
+      const statusCounts = data.diagnostics?.bookingStatusCounts || [];
+      const completedCount = statusCounts.find((s: any) => s.status === 'completed')?.count || 0;
+      const totalBookings = statusCounts.reduce((sum: number, s: any) => sum + s.count, 0);
+      
       toast({
         title: "Mover counts synced",
-        description: `Updated ${data.updates?.length || 0} mover(s) with correct trip counts`,
+        description: `Updated ${data.updates?.length || 0} mover(s). Found ${completedCount} completed bookings out of ${totalBookings} total.`,
       });
     },
     onError: () => {
