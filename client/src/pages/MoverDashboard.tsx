@@ -325,21 +325,28 @@ export default function MoverDashboard() {
   // Auto-filter expired bookings and sort by preferredDate (soonest first)
   const now = new Date();
   
-  // Active bookings: assigned to this mover, not completed/cancelled
-  // Show all assigned jobs regardless of date - mover needs visibility until completion
+  // Active bookings: assigned to this mover, not completed/cancelled, and not past-dated
+  // Hide jobs with past dates to keep the list clean
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  
   const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
     ?.filter((b) => {
       const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
-      return isActiveStatus;
+      if (!isActiveStatus) return false;
+      
+      // Hide jobs with past dates (before today)
+      const jobDate = new Date(b.preferredDate);
+      jobDate.setHours(0, 0, 0, 0);
+      if (jobDate < todayStart) return false;
+      
+      return true;
     })
     ?.sort((a, b) => {
-      // Sort upcoming first, then past-dated at the end
+      // Sort by soonest date first
       const aDate = new Date(a.preferredDate);
       const bDate = new Date(b.preferredDate);
-      const aIsPast = aDate < now;
-      const bIsPast = bDate < now;
-      if (aIsPast !== bIsPast) return aIsPast ? 1 : -1;
       return aDate.getTime() - bDate.getTime();
     }) || [];
   
