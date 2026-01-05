@@ -54,7 +54,6 @@ export default function MoverProfileSetup() {
   const [moverImagePreview, setMoverImagePreview] = useState<string | null>(null);
   const [vehiclePhotoFile, setVehiclePhotoFile] = useState<File | null>(null);
   const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(null);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   // Fetch current mover profile
   const { data: mover, isLoading } = useQuery<any>({
@@ -149,65 +148,6 @@ export default function MoverProfileSetup() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     },
   });
-
-  // Update GPS location mutation
-  const updateLocationMutation = useMutation({
-    mutationFn: async (coords: { latitude: number; longitude: number }) => {
-      return apiRequest("PATCH", "/api/movers/me/location", coords);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
-      toast({
-        title: "Location updated",
-        description: "Your GPS coordinates have been saved for accurate distance calculations.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update location. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Handle GPS location capture
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast({
-        title: "Error",
-        description: "Geolocation is not supported by your browser.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        updateLocationMutation.mutate({ latitude, longitude });
-        setIsGettingLocation(false);
-      },
-      (error) => {
-        setIsGettingLocation(false);
-        let errorMessage = "Failed to get your location.";
-        if (error.code === error.PERMISSION_DENIED) {
-          errorMessage = "Location permission denied. Please enable location access.";
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          errorMessage = "Location information is unavailable.";
-        } else if (error.code === error.TIMEOUT) {
-          errorMessage = "Location request timed out.";
-        }
-        toast({
-          title: "Location Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
 
   const handleMoverImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -396,37 +336,6 @@ export default function MoverProfileSetup() {
                     </FormItem>
                   )}
                 />
-
-                {/* GPS Location Section */}
-                <div className="pt-4 border-t">
-                  <div className="flex items-center gap-2 mb-3">
-                    <MapPin className="w-5 h-5 text-muted-foreground" />
-                    <h3 className="font-medium">Your Location</h3>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleUseCurrentLocation}
-                    disabled={isGettingLocation || updateLocationMutation.isPending}
-                    className="w-full"
-                    data-testid="button-use-current-location"
-                  >
-                    {isGettingLocation || updateLocationMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Navigation className="w-4 h-4 mr-2" />
-                    )}
-                    Use My Current Location
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Click to capture your GPS coordinates for accurate distance calculations to customers
-                  </p>
-                  {mover?.latitude && mover?.longitude && (
-                    <p className="text-xs text-green-600 mt-1">
-                      Location saved: {mover.latitude.toFixed(4)}, {mover.longitude.toFixed(4)}
-                    </p>
-                  )}
-                </div>
               </div>
             </Card>
 
