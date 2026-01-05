@@ -206,7 +206,7 @@ export default function MoverDashboard() {
   const [verificationError, setVerificationError] = useState<any>(null);
   
   // Shared location context - seamless GPS flow
-  const { coords: geoCoords, permissionState: geoPermissionState, requestLocation: requestGeoLocation, isRequesting: isRequestingGeo } = useGeoLocation();
+  const { coords: geoCoords, permissionState: geoPermissionState, requestLocation: requestGeoLocation, refreshLocation, isRequesting: isRequestingGeo } = useGeoLocation();
   const [isLiveGpsActive, setIsLiveGpsActive] = useState(false);
   const pendingOnlineToggle = useRef(false);
   
@@ -755,10 +755,17 @@ export default function MoverDashboard() {
       return;
     }
     
-    // If we don't have permission yet, the shared context handles it
+    // If permission is denied, we can't get location
     if (geoPermissionState === 'denied') {
       setIsLiveGpsActive(false);
       return;
+    }
+    
+    // Force location refresh if we don't have coords yet and permission isn't denied
+    // This ensures GPS starts immediately when mover is already online on page load
+    if (!geoCoords && geoPermissionState !== 'denied' && refreshLocation) {
+      console.log("[GPS] Forcing location refresh for online mover");
+      refreshLocation();
     }
     
     const updateLiveLocation = async () => {
@@ -817,7 +824,7 @@ export default function MoverDashboard() {
       clearInterval(interval);
       setIsLiveGpsActive(false);
     };
-  }, [mover?.isAvailable, geoCoords, geoPermissionState]);
+  }, [mover?.isAvailable, geoCoords, geoPermissionState, refreshLocation]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
