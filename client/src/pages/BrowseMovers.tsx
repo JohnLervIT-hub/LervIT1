@@ -364,7 +364,6 @@ export default function BrowseMovers() {
                   reviewCount={mover.totalMoves || 0}
                   vehicleType={mover.vehicleType}
                   distance={distanceDisplay}
-                  price={0}
                   verified={mover.isVerified}
                   completedMoves={mover.totalMoves || 0}
                   onSelect={handleSelectMover}

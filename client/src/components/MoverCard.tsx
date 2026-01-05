@@ -16,16 +16,16 @@ interface MoverCardProps {
   reviewCount: number;
   vehicleType: string;
   distance: string;
-  price: number;
   verified: boolean;
   completedMoves: number;
   onSelect: (id: string) => void;
-  travelFee?: number;
   pilotApproved?: boolean;
   vehiclePhoto?: string;
   licensePlate?: string;
   vehicleColor?: string;
   isLiveLocation?: boolean; // Uber-style: mover has recent GPS location (within 1 hour)
+  price?: number; // Optional - only used in proximity matching results
+  travelFee?: number; // Optional - only used in proximity matching results
 }
 
 const MoverCard = memo(function MoverCard({
@@ -36,11 +36,9 @@ const MoverCard = memo(function MoverCard({
   reviewCount,
   vehicleType,
   distance,
-  price,
   verified,
   completedMoves,
   onSelect,
-  travelFee,
   pilotApproved,
   vehiclePhoto,
   licensePlate,
@@ -87,19 +85,6 @@ const MoverCard = memo(function MoverCard({
             </div>
           </div>
           
-          <div className="text-right shrink-0">
-            <div className="text-2xl font-bold text-primary leading-tight" data-testid={`text-price-${id}`}>
-              ${price > 0 ? price.toFixed(2) : '—'}
-            </div>
-            {travelFee !== undefined && travelFee > 0 && (
-              <div className="text-xs text-muted-foreground mt-1">
-                (${travelFee.toFixed(2)} travel fee included)
-              </div>
-            )}
-            <div className="text-xs text-muted-foreground mt-1">
-              {price > 0 ? 'Estimated' : 'Quote on request'}
-            </div>
-          </div>
         </div>
 
         {/* Vehicle Section - Full image display without cropping */}
