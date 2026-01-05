@@ -371,6 +371,7 @@ export default function BrowseMovers() {
                   vehiclePhoto={mover.vehiclePhoto || undefined}
                   licensePlate={mover.licensePlate || undefined}
                   vehicleColor={mover.vehicleColor || undefined}
+                  isLiveLocation={mover.isLiveLocation}
                 />
               );
             })}

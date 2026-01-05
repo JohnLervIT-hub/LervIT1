@@ -25,6 +25,7 @@ interface MoverCardProps {
   vehiclePhoto?: string;
   licensePlate?: string;
   vehicleColor?: string;
+  isLiveLocation?: boolean; // Uber-style: mover has recent GPS location (within 1 hour)
 }
 
 const MoverCard = memo(function MoverCard({
@@ -44,6 +45,7 @@ const MoverCard = memo(function MoverCard({
   vehiclePhoto,
   licensePlate,
   vehicleColor,
+  isLiveLocation,
 }: MoverCardProps) {
   const [vehicleImageLoaded, setVehicleImageLoaded] = useState(false);
   const [vehicleImageError, setVehicleImageError] = useState(false);
@@ -73,6 +75,12 @@ const MoverCard = memo(function MoverCard({
                   <Badge variant="secondary" className="text-xs gap-1 shrink-0 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-early-access-${id}`}>
                     <Rocket className="w-3 h-3" />
                     Early Access
+                  </Badge>
+                )}
+                {isLiveLocation && (
+                  <Badge variant="outline" className="text-xs gap-1 shrink-0 bg-blue-500/10 text-blue-600 border-blue-500/30" data-testid={`badge-live-location-${id}`}>
+                    <MapPin className="w-3 h-3" />
+                    Live
                   </Badge>
                 )}
               </div>

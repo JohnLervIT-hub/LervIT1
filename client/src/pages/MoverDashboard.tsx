@@ -595,8 +595,8 @@ export default function MoverDashboard() {
       toast({
         title: newState ? "You're now online" : "You're now offline",
         description: newState 
-          ? "You can now receive and accept job requests" 
-          : "You won't receive new job notifications",
+          ? "Customers can now see you're available. Your location is updated while you stay online." 
+          : "You won't receive new job notifications. Location sharing stopped.",
       });
     },
     onError: async (error: any) => {
@@ -720,6 +720,55 @@ export default function MoverDashboard() {
 
     return () => clearInterval(interval);
   }, [locationSharing, toast]);
+
+  // Uber-style live GPS tracking when mover is online (isAvailable = true)
+  // Updates location every 30 seconds to show on Find Movers page
+  useEffect(() => {
+    if (!mover?.isAvailable) return;
+
+    let permissionDeniedShown = false;
+    
+    const updateLiveLocation = () => {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              await apiRequest("PATCH", "/api/movers/me/location", {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              });
+              console.log("[GPS] Live location updated while online");
+            } catch (error) {
+              console.error("[GPS] Failed to update live location:", error);
+            }
+          },
+          (error) => {
+            if (error.code === 1 && !permissionDeniedShown) {
+              permissionDeniedShown = true;
+              toast({
+                title: "Location access needed",
+                description: "Enable location to show your live position to customers on the Find Movers page.",
+                variant: "destructive",
+              });
+            }
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 30000
+          }
+        );
+      }
+    };
+
+    // Update location immediately when going online
+    updateLiveLocation();
+
+    // Then update every 30 seconds while online
+    const interval = setInterval(updateLiveLocation, 30000);
+
+    return () => clearInterval(interval);
+  }, [mover?.isAvailable, toast]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1325,24 +1374,32 @@ export default function MoverDashboard() {
             
             {/* Status Toggle & Actions */}
             <div className="flex items-center gap-3">
-              <div 
-                className={`flex items-center gap-3 rounded-full px-4 py-2 border-2 transition-all ${
-                  mover?.isAvailable 
-                    ? 'bg-green-500/10 border-green-500/30' 
-                    : 'bg-muted/50 border-muted-foreground/20'
-                }`}
-                data-testid="toggle-availability"
-              >
-                <div className={`w-2.5 h-2.5 rounded-full ${mover?.isAvailable ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/50'}`} />
-                <span className={`text-sm font-semibold ${mover?.isAvailable ? 'text-green-600' : 'text-muted-foreground'}`}>
-                  {isVerificationLoading ? '...' : (mover?.isAvailable ? 'Online' : 'Offline')}
-                </span>
-                <Switch 
-                  checked={mover?.isAvailable || false}
-                  onCheckedChange={handleAvailabilityToggle}
-                  disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
-                  data-testid="switch-online-status"
-                />
+              <div className="flex items-center gap-2">
+                {mover?.isAvailable && (
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs gap-1" data-testid="badge-live-gps">
+                    <MapPin className="w-3 h-3" />
+                    Live GPS
+                  </Badge>
+                )}
+                <div 
+                  className={`flex items-center gap-3 rounded-full px-4 py-2 border-2 transition-all ${
+                    mover?.isAvailable 
+                      ? 'bg-green-500/10 border-green-500/30' 
+                      : 'bg-muted/50 border-muted-foreground/20'
+                  }`}
+                  data-testid="toggle-availability"
+                >
+                  <div className={`w-2.5 h-2.5 rounded-full ${mover?.isAvailable ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/50'}`} />
+                  <span className={`text-sm font-semibold ${mover?.isAvailable ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    {isVerificationLoading ? '...' : (mover?.isAvailable ? 'Online' : 'Offline')}
+                  </span>
+                  <Switch 
+                    checked={mover?.isAvailable || false}
+                    onCheckedChange={handleAvailabilityToggle}
+                    disabled={isVerificationLoading || toggleAvailabilityMutation.isPending}
+                    data-testid="switch-online-status"
+                  />
+                </div>
               </div>
               
             </div>
