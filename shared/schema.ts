@@ -1011,3 +1011,48 @@ export const insertInAppNotificationSchema = createInsertSchema(inAppNotificatio
 
 export type InsertInAppNotification = z.infer<typeof insertInAppNotificationSchema>;
 export type InAppNotification = typeof inAppNotifications.$inferSelect;
+
+// ===== ABANDONED BOOKINGS (for reminder campaigns) =====
+// Tracks users who started but didn't complete bookings
+
+export const abandonedBookings = pgTable("abandoned_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  email: text("email"),
+  phone: text("phone"),
+  
+  pickupAddress: text("pickup_address"),
+  dropoffAddress: text("dropoff_address"),
+  loadSize: text("load_size"),
+  preferredDate: text("preferred_date"),
+  selectedMoverId: varchar("selected_mover_id").references(() => movers.id),
+  
+  lastStep: integer("last_step").default(1).notNull(),
+  
+  reminderSentAt: timestamp("reminder_sent_at"),
+  reminderCount: integer("reminder_count").default(0).notNull(),
+  
+  recovered: boolean("recovered").default(false).notNull(),
+  recoveredBookingId: varchar("recovered_booking_id").references(() => bookings.id),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("abandoned_bookings_user_id_idx").on(table.userId),
+  emailIdx: index("abandoned_bookings_email_idx").on(table.email),
+  recoveredIdx: index("abandoned_bookings_recovered_idx").on(table.recovered),
+  createdAtIdx: index("abandoned_bookings_created_at_idx").on(table.createdAt),
+}));
+
+export const insertAbandonedBookingSchema = createInsertSchema(abandonedBookings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  reminderSentAt: true,
+  reminderCount: true,
+  recovered: true,
+  recoveredBookingId: true,
+});
+
+export type InsertAbandonedBooking = z.infer<typeof insertAbandonedBookingSchema>;
+export type AbandonedBooking = typeof abandonedBookings.$inferSelect;
