@@ -3738,13 +3738,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? `payment_intent_${booking.id}_${amountInCents}_retry_${Date.now()}`
           : `payment_intent_${booking.id}_${amountInCents}`;
         
+        // Get or create Stripe customer so customer info appears in Stripe Dashboard
+        const stripeCustomerId = await getOrCreateStripeCustomer(user);
+        
+        // Update customer with phone if available (for disputes/reconciliation)
+        if (user.phone) {
+          try {
+            await stripe.customers.update(stripeCustomerId, {
+              phone: user.phone,
+            });
+          } catch (updateErr) {
+            console.error('Failed to update Stripe customer phone:', updateErr);
+          }
+        }
+        
         paymentIntent = await stripe.paymentIntents.create({
           amount: amountInCents,
           currency: "cad",
+          customer: stripeCustomerId, // Link to Stripe Customer for dashboard visibility
+          receipt_email: user.email,  // Send receipt to customer email
           metadata: {
             bookingId: booking.id,
             customerId: user.id,
             customerName: user.name,
+            customerEmail: user.email,
+            customerPhone: user.phone || '',
+            pickupAddress: booking.pickupAddress || '',
+            dropoffAddress: booking.dropoffAddress || '',
             isRetry: isRetry ? 'true' : 'false',
           },
           description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
@@ -3913,18 +3933,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // === SAVED PAYMENT METHODS ===
   
-  // Helper to get or create Stripe customer
+  // Helper to get or create Stripe customer with full contact info
   async function getOrCreateStripeCustomer(user: User): Promise<string> {
     if (user.stripeCustomerId) {
       return user.stripeCustomerId;
     }
     
-    // Create new Stripe customer
+    // Create new Stripe customer with all available info for dashboard visibility
     const customer = await stripe.customers.create({
       email: user.email,
       name: user.name || undefined,
+      phone: user.phone || undefined,
       metadata: {
         userId: user.id,
+        role: user.role || 'customer',
       },
     });
     
