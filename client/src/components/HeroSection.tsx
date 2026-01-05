@@ -2,13 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar, MapPin } from "lucide-react";
-import { useState, Component, lazy, Suspense, type ReactNode } from "react";
+import { useState, Component, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import heroImage from "@assets/generated_images/moving_truck_calgary_hero.png";
-
-// Lazy load CustomAddressInput to avoid initialization issues
-const CustomAddressInput = lazy(() => import("@/components/CustomAddressInput").then(m => ({ default: m.CustomAddressInput })));
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 
 // Error boundary for address inputs
 class AddressInputErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
@@ -133,23 +131,13 @@ export default function HeroSection() {
                     />
                   }
                 >
-                  <Suspense fallback={
-                    <FallbackAddressInput 
-                      id="pickup"
-                      value={pickupAddress}
-                      onChange={setPickupAddress}
-                      placeholder="Enter pickup address in Calgary"
-                      data-testid="input-pickup"
-                    />
-                  }>
-                    <CustomAddressInput
-                      id="pickup"
-                      value={pickupAddress}
-                      onChange={(address) => setPickupAddress(address)}
-                      placeholder="Enter pickup address in Calgary"
-                      data-testid="input-pickup"
-                    />
-                  </Suspense>
+                  <CustomAddressInput
+                    id="pickup"
+                    value={pickupAddress}
+                    onChange={(address) => setPickupAddress(address)}
+                    placeholder="Enter pickup address in Calgary"
+                    data-testid="input-pickup"
+                  />
                 </AddressInputErrorBoundary>
               </div>
 
@@ -168,23 +156,13 @@ export default function HeroSection() {
                     />
                   }
                 >
-                  <Suspense fallback={
-                    <FallbackAddressInput 
-                      id="dropoff"
-                      value={dropoffAddress}
-                      onChange={setDropoffAddress}
-                      placeholder="Enter dropoff address in Calgary"
-                      data-testid="input-dropoff"
-                    />
-                  }>
-                    <CustomAddressInput
-                      id="dropoff"
-                      value={dropoffAddress}
-                      onChange={(address) => setDropoffAddress(address)}
-                      placeholder="Enter dropoff address in Calgary"
-                      data-testid="input-dropoff"
-                    />
-                  </Suspense>
+                  <CustomAddressInput
+                    id="dropoff"
+                    value={dropoffAddress}
+                    onChange={(address) => setDropoffAddress(address)}
+                    placeholder="Enter dropoff address in Calgary"
+                    data-testid="input-dropoff"
+                  />
                 </AddressInputErrorBoundary>
               </div>
 
