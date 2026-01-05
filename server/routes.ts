@@ -1230,6 +1230,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Enrich movers with user data and driving distance
       // Privacy: Mask full street addresses - only show city/area
+      const ONE_HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000);
+      
       let enrichedMovers = await Promise.all(
         movers.map(async (mover) => {
           const user = await storage.getUser(mover.userId);
@@ -1239,12 +1241,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const distance = drivingData?.distanceKm ?? null;
           const drivingMinutes = drivingData?.durationMinutes ?? null;
           
+          // Check if mover has recent GPS update (within last hour) - Uber-style live location
+          const isLiveLocation = mover.lastLocationUpdate 
+            ? new Date(mover.lastLocationUpdate) > ONE_HOUR_AGO
+            : false;
+          
           return {
             ...mover,
             // Mask location for privacy - only show city/area, not full street address
             location: maskAddressForPrivacy(mover.location),
             distance,
             drivingMinutes,
+            isLiveLocation,
             user: user ? { name: user.name, email: user.email, phone: user.phone } : null
           };
         })
@@ -1451,11 +1459,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn('[Location] Reverse geocoding failed, using coordinates:', geoError);
       }
       
-      // Update mover's coordinates
+      // Update mover's coordinates with timestamp
       await storage.updateMover(mover.id, {
         latitude,
         longitude,
         location: locationText,
+        lastLocationUpdate: new Date(),
       });
       
       console.log(`[Location] Updated mover ${mover.id} GPS: ${latitude}, ${longitude} -> ${locationText}`);
