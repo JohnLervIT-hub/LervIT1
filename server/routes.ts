@@ -3944,8 +3944,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Helper to get or create Stripe customer with full contact info
   async function getOrCreateStripeCustomer(user: User): Promise<string> {
+    // If user has a stored Stripe customer ID, verify it exists in current Stripe mode
     if (user.stripeCustomerId) {
-      return user.stripeCustomerId;
+      try {
+        // Try to retrieve the customer to verify it exists
+        await stripe.customers.retrieve(user.stripeCustomerId);
+        return user.stripeCustomerId;
+      } catch (err: any) {
+        // Customer doesn't exist (likely switched from test to live mode)
+        // Fall through to create a new customer
+        console.log(`Stripe customer ${user.stripeCustomerId} not found, creating new one for user ${user.id}`);
+      }
     }
     
     // Create new Stripe customer with all available info for dashboard visibility
