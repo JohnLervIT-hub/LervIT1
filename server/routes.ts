@@ -7703,6 +7703,59 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: REFRESH GPS STATUS FOR ALL ONLINE MOVERS =====
+  // Updates lastLocationUpdate for all online movers so they show as "Live" on Find Movers
+  app.post("/api/admin/refresh-mover-gps", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get all online movers
+      const onlineMovers = await db.select()
+        .from(moversTable)
+        .where(eq(moversTable.isAvailable, true));
+      
+      if (onlineMovers.length === 0) {
+        return res.json({
+          success: true,
+          message: "No online movers found",
+          updated: 0
+        });
+      }
+      
+      // Update lastLocationUpdate for all online movers to current time
+      const now = new Date();
+      const updated: { moverId: string; name: string | null }[] = [];
+      
+      for (const mover of onlineMovers) {
+        await db.update(moversTable)
+          .set({ lastLocationUpdate: now })
+          .where(eq(moversTable.id, mover.id));
+        
+        // Get mover name
+        const user = await db.select({ name: usersTable.name })
+          .from(usersTable)
+          .where(eq(usersTable.id, mover.userId))
+          .limit(1);
+        
+        updated.push({
+          moverId: mover.id,
+          name: user[0]?.name || null
+        });
+      }
+      
+      console.log(`[Admin] Refreshed GPS status for ${updated.length} online movers`);
+      
+      res.json({
+        success: true,
+        message: `Refreshed GPS status for ${updated.length} online mover(s). They will now show as "Live" on Find Movers.`,
+        updated
+      });
+    } catch (error) {
+      console.error('[Admin] Refresh mover GPS error:', error);
+      res.status(500).json({ error: "Failed to refresh mover GPS status" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time mover notifications
