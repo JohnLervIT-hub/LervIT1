@@ -3741,15 +3741,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get or create Stripe customer so customer info appears in Stripe Dashboard
         const stripeCustomerId = await getOrCreateStripeCustomer(user);
         
-        // Update customer with phone if available (for disputes/reconciliation)
-        if (user.phone) {
-          try {
-            await stripe.customers.update(stripeCustomerId, {
-              phone: user.phone,
-            });
-          } catch (updateErr) {
-            console.error('Failed to update Stripe customer phone:', updateErr);
-          }
+        // ALWAYS sync customer info to Stripe (backfills existing customers with missing data)
+        try {
+          await stripe.customers.update(stripeCustomerId, {
+            name: user.name || undefined,
+            email: user.email || undefined,
+            phone: user.phone || undefined,
+          });
+        } catch (updateErr) {
+          console.error('Failed to sync Stripe customer info:', updateErr);
         }
         
         paymentIntent = await stripe.paymentIntents.create({
