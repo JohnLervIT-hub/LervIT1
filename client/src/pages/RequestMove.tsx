@@ -25,6 +25,7 @@ import { useLocation, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { aiPredictPrice, generatePriceExplanation, AI_FEATURES, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
@@ -118,8 +119,8 @@ export default function RequestMove() {
     enabled: !!preSelectedMoverId,
   });
   
-  // Location permission state
-  const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
+  // Use shared location context - no more separate location prompts!
+  const { coords: geoCoords, permissionState: locationStatus, requestLocation: requestGeoLocation, isRequesting: isRequestingLocation } = useGeoLocation();
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   
   // Track if we're restoring from sessionStorage - prevents location dialog from showing during restoration
@@ -131,61 +132,19 @@ export default function RequestMove() {
     !!(localStorage.getItem('pendingBooking') || sessionStorage.getItem('pendingBooking'))
   );
 
-  // Check location permission on mount - but skip if restoring saved data
+  // Show location dialog only if permission not granted AND not already have coords from shared context
   useEffect(() => {
-    // Skip location dialog if we're restoring a saved booking
-    if (hasPendingBooking.current) return;
+    // Skip if restoring a saved booking, or if we already have location
+    if (hasPendingBooking.current || geoCoords || locationStatus === 'granted' || locationStatus === 'loading') {
+      setShowLocationDialog(false);
+      return;
+    }
     
-    const checkLocationPermission = async () => {
-      try {
-        // Check if geolocation is supported
-        if (!navigator.geolocation) {
-          setLocationStatus('denied');
-          setShowLocationDialog(true);
-          return;
-        }
-        
-        // Check permission status if available
-        if (navigator.permissions) {
-          const result = await navigator.permissions.query({ name: 'geolocation' });
-          setLocationStatus(result.state as 'granted' | 'denied' | 'prompt');
-          
-          if (result.state !== 'granted') {
-            setShowLocationDialog(true);
-          }
-          
-          // Listen for permission changes
-          result.onchange = () => {
-            setLocationStatus(result.state as 'granted' | 'denied' | 'prompt');
-            if (result.state === 'granted') {
-              setShowLocationDialog(false);
-            }
-          };
-        } else {
-          // Fallback: try to get position to check permission
-          navigator.geolocation.getCurrentPosition(
-            () => {
-              setLocationStatus('granted');
-            },
-            (error) => {
-              if (error.code === error.PERMISSION_DENIED) {
-                setLocationStatus('denied');
-              } else {
-                setLocationStatus('prompt');
-              }
-              setShowLocationDialog(true);
-            },
-            { timeout: 5000 }
-          );
-        }
-      } catch (error) {
-        setLocationStatus('prompt');
-        setShowLocationDialog(true);
-      }
-    };
-    
-    checkLocationPermission();
-  }, []);
+    // Only show dialog if permission is prompt or denied (and we don't have coords)
+    if (locationStatus === 'prompt' || locationStatus === 'denied') {
+      setShowLocationDialog(true);
+    }
+  }, [geoCoords, locationStatus]);
 
   // PERFORMANCE: Preload Payment page when user reaches step 2 for instant navigation
   useEffect(() => {
@@ -860,26 +819,13 @@ export default function RequestMove() {
 
   // Request location permission
   const requestLocationPermission = () => {
-    navigator.geolocation.getCurrentPosition(
-      () => {
-        setLocationStatus('granted');
-        setShowLocationDialog(false);
-        toast({
-          title: "Location Enabled",
-          description: "You can now book a move with accurate location services.",
-        });
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocationStatus('denied');
-          toast({
-            title: "Location Denied",
-            description: "You can still book, but enabling location improves accuracy.",
-            variant: "destructive",
-          });
-        }
-      }
-    );
+    // Use the shared location context to request permission
+    requestGeoLocation();
+    setShowLocationDialog(false);
+    toast({
+      title: "Location Requested",
+      description: "Please allow location access when prompted.",
+    });
   };
 
   return (
