@@ -7432,21 +7432,25 @@ Respond with VALID JSON only:
       
       // Update all movers (including those with 0 completions)
       for (const mover of allMovers) {
-        // Force to numbers to avoid string/number comparison issues
-        const currentTrips = Number(mover.completedTrips) || 0;
-        const actualTrips = Number(countMap.get(mover.id)) || 0;
+        // Force to integers to avoid any comparison issues
+        const rawCurrent = mover.completedTrips;
+        const rawActual = countMap.get(mover.id);
+        const currentTrips = parseInt(String(rawCurrent || 0), 10);
+        const actualTrips = parseInt(String(rawActual || 0), 10);
+        const needsUpdate = currentTrips !== actualTrips;
+        
+        console.log(`[Admin Sync] Mover ${mover.id}: rawCurrent=${rawCurrent}, rawActual=${rawActual}, current=${currentTrips}, actual=${actualTrips}, needsUpdate=${needsUpdate}`);
         
         diagnostics.push({
           moverId: mover.id,
           currentTrips,
           actualTrips,
-          match: currentTrips === actualTrips
+          match: !needsUpdate
         });
         
-        console.log(`[Admin Sync] Mover ${mover.id}: current=${currentTrips} (${typeof currentTrips}), actual=${actualTrips} (${typeof actualTrips}), match=${currentTrips === actualTrips}`);
-        
-        // Only update if there's a mismatch
-        if (currentTrips !== actualTrips) {
+        // Update if there's a mismatch
+        if (needsUpdate) {
+          console.log(`[Admin Sync] UPDATING mover ${mover.id} from ${currentTrips} to ${actualTrips}`);
           await db.update(moversTable)
             .set({ 
               completedTrips: actualTrips,
