@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio } from "lucide-react";
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +68,274 @@ type Booking = {
     };
   } | null;
 };
+
+// Growth Metrics Types
+type GrowthMetrics = {
+  overview: {
+    totalBookings: number;
+    weeklyBookings: number;
+    monthlyBookings: number;
+    completedBookings: number;
+    totalRevenue: string;
+    avgBookingValue: string;
+    conversionRate: string;
+  };
+  bookings: {
+    paid: number;
+    pendingPayment: number;
+    failed: number;
+    statusBreakdown: {
+      pending: number;
+      accepted: number;
+      in_progress: number;
+      completed: number;
+      cancelled: number;
+    };
+  };
+  users: {
+    totalCustomers: number;
+    weeklyNewCustomers: number;
+    totalMovers: number;
+    weeklyNewMovers: number;
+    onlineMovers: number;
+    verifiedMovers: number;
+    liveGpsMovers: number;
+  };
+  abandoned: {
+    total: number;
+    recovered: number;
+    pending: number;
+    recoveryRate: string;
+  };
+  trends: {
+    dailyBookings: { date: string; count: number }[];
+  };
+  generatedAt: string;
+};
+
+function GrowthDashboard() {
+  const { data: metrics, isLoading, error } = useQuery<GrowthMetrics>({
+    queryKey: ["/api/admin/growth-metrics"],
+    refetchInterval: 60000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading growth metrics...</span>
+      </div>
+    );
+  }
+
+  if (error || !metrics) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center text-muted-foreground">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+            <p>Failed to load growth metrics</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <BarChart3 className="w-4 h-4" />
+              <span className="text-xs uppercase tracking-wide">Total Bookings</span>
+            </div>
+            <p className="text-2xl font-bold">{metrics.overview.totalBookings}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {metrics.overview.weeklyBookings} this week
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <DollarSign className="w-4 h-4" />
+              <span className="text-xs uppercase tracking-wide">Revenue</span>
+            </div>
+            <p className="text-2xl font-bold">${metrics.overview.totalRevenue}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Avg: ${metrics.overview.avgBookingValue}
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Target className="w-4 h-4" />
+              <span className="text-xs uppercase tracking-wide">Conversion</span>
+            </div>
+            <p className="text-2xl font-bold">{metrics.overview.conversionRate}%</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {metrics.overview.completedBookings} completed
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Percent className="w-4 h-4" />
+              <span className="text-xs uppercase tracking-wide">Cart Recovery</span>
+            </div>
+            <p className="text-2xl font-bold">{metrics.abandoned.recoveryRate}%</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {metrics.abandoned.recovered}/{metrics.abandoned.total} recovered
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              User Metrics
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Total Customers</span>
+                <span className="font-medium">{metrics.users.totalCustomers}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">New This Week</span>
+                <Badge variant="secondary">+{metrics.users.weeklyNewCustomers}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Total Movers</span>
+                <span className="font-medium">{metrics.users.totalMovers}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Online Now</span>
+                <Badge className="bg-green-500">{metrics.users.onlineMovers}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Radio className="w-3 h-3" />
+                  Live GPS
+                </span>
+                <Badge className="bg-blue-500">{metrics.users.liveGpsMovers}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-muted-foreground">Verified</span>
+                <Badge variant="outline">{metrics.users.verifiedMovers}</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Booking Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Pending</span>
+                <Badge variant="secondary">{metrics.bookings.statusBreakdown.pending}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Accepted</span>
+                <Badge className="bg-blue-500">{metrics.bookings.statusBreakdown.accepted}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">In Progress</span>
+                <Badge className="bg-amber-500">{metrics.bookings.statusBreakdown.in_progress}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Completed</span>
+                <Badge className="bg-green-500">{metrics.bookings.statusBreakdown.completed}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-muted-foreground">Cancelled</span>
+                <Badge variant="destructive">{metrics.bookings.statusBreakdown.cancelled}</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-muted-foreground">Paid</span>
+                <span className="font-medium text-green-600">{metrics.bookings.paid}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            7-Day Booking Trend
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-end gap-2 h-24">
+            {metrics.trends.dailyBookings.map((day) => (
+              <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                <div 
+                  className="w-full bg-primary/20 rounded-t"
+                  style={{ 
+                    height: Math.max(8, day.count * 20),
+                    maxHeight: 80 
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">{day.date.slice(5)}</span>
+                <span className="text-xs font-medium">{day.count}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            Abandoned Bookings
+          </CardTitle>
+          <CardDescription>
+            Users who started but didn't complete their booking
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-2xl font-bold text-amber-500">{metrics.abandoned.pending}</p>
+              <p className="text-xs text-muted-foreground">Pending Follow-up</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-2xl font-bold text-green-500">{metrics.abandoned.recovered}</p>
+              <p className="text-xs text-muted-foreground">Recovered</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-2xl font-bold">{metrics.abandoned.recoveryRate}%</p>
+              <p className="text-xs text-muted-foreground">Recovery Rate</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted-foreground text-right">
+        Last updated: {format(new Date(metrics.generatedAt), "MMM d, h:mm a")}
+      </p>
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -403,6 +671,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="bookings">Bookings</TabsTrigger>
             <TabsTrigger value="movers">Movers</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
           </TabsList>
 
           <TabsContent value="bookings" className="space-y-4">
@@ -600,6 +869,10 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="growth" className="space-y-4">
+            <GrowthDashboard />
           </TabsContent>
         </Tabs>
 
