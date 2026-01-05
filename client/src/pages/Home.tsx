@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
-import { Camera, Users, Navigation } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Camera, Users, Navigation, MapPin, X } from "lucide-react";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
-import { LocationPrompt } from "@/components/LocationPrompt";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
@@ -14,6 +15,7 @@ import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_backgro
 export default function Home() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { coords, permissionState, requestLocation, isRequesting } = useGeoLocation();
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -50,9 +52,44 @@ export default function Home() {
     },
   ];
 
+  // Only show location banner if permission not granted and not loading
+  const showLocationBanner = !coords && permissionState !== "granted" && permissionState !== "loading";
+
   return (
     <div className="min-h-screen">
-      <LocationPrompt variant="banner" />
+      {/* Location banner - only shows once if permission not granted */}
+      {showLocationBanner && (
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              {permissionState === "denied" ? (
+                <MapPin className="w-5 h-5 flex-shrink-0" />
+              ) : (
+                <MapPin className="w-5 h-5 flex-shrink-0" />
+              )}
+              <span className="text-sm font-medium">
+                {permissionState === "denied" 
+                  ? "Location blocked. Enable it in browser settings to find nearby movers."
+                  : "Enable location to find movers near you with accurate pricing"
+                }
+              </span>
+            </div>
+            {permissionState !== "denied" && (
+              <Button
+                onClick={requestLocation}
+                disabled={isRequesting}
+                variant="secondary"
+                size="sm"
+                className="bg-white text-orange-600 hover:bg-orange-50"
+                data-testid="button-enable-location-banner"
+              >
+                <Navigation className="w-4 h-4 mr-1" />
+                {isRequesting ? "Getting..." : "Enable"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       <HeroSection />
 
       <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
