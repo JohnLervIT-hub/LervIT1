@@ -616,6 +616,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
+      // If address was updated and user is a mover, geocode and update mover coordinates
+      if (updates.address && user.role === 'mover') {
+        try {
+          const { geocodeAddress } = await import("./google-maps");
+          const movers = await storage.getMovers({ userId: user.id });
+          
+          if (movers.length > 0) {
+            const result = await geocodeAddress(updates.address);
+            if (result && result.success) {
+              await storage.updateMover(movers[0].id, {
+                location: updates.address,
+                latitude: result.coordinates.lat,
+                longitude: result.coordinates.lng,
+              });
+              console.log(`[Profile] Updated mover ${movers[0].id} coordinates: ${result.coordinates.lat}, ${result.coordinates.lng}`);
+            } else {
+              console.warn(`[Profile] Could not geocode address: ${updates.address}`);
+            }
+          }
+        } catch (geocodeError) {
+          console.error('[Profile] Geocoding error:', geocodeError);
+          // Don't fail the request if geocoding fails - address is still saved
+        }
+      }
+      
       const { password: _, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
     } catch (error) {
