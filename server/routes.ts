@@ -618,19 +618,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If address was updated and user is a mover, geocode and update mover coordinates
       if (updates.address && user.role === 'mover') {
+        console.log(`[Profile] Mover address update detected: "${updates.address}"`);
         try {
           const { geocodeAddress } = await import("./google-maps");
           const movers = await storage.getMovers({ userId: user.id });
+          console.log(`[Profile] Found ${movers.length} mover profiles for user ${user.id}`);
           
           if (movers.length > 0) {
             const result = await geocodeAddress(updates.address);
-            if (result && result.success) {
+            console.log(`[Profile] Geocode result:`, JSON.stringify(result));
+            
+            // Update coordinates even if using fallback (success: false just means mock/fallback was used)
+            if (result && result.coordinates) {
               await storage.updateMover(movers[0].id, {
                 location: updates.address,
                 latitude: result.coordinates.lat,
                 longitude: result.coordinates.lng,
               });
-              console.log(`[Profile] Updated mover ${movers[0].id} coordinates: ${result.coordinates.lat}, ${result.coordinates.lng}`);
+              console.log(`[Profile] ✓ Updated mover ${movers[0].id} coordinates: ${result.coordinates.lat}, ${result.coordinates.lng}`);
             } else {
               console.warn(`[Profile] Could not geocode address: ${updates.address}`);
             }
