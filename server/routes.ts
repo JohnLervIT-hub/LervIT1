@@ -85,6 +85,65 @@ function formatPhoneNumber(phone: string): string {
   return phone;
 }
 
+// Helper to mask full address for privacy - only show city/area
+// Strips street numbers/addresses but keeps city and province
+function maskAddressForPrivacy(location: string | null): string {
+  if (!location) return "Calgary, AB";
+  
+  const parts = location.split(',').map(p => p.trim());
+  
+  // Helper to check if a part looks like a street address (contains numbers)
+  const isStreetAddress = (part: string): boolean => /\d/.test(part);
+  
+  // Helper to check if a part is a province code (AB, BC, ON, etc.)
+  const isProvinceCode = (part: string): boolean => /^[A-Z]{2}$/i.test(part.replace(/[A-Z]\d[A-Z]\s*\d[A-Z]\d/gi, '').trim());
+  
+  // Clean postal codes from any part
+  const cleanPostalCode = (part: string): string => part.replace(/[A-Z]\d[A-Z]\s*\d[A-Z]\d/gi, '').trim();
+  
+  if (parts.length === 1) {
+    // Single part - return as-is unless it has numbers (street)
+    if (isStreetAddress(parts[0])) {
+      return "Calgary, AB";
+    }
+    const cleaned = cleanPostalCode(parts[0]);
+    return cleaned.toLowerCase().includes('calgary') ? "Calgary, AB" : (cleaned || "Calgary, AB");
+  }
+  
+  if (parts.length === 2) {
+    const firstPart = cleanPostalCode(parts[0]);
+    const secondPart = cleanPostalCode(parts[1]);
+    
+    // Check if first part is a street address (has numbers)
+    if (isStreetAddress(parts[0])) {
+      // First part is street, second is city - return city with AB province
+      if (secondPart.toLowerCase().includes('calgary')) {
+        return "Calgary, AB";
+      }
+      return secondPart && secondPart.length > 2 ? `${secondPart}, AB` : "Calgary, AB";
+    }
+    
+    // No street number - this is likely "City, Province" format, return as-is
+    if (firstPart.toLowerCase().includes('calgary')) {
+      return "Calgary, AB";
+    }
+    return `${firstPart}, ${secondPart}`;
+  }
+  
+  if (parts.length >= 3) {
+    // Street, City, Province format - return just City, Province
+    const city = cleanPostalCode(parts[parts.length - 2]);
+    const province = cleanPostalCode(parts[parts.length - 1]);
+    
+    if (city.toLowerCase().includes('calgary')) {
+      return "Calgary, AB";
+    }
+    return city && city.length > 2 ? `${city}, ${province || 'AB'}` : "Calgary, AB";
+  }
+  
+  return "Calgary, AB";
+}
+
 // Auth middleware to attach user to req (session-based)
 async function authMiddleware(req: Request, res: Response, next: Function) {
   // Check session first (secure method)
@@ -1170,6 +1229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Enrich movers with user data and driving distance
+      // Privacy: Mask full street addresses - only show city/area
       let enrichedMovers = await Promise.all(
         movers.map(async (mover) => {
           const user = await storage.getUser(mover.userId);
@@ -1181,6 +1241,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           return {
             ...mover,
+            // Mask location for privacy - only show city/area, not full street address
+            location: maskAddressForPrivacy(mover.location),
             distance,
             drivingMinutes,
             user: user ? { name: user.name, email: user.email, phone: user.phone } : null
