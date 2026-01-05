@@ -7370,15 +7370,13 @@ Respond with VALID JSON only:
     try {
       if (!requireAdmin(req, res)) return;
       
-      // Get all movers with user info for logging
-      const allMovers = await db.select({
+      // Get before state for all movers
+      const beforeState = await db.select({
         id: moversTable.id,
-        userId: moversTable.userId,
-        completedTrips: moversTable.completedTrips,
-        totalMoves: moversTable.totalMoves
+        completedTrips: moversTable.completedTrips
       }).from(moversTable);
       
-      // Get all booking statuses for diagnostics
+      // Get booking counts
       const statusCounts = await db
         .select({
           status: bookings.status,
@@ -7387,10 +7385,6 @@ Respond with VALID JSON only:
         .from(bookings)
         .groupBy(bookings.status);
       
-      console.log('[Admin Sync] Booking status distribution:', statusCounts);
-      
-      // Get count of completed bookings per mover (matching earnings endpoint logic)
-      // Must have status='completed' AND paymentStatus='succeeded' to match dashboard
       const completedCounts = await db
         .select({
           moverId: bookings.moverId,
@@ -7403,85 +7397,45 @@ Respond with VALID JSON only:
         ))
         .groupBy(bookings.moverId);
       
-      console.log('[Admin Sync] Completed bookings (status=completed + payment=succeeded) by moverId:', completedCounts);
-      console.log('[Admin Sync] Total movers in system:', allMovers.length);
+      console.log('[Admin Sync] Completed bookings by mover:', completedCounts);
       
-      // Log mover IDs for comparison
-      const moverIds = allMovers.map(m => m.id);
-      const bookingMoverIds = completedCounts.map(c => c.moverId).filter(Boolean);
-      console.log('[Admin Sync] Mover IDs in movers table:', moverIds);
-      console.log('[Admin Sync] Mover IDs in completed bookings:', bookingMoverIds);
+      // FORCE UPDATE using direct SQL - bypass all JavaScript comparison
+      // First, reset all movers to 0
+      await db.execute(sql`UPDATE movers SET completed_trips = 0, total_moves = 0`);
       
-      // Check for mismatches
-      const unmatchedBookingIds = bookingMoverIds.filter(id => !moverIds.includes(id as string));
-      const moversWithNoBookings = moverIds.filter(id => !bookingMoverIds.includes(id));
-      console.log('[Admin Sync] Booking moverIds NOT in movers table:', unmatchedBookingIds);
-      console.log('[Admin Sync] Movers with 0 completed bookings:', moversWithNoBookings.length);
-      
-      // Build a map of moverId -> completed count
-      const countMap = new Map<string, number>();
-      for (const row of completedCounts) {
-        if (row.moverId) {
-          countMap.set(row.moverId, row.count);
-        }
-      }
-      
+      // Then set the correct counts for movers with completed bookings
       let updatedCount = 0;
-      const updates: { moverId: string; previousTrips: number; newTrips: number }[] = [];
-      const diagnostics: { moverId: string; currentTrips: number; actualTrips: number; match: boolean }[] = [];
+      const updates: { moverId: string; newTrips: number }[] = [];
       
-      // Update all movers (including those with 0 completions)
-      for (const mover of allMovers) {
-        // Force to integers to avoid any comparison issues
-        const rawCurrent = mover.completedTrips;
-        const rawActual = countMap.get(mover.id);
-        const currentTrips = parseInt(String(rawCurrent || 0), 10);
-        const actualTrips = parseInt(String(rawActual || 0), 10);
-        const needsUpdate = currentTrips !== actualTrips;
-        
-        console.log(`[Admin Sync] Mover ${mover.id}: rawCurrent=${rawCurrent}, rawActual=${rawActual}, current=${currentTrips}, actual=${actualTrips}, needsUpdate=${needsUpdate}`);
-        
-        diagnostics.push({
-          moverId: mover.id,
-          currentTrips,
-          actualTrips,
-          match: !needsUpdate
-        });
-        
-        // Update if there's a mismatch
-        if (needsUpdate) {
-          console.log(`[Admin Sync] UPDATING mover ${mover.id} from ${currentTrips} to ${actualTrips}`);
-          await db.update(moversTable)
-            .set({ 
-              completedTrips: actualTrips,
-              totalMoves: actualTrips 
-            })
-            .where(eq(moversTable.id, mover.id));
-          
-          updates.push({
-            moverId: mover.id,
-            previousTrips: currentTrips,
-            newTrips: actualTrips
-          });
+      for (const row of completedCounts) {
+        if (row.moverId && row.count > 0) {
+          await db.execute(sql`
+            UPDATE movers 
+            SET completed_trips = ${row.count}, total_moves = ${row.count}
+            WHERE id = ${row.moverId}
+          `);
+          updates.push({ moverId: row.moverId, newTrips: row.count });
           updatedCount++;
+          console.log(`[Admin Sync] Set mover ${row.moverId} to ${row.count} trips`);
         }
       }
       
-      console.log('[Admin Sync] Diagnostics:', diagnostics);
-      console.log('[Admin Sync] Updates made:', updates);
+      // Get after state
+      const afterState = await db.select({
+        id: moversTable.id,
+        completedTrips: moversTable.completedTrips
+      }).from(moversTable);
       
       res.json({
         success: true,
-        message: `Synced ${updatedCount} mover(s) with correct trip counts`,
+        message: `Force synced ${updatedCount} mover(s) with completed bookings. All other movers reset to 0.`,
         updates,
         diagnostics: {
-          totalMovers: allMovers.length,
+          totalMovers: beforeState.length,
           bookingStatusCounts: statusCounts,
           completedByMover: completedCounts,
-          moverComparison: diagnostics,
-          unmatchedBookingMoverIds: unmatchedBookingIds,
-          moverIdsInTable: moverIds,
-          moverIdsInBookings: bookingMoverIds
+          beforeState,
+          afterState
         }
       });
     } catch (error) {
