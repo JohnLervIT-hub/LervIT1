@@ -63,13 +63,7 @@ const MoverCard = memo(function MoverCard({
                 <h3 className="font-bold text-base truncate" data-testid={`text-mover-name-${id}`}>
                   {name}
                 </h3>
-                {verified && (
-                  <Badge variant="default" className="text-xs gap-1 shrink-0" data-testid={`badge-verified-${id}`}>
-                    <ShieldCheck className="w-3 h-3" />
-                    Verified
-                  </Badge>
-                )}
-                {pilotApproved && !verified && (
+                {pilotApproved && (
                   <Badge variant="secondary" className="text-xs gap-1 shrink-0 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-early-access-${id}`}>
                     <Rocket className="w-3 h-3" />
                     Early Access
