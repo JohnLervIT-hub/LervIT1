@@ -665,85 +665,102 @@ export default function MoverDashboard() {
     }
   }, [geoPermissionState, geoCoords]);
 
-  // Location sharing effect - updates location every 5 seconds for in-transit bookings
+  // Location sharing effect - uses watchPosition for continuous real-time tracking during trips
+  // This is more reliable than setInterval + getCurrentPosition, especially when phone screen is off
   useEffect(() => {
     if (!locationSharing) return;
 
     let permissionDeniedShown = false;
-    let consecutiveErrors = 0;
-    const MAX_CONSECUTIVE_ERRORS = 5;
+    let watchId: number | null = null;
+    let lastSentTime = 0;
+    const MIN_UPDATE_INTERVAL = 3000; // Send updates at most every 3 seconds
+    const MIN_DISTANCE_METERS = 5; // Only send if moved at least 5 meters
+    let lastPosition: { lat: number; lng: number } | null = null;
 
-    const shareLocation = () => {
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            consecutiveErrors = 0; // Reset on success
-            try {
-              await apiRequest("POST", `/api/bookings/${locationSharing}/location`, {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              });
-            } catch (error) {
-              console.error("Failed to update location:", error);
-            }
-          },
-          (error) => {
-            console.error("Geolocation error:", error.code, error.message);
-            consecutiveErrors++;
-            
-            // Handle different error types
-            switch (error.code) {
-              case 1: // PERMISSION_DENIED
-                if (!permissionDeniedShown) {
-                  permissionDeniedShown = true;
-                  toast({
-                    title: "Location permission denied",
-                    description: "Please allow location access in your browser settings, then try starting the trip again.",
-                    variant: "destructive",
-                  });
-                  setLocationSharing(null);
-                }
-                break;
-              case 2: // POSITION_UNAVAILABLE
-                console.log("Position unavailable, will retry...");
-                // Don't stop sharing, just log - GPS might be temporarily unavailable
-                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                  toast({
-                    title: "Location unavailable",
-                    description: "Unable to get your location. Please check your GPS is enabled and you have a clear view of the sky.",
-                    variant: "destructive",
-                  });
-                }
-                break;
-              case 3: // TIMEOUT
-                console.log("Location request timed out, will retry...");
-                // Don't stop sharing, just retry on next interval
-                break;
-            }
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000, // 10 second timeout
-            maximumAge: 5000 // Accept cached position up to 5 seconds old
-          }
-        );
-      } else {
-        toast({
-          title: "Geolocation not supported",
-          description: "Your browser doesn't support location services.",
-          variant: "destructive",
+    // Calculate distance between two points in meters (Haversine formula)
+    const getDistanceMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+      const R = 6371000; // Earth's radius in meters
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    const sendLocationUpdate = async (latitude: number, longitude: number) => {
+      const now = Date.now();
+      
+      // Check if enough time has passed since last update
+      if (now - lastSentTime < MIN_UPDATE_INTERVAL) {
+        return;
+      }
+      
+      // Check if we've moved enough (skip if standing still)
+      if (lastPosition) {
+        const distance = getDistanceMeters(lastPosition.lat, lastPosition.lng, latitude, longitude);
+        if (distance < MIN_DISTANCE_METERS && now - lastSentTime < 10000) {
+          // If not moved much and updated within 10 seconds, skip
+          return;
+        }
+      }
+      
+      try {
+        await apiRequest("POST", `/api/bookings/${locationSharing}/location`, {
+          latitude,
+          longitude,
         });
-        setLocationSharing(null);
+        lastSentTime = now;
+        lastPosition = { lat: latitude, lng: longitude };
+        console.log("[GPS] Location shared via watchPosition");
+      } catch (error) {
+        console.error("Failed to update location:", error);
       }
     };
 
-    // Share location immediately
-    shareLocation();
+    if ("geolocation" in navigator) {
+      // Use watchPosition for continuous tracking - more reliable in background
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          sendLocationUpdate(position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.error("Geolocation watch error:", error.code, error.message);
+          
+          if (error.code === 1 && !permissionDeniedShown) { // PERMISSION_DENIED
+            permissionDeniedShown = true;
+            toast({
+              title: "Location permission denied",
+              description: "Please allow location access in your browser settings, then try starting the trip again.",
+              variant: "destructive",
+            });
+            setLocationSharing(null);
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 30000, // Longer timeout for watchPosition
+          maximumAge: 3000, // Accept positions up to 3 seconds old
+        }
+      );
+      
+      console.log("[GPS] Started watchPosition for trip tracking, watchId:", watchId);
+    } else {
+      toast({
+        title: "Geolocation not supported",
+        description: "Your browser doesn't support location services.",
+        variant: "destructive",
+      });
+      setLocationSharing(null);
+    }
 
-    // Then share every 5 seconds
-    const interval = setInterval(shareLocation, 5000);
-
-    return () => clearInterval(interval);
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        console.log("[GPS] Stopped watchPosition, watchId:", watchId);
+      }
+    };
   }, [locationSharing, toast]);
 
   // Uber-style live GPS tracking when mover is online (isAvailable = true)

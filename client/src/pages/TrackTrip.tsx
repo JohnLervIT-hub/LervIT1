@@ -135,16 +135,37 @@ export default function TrackTrip() {
   const animationFrameRef = useRef<number | null>(null);
   const isFirstPositionRef = useRef(true);
 
-  // Resilient polling
+  // Resilient polling - 3 second intervals for smoother tracking
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
     ["/api/bookings", bookingId, "location"],
     {},
     { 
-      baseInterval: 5000, 
-      maxInterval: 30000,
+      baseInterval: 3000, // More frequent polling for smoother animation
+      maxInterval: 15000, // Max backoff when connection issues
       enabled: autoRefresh 
     }
   );
+  
+  // Track time since last location update for display
+  const [lastUpdateSeconds, setLastUpdateSeconds] = useState<number | null>(null);
+  
+  useEffect(() => {
+    if (!locationData?.currentLocation?.updatedAt) {
+      setLastUpdateSeconds(null);
+      return;
+    }
+    
+    const updateTimer = () => {
+      const updatedAt = new Date(locationData.currentLocation!.updatedAt).getTime();
+      const now = Date.now();
+      const seconds = Math.floor((now - updatedAt) / 1000);
+      setLastUpdateSeconds(seconds);
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [locationData?.currentLocation?.updatedAt]);
 
   useEffect(() => {
     if (locationData?.status === "completed" || locationData?.status === "cancelled") {
@@ -448,11 +469,17 @@ export default function TrackTrip() {
           </Button>
         </Link>
         
-        {/* Live indicator */}
+        {/* Live indicator with last update time */}
         {isLive && (
           <div className="bg-black/80 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2 shadow-lg" data-testid="live-indicator">
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            <span className="text-white text-sm font-medium">LIVE</span>
+            <span className={`w-2 h-2 rounded-full ${lastUpdateSeconds !== null && lastUpdateSeconds < 30 ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></span>
+            <span className="text-white text-sm font-medium">
+              {lastUpdateSeconds !== null && lastUpdateSeconds < 10 
+                ? 'LIVE' 
+                : lastUpdateSeconds !== null 
+                  ? `${lastUpdateSeconds}s ago`
+                  : 'LIVE'}
+            </span>
           </div>
         )}
       </div>
