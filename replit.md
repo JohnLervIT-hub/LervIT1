@@ -44,6 +44,7 @@ The platform features a responsive, mobile-first design utilizing shadcn/ui comp
 *   **Notification Systems:** Comprehensive email templates (Resend) and SMS alerts (Telnyx) for job matches, bookings, payments, and status updates.
 *   **Mover Earnings & Payout:** Dashboard and payout system integrated with Stripe Connect for onboarding, commissions, and UI.
 *   **Real-Time Tracking:** Movers can share location for customer tracking.
+*   **Live Mover GPS System:** Uber-style live location when movers go online - GPS updates every 30 seconds while available, showing "Live" badge on Find Movers page for movers with updates within 1 hour. Uses `lastLocationUpdate` timestamp field and `isLiveLocation` flag.
 *   **Move Progress Tracking:** A 6-stage booking status flow with visual indicators.
 *   **Mover Profile Management:** Movers can manage profiles, photos, bio, and vehicle details.
 *   **Driver Verification:** System tracks 7 types of verification with blocking logic, supported by an admin review dashboard.
