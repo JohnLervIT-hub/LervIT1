@@ -88,6 +88,7 @@ export const movers = pgTable("movers", {
   location: text("location"),
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
+  lastLocationUpdate: timestamp("last_location_update"), // When GPS was last updated (for live location priority)
   isAvailable: boolean("is_available").default(true).notNull(),
   // Early Access (Pilot) program fields
   pilotStatus: text("pilot_status").default("none"), // none | pending | approved | rejected | suspended
