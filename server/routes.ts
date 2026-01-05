@@ -7432,8 +7432,9 @@ Respond with VALID JSON only:
       
       // Update all movers (including those with 0 completions)
       for (const mover of allMovers) {
-        const currentTrips = mover.completedTrips || 0;
-        const actualTrips = countMap.get(mover.id) || 0;
+        // Force to numbers to avoid string/number comparison issues
+        const currentTrips = Number(mover.completedTrips) || 0;
+        const actualTrips = Number(countMap.get(mover.id)) || 0;
         
         diagnostics.push({
           moverId: mover.id,
@@ -7441,6 +7442,8 @@ Respond with VALID JSON only:
           actualTrips,
           match: currentTrips === actualTrips
         });
+        
+        console.log(`[Admin Sync] Mover ${mover.id}: current=${currentTrips} (${typeof currentTrips}), actual=${actualTrips} (${typeof actualTrips}), match=${currentTrips === actualTrips}`);
         
         // Only update if there's a mismatch
         if (currentTrips !== actualTrips) {
