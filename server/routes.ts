@@ -7406,6 +7406,18 @@ Respond with VALID JSON only:
       console.log('[Admin Sync] Completed bookings (status=completed + payment=succeeded) by moverId:', completedCounts);
       console.log('[Admin Sync] Total movers in system:', allMovers.length);
       
+      // Log mover IDs for comparison
+      const moverIds = allMovers.map(m => m.id);
+      const bookingMoverIds = completedCounts.map(c => c.moverId).filter(Boolean);
+      console.log('[Admin Sync] Mover IDs in movers table:', moverIds);
+      console.log('[Admin Sync] Mover IDs in completed bookings:', bookingMoverIds);
+      
+      // Check for mismatches
+      const unmatchedBookingIds = bookingMoverIds.filter(id => !moverIds.includes(id as string));
+      const moversWithNoBookings = moverIds.filter(id => !bookingMoverIds.includes(id));
+      console.log('[Admin Sync] Booking moverIds NOT in movers table:', unmatchedBookingIds);
+      console.log('[Admin Sync] Movers with 0 completed bookings:', moversWithNoBookings.length);
+      
       // Build a map of moverId -> completed count
       const countMap = new Map<string, number>();
       for (const row of completedCounts) {
@@ -7459,7 +7471,10 @@ Respond with VALID JSON only:
           totalMovers: allMovers.length,
           bookingStatusCounts: statusCounts,
           completedByMover: completedCounts,
-          moverComparison: diagnostics
+          moverComparison: diagnostics,
+          unmatchedBookingMoverIds: unmatchedBookingIds,
+          moverIdsInTable: moverIds,
+          moverIdsInBookings: bookingMoverIds
         }
       });
     } catch (error) {
