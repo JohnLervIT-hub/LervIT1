@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, Upload, Truck, User, Phone } from "lucide-react";
+import { Loader2, Upload, Truck, User, Phone, Navigation, MapPin } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 // Vehicle types aligned with Vision Engine categories for proper matching

@@ -1352,6 +1352,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update mover location from GPS coordinates
+  app.patch("/api/movers/me/location", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      if (user.role !== 'mover') {
+        return res.status(403).json({ error: "Only movers can update their location" });
+      }
+      
+      const locationSchema = z.object({
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+      });
+      
+      const { latitude, longitude } = validateBody(locationSchema, req.body);
+      
+      // Get mover profile
+      const movers = await storage.getMovers({ userId: user.id });
+      if (!movers.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      
+      const mover = movers[0];
+      
+      // Reverse geocode to get address from coordinates
+      let locationText = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+      try {
+        const { reverseGeocode } = await import("./google-maps");
+        const result = await reverseGeocode(latitude, longitude);
+        if (result) {
+          locationText = result;
+        }
+      } catch (geoError) {
+        console.warn('[Location] Reverse geocoding failed, using coordinates:', geoError);
+      }
+      
+      // Update mover's coordinates
+      await storage.updateMover(mover.id, {
+        latitude,
+        longitude,
+        location: locationText,
+      });
+      
+      console.log(`[Location] Updated mover ${mover.id} GPS: ${latitude}, ${longitude} -> ${locationText}`);
+      
+      res.json({ 
+        success: true, 
+        location: locationText,
+        latitude,
+        longitude,
+      });
+    } catch (error) {
+      console.error('[Location] Update error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update location" });
+    }
+  });
+
   // ===== VERIFICATION HELPER FUNCTIONS =====
   
   async function getDriverVerificationSummary(moverId: string) {

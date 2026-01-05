@@ -256,3 +256,36 @@ export async function geocodeAddress(address: string): Promise<GeocodingResult> 
     };
   }
 }
+
+/**
+ * Reverse geocode coordinates to get a human-readable address
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn("[Google Maps] API key not configured, cannot reverse geocode");
+    return null;
+  }
+
+  try {
+    const response = await client.reverseGeocode({
+      params: {
+        latlng: { lat, lng },
+        key: GOOGLE_MAPS_API_KEY,
+      },
+      timeout: 5000,
+    });
+
+    if (response.data.status !== "OK" || !response.data.results[0]) {
+      console.warn(`[Google Maps] Reverse geocoding failed with status: ${response.data.status}`);
+      return null;
+    }
+
+    const result = response.data.results[0];
+    console.log(`[Google Maps] ✓ Reverse geocoded ${lat}, ${lng} to "${result.formatted_address}"`);
+    
+    return result.formatted_address;
+  } catch (error) {
+    console.error("[Google Maps] Reverse geocoding error:", error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}

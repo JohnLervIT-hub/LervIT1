@@ -30,7 +30,8 @@ import {
   Briefcase,
   FileCheck,
   AlertTriangle,
-  Star
+  Star,
+  Navigation
 } from "lucide-react";
 import { Link } from "wouter";
 import { PhoneVerification } from "@/components/PhoneVerification";
@@ -68,6 +69,7 @@ export default function MoverProfile() {
   const [phone, setPhone] = useState(user?.phone || "");
   const [address, setAddress] = useState(user?.address || "");
   const [isUploading, setIsUploading] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   
   
   // Initialize notifications from user data (persisted in database)
@@ -138,6 +140,64 @@ export default function MoverProfile() {
       setIsUploading(false);
     },
   });
+
+  const updateLocationMutation = useMutation({
+    mutationFn: async (data: { latitude: number; longitude: number }) => {
+      return apiRequest("PATCH", "/api/movers/me/location", data);
+    },
+    onSuccess: (response: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers/me"] });
+      // Don't overwrite the profile address - GPS location is stored separately
+      toast({
+        title: "Location Updated",
+        description: `GPS coordinates saved (${response.location}). Customers will now see accurate distances.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Update Failed",
+        description: "Could not update your location. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUseCurrentLocation = () => {
+    if (!("geolocation" in navigator)) {
+      toast({
+        title: "Not Supported",
+        description: "Your browser doesn't support location services.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        updateLocationMutation.mutate({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        let message = "Could not get your location.";
+        if (error.code === error.PERMISSION_DENIED) {
+          message = "Please allow location access in your browser settings.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = "Location unavailable. Please check your GPS is enabled.";
+        }
+        toast({
+          title: "Location Error",
+          description: message,
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -352,6 +412,25 @@ export default function MoverProfile() {
                   data-testid="input-mover-profile-address"
                 />
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUseCurrentLocation}
+                disabled={isGettingLocation || updateLocationMutation.isPending}
+                className="w-full"
+                data-testid="button-use-current-location"
+              >
+                {isGettingLocation || updateLocationMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Navigation className="w-4 h-4 mr-2" />
+                )}
+                Use My Current Location
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Click to capture your GPS coordinates for accurate distance calculations
+              </p>
             </div>
 
             <Button 
