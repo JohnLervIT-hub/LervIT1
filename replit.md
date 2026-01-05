@@ -53,6 +53,8 @@ The platform features a responsive, mobile-first design utilizing shadcn/ui comp
 *   **Mover Job Decline:** Movers can decline job offers, marking notifications as declined and preventing re-acceptance.
 *   **Improved Mover Selection:** Uses Google Maps Distance Matrix API for accurate driving distances and times, and supports pre-selection of movers with a two-stage assignment flow (pending notification, explicit acceptance/decline). If a pre-selected mover declines, the system automatically triggers proximity matching for other movers.
 *   **Login-First Mover Selection:** Unauthenticated users selecting a mover are redirected to login/signup, then returned to the booking page with the selected mover pre-filled.
+*   **Abandoned Booking Tracking:** Automatically saves incomplete bookings when users leave the booking flow. Sends email/SMS reminders to encourage completion (up to 3 reminders per abandoned booking). Admin can view abandoned bookings and recovery rate.
+*   **Growth Dashboard:** Admin tab showing key platform metrics including total/weekly/monthly bookings, revenue, conversion rate, user stats (customers, movers, online, verified, live GPS), abandoned booking recovery rate, and 7-day booking trend chart.
 
 ## External Dependencies
 *   **Payment Processing:** Stripe (`@stripe/stripe-js`, `@stripe/react-stripe-js`)

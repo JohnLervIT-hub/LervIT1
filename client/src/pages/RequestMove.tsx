@@ -428,6 +428,93 @@ export default function RequestMove() {
     }
   }, [createdBooking]);
 
+  // Abandoned Booking Tracking - Save to server when user leaves without completing
+  const abandonedBookingRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Only track if user has entered some booking data (step > 1)
+    const hasEnteredData = step > 1 || pickupAddress || dropoffAddress;
+    
+    const saveAbandonedBooking = async () => {
+      if (!hasEnteredData) return;
+      
+      // Don't save if booking was already created successfully
+      if (createdBooking) return;
+      
+      try {
+        const response = await fetch('/api/abandoned-bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            pickupAddress,
+            dropoffAddress,
+            loadSize,
+            preferredDate: date,
+            selectedMoverId: preSelectedMoverId,
+            lastStep: step,
+            email: user?.email,
+            phone: user?.phone,
+          }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          abandonedBookingRef.current = data.id;
+        }
+      } catch (error) {
+        console.log('[Abandoned Booking] Failed to save:', error);
+      }
+    };
+    
+    // Save on visibility change (user switches tabs)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && hasEnteredData && !createdBooking) {
+        saveAbandonedBooking();
+      }
+    };
+    
+    // Save on beforeunload (user closes tab)
+    const handleBeforeUnload = () => {
+      if (hasEnteredData && !createdBooking) {
+        // Use navigator.sendBeacon with Blob for proper JSON content type
+        const data = JSON.stringify({
+          pickupAddress,
+          dropoffAddress,
+          loadSize,
+          preferredDate: date,
+          selectedMoverId: preSelectedMoverId,
+          lastStep: step,
+          email: user?.email,
+          phone: user?.phone,
+        });
+        const blob = new Blob([data], { type: 'application/json' });
+        navigator.sendBeacon('/api/abandoned-bookings', blob);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [step, pickupAddress, dropoffAddress, loadSize, date, preSelectedMoverId, user, createdBooking]);
+  
+  // Mark abandoned booking as recovered when booking is created
+  useEffect(() => {
+    if (createdBooking && abandonedBookingRef.current) {
+      fetch(`/api/abandoned-bookings/${abandonedBookingRef.current}/recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ bookingId: createdBooking.id }),
+      }).catch(() => {
+        // Silently fail - not critical
+      });
+    }
+  }, [createdBooking]);
+
   /* ============================================================
      ARCHIVED: AI Photo Analysis Handler (Future Development)
      ============================================================
