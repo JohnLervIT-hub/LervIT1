@@ -40,7 +40,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, generateWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt } from "drizzle-orm";
@@ -7753,6 +7753,243 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Refresh mover GPS error:', error);
       res.status(500).json({ error: "Failed to refresh mover GPS status" });
+    }
+  });
+
+  // ===== ABANDONED BOOKINGS API =====
+  
+  // POST /api/abandoned-bookings - Save abandoned booking for reminder follow-up
+  app.post("/api/abandoned-bookings", async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { pickupAddress, dropoffAddress, loadSize, preferredDate, selectedMoverId, lastStep, email, phone } = req.body;
+      
+      // Use user data if authenticated, otherwise use provided data
+      const abandonedData = {
+        userId: user?.id || null,
+        email: user?.email || email || null,
+        phone: user?.phone || phone || null,
+        pickupAddress: pickupAddress || null,
+        dropoffAddress: dropoffAddress || null,
+        loadSize: loadSize || null,
+        preferredDate: preferredDate || null,
+        selectedMoverId: selectedMoverId || null,
+        lastStep: lastStep || 1,
+      };
+      
+      // Check if we have at least some identifying info
+      if (!abandonedData.userId && !abandonedData.email && !abandonedData.phone) {
+        return res.status(400).json({ error: "At least email, phone, or user ID required" });
+      }
+      
+      // Check if there's an existing abandoned booking for this user/email
+      let existingAbandoned = null;
+      if (abandonedData.userId) {
+        const result = await db.select().from(abandonedBookings)
+          .where(and(
+            eq(abandonedBookings.userId, abandonedData.userId),
+            eq(abandonedBookings.recovered, false)
+          ))
+          .limit(1);
+        existingAbandoned = result[0];
+      } else if (abandonedData.email) {
+        const result = await db.select().from(abandonedBookings)
+          .where(and(
+            eq(abandonedBookings.email, abandonedData.email),
+            eq(abandonedBookings.recovered, false)
+          ))
+          .limit(1);
+        existingAbandoned = result[0];
+      }
+      
+      if (existingAbandoned) {
+        // Update existing abandoned booking
+        await db.update(abandonedBookings)
+          .set({
+            ...abandonedData,
+            updatedAt: new Date(),
+          })
+          .where(eq(abandonedBookings.id, existingAbandoned.id));
+        
+        res.json({ success: true, updated: true, id: existingAbandoned.id });
+      } else {
+        // Create new abandoned booking
+        const result = await db.insert(abandonedBookings).values(abandonedData).returning({ id: abandonedBookings.id });
+        res.json({ success: true, created: true, id: result[0].id });
+      }
+    } catch (error) {
+      console.error('[Abandoned Booking] Error saving:', error);
+      res.status(500).json({ error: "Failed to save abandoned booking" });
+    }
+  });
+  
+  // POST /api/abandoned-bookings/:id/recover - Mark abandoned booking as recovered
+  app.post("/api/abandoned-bookings/:id/recover", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { bookingId } = req.body;
+      
+      await db.update(abandonedBookings)
+        .set({
+          recovered: true,
+          recoveredBookingId: bookingId || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(abandonedBookings.id, id));
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('[Abandoned Booking] Error recovering:', error);
+      res.status(500).json({ error: "Failed to mark booking as recovered" });
+    }
+  });
+
+  // ===== ADMIN: GROWTH METRICS DASHBOARD =====
+  
+  app.get("/api/admin/growth-metrics", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const now = new Date();
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // Get all bookings
+      const allBookings = await db.select().from(bookings);
+      
+      // Get all users
+      const allUsers = await db.select().from(usersTable);
+      
+      // Get all movers
+      const allMovers = await db.select().from(moversTable);
+      
+      // Get abandoned bookings
+      const allAbandoned = await db.select().from(abandonedBookings);
+      
+      // Calculate metrics
+      const totalBookings = allBookings.length;
+      const weeklyBookings = allBookings.filter(b => new Date(b.createdAt) >= oneWeekAgo).length;
+      const monthlyBookings = allBookings.filter(b => new Date(b.createdAt) >= oneMonthAgo).length;
+      
+      const completedBookings = allBookings.filter(b => b.status === 'completed');
+      const completedCount = completedBookings.length;
+      const totalRevenue = completedBookings.reduce((sum, b) => sum + parseFloat(b.price || '0'), 0);
+      
+      const paidBookings = allBookings.filter(b => b.paymentStatus === 'paid').length;
+      const pendingPaymentBookings = allBookings.filter(b => b.paymentStatus === 'pending').length;
+      const failedBookings = allBookings.filter(b => b.status === 'cancelled' || b.paymentStatus === 'failed').length;
+      
+      // Conversion rate: completed / total
+      const conversionRate = totalBookings > 0 ? (completedCount / totalBookings * 100).toFixed(1) : '0';
+      
+      // User metrics
+      const totalCustomers = allUsers.filter(u => u.role === 'customer').length;
+      const weeklyNewCustomers = allUsers.filter(u => u.role === 'customer' && new Date(u.createdAt) >= oneWeekAgo).length;
+      
+      const totalMovers = allMovers.length;
+      const onlineMovers = allMovers.filter(m => m.isAvailable).length;
+      const verifiedMovers = allMovers.filter(m => m.isVerified).length;
+      const weeklyNewMovers = allMovers.filter(m => new Date(m.createdAt) >= oneWeekAgo).length;
+      
+      // Live GPS movers (updated within last hour)
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const liveGpsMovers = allMovers.filter(m => 
+        m.isAvailable && m.lastLocationUpdate && new Date(m.lastLocationUpdate) > oneHourAgo
+      ).length;
+      
+      // Abandoned booking metrics
+      const totalAbandoned = allAbandoned.length;
+      const recoveredAbandoned = allAbandoned.filter(a => a.recovered).length;
+      const pendingAbandoned = allAbandoned.filter(a => !a.recovered).length;
+      const recoveryRate = totalAbandoned > 0 ? (recoveredAbandoned / totalAbandoned * 100).toFixed(1) : '0';
+      
+      // Average booking value
+      const avgBookingValue = completedCount > 0 ? (totalRevenue / completedCount).toFixed(2) : '0';
+      
+      // Booking status breakdown
+      const statusBreakdown = {
+        pending: allBookings.filter(b => b.status === 'pending').length,
+        accepted: allBookings.filter(b => b.status === 'accepted').length,
+        in_progress: allBookings.filter(b => b.status === 'in_progress').length,
+        completed: completedCount,
+        cancelled: allBookings.filter(b => b.status === 'cancelled').length,
+      };
+      
+      // Daily bookings for last 7 days
+      const dailyBookings = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        
+        const count = allBookings.filter(b => {
+          const created = new Date(b.createdAt);
+          return created >= date && created < nextDate;
+        }).length;
+        
+        dailyBookings.push({
+          date: date.toISOString().split('T')[0],
+          count,
+        });
+      }
+      
+      res.json({
+        overview: {
+          totalBookings,
+          weeklyBookings,
+          monthlyBookings,
+          completedBookings: completedCount,
+          totalRevenue: totalRevenue.toFixed(2),
+          avgBookingValue,
+          conversionRate,
+        },
+        bookings: {
+          paid: paidBookings,
+          pendingPayment: pendingPaymentBookings,
+          failed: failedBookings,
+          statusBreakdown,
+        },
+        users: {
+          totalCustomers,
+          weeklyNewCustomers,
+          totalMovers,
+          weeklyNewMovers,
+          onlineMovers,
+          verifiedMovers,
+          liveGpsMovers,
+        },
+        abandoned: {
+          total: totalAbandoned,
+          recovered: recoveredAbandoned,
+          pending: pendingAbandoned,
+          recoveryRate,
+        },
+        trends: {
+          dailyBookings,
+        },
+        generatedAt: now.toISOString(),
+      });
+    } catch (error) {
+      console.error('[Admin] Growth metrics error:', error);
+      res.status(500).json({ error: "Failed to fetch growth metrics" });
+    }
+  });
+  
+  // GET /api/admin/abandoned-bookings - Get all abandoned bookings
+  app.get("/api/admin/abandoned-bookings", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const abandoned = await db.select()
+        .from(abandonedBookings)
+        .orderBy(desc(abandonedBookings.createdAt));
+      
+      res.json(abandoned);
+    } catch (error) {
+      console.error('[Admin] Get abandoned bookings error:', error);
+      res.status(500).json({ error: "Failed to fetch abandoned bookings" });
     }
   });
 
