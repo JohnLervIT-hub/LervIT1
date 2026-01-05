@@ -20,11 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, SlidersHorizontal, MapPin, X } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, X, Navigation } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { LocationPrompt } from "@/components/LocationPrompt";
+import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { getVehicleDisplayName } from "@/lib/utils";
 
 // Vehicle type filter options with display name and normalized DB values
@@ -66,9 +66,8 @@ function MoverCardSkeleton() {
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { coords: userCoords, permissionState, requestLocation, isRequesting } = useGeoLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationDenied, setLocationDenied] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedVehicleTypes, setSelectedVehicleTypes] = useState<string[]>([]);
   const [minRating, setMinRating] = useState<string>("all");
@@ -94,11 +93,6 @@ export default function BrowseMovers() {
         ? prev.filter(t => t !== type)
         : [...prev, type]
     );
-  };
-
-  const handleLocationGranted = (coords: { lat: number; lng: number }) => {
-    setUserCoords(coords);
-    setLocationDenied(false);
   };
 
   // Always fetch movers immediately, update with coords when available
@@ -197,12 +191,41 @@ export default function BrowseMovers() {
           </p>
         </div>
 
-        {!userCoords && (
+        {/* Location prompt - only shows if permission not yet granted */}
+        {!userCoords && permissionState !== "granted" && permissionState !== "loading" && (
           <div className="mb-6">
-            <LocationPrompt 
-              variant="card" 
-              onLocationGranted={handleLocationGranted}
-            />
+            <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full bg-orange-100 dark:bg-orange-900/40">
+                    <MapPin className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-orange-800 dark:text-orange-200">
+                      {permissionState === "denied" ? "Location Access Blocked" : "Enable Location for Better Results"}
+                    </h3>
+                    <p className="text-sm text-orange-700 dark:text-orange-300">
+                      {permissionState === "denied" 
+                        ? "Enable location in browser settings to find movers near you."
+                        : "See movers closest to you with accurate distance."
+                      }
+                    </p>
+                  </div>
+                </div>
+                {permissionState !== "denied" && (
+                  <Button
+                    onClick={requestLocation}
+                    disabled={isRequesting}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                    size="sm"
+                    data-testid="button-enable-location"
+                  >
+                    <Navigation className="w-4 h-4 mr-2" />
+                    {isRequesting ? "Getting..." : "Enable Location"}
+                  </Button>
+                )}
+              </div>
+            </Card>
           </div>
         )}
 
@@ -377,19 +400,6 @@ export default function BrowseMovers() {
           </div>
         )}
         
-        {locationDenied && (
-          <div className="mt-6 p-4 border rounded-md bg-muted/30">
-            <div className="flex items-start gap-3">
-              <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">Location access required</p>
-                <p className="text-sm text-muted-foreground">
-                  Enable location access to see movers sorted by distance from you.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

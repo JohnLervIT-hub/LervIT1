@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { GoogleMapsProvider } from "@/contexts/GoogleMapsContext";
+import { LocationProvider } from "@/contexts/LocationContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
@@ -234,8 +235,9 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <GoogleMapsProvider>
-            <TooltipProvider>
-              <ErrorBoundary>
+            <LocationProvider>
+              <TooltipProvider>
+                <ErrorBoundary>
                 <ScrollToTop />
                 <Header />
                 <div className="pt-16 pb-16 md:pb-0">
@@ -246,8 +248,9 @@ function App() {
                 <MobileBottomNav />
                 <JobNotificationSound />
               </ErrorBoundary>
-              <Toaster />
-            </TooltipProvider>
+                <Toaster />
+              </TooltipProvider>
+            </LocationProvider>
           </GoogleMapsProvider>
         </AuthProvider>
       </QueryClientProvider>
