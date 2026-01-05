@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
-import { bookings, jobNotifications, users, BOOKING_STATUSES } from '@shared/schema';
-import { eq, lt, and, inArray, gte, isNotNull } from 'drizzle-orm';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers } from '@shared/schema';
+import { eq, lt, and, inArray, gte, isNotNull, isNull, lte } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
@@ -51,6 +51,11 @@ export function initBackgroundJobs() {
   // Auto-cancel unpaid past-dated bookings every hour (clears mover dashboards)
   cron.schedule('5 * * * *', async () => {
     await cancelPastDatedBookings();
+  });
+  
+  // Send abandoned booking reminders every 30 minutes
+  cron.schedule('*/30 * * * *', async () => {
+    await sendAbandonedBookingReminders();
   });
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
@@ -486,6 +491,134 @@ async function cancelPastDatedBookings() {
   } catch (error) {
     logEvent.error('cancelPastDatedBookings', error);
     return 0;
+  }
+}
+
+// Track abandoned booking reminders to avoid duplicates
+const sentAbandonedReminders = new Set<string>();
+
+async function sendAbandonedBookingReminders() {
+  try {
+    const now = new Date();
+    // Only send reminders for bookings abandoned 1+ hour ago but less than 24 hours
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Get abandoned bookings that haven't been recovered and need reminders
+    const abandonedToRemind = await db.select()
+      .from(abandonedBookings)
+      .where(
+        and(
+          eq(abandonedBookings.recovered, false),
+          lte(abandonedBookings.createdAt, oneHourAgo),
+          gte(abandonedBookings.createdAt, twentyFourHoursAgo),
+          lte(abandonedBookings.reminderCount, 2) // Max 3 reminders
+        )
+      );
+    
+    let emailsSent = 0;
+    let smsSent = 0;
+    
+    for (const abandoned of abandonedToRemind) {
+      const reminderKey = `${abandoned.id}-${abandoned.reminderCount}`;
+      
+      // Skip if we already sent this reminder in this session
+      if (sentAbandonedReminders.has(reminderKey)) {
+        continue;
+      }
+      
+      // Get selected mover info if available
+      let moverName = null;
+      if (abandoned.selectedMoverId) {
+        const moverResult = await db.select({
+          userId: movers.userId,
+        })
+        .from(movers)
+        .where(eq(movers.id, abandoned.selectedMoverId))
+        .limit(1);
+        
+        if (moverResult[0]) {
+          const userResult = await db.select({ name: users.name })
+            .from(users)
+            .where(eq(users.id, moverResult[0].userId))
+            .limit(1);
+          moverName = userResult[0]?.name;
+        }
+      }
+      
+      // Send email reminder if we have email
+      if (abandoned.email) {
+        try {
+          const bookingUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`;
+          
+          await notificationService.sendEmail(
+            abandoned.email,
+            '🚚 Complete Your Moving Booking - LervIT',
+            `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #1a56db;">Complete Your Moving Booking</h2>
+              <p>Hi there,</p>
+              <p>We noticed you started booking a move but didn't complete it. No worries - we saved your progress!</p>
+              ${abandoned.pickupAddress ? `<p><strong>From:</strong> ${abandoned.pickupAddress}</p>` : ''}
+              ${abandoned.dropoffAddress ? `<p><strong>To:</strong> ${abandoned.dropoffAddress}</p>` : ''}
+              ${moverName ? `<p><strong>Selected Mover:</strong> ${moverName}</p>` : ''}
+              <p style="margin: 20px 0;">
+                <a href="${bookingUrl}" style="background-color: #1a56db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  Complete Your Booking
+                </a>
+              </p>
+              <p style="color: #666; font-size: 14px;">
+                If you have any questions, our support team is here to help.
+              </p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+              <p style="color: #999; font-size: 12px;">
+                LervIT - Smart Moving for Calgary
+              </p>
+            </div>`
+          );
+          emailsSent++;
+        } catch (emailError) {
+          logger.error({ error: emailError, abandonedId: abandoned.id }, 'Failed to send abandoned booking email');
+        }
+      }
+      
+      // Send SMS reminder if we have phone (only for first reminder)
+      if (abandoned.phone && abandoned.reminderCount === 0) {
+        try {
+          await notificationService.sendSMS(
+            abandoned.phone,
+            `LervIT: We saved your moving booking progress! Complete it now: ${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`
+          );
+          smsSent++;
+        } catch (smsError) {
+          logger.error({ error: smsError, abandonedId: abandoned.id }, 'Failed to send abandoned booking SMS');
+        }
+      }
+      
+      // Update reminder count and timestamp
+      await db.update(abandonedBookings)
+        .set({
+          reminderCount: abandoned.reminderCount + 1,
+          reminderSentAt: now,
+          updatedAt: now,
+        })
+        .where(eq(abandonedBookings.id, abandoned.id));
+      
+      sentAbandonedReminders.add(reminderKey);
+    }
+    
+    if (emailsSent > 0 || smsSent > 0) {
+      logger.info({ 
+        event: 'abandoned_booking_reminders', 
+        emailsSent, 
+        smsSent,
+        total: abandonedToRemind.length 
+      }, `Sent ${emailsSent} emails and ${smsSent} SMS for abandoned bookings`);
+    }
+    
+    return { emailsSent, smsSent };
+  } catch (error) {
+    logEvent.error('sendAbandonedBookingReminders', error);
+    return { emailsSent: 0, smsSent: 0 };
   }
 }
 
