@@ -14,11 +14,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getVehicleDisplayName } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { generatePriceExplanation, AI_FEATURES } from "@shared/ai";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
@@ -203,6 +204,11 @@ export default function MoverDashboard() {
   const [locationSharing, setLocationSharing] = useState<string | null>(null);
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [verificationError, setVerificationError] = useState<any>(null);
+  
+  // Shared location context - seamless GPS flow
+  const { coords: geoCoords, permissionState: geoPermissionState, requestLocation: requestGeoLocation, isRequesting: isRequestingGeo } = useGeoLocation();
+  const [isLiveGpsActive, setIsLiveGpsActive] = useState(false);
+  const pendingOnlineToggle = useRef(false);
   
   // Track URL search params for tab sync (wouter's location only tracks pathname)
   const [searchParams, setSearchParams] = useState(window.location.search);
@@ -637,8 +643,27 @@ export default function MoverDashboard() {
     //   return;
     // }
     
+    // When going online, auto-request location permission (seamless UX)
+    if (checked && geoPermissionState !== 'granted' && !geoCoords) {
+      pendingOnlineToggle.current = true;
+      requestGeoLocation();
+      toast({
+        title: "Enabling location...",
+        description: "Please allow location access to go online and receive job offers.",
+      });
+      return;
+    }
+    
     toggleAvailabilityMutation.mutate(checked);
   };
+  
+  // Auto-complete online toggle after location permission is granted
+  useEffect(() => {
+    if (pendingOnlineToggle.current && (geoPermissionState === 'granted' || geoCoords)) {
+      pendingOnlineToggle.current = false;
+      toggleAvailabilityMutation.mutate(true);
+    }
+  }, [geoPermissionState, geoCoords]);
 
   // Location sharing effect - updates location every 5 seconds for in-transit bookings
   useEffect(() => {
@@ -723,12 +748,36 @@ export default function MoverDashboard() {
 
   // Uber-style live GPS tracking when mover is online (isAvailable = true)
   // Updates location every 30 seconds to show on Find Movers page
+  // Uses shared LocationContext for seamless permission handling
   useEffect(() => {
-    if (!mover?.isAvailable) return;
-
-    let permissionDeniedShown = false;
+    if (!mover?.isAvailable) {
+      setIsLiveGpsActive(false);
+      return;
+    }
     
-    const updateLiveLocation = () => {
+    // If we don't have permission yet, the shared context handles it
+    if (geoPermissionState === 'denied') {
+      setIsLiveGpsActive(false);
+      return;
+    }
+    
+    const updateLiveLocation = async () => {
+      // Use shared context coords if available (faster, already cached)
+      if (geoCoords) {
+        try {
+          await apiRequest("PATCH", "/api/movers/me/location", {
+            latitude: geoCoords.lat,
+            longitude: geoCoords.lng,
+          });
+          console.log("[GPS] Live location updated from shared context");
+          setIsLiveGpsActive(true);
+        } catch (error) {
+          console.error("[GPS] Failed to update live location:", error);
+        }
+        return;
+      }
+      
+      // Fallback to direct geolocation if shared context doesn't have coords yet
       if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
@@ -737,19 +786,16 @@ export default function MoverDashboard() {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
               });
-              console.log("[GPS] Live location updated while online");
+              console.log("[GPS] Live location updated from direct call");
+              setIsLiveGpsActive(true);
             } catch (error) {
               console.error("[GPS] Failed to update live location:", error);
             }
           },
           (error) => {
-            if (error.code === 1 && !permissionDeniedShown) {
-              permissionDeniedShown = true;
-              toast({
-                title: "Location access needed",
-                description: "Enable location to show your live position to customers on the Find Movers page.",
-                variant: "destructive",
-              });
+            console.error("[GPS] Geolocation error:", error.code);
+            if (error.code === 1) {
+              setIsLiveGpsActive(false);
             }
           },
           {
@@ -767,8 +813,11 @@ export default function MoverDashboard() {
     // Then update every 30 seconds while online
     const interval = setInterval(updateLiveLocation, 30000);
 
-    return () => clearInterval(interval);
-  }, [mover?.isAvailable, toast]);
+    return () => {
+      clearInterval(interval);
+      setIsLiveGpsActive(false);
+    };
+  }, [mover?.isAvailable, geoCoords, geoPermissionState]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1375,10 +1424,16 @@ export default function MoverDashboard() {
             {/* Status Toggle & Actions */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                {mover?.isAvailable && (
+                {mover?.isAvailable && isLiveGpsActive && (
                   <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs gap-1" data-testid="badge-live-gps">
                     <MapPin className="w-3 h-3" />
                     Live GPS
+                  </Badge>
+                )}
+                {mover?.isAvailable && !isLiveGpsActive && geoPermissionState !== 'denied' && (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs gap-1 animate-pulse" data-testid="badge-gps-loading">
+                    <MapPin className="w-3 h-3" />
+                    GPS...
                   </Badge>
                 )}
                 <div 
@@ -1470,14 +1525,16 @@ export default function MoverDashboard() {
           userName={user?.name || "Mover"}
         />
 
-        {/* Location Permission Prompt for Movers */}
-        <div className="mb-4">
-          <LocationPrompt 
-            variant="card"
-            showAlways={false}
-            context="mover"
-          />
-        </div>
+        {/* Location Permission Prompt for Movers - ONLY show if permission blocked */}
+        {geoPermissionState === 'denied' && !geoCoords && (
+          <div className="mb-4">
+            <LocationPrompt 
+              variant="card"
+              showAlways={true}
+              context="mover"
+            />
+          </div>
+        )}
 
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
           <AlertDialogContent>
