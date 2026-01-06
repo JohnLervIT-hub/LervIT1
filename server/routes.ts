@@ -6193,8 +6193,26 @@ Respond with VALID JSON only:
       
       res.json({ url: accountLink.url });
     } catch (error: any) {
-      console.error("Stripe Connect error:", error);
-      res.status(500).json({ error: error.message || "Failed to create onboarding link" });
+      console.error("Stripe Connect error:", {
+        message: error.message,
+        type: error.type,
+        code: error.code,
+        param: error.param,
+        detail: error.detail,
+        raw: error.raw?.message,
+      });
+      
+      // Provide user-friendly error messages for common Stripe errors
+      let userMessage = "Failed to create onboarding link. Please try again.";
+      if (error.code === 'account_invalid') {
+        userMessage = "There's an issue with the payout account. Please contact support.";
+      } else if (error.code === 'rate_limit') {
+        userMessage = "Too many requests. Please wait a moment and try again.";
+      } else if (error.type === 'StripeInvalidRequestError') {
+        userMessage = error.message || "Invalid request. Please contact support.";
+      }
+      
+      res.status(500).json({ error: userMessage, code: error.code });
     }
   });
 
