@@ -571,10 +571,10 @@ async function sendAbandonedBookingReminders() {
         try {
           const bookingUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`;
           
-          await notificationService.sendEmail(
-            abandoned.email,
-            '🚚 Complete Your Moving Booking - LervIT',
-            `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          await notificationService.sendEmail({
+            to: abandoned.email,
+            subject: 'Complete Your Moving Booking - LervIT',
+            body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #1a56db;">Complete Your Moving Booking</h2>
               <p>Hi there,</p>
               <p>We noticed you started booking a move but didn't complete it. No worries - we saved your progress!</p>
@@ -593,8 +593,9 @@ async function sendAbandonedBookingReminders() {
               <p style="color: #999; font-size: 12px;">
                 LervIT - Smart Moving for Calgary
               </p>
-            </div>`
-          );
+            </div>`,
+            type: 'status_update',
+          });
           emailsSent++;
         } catch (emailError) {
           logger.error({ error: emailError, abandonedId: abandoned.id }, 'Failed to send abandoned booking email');
@@ -604,10 +605,11 @@ async function sendAbandonedBookingReminders() {
       // Send SMS reminder if we have phone (only for first reminder)
       if (abandoned.phone && abandoned.reminderCount === 0) {
         try {
-          await notificationService.sendSMS(
-            abandoned.phone,
-            `LervIT: We saved your moving booking progress! Complete it now: ${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`
-          );
+          await notificationService.sendSMS({
+            to: abandoned.phone,
+            message: `LervIT: We saved your moving booking progress! Complete it now: ${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`,
+            type: 'booking_update',
+          });
           smsSent++;
         } catch (smsError) {
           logger.error({ error: smsError, abandonedId: abandoned.id }, 'Failed to send abandoned booking SMS');

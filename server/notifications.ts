@@ -509,11 +509,17 @@ class NotificationService {
 
   // Job acceptance notification to customer (email + SMS) - Uber-style with mover details
   async sendMoverAssigned(customer: User, mover: User, booking: Partial<Booking>, moverProfile?: Partial<Mover>): Promise<void> {
-    const vehicleType = moverProfile?.vehicleType || 'Vehicle';
-    const vehicleColor = moverProfile?.vehicleColor || '';
-    const licensePlate = moverProfile?.licensePlate || '';
-    const rating = moverProfile?.rating || '0';
-    const completedTrips = moverProfile?.completedTrips || 0;
+    console.log('\n[MOVER_ASSIGNED] Starting notification...');
+    console.log('[MOVER_ASSIGNED] Customer:', customer.email, customer.phone || 'no phone');
+    console.log('[MOVER_ASSIGNED] Mover:', mover.name, mover.phone || 'no phone');
+    console.log('[MOVER_ASSIGNED] Booking:', booking.id);
+    
+    try {
+      const vehicleType = moverProfile?.vehicleType || 'Vehicle';
+      const vehicleColor = moverProfile?.vehicleColor || '';
+      const licensePlate = moverProfile?.licensePlate || '';
+      const rating = moverProfile?.rating || '0';
+      const completedTrips = moverProfile?.completedTrips || 0;
     
     // Format vehicle display (e.g., "White Pickup Truck")
     const vehicleDisplay = vehicleColor 
@@ -634,6 +640,12 @@ class NotificationService {
         message: smsMessage,
         type: 'booking_update',
       });
+    }
+    
+    console.log('[MOVER_ASSIGNED] Notification completed successfully');
+    } catch (error) {
+      console.error('[MOVER_ASSIGNED] ERROR:', error);
+      throw error; // Re-throw to preserve original behavior
     }
   }
 
