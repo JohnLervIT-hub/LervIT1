@@ -30,6 +30,47 @@ function getFirstName(fullName: string | null | undefined): string {
   return firstName || 'there';
 }
 
+// Normalize phone number to E.164 format (e.g., +14035551234)
+// Handles: (403) 555-1234, 403-555-1234, 4035551234, +1 403 555 1234, etc.
+function normalizeToE164(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  
+  // Remove all non-digit characters except leading +
+  let cleaned = phone.replace(/[^0-9+]/g, '');
+  
+  // If empty after cleaning, return null
+  if (!cleaned || cleaned === '+') return null;
+  
+  // Handle numbers that already start with +
+  if (cleaned.startsWith('+')) {
+    // Already has country code, validate length
+    if (cleaned.length >= 11 && cleaned.length <= 15) {
+      return cleaned;
+    }
+    // Strip the + and reprocess
+    cleaned = cleaned.substring(1);
+  }
+  
+  // Remove leading 1 if it's 11 digits (North American with country code)
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return `+${cleaned}`;
+  }
+  
+  // 10 digits = North American number, add +1
+  if (cleaned.length === 10) {
+    return `+1${cleaned}`;
+  }
+  
+  // Other lengths - assume it's a complete international number
+  if (cleaned.length >= 10 && cleaned.length <= 15) {
+    return `+${cleaned}`;
+  }
+  
+  // Invalid length
+  console.warn(`[Phone] Could not normalize phone number: ${phone} (cleaned: ${cleaned})`);
+  return null;
+}
+
 class NotificationService {
   private fromEmail = 'LervIT <support@lervit.com>';
   
@@ -45,10 +86,20 @@ class NotificationService {
 
   // Send SMS via Telnyx REST API
   async sendSMS(notification: SMSNotification): Promise<boolean> {
+    // Normalize phone number to E.164 format
+    const formattedPhone = normalizeToE164(notification.to);
+    
     console.log('\n[SMS] Sending notification:');
-    console.log('To:', notification.to);
+    console.log('To (original):', notification.to);
+    console.log('To (E.164):', formattedPhone || 'INVALID');
     console.log('From:', telnyxPhoneNumber ? `${telnyxPhoneNumber.slice(0, 4)}****${telnyxPhoneNumber.slice(-2)}` : 'NOT SET');
     console.log('Type:', notification.type);
+    
+    if (!formattedPhone) {
+      console.log('[SMS] Invalid phone number - cannot send');
+      console.log('---\n');
+      return false;
+    }
     
     if (!telnyxApiKey || !telnyxPhoneNumber) {
       console.log('[SMS] Telnyx not configured - SMS logged only');
@@ -62,13 +113,6 @@ class NotificationService {
     }
     
     try {
-      // Format phone number for Telnyx (ensure E.164 format)
-      let formattedPhone = notification.to.replace(/[^0-9+]/g, '');
-      if (!formattedPhone.startsWith('+')) {
-        // Assume Canadian number if no country code
-        formattedPhone = formattedPhone.startsWith('1') ? `+${formattedPhone}` : `+1${formattedPhone}`;
-      }
-      
       const response = await fetch('https://api.telnyx.com/v2/messages', {
         method: 'POST',
         headers: {
