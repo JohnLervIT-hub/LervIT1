@@ -815,6 +815,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         resetToken: null,
         resetTokenExpiry: null,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        lockReason: null,
       });
       
       res.json({ message: "Password has been reset successfully" });
