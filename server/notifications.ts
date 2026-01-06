@@ -624,10 +624,11 @@ class NotificationService {
       type: 'status_update',
     });
     
-    // Also send SMS to customer if they have a phone number - Uber style with vehicle details
+    // Also send SMS to customer if they have a phone number - Uber style with vehicle details + mover phone
     if (customer.phone) {
       const plateInfo = licensePlate ? ` Plate: ${licensePlate}.` : '';
-      const smsMessage = `LervIT: ${mover.name} is your mover! ${vehicleDisplay}.${plateInfo} Track your move in the app.`;
+      const moverContact = mover.phone ? ` Contact: ${mover.phone}.` : '';
+      const smsMessage = `LervIT: ${mover.name} is your mover! ${vehicleDisplay}.${plateInfo}${moverContact} Track your move in the app.`;
       await this.sendSMS({
         to: customer.phone,
         message: smsMessage,
