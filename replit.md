@@ -17,7 +17,7 @@ The platform features a responsive, mobile-first design utilizing shadcn/ui comp
 *   **Data Storage:** PostgreSQL (Neon serverless) managed with Drizzle ORM.
 *   **Monorepo Structure:** A `/shared` directory ensures end-to-end TypeScript type safety across frontend and backend.
 *   **Production Observability:** Pino-based structured JSON logging for critical events.
-*   **Background Jobs:** `node-cron` for scheduled tasks like expiring notifications and failed bookings, and `expirePastScheduledJobs()` to mark past jobs.
+*   **Background Jobs:** `node-cron` for scheduled tasks like expiring notifications and failed bookings, and `expirePastScheduledJobs()` to mark past jobs. **Active Trip Protection:** Auto-complete/cancel jobs now check `locationUpdatedAt` - if mover updated location within 2 hours, booking is protected from premature status changes.
 *   **Payment Security:** Stripe webhook signature verification and idempotency checks.
 *   **Stripe Connect:** Integrates for mover onboarding and escrow-based payout system.
 *   **Performance:** Gzip/Brotli compression, lazy loading for routes, preconnect hints, React Query caching, and static upload caching.

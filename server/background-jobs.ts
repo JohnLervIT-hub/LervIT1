@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers } from '@shared/schema';
-import { eq, lt, and, inArray, gte, isNotNull, isNull, lte } from 'drizzle-orm';
+import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
@@ -397,10 +397,14 @@ async function expirePastScheduledJobs() {
 
 // Auto-complete past-dated bookings that were paid
 // This enables customers to leave reviews for completed moves
+// IMPORTANT: Excludes bookings with recent location updates (mover actively traveling)
 async function autoCompletePastPaidBookings() {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Start of today
+    
+    // Threshold for "active" location updates - if mover updated location within 2 hours, they're still traveling
+    const activeThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
     
     // Find paid bookings that are past-dated and still in active states
     const paidStatuses = ['paid', 'succeeded'];
@@ -416,7 +420,13 @@ async function autoCompletePastPaidBookings() {
         and(
           inArray(bookings.status, activeStatuses),
           inArray(bookings.paymentStatus, paidStatuses),
-          lt(bookings.preferredDate, today)
+          lt(bookings.preferredDate, today),
+          // CRITICAL FIX: Only auto-complete if mover has NOT updated location recently
+          // This prevents completing bookings while mover is still actively traveling
+          or(
+            isNull(bookings.locationUpdatedAt),
+            lt(bookings.locationUpdatedAt, activeThreshold)
+          )
         )
       )
       .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
@@ -442,10 +452,14 @@ async function autoCompletePastPaidBookings() {
 
 // Auto-cancel bookings with past dates that weren't completed
 // This clears them from all mover dashboards in production
+// IMPORTANT: Excludes bookings with recent location updates (mover actively traveling)
 async function cancelPastDatedBookings() {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Start of today
+    
+    // Threshold for "active" location updates - if mover updated location within 2 hours, they're still traveling
+    const activeThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
     
     // All statuses that should be auto-cancelled if past-dated
     // Includes pending, confirmed, payment states, AND in-progress move states
@@ -469,7 +483,13 @@ async function cancelPastDatedBookings() {
       .where(
         and(
           inArray(bookings.status, activeStatuses),
-          lt(bookings.preferredDate, today)
+          lt(bookings.preferredDate, today),
+          // CRITICAL FIX: Only auto-cancel if mover has NOT updated location recently
+          // This prevents cancelling bookings while mover is still actively traveling
+          or(
+            isNull(bookings.locationUpdatedAt),
+            lt(bookings.locationUpdatedAt, activeThreshold)
+          )
         )
       )
       .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
