@@ -50,10 +50,10 @@ type Booking = {
   } | null;
   mover: {
     id?: string;
-    user?: {
-      id?: string;
-      name?: string;
-    };
+    userId?: string;
+    name?: string;
+    phone?: string;
+    vehicleType?: string;
   } | null;
 };
 
@@ -316,7 +316,7 @@ export default function AdminMovesPage() {
                           <div className="text-xs text-muted-foreground">{b.customer?.email || "No email"}</div>
                         </TableCell>
                         <TableCell>
-                          {b.mover?.user?.name ? b.mover.user.name : <span className="text-muted-foreground">Unassigned</span>}
+                          {b.mover?.name ? b.mover.name : <span className="text-muted-foreground">Unassigned</span>}
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate" title={b.pickupAddress}>
                           {b.pickupAddress || "N/A"}
