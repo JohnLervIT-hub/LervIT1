@@ -6136,6 +6136,7 @@ Respond with VALID JSON only:
           business_type: 'individual',
           business_profile: {
             name: displayName || undefined,
+            url: 'https://lervit.com', // Pre-fill platform URL so movers don't need their own website
             product_description: 'Professional moving services',
             mcc: '4214', // MCC code for local delivery/courier
           },
