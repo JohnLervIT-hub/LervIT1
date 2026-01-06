@@ -6112,8 +6112,20 @@ Respond with VALID JSON only:
       if (existingAccounts.length) {
         stripeAccount = existingAccounts[0];
       } else {
-        // Create new Stripe Express account
-        const account = await stripe.accounts.create({
+        // Pre-fill as much data as possible from mover profile to reduce onboarding friction
+        // Parse name into first/last for Stripe's individual profile
+        const displayName = user.name || '';
+        const nameParts = displayName.trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || nameParts[0] || '';
+        
+        // Clean phone number - remove non-digits but keep for E.164 format
+        const cleanPhone = user.phone?.replace(/\D/g, '') || '';
+        const formattedPhone = cleanPhone.length === 10 ? `+1${cleanPhone}` : 
+                               cleanPhone.length === 11 && cleanPhone.startsWith('1') ? `+${cleanPhone}` : '';
+        
+        // Build Stripe account with pre-filled data
+        const accountParams: any = {
           type: 'express',
           country: 'CA',
           email: user.email,
@@ -6122,11 +6134,33 @@ Respond with VALID JSON only:
             transfers: { requested: true },
           },
           business_type: 'individual',
+          business_profile: {
+            name: displayName || undefined,
+            product_description: 'Professional moving services',
+            mcc: '4214', // MCC code for local delivery/courier
+          },
           metadata: {
             moverId: mover.id,
             userId: user.id,
           },
-        });
+        };
+        
+        // Add individual details if we have name data
+        if (firstName) {
+          accountParams.individual = {
+            first_name: firstName,
+            last_name: lastName || firstName,
+            email: user.email,
+          };
+          
+          // Add phone if valid
+          if (formattedPhone) {
+            accountParams.individual.phone = formattedPhone;
+          }
+        }
+        
+        // Create new Stripe Express account with pre-filled data
+        const account = await stripe.accounts.create(accountParams);
         
         // Save to database
         const [newAccount] = await db.insert(moverStripeAccounts).values({
