@@ -225,62 +225,134 @@ export function MoverPayoutCenter() {
         </CardHeader>
         <CardContent className="p-6">
           {!accountStatus?.hasAccount ? (
-            <div className="text-center py-6 space-y-4">
-              <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                <Building className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Set Up Payouts</h3>
+            <div className="py-4 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Building className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="font-semibold text-lg">Set Up Payouts in 5 Minutes</h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Connect your bank account to receive payouts for completed jobs. 
-                  LervIT uses Stripe for secure, fast payments.
+                  Get paid directly to your bank account after completing jobs.
                 </p>
               </div>
-              <Button
-                onClick={() => onboardingMutation.mutate()}
-                disabled={onboardingMutation.isPending}
-                className="gap-2"
-                data-testid="button-start-onboarding"
-              >
-                {onboardingMutation.isPending ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="w-4 h-4" />
-                )}
-                Set Up Payout Account
-              </Button>
+              
+              {/* Step-by-step guide */}
+              <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                <p className="font-medium text-sm">Have these ready before you start:</p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Your name and email (already filled in)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <span>Phone number (already filled in)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full border-2 border-muted-foreground flex-shrink-0" />
+                    <span>Canadian bank account number (transit + account #)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full border-2 border-muted-foreground flex-shrink-0" />
+                    <span>Government ID (driver's license or passport)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full border-2 border-muted-foreground flex-shrink-0" />
+                    <span>Date of birth and home address</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-center space-y-3">
+                <Button
+                  onClick={() => onboardingMutation.mutate()}
+                  disabled={onboardingMutation.isPending}
+                  size="lg"
+                  className="gap-2"
+                  data-testid="button-start-onboarding"
+                >
+                  {onboardingMutation.isPending ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4" />
+                  )}
+                  Start Setup
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Powered by Stripe - your info is secure and encrypted
+                </p>
+              </div>
             </div>
           ) : accountStatus.onboardingStatus !== "complete" ? (
             <div className="space-y-4">
               <div className="flex items-start gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                 <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
                 <div className="flex-1">
-                  <p className="font-medium text-yellow-700 dark:text-yellow-400">Action Required</p>
+                  <p className="font-medium text-yellow-700 dark:text-yellow-400">Almost There!</p>
                   <p className="text-sm text-muted-foreground">
-                    Complete your Stripe account setup to start receiving payouts.
+                    You're just a few steps away from receiving payouts. Complete the remaining items below.
                   </p>
-                  {accountStatus.currentlyDue && accountStatus.currentlyDue.length > 0 && (
-                    <ul className="mt-2 text-sm text-muted-foreground list-disc list-inside">
-                      {accountStatus.currentlyDue.slice(0, 3).map((item, i) => (
-                        <li key={i}>{item.replace(/_/g, " ").replace(".", " - ")}</li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               </div>
-              <Button
-                onClick={() => onboardingMutation.mutate()}
-                disabled={onboardingMutation.isPending}
-                className="gap-2"
-                data-testid="button-continue-onboarding"
-              >
-                {onboardingMutation.isPending ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="w-4 h-4" />
-                )}
-                Complete Setup
-              </Button>
+              
+              {/* Show what's still needed */}
+              {accountStatus.currentlyDue && accountStatus.currentlyDue.length > 0 && (
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <p className="font-medium text-sm">Still needed:</p>
+                  <div className="grid gap-2 text-sm">
+                    {accountStatus.currentlyDue.slice(0, 5).map((item, i) => {
+                      // Make Stripe field names human-readable
+                      const readable = item
+                        .replace(/^individual\./, '')
+                        .replace(/^external_account$/, 'Bank account details')
+                        .replace(/^individual\.verification\.document$/, 'Government ID photo')
+                        .replace(/ssn_last_4/, 'Last 4 of SIN')
+                        .replace(/dob/, 'Date of birth')
+                        .replace(/_/g, ' ')
+                        .replace(/\./g, ' - ')
+                        .split(' ')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border-2 border-yellow-500 flex-shrink-0" />
+                          <span>{readable}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  onClick={() => onboardingMutation.mutate()}
+                  disabled={onboardingMutation.isPending}
+                  className="gap-2 flex-1"
+                  data-testid="button-continue-onboarding"
+                >
+                  {onboardingMutation.isPending ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4" />
+                  )}
+                  Continue Setup
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="gap-2"
+                  data-testid="button-check-status"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  Check Status
+                </Button>
+              </div>
+              
+              <p className="text-xs text-muted-foreground text-center">
+                Already finished on Stripe? Click "Check Status" to sync your account.
+              </p>
             </div>
           ) : (
             <div className="flex items-center gap-4 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
