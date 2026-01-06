@@ -96,17 +96,28 @@ export function MoverPayoutCenter() {
   const onboardingMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/movers/payouts/onboarding-link");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to start onboarding");
+      }
       return response.json();
     },
     onSuccess: (data) => {
       if (data.url) {
-        window.open(data.url, "_blank");
+        // Use window.location for more reliable navigation (avoids popup blockers)
+        window.location.href = data.url;
+      } else {
+        toast({
+          title: "Error",
+          description: "No onboarding URL received. Please try again.",
+          variant: "destructive",
+        });
       }
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to start onboarding",
+        title: "Setup Failed",
+        description: error.message || "Failed to start onboarding. Please try again.",
         variant: "destructive",
       });
     },

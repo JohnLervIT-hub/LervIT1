@@ -6091,9 +6091,11 @@ Respond with VALID JSON only:
 
   // Create Stripe Connect onboarding link for mover
   app.post("/api/movers/payouts/onboarding-link", async (req: Request, res: Response) => {
+    console.log("[Payout Onboarding] Request received");
     try {
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
+      console.log("[Payout Onboarding] User authenticated:", user.id);
       
       // Get mover profile
       const movers = await storage.getMovers({ userId: user.id });
@@ -6103,6 +6105,7 @@ Respond with VALID JSON only:
       const mover = movers[0];
       
       // Check if account already exists
+      console.log("[Payout Onboarding] Checking for existing Stripe account for mover:", mover.id);
       let stripeAccount;
       const existingAccounts = await db.select()
         .from(moverStripeAccounts)
@@ -6111,7 +6114,9 @@ Respond with VALID JSON only:
       
       if (existingAccounts.length) {
         stripeAccount = existingAccounts[0];
+        console.log("[Payout Onboarding] Found existing account:", stripeAccount.stripeAccountId);
       } else {
+        console.log("[Payout Onboarding] Creating new Stripe account...");
         // Pre-fill as much data as possible from mover profile to reduce onboarding friction
         // Parse name into first/last for Stripe's individual profile
         const displayName = user.name || '';
@@ -6175,13 +6180,17 @@ Respond with VALID JSON only:
       }
       
       // Create account link for onboarding
+      console.log("[Payout Onboarding] Creating account link for:", stripeAccount.stripeAccountId);
       const baseUrl = req.headers.origin || `https://${req.headers.host}`;
+      console.log("[Payout Onboarding] Base URL:", baseUrl);
+      
       const accountLink = await stripe.accountLinks.create({
         account: stripeAccount.stripeAccountId,
         refresh_url: `${baseUrl}/mover-dashboard?payout_refresh=true`,
         return_url: `${baseUrl}/mover-dashboard?payout_success=true`,
         type: 'account_onboarding',
       });
+      console.log("[Payout Onboarding] Account link created successfully");
       
       // Update onboarding status
       await db.update(moverStripeAccounts)
@@ -6191,6 +6200,7 @@ Respond with VALID JSON only:
         })
         .where(eq(moverStripeAccounts.id, stripeAccount.id));
       
+      console.log("[Payout Onboarding] Sending URL response:", accountLink.url?.substring(0, 50) + "...");
       res.json({ url: accountLink.url });
     } catch (error: any) {
       console.error("Stripe Connect error:", {
