@@ -2486,13 +2486,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/admin/email/upload-attachment - Upload file attachment for email
+  const emailAttachmentUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+      ];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Allowed: PDF, Word, Excel, CSV, and images.'));
+      }
+    },
+  });
+
+  app.post("/api/admin/email/upload-attachment", emailAttachmentUpload.single('file'), async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      // Return the file as base64 for immediate use (no storage needed)
+      const base64Content = file.buffer.toString('base64');
+      
+      res.json({
+        filename: file.originalname,
+        contentType: file.mimetype,
+        size: file.size,
+        content: base64Content,
+      });
+    } catch (error: any) {
+      console.error('Upload attachment error:', error);
+      res.status(500).json({ error: error.message || "Failed to upload attachment" });
+    }
+  });
+
   // POST /api/admin/email/send - Send an email campaign
   app.post("/api/admin/email/send", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       
       const adminUser = (req as any).user;
-      const { subject, content, type, audienceType, recipientIds, attachmentLinks } = req.body;
+      const { subject, content, type, audienceType, recipientIds, attachmentLinks, fileAttachments } = req.body;
       
       if (!subject || !content || !type || !audienceType) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -2546,7 +2595,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subject,
           content,
           type,
-          attachmentLinks
+          attachmentLinks,
+          fileAttachments
         );
         if (success) {
           successCount++;

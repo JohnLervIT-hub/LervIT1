@@ -1100,7 +1100,8 @@ class NotificationService {
     subject: string,
     content: string,
     campaignType: string,
-    attachmentLinks?: {label: string; url: string}[]
+    attachmentLinks?: {label: string; url: string}[],
+    fileAttachments?: {filename: string; content: string; contentType: string}[]
   ): Promise<boolean> {
     const typeColors: Record<string, string> = {
       account_update: '#3B82F6',
@@ -1165,16 +1166,29 @@ class NotificationService {
     console.log('To:', recipientEmail);
     console.log('Subject:', subject);
     console.log('Type:', campaignType);
+    console.log('File attachments:', fileAttachments?.length || 0);
     
     if (resend) {
       try {
-        const { data, error } = await resend.emails.send({
+        // Build attachments array for Resend
+        const resendAttachments = fileAttachments?.map(file => ({
+          filename: file.filename,
+          content: file.content, // base64 encoded content
+        })) || [];
+        
+        const emailPayload: any = {
           from: this.fromEmail,
           to: recipientEmail,
           replyTo: 'support@lervit.com',
           subject,
           html: body,
-        });
+        };
+        
+        if (resendAttachments.length > 0) {
+          emailPayload.attachments = resendAttachments;
+        }
+        
+        const { data, error } = await resend.emails.send(emailPayload);
         
         if (error) {
           console.error('[CAMPAIGN EMAIL] Resend error:', error);

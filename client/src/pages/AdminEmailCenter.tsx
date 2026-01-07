@@ -32,6 +32,9 @@ import {
   Link2,
   Plus,
   X,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 import type { EmailCampaign, User } from "@shared/schema";
 import { format } from "date-fns";
@@ -98,6 +101,8 @@ export default function AdminEmailCenter() {
   const [attachmentLinks, setAttachmentLinks] = useState<{label: string; url: string}[]>([]);
   const [newLinkLabel, setNewLinkLabel] = useState("");
   const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [fileAttachments, setFileAttachments] = useState<{filename: string; content: string; contentType: string; size: number}[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const { data: campaigns, isLoading: campaignsLoading } = useQuery<EmailCampaign[]>({
     queryKey: ["/api/admin/email/campaigns"],
@@ -116,6 +121,7 @@ export default function AdminEmailCenter() {
       audienceType: string;
       recipientIds?: string[];
       attachmentLinks?: {label: string; url: string}[];
+      fileAttachments?: {filename: string; content: string; contentType: string}[];
     }) => {
       return apiRequest("POST", "/api/admin/email/send", data);
     },
@@ -133,6 +139,7 @@ export default function AdminEmailCenter() {
       setAttachmentLinks([]);
       setNewLinkLabel("");
       setNewLinkUrl("");
+      setFileAttachments([]);
       setActiveTab("history");
     },
     onError: (error: Error) => {
@@ -173,7 +180,74 @@ export default function AdminEmailCenter() {
       audienceType,
       recipientIds: audienceType === "specific" ? selectedRecipients : undefined,
       attachmentLinks: attachmentLinks.length > 0 ? attachmentLinks : undefined,
+      fileAttachments: fileAttachments.length > 0 ? fileAttachments.map(f => ({
+        filename: f.filename,
+        content: f.content,
+        contentType: f.contentType,
+      })) : undefined,
     });
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    setUploadingFile(true);
+    
+    for (const file of Array.from(files)) {
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ variant: "destructive", title: "File Too Large", description: `${file.name} exceeds 10MB limit.` });
+        continue;
+      }
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('/api/admin/email/upload-attachment', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+        
+        const result = await response.json();
+        setFileAttachments(prev => [...prev, {
+          filename: result.filename,
+          content: result.content,
+          contentType: result.contentType,
+          size: result.size,
+        }]);
+        
+        toast({ title: "File Attached", description: `${file.name} added successfully.` });
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Upload Failed", description: error.message });
+      }
+    }
+    
+    setUploadingFile(false);
+    // Reset input to allow re-uploading same file
+    event.target.value = '';
+  };
+
+  const removeFileAttachment = (index: number) => {
+    setFileAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (contentType: string) => {
+    if (contentType.startsWith('image/')) return <ImageIcon className="w-4 h-4" />;
+    return <FileText className="w-4 h-4" />;
   };
 
   const addAttachmentLink = () => {
@@ -359,8 +433,76 @@ export default function AdminEmailCenter() {
 
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
+                      <Paperclip className="w-4 h-4" />
+                      File Attachments
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        id="file-upload"
+                        className="hidden"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.webp,.gif"
+                        onChange={handleFileUpload}
+                        data-testid="input-file-upload"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('file-upload')?.click()}
+                        disabled={uploadingFile}
+                        data-testid="button-attach-file"
+                      >
+                        {uploadingFile ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Paperclip className="w-4 h-4 mr-2" />
+                            Attach Files
+                          </>
+                        )}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        PDF, Word, Excel, CSV, Images (max 10MB each)
+                      </span>
+                    </div>
+                    {fileAttachments.length > 0 && (
+                      <div className="space-y-2 mt-2">
+                        {fileAttachments.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between gap-2 p-2 rounded-lg border bg-muted/50"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {getFileIcon(file.contentType)}
+                              <span className="font-medium truncate">{file.filename}</span>
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {formatFileSize(file.size)}
+                              </Badge>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeFileAttachment(index)}
+                              className="shrink-0"
+                              data-testid={`button-remove-file-${index}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
                       <Link2 className="w-4 h-4" />
-                      Attachment Links
+                      Link Buttons (Optional)
                     </Label>
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Input
@@ -559,9 +701,25 @@ export default function AdminEmailCenter() {
                         ) : (
                           <p className="text-sm text-muted-foreground italic">No content entered...</p>
                         )}
+                        {fileAttachments.length > 0 && (
+                          <div className="pt-3 mt-3 border-t space-y-2">
+                            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">File Attachments:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {fileAttachments.map((file, index) => (
+                                <div
+                                  key={index}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-muted rounded-md"
+                                >
+                                  <Paperclip className="w-3 h-3" />
+                                  {file.filename}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {attachmentLinks.length > 0 && (
                           <div className="pt-3 mt-3 border-t space-y-2">
-                            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Attachments:</p>
+                            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Link Buttons:</p>
                             <div className="flex flex-wrap gap-2">
                               {attachmentLinks.map((link, index) => (
                                 <a
