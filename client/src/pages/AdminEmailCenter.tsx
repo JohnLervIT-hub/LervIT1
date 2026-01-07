@@ -29,6 +29,9 @@ import {
   History,
   Search,
   Loader2,
+  Link2,
+  Plus,
+  X,
 } from "lucide-react";
 import type { EmailCampaign, User } from "@shared/schema";
 import { format } from "date-fns";
@@ -92,6 +95,9 @@ export default function AdminEmailCenter() {
   const [audienceType, setAudienceType] = useState<string>("");
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [attachmentLinks, setAttachmentLinks] = useState<{label: string; url: string}[]>([]);
+  const [newLinkLabel, setNewLinkLabel] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
 
   const { data: campaigns, isLoading: campaignsLoading } = useQuery<EmailCampaign[]>({
     queryKey: ["/api/admin/email/campaigns"],
@@ -109,6 +115,7 @@ export default function AdminEmailCenter() {
       type: string;
       audienceType: string;
       recipientIds?: string[];
+      attachmentLinks?: {label: string; url: string}[];
     }) => {
       return apiRequest("POST", "/api/admin/email/send", data);
     },
@@ -123,6 +130,9 @@ export default function AdminEmailCenter() {
       setEmailType("");
       setAudienceType("");
       setSelectedRecipients([]);
+      setAttachmentLinks([]);
+      setNewLinkLabel("");
+      setNewLinkUrl("");
       setActiveTab("history");
     },
     onError: (error: Error) => {
@@ -162,7 +172,29 @@ export default function AdminEmailCenter() {
       type: emailType,
       audienceType,
       recipientIds: audienceType === "specific" ? selectedRecipients : undefined,
+      attachmentLinks: attachmentLinks.length > 0 ? attachmentLinks : undefined,
     });
+  };
+
+  const addAttachmentLink = () => {
+    if (!newLinkLabel.trim() || !newLinkUrl.trim()) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Please enter both a label and URL for the link." });
+      return;
+    }
+    // Validate URL format
+    try {
+      new URL(newLinkUrl);
+    } catch {
+      toast({ variant: "destructive", title: "Invalid URL", description: "Please enter a valid URL (e.g., https://example.com)." });
+      return;
+    }
+    setAttachmentLinks([...attachmentLinks, { label: newLinkLabel.trim(), url: newLinkUrl.trim() }]);
+    setNewLinkLabel("");
+    setNewLinkUrl("");
+  };
+
+  const removeAttachmentLink = (index: number) => {
+    setAttachmentLinks(attachmentLinks.filter((_, i) => i !== index));
   };
 
   const handleTemplateSelect = (template: typeof EMAIL_TEMPLATES[0]) => {
@@ -325,6 +357,67 @@ export default function AdminEmailCenter() {
                     </p>
                   </div>
 
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Link2 className="w-4 h-4" />
+                      Attachment Links
+                    </Label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        placeholder="Link label (e.g., View Document)"
+                        value={newLinkLabel}
+                        onChange={(e) => setNewLinkLabel(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-link-label"
+                      />
+                      <Input
+                        placeholder="https://..."
+                        value={newLinkUrl}
+                        onChange={(e) => setNewLinkUrl(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-link-url"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={addAttachmentLink}
+                        data-testid="button-add-link"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {attachmentLinks.length > 0 && (
+                      <div className="space-y-2 mt-2">
+                        {attachmentLinks.map((link, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between gap-2 p-2 rounded-lg border bg-muted/50"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Link2 className="w-4 h-4 text-primary shrink-0" />
+                              <span className="font-medium truncate">{link.label}</span>
+                              <span className="text-xs text-muted-foreground truncate">{link.url}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeAttachmentLink(index)}
+                              className="shrink-0"
+                              data-testid={`button-remove-link-${index}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Add clickable links that will appear as buttons in the email.
+                    </p>
+                  </div>
+
                   <Button
                     onClick={handleSendEmail}
                     disabled={sendEmailMutation.isPending}
@@ -465,6 +558,25 @@ export default function AdminEmailCenter() {
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground italic">No content entered...</p>
+                        )}
+                        {attachmentLinks.length > 0 && (
+                          <div className="pt-3 mt-3 border-t space-y-2">
+                            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Attachments:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {attachmentLinks.map((link, index) => (
+                                <a
+                                  key={index}
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-md"
+                                >
+                                  <Link2 className="w-3 h-3" />
+                                  {link.label}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
                         )}
                         <div className="pt-3 border-t mt-4">
                           <p className="text-xs text-muted-foreground text-center">

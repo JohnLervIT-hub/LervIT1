@@ -1099,7 +1099,8 @@ class NotificationService {
     recipientName: string,
     subject: string,
     content: string,
-    campaignType: string
+    campaignType: string,
+    attachmentLinks?: {label: string; url: string}[]
   ): Promise<boolean> {
     const typeColors: Record<string, string> = {
       account_update: '#3B82F6',
@@ -1110,6 +1111,19 @@ class NotificationService {
     };
     
     const headerColor = typeColors[campaignType] || '#4CAF50';
+    
+    // Build attachment links HTML if provided
+    let attachmentsHtml = '';
+    if (attachmentLinks && attachmentLinks.length > 0) {
+      const linksHtml = attachmentLinks.map(link => 
+        `<a href="${link.url}" target="_blank" style="display:inline-block;background-color:${headerColor};color:#ffffff;padding:10px 20px;text-decoration:none;border-radius:4px;margin:5px 5px 5px 0;font-size:14px;">${link.label}</a>`
+      ).join('');
+      attachmentsHtml = `
+              <div style="margin-top:20px;padding-top:20px;border-top:1px solid #eeeeee;">
+                <p style="color:#666666;font-size:14px;margin:0 0 10px 0;font-weight:bold;">Attachments:</p>
+                ${linksHtml}
+              </div>`;
+    }
     
     const body = `
 <!DOCTYPE html>
@@ -1130,6 +1144,7 @@ class NotificationService {
               <div style="color:#333333;font-size:16px;line-height:26px;">
                 ${content}
               </div>
+              ${attachmentsHtml}
             </td>
           </tr>
           <tr>

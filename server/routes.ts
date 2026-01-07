@@ -2492,7 +2492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!requireAdmin(req, res)) return;
       
       const adminUser = (req as any).user;
-      const { subject, content, type, audienceType, recipientIds } = req.body;
+      const { subject, content, type, audienceType, recipientIds, attachmentLinks } = req.body;
       
       if (!subject || !content || !type || !audienceType) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -2545,7 +2545,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           recipient.name,
           subject,
           content,
-          type
+          type,
+          attachmentLinks
         );
         if (success) {
           successCount++;
