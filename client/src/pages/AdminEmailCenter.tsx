@@ -186,9 +186,9 @@ export default function AdminEmailCenter() {
     setUploadingFile(true);
     
     for (const file of Array.from(files)) {
-      // Check file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        toast({ variant: "destructive", title: "File Too Large", description: `${file.name} exceeds 10MB limit.` });
+      // Check file size (25MB limit for videos)
+      if (file.size > 25 * 1024 * 1024) {
+        toast({ variant: "destructive", title: "File Too Large", description: `${file.name} exceeds 25MB limit.` });
         continue;
       }
       
@@ -437,7 +437,7 @@ export default function AdminEmailCenter() {
                         )}
                       </Button>
                       <span className="text-xs text-muted-foreground">
-                        PDF, Word, Excel, CSV, Images (max 10MB each)
+                        PDF, Word, Excel, CSV, Images, Videos (max 25MB each)
                       </span>
                     </div>
                     {fileAttachments.length > 0 && (

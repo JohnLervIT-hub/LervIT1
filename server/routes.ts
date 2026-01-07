@@ -2489,7 +2489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/admin/email/upload-attachment - Upload file attachment for email
   const emailAttachmentUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit for videos
     fileFilter: (req, file, cb) => {
       const allowedTypes = [
         'application/pdf',
