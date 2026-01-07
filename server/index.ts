@@ -108,11 +108,12 @@ declare module 'express-session' {
 }
 
 app.use(express.json({
+  limit: '50mb', // Increased for email attachments with videos
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 // ===== SECURITY MIDDLEWARE =====
 // CORS - restricts cross-origin requests
