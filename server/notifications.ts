@@ -1113,6 +1113,14 @@ class NotificationService {
     
     const headerColor = typeColors[campaignType] || '#4CAF50';
     
+    // Convert plain text line breaks to HTML paragraphs for proper email rendering
+    const formattedContent = content
+      .split(/\n\n+/) // Split by double line breaks (paragraphs)
+      .map(paragraph => paragraph.trim())
+      .filter(paragraph => paragraph.length > 0)
+      .map(paragraph => `<p style="margin:0 0 16px 0;">${paragraph.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+    
     // Build attachment links HTML if provided
     let attachmentsHtml = '';
     if (attachmentLinks && attachmentLinks.length > 0) {
@@ -1143,7 +1151,7 @@ class NotificationService {
             <td style="padding:40px 30px;">
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(recipientName)},</p>
               <div style="color:#333333;font-size:16px;line-height:26px;">
-                ${content}
+                ${formattedContent}
               </div>
               ${attachmentsHtml}
             </td>
