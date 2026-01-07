@@ -2502,11 +2502,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'image/png',
         'image/webp',
         'image/gif',
+        'video/mp4',
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/webm',
+        'video/mpeg',
       ];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('Invalid file type. Allowed: PDF, Word, Excel, CSV, and images.'));
+        cb(new Error('Invalid file type. Allowed: PDF, Word, Excel, CSV, images, and videos.'));
       }
     },
   });

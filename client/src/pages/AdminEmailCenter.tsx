@@ -33,6 +33,7 @@ import {
   Paperclip,
   FileText,
   Image as ImageIcon,
+  Video,
 } from "lucide-react";
 import type { EmailCampaign, User } from "@shared/schema";
 import { format } from "date-fns";
@@ -237,6 +238,7 @@ export default function AdminEmailCenter() {
 
   const getFileIcon = (contentType: string) => {
     if (contentType.startsWith('image/')) return <ImageIcon className="w-4 h-4" />;
+    if (contentType.startsWith('video/')) return <Video className="w-4 h-4" />;
     return <FileText className="w-4 h-4" />;
   };
 
@@ -411,7 +413,7 @@ export default function AdminEmailCenter() {
                         id="file-upload"
                         className="hidden"
                         multiple
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.webp,.gif"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,.avi,.webm,.mpeg"
                         onChange={handleFileUpload}
                         data-testid="input-file-upload"
                       />
