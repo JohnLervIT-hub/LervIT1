@@ -7994,6 +7994,83 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: MARK EARNINGS AS MANUALLY PAID =====
+  // For cases where payment was made outside Stripe (bank transfer, e-transfer, etc.)
+  app.post("/api/admin/mark-manually-paid", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { earningsIds, reference } = req.body;
+      
+      if (!earningsIds || !Array.isArray(earningsIds) || earningsIds.length === 0) {
+        return res.status(400).json({ error: "earningsIds array is required" });
+      }
+      
+      const updated: { earningsId: string; moverId: string; amount: string }[] = [];
+      const failed: { earningsId: string; reason: string }[] = [];
+      
+      for (const earningsId of earningsIds) {
+        try {
+          // Get the earning record
+          const earning = await db.select()
+            .from(moverEarnings)
+            .where(eq(moverEarnings.id, earningsId))
+            .limit(1);
+          
+          if (earning.length === 0) {
+            failed.push({ earningsId, reason: 'Earning record not found' });
+            continue;
+          }
+          
+          if (earning[0].status === 'paid') {
+            failed.push({ earningsId, reason: 'Already marked as paid' });
+            continue;
+          }
+          
+          // Update to paid status with manual reference
+          const referenceNote = reference || `manual_bank_transfer_${new Date().toISOString().slice(0,10)}`;
+          
+          await db.update(moverEarnings)
+            .set({
+              status: 'paid',
+              stripeTransferId: referenceNote,
+              paidAt: new Date(),
+            })
+            .where(eq(moverEarnings.id, earningsId));
+          
+          updated.push({
+            earningsId,
+            moverId: earning[0].moverId,
+            amount: earning[0].netAmount,
+          });
+          
+          logEvent.payment('manual_payout_marked', {
+            earningsId,
+            moverId: earning[0].moverId,
+            amount: earning[0].netAmount,
+            reference: referenceNote,
+            adminId: (req.session as any)?.userId,
+          });
+        } catch (err) {
+          console.error(`[Admin] Failed to mark earning ${earningsId} as paid:`, err);
+          failed.push({ earningsId, reason: 'Database update failed' });
+        }
+      }
+      
+      const totalPaid = updated.reduce((sum, u) => sum + parseFloat(u.amount), 0);
+      
+      res.json({
+        success: true,
+        message: `Marked ${updated.length} earnings as manually paid ($${totalPaid.toFixed(2)})`,
+        updated,
+        failed,
+      });
+    } catch (error) {
+      console.error('[Admin] Mark manually paid error:', error);
+      res.status(500).json({ error: "Failed to mark earnings as paid" });
+    }
+  });
+
   // ===== ADMIN: PROCESS PENDING MOVER PAYOUTS =====
   // Transfers money from LervIT's Stripe account to movers for pending earnings
   app.post("/api/admin/process-pending-payouts", async (req: Request, res: Response) => {

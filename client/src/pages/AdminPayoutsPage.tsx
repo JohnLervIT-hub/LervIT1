@@ -34,11 +34,23 @@ import {
   Loader2,
   Send,
   RefreshCw,
-  Wallet
+  Wallet,
+  Banknote
 } from "lucide-react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type PendingPayout = {
   earningsId: string;
@@ -92,10 +104,20 @@ type BackfillResponse = {
   created: number;
 };
 
+type MarkManuallyPaidResponse = {
+  success: boolean;
+  message: string;
+  updated: { earningsId: string; moverId: string; amount: string }[];
+  failed: { earningsId: string; reason: string }[];
+};
+
 export default function AdminPayoutsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedEarnings, setSelectedEarnings] = useState<string[]>([]);
+  const [manualPayDialogOpen, setManualPayDialogOpen] = useState(false);
+  const [manualPayReference, setManualPayReference] = useState("");
 
   const { data: pendingData, isLoading: loadingPending, refetch: refetchPending } = useQuery<PendingPayoutsResponse>({
     queryKey: ["/api/admin/pending-payouts"],
@@ -149,6 +171,56 @@ export default function AdminPayoutsPage() {
       });
     },
   });
+
+  const markManuallyPaidMutation = useMutation({
+    mutationFn: async ({ earningsIds, reference }: { earningsIds: string[]; reference: string }) => {
+      const res = await apiRequest("POST", "/api/admin/mark-manually-paid", { earningsIds, reference });
+      return res.json();
+    },
+    onSuccess: (data: MarkManuallyPaidResponse) => {
+      toast({
+        title: "Marked as Paid",
+        description: data.message || `${data.updated.length} earnings marked as manually paid`,
+      });
+      setSelectedEarnings([]);
+      setManualPayDialogOpen(false);
+      setManualPayReference("");
+      refetchPending();
+      refetchEarnings();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to mark as paid",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleMarkManuallyPaid = () => {
+    if (selectedEarnings.length === 0) return;
+    markManuallyPaidMutation.mutate({
+      earningsIds: selectedEarnings,
+      reference: manualPayReference || `manual_bank_transfer_${new Date().toISOString().slice(0, 10)}`,
+    });
+  };
+
+  const toggleEarningSelection = (earningsId: string) => {
+    setSelectedEarnings(prev =>
+      prev.includes(earningsId)
+        ? prev.filter(id => id !== earningsId)
+        : [...prev, earningsId]
+    );
+  };
+
+  const toggleAllEarnings = (earningsIds: string[]) => {
+    const allSelected = earningsIds.every(id => selectedEarnings.includes(id));
+    if (allSelected) {
+      setSelectedEarnings(prev => prev.filter(id => !earningsIds.includes(id)));
+    } else {
+      setSelectedEarnings(prev => Array.from(new Set([...prev, ...earningsIds])));
+    }
+  };
 
   if (!user || user.role !== "admin") {
     return (
@@ -369,9 +441,22 @@ export default function AdminPayoutsPage() {
 
           <TabsContent value="pending">
             <Card>
-              <CardHeader>
-                <CardTitle>Pending Payouts</CardTitle>
-                <CardDescription>Movers awaiting payment for completed jobs</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Pending Payouts</CardTitle>
+                  <CardDescription>Movers awaiting payment for completed jobs</CardDescription>
+                </div>
+                {selectedEarnings.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="border-blue-400 text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                    onClick={() => setManualPayDialogOpen(true)}
+                    data-testid="button-mark-manually-paid"
+                  >
+                    <Banknote className="w-4 h-4 mr-2" />
+                    Mark as Manually Paid ({selectedEarnings.length})
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {loadingPending ? (
@@ -381,44 +466,68 @@ export default function AdminPayoutsPage() {
                 ) : pendingPayouts.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No pending payouts</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mover</TableHead>
-                        <TableHead>Booking</TableHead>
-                        <TableHead className="text-right">Gross</TableHead>
-                        <TableHead className="text-right">Fee (15%)</TableHead>
-                        <TableHead className="text-right">Net Payout</TableHead>
-                        <TableHead>Stripe Status</TableHead>
-                        <TableHead>Date</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pendingPayouts.map((payout) => (
-                        <TableRow key={payout.earningsId}>
-                          <TableCell className="font-medium">{payout.moverName}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {payout.bookingId.slice(0, 8)}...
-                          </TableCell>
-                          <TableCell className="text-right">${payout.grossAmount}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">${payout.platformFee}</TableCell>
-                          <TableCell className="text-right font-semibold text-green-600">${payout.netAmount}</TableCell>
-                          <TableCell>
-                            {payout.isReadyToPay ? (
-                              <Badge variant="default" className="bg-green-500">Ready</Badge>
-                            ) : payout.hasStripeAccount ? (
-                              <Badge variant="secondary">Pending Verification</Badge>
-                            ) : (
-                              <Badge variant="destructive">No Account</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {payout.createdAt ? format(new Date(payout.createdAt), "MMM d, yyyy") : "-"}
-                          </TableCell>
+                  <>
+                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        <strong>Tip:</strong> Select payouts you've already paid via bank transfer or e-transfer, then click "Mark as Manually Paid" to update your records.
+                      </p>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[50px]">
+                            <Checkbox
+                              checked={pendingPayouts.every(p => selectedEarnings.includes(p.earningsId))}
+                              onCheckedChange={() => toggleAllEarnings(pendingPayouts.map(p => p.earningsId))}
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
+                          <TableHead>Mover</TableHead>
+                          <TableHead>Booking</TableHead>
+                          <TableHead className="text-right">Gross</TableHead>
+                          <TableHead className="text-right">Fee (15%)</TableHead>
+                          <TableHead className="text-right">Net Payout</TableHead>
+                          <TableHead>Stripe Status</TableHead>
+                          <TableHead>Date</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingPayouts.map((payout) => (
+                          <TableRow 
+                            key={payout.earningsId}
+                            className={selectedEarnings.includes(payout.earningsId) ? "bg-blue-50 dark:bg-blue-950/20" : ""}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedEarnings.includes(payout.earningsId)}
+                                onCheckedChange={() => toggleEarningSelection(payout.earningsId)}
+                                data-testid={`checkbox-select-${payout.earningsId}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">{payout.moverName}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {payout.bookingId.slice(0, 8)}...
+                            </TableCell>
+                            <TableCell className="text-right">${payout.grossAmount}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">${payout.platformFee}</TableCell>
+                            <TableCell className="text-right font-semibold text-green-600">${payout.netAmount}</TableCell>
+                            <TableCell>
+                              {payout.isReadyToPay ? (
+                                <Badge variant="default" className="bg-green-500">Ready</Badge>
+                              ) : payout.hasStripeAccount ? (
+                                <Badge variant="secondary">Pending Verification</Badge>
+                              ) : (
+                                <Badge variant="destructive">No Account</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {payout.createdAt ? format(new Date(payout.createdAt), "MMM d, yyyy") : "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -462,6 +571,8 @@ export default function AdminPayoutsPage() {
                             {earning.stripeTransferId ? (
                               earning.stripeTransferId.startsWith('destination_charge') ? (
                                 <Badge variant="outline" className="text-xs">Auto-split</Badge>
+                              ) : earning.stripeTransferId.startsWith('manual_bank_transfer') ? (
+                                <Badge variant="outline" className="text-xs border-blue-400 text-blue-600">Manual</Badge>
                               ) : (
                                 <span className="text-muted-foreground">{earning.stripeTransferId.slice(0, 12)}...</span>
                               )
@@ -535,6 +646,66 @@ export default function AdminPayoutsPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Mark as Manually Paid Dialog */}
+        <Dialog open={manualPayDialogOpen} onOpenChange={setManualPayDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Banknote className="w-5 h-5" />
+                Mark as Manually Paid
+              </DialogTitle>
+              <DialogDescription>
+                Confirm that you have paid {selectedEarnings.length} mover(s) via bank transfer, e-transfer, or other method outside of Stripe.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="text-sm font-medium">Selected Payouts:</p>
+                <p className="text-2xl font-bold text-green-600">
+                  ${pendingPayouts
+                    .filter(p => selectedEarnings.includes(p.earningsId))
+                    .reduce((sum, p) => sum + parseFloat(p.netAmount), 0)
+                    .toFixed(2)} CAD
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedEarnings.length} payout(s) to {Array.from(new Set(pendingPayouts.filter(p => selectedEarnings.includes(p.earningsId)).map(p => p.moverName))).join(", ")}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reference">Payment Reference (optional)</Label>
+                <Input
+                  id="reference"
+                  placeholder="e.g., e-transfer confirmation, bank ref #"
+                  value={manualPayReference}
+                  onChange={(e) => setManualPayReference(e.target.value)}
+                  data-testid="input-manual-pay-reference"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter your e-transfer confirmation number or bank reference for your records.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setManualPayDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleMarkManuallyPaid}
+                disabled={markManuallyPaidMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="button-confirm-manual-pay"
+              >
+                {markManuallyPaidMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                )}
+                Confirm Payment
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
