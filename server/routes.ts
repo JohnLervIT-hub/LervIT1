@@ -952,13 +952,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send SMS via notification service
       const smsSent = await notificationService.sendPhoneVerificationCode(phone, verificationCode);
 
-      // In development, include the code in response if SMS failed (for testing)
-      const isDev = process.env.NODE_ENV === 'development';
-      if (isDev && !smsSent) {
-        console.log(`[DEV] Verification code for ${phone}: ${verificationCode}`);
+      // If SMS failed to send, include the code in response so user can still verify
+      // This handles cases where Telnyx rejects the number (VoIP, landline, etc.)
+      if (!smsSent) {
+        console.log(`[SMS FAILED] Verification code for ${phone}: ${verificationCode}`);
         res.json({ 
-          message: "Verification code sent to your phone",
-          devCode: verificationCode, // Only in development when SMS fails
+          message: "SMS could not be delivered. Use the code shown below.",
+          devCode: verificationCode,
+          smsFailed: true,
         });
       } else {
         res.json({ message: "Verification code sent to your phone" });
