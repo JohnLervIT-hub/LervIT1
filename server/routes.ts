@@ -8171,6 +8171,23 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: GET ALL MOVER EARNINGS =====
+  // Returns all mover earnings records for reconciliation
+  app.get("/api/admin/mover-earnings", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const earnings = await db.select()
+        .from(moverEarnings)
+        .orderBy(desc(moverEarnings.createdAt));
+      
+      res.json(earnings);
+    } catch (error) {
+      console.error('[Admin] Get mover earnings error:', error);
+      res.status(500).json({ error: "Failed to get mover earnings" });
+    }
+  });
+
   // ===== ADMIN: REFRESH GPS STATUS FOR ALL ONLINE MOVERS =====
   // Updates lastLocationUpdate for all online movers so they show as "Live" on Find Movers
   app.post("/api/admin/refresh-mover-gps", async (req: Request, res: Response) => {

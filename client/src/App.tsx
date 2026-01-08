@@ -41,6 +41,7 @@ const AdminUsersPage = lazy(() => import("@/pages/AdminUsersPage"));
 const AdminMoversPage = lazy(() => import("@/pages/AdminMoversPage"));
 const AdminMovesPage = lazy(() => import("@/pages/AdminMovesPage"));
 const AdminRevenuePage = lazy(() => import("@/pages/AdminRevenuePage"));
+const AdminPayoutsPage = lazy(() => import("@/pages/AdminPayoutsPage"));
 // Demo pages removed for production - archived in client/src/pages/archived/
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
@@ -165,6 +166,11 @@ function Router() {
         <Route path="/admin/revenue">
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminRevenuePage />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/payouts">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminPayoutsPage />
           </ProtectedRoute>
         </Route>
         <Route path="/admin/email-center">

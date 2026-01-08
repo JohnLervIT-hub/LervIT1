@@ -663,6 +663,19 @@ export default function AdminDashboard() {
                 </CardHeader>
               </Card>
             </Link>
+            <Link href="/admin/payouts" data-testid="link-admin-payouts">
+              <Card className="hover-elevate cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <DollarSign className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Mover Payouts</CardTitle>
+                    <CardDescription className="text-xs">Process pending earnings</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
+            </Link>
           </div>
         </div>
 
