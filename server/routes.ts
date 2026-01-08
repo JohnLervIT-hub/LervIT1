@@ -3760,9 +3760,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // SECURITY: Calculate amount SERVER-SIDE from booking (NEVER trust client amounts)
-      const amountInCents = Math.round(parseFloat(booking.price || '0') * 100);
-      
-      if (amountInCents <= 0) {
+      // Use calculatePlatformFee for consistent rounding across all payment operations
+      const priceAmount = parseFloat(booking.price || '0');
+      if (priceAmount <= 0) {
         return res.status(400).json({ error: "Invalid booking price" });
       }
       
@@ -3811,11 +3811,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create new payment intent if needed
       if (needsNewPaymentIntent) {
-        // Use timestamp in idempotency key for retries to allow new intent creation
-        const idempotencyKey = isRetry 
-          ? `payment_intent_${booking.id}_${amountInCents}_retry_${Date.now()}`
-          : `payment_intent_${booking.id}_${amountInCents}`;
-        
         // Get or create Stripe customer so customer info appears in Stripe Dashboard
         const stripeCustomerId = await getOrCreateStripeCustomer(user);
         
@@ -3830,11 +3825,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('Failed to sync Stripe customer info:', updateErr);
         }
         
-        paymentIntent = await stripe.paymentIntents.create({
-          amount: amountInCents,
+        // Check if mover has a connected account for destination charges (Uber-style)
+        const moverAccount = await getMoverStripeAccountForDestinationCharge(booking);
+        
+        // Calculate platform fee - use grossAmountCents from helper for consistent rounding
+        const feeCalc = calculatePlatformFee(priceAmount, booking.loadSize);
+        const { grossAmountCents, platformFeeCents, moverPayoutCents, platformFeePercent } = feeCalc;
+        
+        // Use grossAmountCents in idempotency key for consistency
+        const idempotencyKey = isRetry 
+          ? `payment_intent_${booking.id}_${grossAmountCents}_retry_${Date.now()}`
+          : `payment_intent_${booking.id}_${grossAmountCents}`;
+        
+        // Validate fee doesn't exceed amount (safety check)
+        if (platformFeeCents > grossAmountCents) {
+          console.error(`[Payment] Platform fee (${platformFeeCents}) exceeds amount (${grossAmountCents})`);
+          return res.status(400).json({ error: "Invalid fee calculation" });
+        }
+        
+        // Build payment intent params - use grossAmountCents for consistent rounding
+        const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
+          amount: grossAmountCents,
           currency: "cad",
-          customer: stripeCustomerId, // Link to Stripe Customer for dashboard visibility
-          receipt_email: user.email,  // Send receipt to customer email
+          customer: stripeCustomerId,
+          receipt_email: user.email,
           metadata: {
             bookingId: booking.id,
             customerId: user.id,
@@ -3844,16 +3858,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
             pickupAddress: booking.pickupAddress || '',
             dropoffAddress: booking.dropoffAddress || '',
             isRetry: isRetry ? 'true' : 'false',
+            paymentType: moverAccount ? 'destination_charge' : 'platform_charge',
+            moverId: moverAccount?.moverId || '',
+            moverStripeAccountId: moverAccount?.stripeAccountId || '',
+            platformFeePercent: platformFeePercent.toString(),
+            platformFeeCents: platformFeeCents.toString(),
           },
           description: `LervIT booking from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
-        }, {
+        };
+        
+        // Add destination charge params if mover has connected account (Uber-style split)
+        if (moverAccount) {
+          paymentIntentParams.transfer_data = {
+            destination: moverAccount.stripeAccountId,
+          };
+          paymentIntentParams.application_fee_amount = platformFeeCents;
+          console.log(`[Destination Charge] Using Uber-style split: mover ${moverAccount.moverId} gets $${(moverPayoutCents/100).toFixed(2)}, platform gets $${(platformFeeCents/100).toFixed(2)}`);
+          logEvent.payment('destination_charge_setup', {
+            bookingId: booking.id,
+            moverId: moverAccount.moverId,
+            moverStripeAccountId: moverAccount.stripeAccountId,
+            grossAmount: grossAmountCents,
+            platformFee: platformFeeCents,
+            moverPayout: moverPayoutCents,
+          });
+        } else {
+          console.log(`[Platform Charge] No mover account available, using platform charge (manual transfer later)`);
+        }
+        
+        paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, {
           idempotencyKey,
         });
         
-        // Update booking with new payment intent ID
+        // Update booking with payment intent ID and commission details
         await storage.updateBooking(bookingId, {
           stripePaymentIntentId: paymentIntent.id,
           paymentStatus: 'pending',
+          platformFeePercent: platformFeePercent.toString(),
+          platformFeeAmount: (platformFeeCents / 100).toFixed(2),
+          moverNetAmount: (moverPayoutCents / 100).toFixed(2),
         });
       }
       
@@ -4012,6 +4055,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // === SAVED PAYMENT METHODS ===
   
   // Helper to get or create Stripe customer with full contact info
+  // Helper to get mover's Stripe connected account for destination charges (Uber-style)
+  async function getMoverStripeAccountForDestinationCharge(booking: any): Promise<{
+    stripeAccountId: string;
+    chargesEnabled: boolean;
+    moverId: string;
+  } | null> {
+    // Determine which mover to use (assigned mover or pre-selected mover)
+    const moverId = booking.moverId || booking.preSelectedMoverId;
+    if (!moverId) {
+      return null;
+    }
+    
+    // Look up mover's Stripe connected account
+    const accounts = await db.select()
+      .from(moverStripeAccounts)
+      .where(eq(moverStripeAccounts.moverId, moverId))
+      .limit(1);
+    
+    if (accounts.length === 0) {
+      console.log(`[Destination Charge] Mover ${moverId} has no Stripe account`);
+      return null;
+    }
+    
+    const account = accounts[0];
+    
+    // Check if account can receive payments
+    if (!account.chargesEnabled) {
+      console.log(`[Destination Charge] Mover ${moverId} account not ready (chargesEnabled: false)`);
+      return null;
+    }
+    
+    return {
+      stripeAccountId: account.stripeAccountId,
+      chargesEnabled: account.chargesEnabled,
+      moverId,
+    };
+  }
+
   async function getOrCreateStripeCustomer(user: User): Promise<string> {
     // If user has a stored Stripe customer ID, verify it exists in current Stripe mode
     if (user.stripeCustomerId) {
@@ -4180,11 +4261,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No saved payment methods" });
       }
       
-      const amountInCents = Math.round(parseFloat(booking.price || '0') * 100);
+      // Check if mover has a connected account for destination charges (Uber-style)
+      const moverAccount = await getMoverStripeAccountForDestinationCharge(booking);
       
-      // Create payment intent with saved card
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountInCents,
+      // Calculate platform fee - use grossAmountCents from helper for consistent rounding
+      const feeCalc = calculatePlatformFee(
+        parseFloat(booking.price || '0'),
+        booking.loadSize
+      );
+      const { grossAmountCents, platformFeeCents, moverPayoutCents, platformFeePercent } = feeCalc;
+      
+      // Validate fee doesn't exceed amount (safety check)
+      if (platformFeeCents > grossAmountCents) {
+        console.error(`[Payment - Saved Card] Platform fee (${platformFeeCents}) exceeds amount (${grossAmountCents})`);
+        return res.status(400).json({ error: "Invalid fee calculation" });
+      }
+      
+      // Build payment intent params for saved card - use grossAmountCents for consistent rounding
+      const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
+        amount: grossAmountCents,
         currency: 'cad',
         customer: user.stripeCustomerId,
         payment_method: paymentMethodId,
@@ -4193,15 +4288,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: {
           bookingId: booking.id,
           customerId: user.id,
+          paymentType: moverAccount ? 'destination_charge' : 'platform_charge',
+          moverId: moverAccount?.moverId || '',
+          moverStripeAccountId: moverAccount?.stripeAccountId || '',
+          platformFeePercent: platformFeePercent.toString(),
         },
+      };
+      
+      // Add destination charge params if mover has connected account (Uber-style split)
+      if (moverAccount) {
+        paymentIntentParams.transfer_data = {
+          destination: moverAccount.stripeAccountId,
+        };
+        paymentIntentParams.application_fee_amount = platformFeeCents;
+        console.log(`[Destination Charge - Saved Card] Uber-style split: mover ${moverAccount.moverId} gets $${(moverPayoutCents/100).toFixed(2)}`);
+        logEvent.payment('destination_charge_saved_card', {
+          bookingId: booking.id,
+          moverId: moverAccount.moverId,
+          grossAmount: grossAmountCents,
+          platformFee: platformFeeCents,
+        });
+      }
+      
+      // Create payment intent with saved card (use idempotency key for safety)
+      const savedCardIdempotencyKey = `saved_card_${booking.id}_${grossAmountCents}_${Date.now()}`;
+      const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, {
+        idempotencyKey: savedCardIdempotencyKey,
       });
       
       if (paymentIntent.status === 'succeeded') {
-        // Update booking
+        // Update booking with commission details
         await storage.updateBooking(bookingId, {
           paymentStatus: 'succeeded',
           status: 'confirmed',
           stripePaymentIntentId: paymentIntent.id,
+          platformFeePercent: platformFeePercent.toString(),
+          platformFeeAmount: (platformFeeCents / 100).toFixed(2),
+          moverNetAmount: (moverPayoutCents / 100).toFixed(2),
         });
         
         // Send confirmation emails
@@ -6542,17 +6665,17 @@ Respond with VALID JSON only:
   });
 
   /**
-   * Record earnings when job is completed and create Stripe Transfer to mover
+   * Record earnings when job is completed
    * 
-   * FLOW: Separate Transfer Approach (Option B)
-   * 1. Customer pays platform via PaymentIntent
-   * 2. Funds are held in platform's Stripe account
-   * 3. When job completes, create Transfer to mover's connected account
+   * UBER-STYLE DESTINATION CHARGES:
+   * - If payment used destination charge (transfer_data.destination), money was
+   *   already split at payment time - no separate transfer needed
+   * - Status is 'available' immediately since funds are already with mover
    * 
-   * This approach is used because:
-   * - Mover is not known at payment time
-   * - Allows platform to hold funds until job is complete
-   * - Enables refund handling before transfer occurs
+   * LEGACY PLATFORM CHARGES (Fallback):
+   * - If payment was a platform charge (no mover assigned at payment time),
+   *   create a Transfer to mover's connected account
+   * - Status is 'available' after transfer completes
    */
   async function recordMoverEarnings(bookingId: string, moverId: string, booking: any) {
     // Get commission data from booking (persisted for audit trail)
@@ -6571,55 +6694,82 @@ Respond with VALID JSON only:
       return existing[0];
     }
     
-    // Get mover's Stripe Connect account for transfer
-    const moverStripeAccountResult = await db.select()
-      .from(moverStripeAccounts)
-      .where(eq(moverStripeAccounts.moverId, moverId))
-      .limit(1);
-    
     let stripeTransferId: string | undefined;
     let earningsStatus = 'pending';
     
-    // Only create transfer if mover has an onboarded Stripe Connect account
-    if (moverStripeAccountResult.length > 0 && moverStripeAccountResult[0].payoutsEnabled) {
-      const moverStripeAccount = moverStripeAccountResult[0];
-      const transferAmountCents = Math.round(netAmount * 100);
-      
+    // Check if this was a destination charge (Uber-style) by checking payment intent metadata
+    let wasDestinationCharge = false;
+    if (booking.stripePaymentIntentId) {
       try {
-        // Create Stripe Transfer to mover's connected account
-        const transfer = await stripe.transfers.create({
-          amount: transferAmountCents,
-          currency: 'cad',
-          destination: moverStripeAccount.stripeAccountId,
-          metadata: {
+        const paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+        wasDestinationCharge = paymentIntent.metadata?.paymentType === 'destination_charge';
+        
+        if (wasDestinationCharge) {
+          // Money was already split at payment time - mark as available immediately
+          earningsStatus = 'available';
+          stripeTransferId = `destination_charge_${paymentIntent.id}`; // Marker for destination charges
+          
+          logEvent.payment('destination_charge_earnings_recorded', {
             bookingId,
             moverId,
-            grossAmount: grossAmount.toFixed(2),
-            platformFee: platformFeeAmount.toFixed(2),
-          },
-        }, {
-          idempotencyKey: `transfer-${bookingId}`,
-        });
+            paymentIntentId: paymentIntent.id,
+            netAmount,
+          });
+        }
+      } catch (err) {
+        console.error(`[Earnings] Failed to retrieve PaymentIntent for ${bookingId}:`, err);
+      }
+    }
+    
+    // If not a destination charge, try to create a transfer (legacy flow)
+    if (!wasDestinationCharge) {
+      // Get mover's Stripe Connect account for transfer
+      const moverStripeAccountResult = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, moverId))
+        .limit(1);
+      
+      // Only create transfer if mover has an onboarded Stripe Connect account
+      if (moverStripeAccountResult.length > 0 && moverStripeAccountResult[0].payoutsEnabled) {
+        const moverStripeAccount = moverStripeAccountResult[0];
+        const transferAmountCents = Math.round(netAmount * 100);
         
-        stripeTransferId = transfer.id;
-        earningsStatus = 'available';
-        
-        logEvent.payment('transfer_created', {
+        try {
+          // Create Stripe Transfer to mover's connected account
+          const transfer = await stripe.transfers.create({
+            amount: transferAmountCents,
+            currency: 'cad',
+            destination: moverStripeAccount.stripeAccountId,
+            metadata: {
+              bookingId,
+              moverId,
+              grossAmount: grossAmount.toFixed(2),
+              platformFee: platformFeeAmount.toFixed(2),
+            },
+          }, {
+            idempotencyKey: `transfer-${bookingId}`,
+          });
+          
+          stripeTransferId = transfer.id;
+          earningsStatus = 'available';
+          
+          logEvent.payment('transfer_created', {
+            bookingId,
+            moverId,
+            transferId: transfer.id,
+            amount: netAmount,
+          });
+        } catch (transferError: any) {
+          logEvent.error('transfer_failed', transferError);
+          earningsStatus = 'pending';
+        }
+      } else {
+        logEvent.payment('transfer_skipped', {
           bookingId,
           moverId,
-          transferId: transfer.id,
-          amount: netAmount,
+          reason: 'No enabled Stripe Connect account',
         });
-      } catch (transferError: any) {
-        logEvent.error('transfer_failed', transferError);
-        earningsStatus = 'pending';
       }
-    } else {
-      logEvent.payment('transfer_skipped', {
-        bookingId,
-        moverId,
-        reason: 'No enabled Stripe Connect account',
-      });
     }
     
     const [earnings] = await db.insert(moverEarnings).values({
