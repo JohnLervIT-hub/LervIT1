@@ -589,11 +589,16 @@ export default function AdminUsersPage() {
                               .map((booking) => (
                                 <div key={booking.id} className="p-4 hover:bg-muted/50" data-testid={`activity-booking-${booking.id}`}>
                                   <div className="flex items-start justify-between gap-3 mb-2">
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                                      <span className="font-medium">
-                                        {format(new Date(booking.preferredDate), "MMM d, yyyy")}
-                                      </span>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                                        <span className="font-medium">
+                                          {format(new Date(booking.preferredDate), "MMM d, yyyy")}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground font-mono mt-0.5" data-testid={`text-activity-booking-id-${booking.id}`}>
+                                        #{booking.id.slice(0, 8).toUpperCase()}
+                                      </p>
                                     </div>
                                     {getStatusBadge(booking.status)}
                                   </div>

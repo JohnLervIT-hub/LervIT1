@@ -722,9 +722,6 @@ export default function AdminDashboard() {
                                 <p className="text-sm text-muted-foreground">
                                   {booking.customer?.email || "No email"}
                                 </p>
-                                <p className="text-xs text-muted-foreground font-mono" data-testid={`text-booking-id-${booking.id}`}>
-                                  #{booking.id.slice(0, 8).toUpperCase()}
-                                </p>
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-1">

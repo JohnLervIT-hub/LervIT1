@@ -566,9 +566,6 @@ export default function CustomerDashboard() {
                         <p className="text-sm text-muted-foreground">
                           {format(new Date(booking.preferredDate), "h:mm a")}
                         </p>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5" data-testid={`text-booking-id-${booking.id}`}>
-                          #{booking.id.slice(0, 8).toUpperCase()}
-                        </p>
                       </div>
                       <Badge className={getStatusColor(booking.status)}>
                         {getStatusLabel(booking.status)}
@@ -645,9 +642,6 @@ export default function CustomerDashboard() {
                       <div>
                         <p className="font-medium">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
                         <p className="text-sm text-muted-foreground">{booking.loadSize} load</p>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5" data-testid={`text-past-booking-id-${booking.id}`}>
-                          #{booking.id.slice(0, 8).toUpperCase()}
-                        </p>
                       </div>
                       <Badge className={getStatusColor(booking.status)}>
                         {booking.status === "completed" ? (
