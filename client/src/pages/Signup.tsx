@@ -147,10 +147,23 @@ export default function Signup() {
       });
     },
     onError: (error: Error) => {
+      // Extract message from error (may be formatted as "400: {json}" or plain text)
+      let errorMessage = "Invalid code. Please try again.";
+      try {
+        const match = error.message.match(/^\d+:\s*(.+)$/);
+        if (match) {
+          const parsed = JSON.parse(match[1]);
+          errorMessage = parsed.message || parsed.error || errorMessage;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      } catch {
+        // Use default message
+      }
       toast({
         variant: "destructive",
         title: "Verification Failed",
-        description: error.message || "Invalid code. Please try again.",
+        description: errorMessage,
       });
     },
   });
