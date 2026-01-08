@@ -7994,6 +7994,183 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: PROCESS PENDING MOVER PAYOUTS =====
+  // Transfers money from LervIT's Stripe account to movers for pending earnings
+  app.post("/api/admin/process-pending-payouts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get all pending earnings
+      const pendingEarnings = await db.select()
+        .from(moverEarnings)
+        .where(eq(moverEarnings.status, 'pending'));
+      
+      if (pendingEarnings.length === 0) {
+        return res.json({
+          success: true,
+          message: "No pending payouts to process",
+          processed: 0,
+          failed: 0
+        });
+      }
+      
+      const processed: { earningsId: string; moverId: string; amount: string; transferId: string }[] = [];
+      const failed: { earningsId: string; moverId: string; reason: string }[] = [];
+      const skipped: { earningsId: string; moverId: string; reason: string }[] = [];
+      
+      for (const earning of pendingEarnings) {
+        // Get mover's Stripe connected account
+        const moverAccounts = await db.select()
+          .from(moverStripeAccounts)
+          .where(eq(moverStripeAccounts.moverId, earning.moverId))
+          .limit(1);
+        
+        if (moverAccounts.length === 0) {
+          skipped.push({
+            earningsId: earning.id,
+            moverId: earning.moverId,
+            reason: 'No Stripe account connected'
+          });
+          continue;
+        }
+        
+        const moverAccount = moverAccounts[0];
+        
+        if (!moverAccount.chargesEnabled || !moverAccount.payoutsEnabled) {
+          skipped.push({
+            earningsId: earning.id,
+            moverId: earning.moverId,
+            reason: 'Stripe account not fully verified'
+          });
+          continue;
+        }
+        
+        const netAmountCents = Math.round(parseFloat(earning.netAmount) * 100);
+        
+        try {
+          // Create Stripe Transfer to mover's connected account
+          const transfer = await stripe.transfers.create({
+            amount: netAmountCents,
+            currency: 'cad',
+            destination: moverAccount.stripeAccountId,
+            metadata: {
+              earningsId: earning.id,
+              bookingId: earning.bookingId,
+              moverId: earning.moverId,
+              processedBy: 'admin_batch_payout',
+            },
+          });
+          
+          // Update earnings status to paid
+          await db.update(moverEarnings)
+            .set({
+              status: 'paid',
+              stripeTransferId: transfer.id,
+              paidAt: new Date(),
+            })
+            .where(eq(moverEarnings.id, earning.id));
+          
+          processed.push({
+            earningsId: earning.id,
+            moverId: earning.moverId,
+            amount: earning.netAmount,
+            transferId: transfer.id
+          });
+          
+          console.log(`[Admin Payout] Transferred $${earning.netAmount} to mover ${earning.moverId} (transfer: ${transfer.id})`);
+        } catch (err: any) {
+          console.error(`[Admin Payout] Failed to transfer for earnings ${earning.id}:`, err);
+          failed.push({
+            earningsId: earning.id,
+            moverId: earning.moverId,
+            reason: err.message || 'Transfer failed'
+          });
+        }
+      }
+      
+      const totalPaid = processed.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      
+      res.json({
+        success: true,
+        message: `Processed ${processed.length} payouts, ${failed.length} failed, ${skipped.length} skipped`,
+        totalPaid: totalPaid.toFixed(2),
+        processed,
+        failed,
+        skipped
+      });
+    } catch (error) {
+      console.error('[Admin] Process pending payouts error:', error);
+      res.status(500).json({ error: "Failed to process pending payouts" });
+    }
+  });
+
+  // ===== ADMIN: GET PENDING PAYOUTS SUMMARY =====
+  // View all pending payouts before processing
+  app.get("/api/admin/pending-payouts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get all pending earnings with mover info
+      const pendingEarnings = await db.select()
+        .from(moverEarnings)
+        .where(eq(moverEarnings.status, 'pending'));
+      
+      // Get mover Stripe account status for each
+      const payoutSummary = [];
+      let totalPending = 0;
+      let readyToPay = 0;
+      let needsStripeSetup = 0;
+      
+      for (const earning of pendingEarnings) {
+        const moverAccounts = await db.select()
+          .from(moverStripeAccounts)
+          .where(eq(moverStripeAccounts.moverId, earning.moverId))
+          .limit(1);
+        
+        const hasStripeAccount = moverAccounts.length > 0;
+        const isReady = hasStripeAccount && moverAccounts[0].chargesEnabled && moverAccounts[0].payoutsEnabled;
+        
+        const netAmount = parseFloat(earning.netAmount);
+        totalPending += netAmount;
+        
+        if (isReady) {
+          readyToPay += netAmount;
+        } else {
+          needsStripeSetup += netAmount;
+        }
+        
+        // Get mover name
+        const mover = await db.select().from(moversTable).where(eq(moversTable.id, earning.moverId)).limit(1);
+        const moverUser = mover.length > 0 ? await storage.getUser(mover[0].userId) : null;
+        
+        payoutSummary.push({
+          earningsId: earning.id,
+          bookingId: earning.bookingId,
+          moverId: earning.moverId,
+          moverName: moverUser?.name || 'Unknown',
+          grossAmount: earning.grossAmount,
+          platformFee: earning.platformFeeAmount,
+          netAmount: earning.netAmount,
+          hasStripeAccount,
+          isReadyToPay: isReady,
+          createdAt: earning.createdAt,
+        });
+      }
+      
+      res.json({
+        success: true,
+        totalPending: totalPending.toFixed(2),
+        readyToPay: readyToPay.toFixed(2),
+        needsStripeSetup: needsStripeSetup.toFixed(2),
+        count: pendingEarnings.length,
+        payouts: payoutSummary
+      });
+    } catch (error) {
+      console.error('[Admin] Get pending payouts error:', error);
+      res.status(500).json({ error: "Failed to get pending payouts" });
+    }
+  });
+
   // ===== ADMIN: REFRESH GPS STATUS FOR ALL ONLINE MOVERS =====
   // Updates lastLocationUpdate for all online movers so they show as "Live" on Find Movers
   app.post("/api/admin/refresh-mover-gps", async (req: Request, res: Response) => {
