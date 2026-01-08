@@ -2,7 +2,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { MapPin, Calendar, Package, MessageCircle } from "lucide-react";
+import { MapPin, Calendar, Package, MessageCircle, Hash } from "lucide-react";
 
 interface BookingCardProps {
   id: string;
@@ -52,6 +52,10 @@ export default function BookingCard({
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="w-3 h-3" />
               <span data-testid={`text-datetime-${id}`}>{date} at {time}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+              <Hash className="w-3 h-3" />
+              <span className="font-mono" data-testid={`text-booking-id-${id}`}>{id.slice(0, 8).toUpperCase()}</span>
             </div>
           </div>
         </div>
