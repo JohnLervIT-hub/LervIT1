@@ -904,6 +904,14 @@ export default function AdminDashboard() {
 
             {selectedBooking && (
               <div className="space-y-6">
+                {/* Booking ID */}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Booking ID:</span>
+                  <span className="font-mono font-medium text-foreground" data-testid={`text-booking-id-${selectedBooking.id}`}>
+                    #{selectedBooking.id.slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+
                 {/* Status & Payment */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
