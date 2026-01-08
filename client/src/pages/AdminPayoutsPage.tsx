@@ -83,6 +83,13 @@ type MoverEarning = {
   stripeTransferId: string | null;
   paidAt: string | null;
   createdAt: string;
+  _isMissing?: boolean;
+};
+
+type BackfillResponse = {
+  success: boolean;
+  message: string;
+  created: number;
 };
 
 export default function AdminPayoutsPage() {
@@ -121,6 +128,28 @@ export default function AdminPayoutsPage() {
     },
   });
 
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/backfill-mover-earnings");
+      return res.json();
+    },
+    onSuccess: (data: BackfillResponse) => {
+      toast({
+        title: "Backfill Complete",
+        description: data.message || `Created ${data.created} earnings records`,
+      });
+      refetchPending();
+      refetchEarnings();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to backfill earnings",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!user || user.role !== "admin") {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -137,6 +166,7 @@ export default function AdminPayoutsPage() {
   
   const paidEarnings = allEarnings?.filter(e => e.status === 'paid' || e.status === 'available') || [];
   const pendingEarnings = allEarnings?.filter(e => e.status === 'pending') || [];
+  const missingEarnings = allEarnings?.filter(e => e.status === 'needs_backfill' || e._isMissing) || [];
 
   const handleProcessPayouts = async () => {
     setIsProcessing(true);
@@ -285,6 +315,39 @@ export default function AdminPayoutsPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Backfill Alert for Missing Earnings */}
+        {missingEarnings.length > 0 && (
+          <Card className="mb-6 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                    Missing Earnings Records
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {missingEarnings.length} completed booking(s) need earnings records created
+                  </p>
+                </div>
+                <Button 
+                  variant="outline"
+                  className="border-amber-400 text-amber-700 hover:bg-amber-100"
+                  onClick={() => backfillMutation.mutate()}
+                  disabled={backfillMutation.isPending}
+                  data-testid="button-backfill-earnings"
+                >
+                  {backfillMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Backfill Earnings
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -454,6 +517,8 @@ export default function AdminPayoutsPage() {
                           <TableCell>
                             {earning.status === 'paid' || earning.status === 'available' ? (
                               <Badge variant="default" className="bg-green-500">Paid</Badge>
+                            ) : earning.status === 'needs_backfill' || earning._isMissing ? (
+                              <Badge variant="outline" className="border-amber-400 text-amber-700">Needs Backfill</Badge>
                             ) : (
                               <Badge variant="secondary">Pending</Badge>
                             )}

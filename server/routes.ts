@@ -8172,16 +8172,65 @@ Respond with VALID JSON only:
   });
 
   // ===== ADMIN: GET ALL MOVER EARNINGS =====
-  // Returns all mover earnings records for reconciliation
+  // Returns all mover earnings records for reconciliation, including completed bookings missing earnings records
   app.get("/api/admin/mover-earnings", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       
+      // Get existing earnings records
       const earnings = await db.select()
         .from(moverEarnings)
         .orderBy(desc(moverEarnings.createdAt));
       
-      res.json(earnings);
+      // Get completed bookings with movers that DON'T have earnings records yet
+      const existingBookingIds = new Set(earnings.map(e => e.bookingId));
+      
+      const completedBookings = await db.select()
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.status, 'completed'),
+            eq(bookings.paymentStatus, 'succeeded'),
+            sql`${bookings.moverId} IS NOT NULL`
+          )
+        )
+        .orderBy(desc(bookings.createdAt));
+      
+      // Convert completed bookings without earnings to a compatible format
+      const missingEarnings = completedBookings
+        .filter(b => !existingBookingIds.has(b.id))
+        .map(b => {
+          const grossAmount = Number(b.price) || 0;
+          const platformFeePercent = 15; // 15% commission
+          const platformFeeAmount = Math.round(grossAmount * platformFeePercent) / 100;
+          const netAmount = grossAmount - platformFeeAmount;
+          
+          return {
+            id: `missing-${b.id}`,
+            moverId: b.moverId,
+            bookingId: b.id,
+            grossAmount: grossAmount.toFixed(2),
+            platformFeePercent: platformFeePercent.toString(),
+            platformFeeAmount: platformFeeAmount.toFixed(2),
+            netAmount: netAmount.toFixed(2),
+            stripeTransferId: null,
+            status: 'needs_backfill' as const,
+            availableAt: null,
+            paidAt: null,
+            payoutId: null,
+            createdAt: b.createdAt,
+            _isMissing: true,  // Flag for frontend
+          };
+        });
+      
+      // Combine and sort by date
+      const allEarnings = [...earnings, ...missingEarnings].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      res.json(allEarnings);
     } catch (error) {
       console.error('[Admin] Get mover earnings error:', error);
       res.status(500).json({ error: "Failed to get mover earnings" });
