@@ -51,28 +51,23 @@ export const STRIPE_CONFIG = {
 };
 
 /**
- * Platform commission rates by vehicle class
- * These rates can be adjusted based on business needs
+ * Platform commission rate - flat 15% for MVP
  */
 export const PLATFORM_COMMISSION = {
   DEFAULT_PERCENT: 15.00,
-  BY_VEHICLE_CLASS: {
-    car: 12.00,     // Lower commission for smaller jobs
-    van: 15.00,     // Standard commission
-    pickup: 15.00,  // Standard commission
-    truck: 18.00,   // Higher commission for larger jobs
-  } as Record<string, number>,
+  // MVP: Using flat 15% rate for all vehicle types
+  // Future: Can add BY_VEHICLE_CLASS for tiered rates
 };
 
 /**
  * Calculate platform fee based on booking details
  * @param grossAmount - Total amount customer pays (in dollars)
- * @param vehicleClass - Optional vehicle class for adjusted rates
+ * @param _vehicleClass - Unused for MVP (flat 15% rate)
  * @returns Object with fee breakdown in cents
  */
 export function calculatePlatformFee(
   grossAmount: number,
-  vehicleClass?: string
+  _vehicleClass?: string
 ): {
   grossAmountCents: number;
   platformFeePercent: number;
@@ -81,9 +76,8 @@ export function calculatePlatformFee(
 } {
   const grossAmountCents = Math.round(grossAmount * 100);
   
-  const platformFeePercent = vehicleClass && PLATFORM_COMMISSION.BY_VEHICLE_CLASS[vehicleClass.toLowerCase()]
-    ? PLATFORM_COMMISSION.BY_VEHICLE_CLASS[vehicleClass.toLowerCase()]
-    : PLATFORM_COMMISSION.DEFAULT_PERCENT;
+  // MVP: Flat 15% commission rate for all bookings
+  const platformFeePercent = PLATFORM_COMMISSION.DEFAULT_PERCENT;
   
   const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
   const moverPayoutCents = grossAmountCents - platformFeeCents;
