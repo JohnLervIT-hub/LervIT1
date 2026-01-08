@@ -4310,8 +4310,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Create payment intent with saved card (use idempotency key for safety)
-      const savedCardIdempotencyKey = `saved_card_${booking.id}_${grossAmountCents}_${Date.now()}`;
+      // Create payment intent with saved card (use deterministic idempotency key for safety)
+      const savedCardIdempotencyKey = `saved_card_${booking.id}_${grossAmountCents}_${paymentMethodId}`;
       const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams, {
         idempotencyKey: savedCardIdempotencyKey,
       });
