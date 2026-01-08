@@ -385,13 +385,13 @@ export default function MoverVerification() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
-  const { data: mover } = useQuery<any>({
+  const { data: mover, isLoading: moverLoading } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
     enabled: !!user?.id,
     select: (data) => Array.isArray(data) ? data[0] : data,
   });
 
-  const { data: items = [], isLoading } = useQuery<VerificationItem[]>({
+  const { data: items = [], isLoading: itemsLoading } = useQuery<VerificationItem[]>({
     queryKey: [`/api/movers/${mover?.id}/verification`],
     enabled: !!mover?.id,
   });
@@ -401,7 +401,7 @@ export default function MoverVerification() {
     enabled: !!mover?.id,
   });
 
-  if (isLoading) {
+  if (moverLoading || itemsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-muted-foreground">Loading verification status...</div>
