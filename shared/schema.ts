@@ -495,6 +495,8 @@ export const moverStripeAccounts = pgTable("mover_stripe_accounts", {
   currentlyDue: text("currently_due").array(),
   defaultCurrency: text("default_currency").default("cad"),
   country: text("country").default("CA"),
+  reminderCount: integer("reminder_count").default(0).notNull(),
+  lastReminderAt: timestamp("last_reminder_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

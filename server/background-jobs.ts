@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { db } from './db';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers } from '@shared/schema';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
@@ -56,6 +56,11 @@ export function initBackgroundJobs() {
   // Send abandoned booking reminders every 30 minutes
   cron.schedule('*/30 * * * *', async () => {
     await sendAbandonedBookingReminders();
+  });
+  
+  // Send Stripe onboarding reminders every 6 hours
+  cron.schedule('0 */6 * * *', async () => {
+    await sendStripeOnboardingReminders();
   });
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
@@ -683,4 +688,201 @@ export async function runManualCleanup() {
     cancelledPastDatedBookings: pastDatedBooks,
     timestamp: new Date().toISOString(),
   };
+}
+
+// Track sent Stripe onboarding reminders in memory to avoid duplicates within same session
+const sentStripeReminders = new Set<string>();
+
+// Constants for Stripe onboarding reminders
+const STRIPE_REMINDER_INTERVALS = [
+  24 * 60 * 60 * 1000,  // 1st reminder: 24 hours after starting
+  3 * 24 * 60 * 60 * 1000,  // 2nd reminder: 3 days after starting
+  7 * 24 * 60 * 60 * 1000,  // 3rd reminder: 7 days after starting
+];
+const MAX_STRIPE_REMINDERS = 3;
+
+async function sendStripeOnboardingReminders() {
+  try {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Find movers with incomplete Stripe onboarding:
+    // - Account created > 24 hours ago
+    // - Not complete (chargesEnabled = false OR onboardingStatus != 'complete')
+    // - Less than max reminders sent
+    // - Last reminder was at least 24 hours ago (or never sent)
+    const incompleteAccounts = await db.select({
+      accountId: moverStripeAccounts.id,
+      moverId: moverStripeAccounts.moverId,
+      stripeAccountId: moverStripeAccounts.stripeAccountId,
+      onboardingStatus: moverStripeAccounts.onboardingStatus,
+      chargesEnabled: moverStripeAccounts.chargesEnabled,
+      currentlyDue: moverStripeAccounts.currentlyDue,
+      reminderCount: moverStripeAccounts.reminderCount,
+      lastReminderAt: moverStripeAccounts.lastReminderAt,
+      createdAt: moverStripeAccounts.createdAt,
+    })
+    .from(moverStripeAccounts)
+    .where(
+      and(
+        eq(moverStripeAccounts.chargesEnabled, false),
+        lt(moverStripeAccounts.createdAt, oneDayAgo),
+        lt(moverStripeAccounts.reminderCount, MAX_STRIPE_REMINDERS)
+      )
+    );
+    
+    let emailsSent = 0;
+    let smsSent = 0;
+    
+    for (const account of incompleteAccounts) {
+      const reminderKey = `stripe_${account.accountId}_${account.reminderCount}`;
+      
+      // Skip if already sent this reminder in this session
+      if (sentStripeReminders.has(reminderKey)) {
+        continue;
+      }
+      
+      // Check if enough time has passed since last reminder
+      const timeSinceCreation = now.getTime() - new Date(account.createdAt).getTime();
+      const requiredInterval = STRIPE_REMINDER_INTERVALS[account.reminderCount] || STRIPE_REMINDER_INTERVALS[STRIPE_REMINDER_INTERVALS.length - 1];
+      
+      if (timeSinceCreation < requiredInterval) {
+        continue;
+      }
+      
+      // Check last reminder time - ensure at least 24 hours between reminders
+      if (account.lastReminderAt) {
+        const timeSinceLastReminder = now.getTime() - new Date(account.lastReminderAt).getTime();
+        if (timeSinceLastReminder < 24 * 60 * 60 * 1000) {
+          continue;
+        }
+      }
+      
+      // Get mover and user info
+      const moverResult = await db.select({
+        userId: movers.userId,
+      })
+      .from(movers)
+      .where(eq(movers.id, account.moverId))
+      .limit(1);
+      
+      if (!moverResult[0]) continue;
+      
+      const userResult = await db.select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+      })
+      .from(users)
+      .where(eq(users.id, moverResult[0].userId))
+      .limit(1);
+      
+      const user = userResult[0];
+      if (!user) continue;
+      
+      // Determine what's still needed
+      const stillNeeded = account.currentlyDue && account.currentlyDue.length > 0
+        ? account.currentlyDue.slice(0, 3).map(item => 
+            item.replace(/^individual\./, '')
+              .replace(/^external_account$/, 'bank account')
+              .replace(/verification\.document/, 'ID verification')
+              .replace(/_/g, ' ')
+          ).join(', ')
+        : 'a few more details';
+      
+      const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://lervit.com');
+      
+      // Customize message based on reminder count
+      const reminderNumber = account.reminderCount + 1;
+      let subject: string;
+      let urgency: string;
+      
+      if (reminderNumber === 1) {
+        subject = 'Complete Your Payout Setup - LervIT';
+        urgency = 'Just a quick reminder';
+      } else if (reminderNumber === 2) {
+        subject = 'Your Payouts Are Almost Ready - LervIT';
+        urgency = 'Don\'t miss out on earnings';
+      } else {
+        subject = 'Final Reminder: Complete Your Payout Setup - LervIT';
+        urgency = 'This is your final reminder';
+      }
+      
+      // Send email reminder
+      if (user.email) {
+        try {
+          await notificationService.sendEmail({
+            to: user.email,
+            subject,
+            type: 'status_update',
+            body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #1a56db;">Complete Your Payout Setup</h2>
+              <p>Hi ${user.name || 'there'},</p>
+              <p>${urgency} to finish setting up your LervIT payout account so you can receive earnings from completed moves.</p>
+              <p><strong>What's still needed:</strong> ${stillNeeded}</p>
+              <p>It only takes a few minutes to complete, and once done, your earnings will be deposited directly to your bank account.</p>
+              <div style="margin: 24px 0;">
+                <a href="${baseUrl}/mover-settings" 
+                   style="background-color: #1a56db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  Complete Setup Now
+                </a>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                Questions? Reply to this email or visit our support page.
+              </p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+              <p style="color: #999; font-size: 12px;">
+                You're receiving this because you started setting up payouts on LervIT but haven't completed it yet.
+              </p>
+            </div>`,
+          });
+          emailsSent++;
+        } catch (err) {
+          console.error(`[Stripe Reminder] Failed to send email to ${user.email}:`, err);
+        }
+      }
+      
+      // Send SMS reminder (only for 2nd and 3rd reminders to avoid spamming)
+      if (user.phone && reminderNumber >= 2) {
+        try {
+          const smsMessage = `LervIT: ${urgency}! Complete your payout setup to receive earnings. It takes 2 min: ${baseUrl}/mover-settings`;
+          await notificationService.sendSMS({
+            to: user.phone,
+            message: smsMessage,
+            type: 'booking_update',
+          });
+          smsSent++;
+        } catch (err) {
+          console.error(`[Stripe Reminder] Failed to send SMS to ${user.phone}:`, err);
+        }
+      }
+      
+      // Update reminder count
+      await db.update(moverStripeAccounts)
+        .set({
+          reminderCount: account.reminderCount + 1,
+          lastReminderAt: now,
+          updatedAt: now,
+        })
+        .where(eq(moverStripeAccounts.id, account.accountId));
+      
+      sentStripeReminders.add(reminderKey);
+    }
+    
+    if (emailsSent > 0 || smsSent > 0) {
+      logger.info({ 
+        event: 'stripe_onboarding_reminders', 
+        emailsSent, 
+        smsSent,
+        total: incompleteAccounts.length 
+      }, `Sent ${emailsSent} emails and ${smsSent} SMS for incomplete Stripe onboarding`);
+    }
+    
+    return { emailsSent, smsSent };
+  } catch (error) {
+    logEvent.error('sendStripeOnboardingReminders', error);
+    return { emailsSent: 0, smsSent: 0 };
+  }
 }
