@@ -1,0 +1,118 @@
+Act as a senior Stripe Connect engineer doing a read-only audit of this codebase.
+Do NOT modify any code, configs, or secrets. Only inspect and report.
+
+Goal: Before we switch to “Uber-style” split payouts, I need to understand exactly how our current Stripe integration works, what is configured, and what is missing.
+
+1. Locate all Stripe usage
+
+Find all files where Stripe is imported or used (server, API routes, webhooks, etc.).
+
+List each function that calls Stripe (e.g., stripe.paymentIntents.create, stripe.charges.create, stripe.transfers.create, stripe.refunds.create, etc.).
+
+For each call, paste the relevant snippet in your answer.
+
+2. How are payments currently created?
+
+For the main customer payment flow (the one used when a customer books a mover on Lervit):
+
+Confirm whether we use PaymentIntents, Checkout Sessions, or something else.
+
+For each payment creation, tell me:
+
+Are we passing transfer_data or transfer_data.destination?
+
+Are we passing application_fee_amount or application_fee_percent?
+
+Are we using on_behalf_of?
+
+What metadata do we send (e.g., bookingId, mover_id, acct_id, etc.)?
+
+Explicitly state whether the charge is:
+
+A direct charge on the platform account,
+
+A destination charge, or
+
+Using separate charges and transfers.
+
+3. How are connected accounts and movers wired?
+
+Find where we create Stripe Connect accounts for movers.
+
+Are they created as Express accounts?
+
+What capabilities do we request (card_payments, transfers)?
+
+Find where we store the Stripe connected account ID (acct_...) in our database.
+
+Which table/field holds this value (e.g., mover.stripe_account_id)?
+
+Show an example schema for the mover table.
+
+Confirm whether this acct_... value is actually used anywhere other than metadata when creating payments.
+
+4. Job / booking → mover → payment linkage
+
+Inspect the DB schema for the jobs/bookings table.
+
+Confirm it has fields like: job_id (or bookingId), customer_id, mover_id, price, and stripe_payment_intent_id.
+
+Explain, step by step, how the code currently:
+
+Selects a mover for a job
+
+Creates a payment for that job
+
+Records mover_id, acct_id, and stripe_payment_intent_id (if it does).
+
+Tell me clearly: does the payment code actually use the mover’s Stripe account ID to route money, or does it only save it as metadata?
+
+5. Payouts, transfers, and refunds
+
+Search for any usage of stripe.transfers.create, stripe.payouts, or payout-related APIs.
+
+Are we manually creating transfers to connected accounts, or not at all?
+
+Search for stripe.refunds.create or refund handling.
+
+How are refunds implemented?
+
+Do they consider connected accounts, or are they just simple refunds on the platform charge?
+
+6. Current behaviour summary (this is the critical part)
+
+In your own words, summarize how money flows today for a typical successful booking:
+
+Who is charged? (platform or connected account)
+
+Where does the money land initially? (platform balance vs connected account balance)
+
+Are any application fees collected?
+
+Are any transfers to movers created? If yes, how and where?
+
+What is not configured yet for proper “Uber-style” split pay?
+
+7. Safety & migration notes
+
+Without making any code changes, explain what minimal changes would be needed to:
+
+Convert the main payment flow to a destination charge using transfer_data.destination = moverStripeAccountId and application_fee_amount = platformCommission.
+
+Keep historical payments untouched and safe.
+
+Highlight any potential pitfalls we must be aware of (e.g., refund behaviour, missing capabilities, webhook changes we’d need later).
+
+Important:
+
+Stay in read-only / analysis mode only.
+
+Do not run migrations, do not edit files, and do not rotate keys.
+
+Output a clear report with sections matching the headings above, so we know exactly what is already configured and what is missing, before we touch the integration.
+
+When you’re done, give me:
+
+A short “Current state” summary (3–5 bullet points)
+
+A short “Ready for Uber mode?” checklist with ✅/❌ for each requirement.
