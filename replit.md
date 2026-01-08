@@ -19,7 +19,7 @@ The platform features a responsive, mobile-first design utilizing shadcn/ui comp
 *   **Production Observability:** Pino-based structured JSON logging for critical events.
 *   **Background Jobs:** `node-cron` for scheduled tasks like expiring notifications and failed bookings, and `expirePastScheduledJobs()` to mark past jobs. **Active Trip Protection:** Auto-complete/cancel jobs now check `locationUpdatedAt` - if mover updated location within 2 hours, booking is protected from premature status changes.
 *   **Payment Security:** Stripe webhook signature verification and idempotency checks.
-*   **Stripe Connect:** Integrates for mover onboarding and escrow-based payout system.
+*   **Stripe Connect:** Integrates for mover onboarding and escrow-based payout system. Automated reminder system sends up to 3 progressive reminders (1st: 24h email, 2nd: 3 days email+SMS, 3rd: 7 days email+SMS) to movers with incomplete onboarding.
 *   **Performance:** Gzip/Brotli compression, lazy loading for routes, preconnect hints, React Query caching, and static upload caching.
 *   **Real-Time Communication:** WebSocket notification system for movers with token-based authentication and audio alerts.
 *   **Resilience:** Circuit Breaker system for external API calls and an async Vision Queue for background image processing.
