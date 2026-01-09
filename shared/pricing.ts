@@ -4,6 +4,8 @@
 export interface PriceBreakdown {
   baseFee: number;
   distanceFee: number;
+  distanceKm: number;  // Distance in kilometers for display
+  perKmRate: number;   // Price per km for the vehicle class
   loadFee: number;
   loadSizeFee: number;  // New: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
   moverTravelFee: number;
@@ -243,6 +245,8 @@ export function calculatePrice(
   return {
     baseFee: Math.round(baseFee * 100) / 100,
     distanceFee: Math.round(distanceFee * 100) / 100,
+    distanceKm: Math.round(pickupToDropoffDistance * 10) / 10,  // Round to 1 decimal
+    perKmRate: classConfig.perKmRate,
     loadFee: Math.round(loadFee * 100) / 100,
     loadSizeFee: Math.round(loadSizeFee * 100) / 100,
     pickupDifficultyFee: Math.round(pickupDifficultyFee * 100) / 100,
