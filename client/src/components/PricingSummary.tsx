@@ -71,19 +71,19 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
   // Format load size label for display
   const loadSizeLabel = breakdown.loadSize 
     ? `Load Size (${breakdown.loadSize.charAt(0).toUpperCase() + breakdown.loadSize.slice(1)})`
-    : "Load Size Fee";
+    : "Load Size";
 
   // Get vehicle class info
   const vehicleClass = breakdown.vehicleClass || 'C';
   const vehicleConfig = VEHICLE_CLASSES[vehicleClass];
 
-  // Distance label with KM
+  // Distance label with KM only
   const distanceLabel = breakdown.distanceKm 
-    ? `Distance (${breakdown.distanceKm} km × $${breakdown.perKmRate.toFixed(2)})`
+    ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
 
-  // Base fee explanation based on vehicle class
-  const baseFeeLabel = `Base Fee (${vehicleConfig.name})`;
+  // Simple Base Fee label
+  const baseFeeLabel = "Base Fee";
 
   const feeItems = [
     { 
