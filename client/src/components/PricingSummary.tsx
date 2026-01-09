@@ -1,21 +1,10 @@
 // PERFORMANCE: React.memo optimization to prevent unnecessary re-renders
-import { memo, useState } from "react";
+import { memo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, ChevronDown, Info, Car } from "lucide-react";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck } from "lucide-react";
 import type { PriceBreakdown } from "@shared/pricing";
-import { VEHICLE_CLASSES, type VehicleClass } from "@shared/pricing";
-
-// Pricing reference data
-const LOAD_SIZE_FEES: Record<string, { label: string; fee: number }> = {
-  boxes: { label: "Boxes / Small Items", fee: 5.00 },
-  small: { label: "Small Load", fee: 5.00 },
-  medium: { label: "Medium Load", fee: 15.00 },
-  large: { label: "Large Load", fee: 30.00 },
-  apartment: { label: "Full Apartment", fee: 45.00 },
-};
 
 interface PricingSummaryProps {
   breakdown: PriceBreakdown | null;
@@ -73,74 +62,58 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     ? `Load Size (${breakdown.loadSize.charAt(0).toUpperCase() + breakdown.loadSize.slice(1)})`
     : "Load Size";
 
-  // Get vehicle class info
-  const vehicleClass = breakdown.vehicleClass || 'C';
-  const vehicleConfig = VEHICLE_CLASSES[vehicleClass];
-
   // Distance label with KM only
   const distanceLabel = breakdown.distanceKm 
     ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
 
-  // Simple Base Fee label
-  const baseFeeLabel = "Base Fee";
-
   const feeItems = [
     { 
-      label: baseFeeLabel, 
+      label: "Base Fee", 
       amount: breakdown.baseFee, 
       testId: "fee-base",
       icon: Zap,
-      show: true,
-      tooltip: "Starting fee based on vehicle size needed"
+      show: true
     },
     { 
       label: distanceLabel, 
       amount: breakdown.distanceFee, 
       testId: "fee-distance",
       icon: MapPin,
-      show: true,
-      tooltip: `${breakdown.distanceKm || 0} km at $${breakdown.perKmRate?.toFixed(2) || '0.00'}/km`
+      show: true
     },
     { 
       label: loadSizeLabel, 
       amount: breakdown.loadSizeFee, 
       testId: "fee-loadsize",
       icon: Package,
-      show: true,
-      tooltip: "Fee based on the size of your load"
+      show: true
     },
     { 
       label: "Pickup Access", 
       amount: breakdown.pickupDifficultyFee, 
       testId: "fee-pickup",
       icon: TrendingUp,
-      show: breakdown.pickupDifficultyFee > 0,
-      tooltip: "Additional fee for stairs, basement, or elevator access"
+      show: breakdown.pickupDifficultyFee > 0
     },
     { 
       label: "Dropoff Access", 
       amount: breakdown.dropoffDifficultyFee, 
       testId: "fee-dropoff",
       icon: TrendingUp,
-      show: breakdown.dropoffDifficultyFee > 0,
-      tooltip: "Additional fee for stairs, basement, or elevator access"
+      show: breakdown.dropoffDifficultyFee > 0
     },
     { 
       label: "Mover Travel", 
       amount: breakdown.moverTravelFee, 
       testId: "fee-travel",
       icon: Truck,
-      show: breakdown.moverTravelFee > 0,
-      tooltip: "Fee for mover traveling beyond 5km to pickup"
+      show: breakdown.moverTravelFee > 0
     },
   ];
 
   const visibleFees = feeItems.filter(item => item.show);
   const hasTwoMovers = breakdown.numberOfMoversMultiplier > 1;
-
-  // State for collapsible sections
-  const [showRates, setShowRates] = useState(false);
 
   return (
     <Card className={`${className} overflow-hidden`} data-testid="pricing-summary">
@@ -180,98 +153,6 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
             </div>
           ))}
         </div>
-
-        <Separator />
-
-        {/* Collapsible Pricing Reference */}
-        <Collapsible open={showRates} onOpenChange={setShowRates}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="toggle-pricing-rates">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4" />
-              <span>View All Pricing Rates</span>
-            </div>
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showRates ? 'rotate-180' : ''}`} />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4 pt-2">
-            {/* Vehicle Class Rates */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                <Car className="w-3 h-3" />
-                Price Per KM by Vehicle
-              </div>
-              <div className="grid gap-1.5 text-xs">
-                {(Object.entries(VEHICLE_CLASSES) as [VehicleClass, typeof VEHICLE_CLASSES[VehicleClass]][]).map(([cls, config]) => (
-                  <div 
-                    key={cls}
-                    className={`flex items-center justify-between py-1.5 px-2 rounded ${
-                      vehicleClass === cls ? 'bg-primary/10 border border-primary/20' : 'bg-muted/30'
-                    }`}
-                    data-testid={`rate-vehicle-${cls}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center ${
-                        vehicleClass === cls ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {cls}
-                      </span>
-                      <span className={vehicleClass === cls ? 'font-medium text-foreground' : 'text-muted-foreground'}>
-                        {config.name}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className={`font-medium tabular-nums ${vehicleClass === cls ? 'text-primary' : 'text-foreground'}`}>
-                        ${config.perKmRate.toFixed(2)}/km
-                      </span>
-                      <span className="text-muted-foreground ml-1">(${config.baseFee} base)</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Load Size Fees */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                <Package className="w-3 h-3" />
-                Load Size Fees
-              </div>
-              <div className="grid gap-1.5 text-xs">
-                {Object.entries(LOAD_SIZE_FEES).filter(([key]) => key !== 'small').map(([key, { label, fee }]) => (
-                  <div 
-                    key={key}
-                    className={`flex items-center justify-between py-1.5 px-2 rounded ${
-                      breakdown.loadSize === key ? 'bg-primary/10 border border-primary/20' : 'bg-muted/30'
-                    }`}
-                    data-testid={`rate-loadsize-${key}`}
-                  >
-                    <span className={breakdown.loadSize === key ? 'font-medium text-foreground' : 'text-muted-foreground'}>
-                      {label}
-                    </span>
-                    <span className={`font-medium tabular-nums ${breakdown.loadSize === key ? 'text-primary' : 'text-foreground'}`}>
-                      ${fee.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Base Fee Explanation */}
-            <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
-              <div className="flex items-center gap-1.5 font-medium">
-                <Zap className="w-3 h-3 text-primary" />
-                What is the Base Fee?
-              </div>
-              <p className="text-muted-foreground leading-relaxed">
-                The base fee is a starting charge that varies by vehicle size. Larger vehicles (like moving trucks) 
-                have higher base fees because they require more fuel and specialized equipment. Your current 
-                vehicle class <span className="font-medium text-foreground">({vehicleConfig.name})</span> has 
-                a base fee of <span className="font-medium text-foreground">${breakdown.baseFee.toFixed(2)}</span>.
-              </p>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
 
         <Separator />
 
