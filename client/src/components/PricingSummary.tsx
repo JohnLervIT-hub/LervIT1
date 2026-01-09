@@ -201,7 +201,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
 
         {/* Disclaimer */}
         <p className="text-[11px] text-center text-muted-foreground leading-relaxed">
-          Final price confirmed after mover assignment. Travel fee may vary based on mover proximity.
+          Final price confirmed at checkout. Travel fee calculated based on mover distance to pickup.
         </p>
       </CardContent>
     </Card>
