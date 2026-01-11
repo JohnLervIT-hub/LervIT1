@@ -979,6 +979,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Pre-signup: Resend verification code via email (fallback when SMS fails)
+  app.post("/api/auth/pre-signup/resend-via-email", async (req: Request, res: Response) => {
+    try {
+      const emailFallbackSchema = z.object({
+        phone: z.string().min(10, "Invalid phone number"),
+        email: z.string().email("Invalid email address"),
+      });
+      const { phone, email } = validateBody(emailFallbackSchema, req.body);
+
+      // Find existing verification token for this phone
+      const { phoneVerificationTokens } = await import("@shared/schema");
+      const tokens = await db.select().from(phoneVerificationTokens)
+        .where(eq(phoneVerificationTokens.phone, phone))
+        .limit(1);
+
+      if (tokens.length === 0) {
+        return res.status(400).json({ error: "No verification code found. Please request a new code first." });
+      }
+
+      const token = tokens[0];
+
+      // Check if token has expired
+      if (new Date() > new Date(token.expiresAt)) {
+        return res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+      }
+
+      // Check if already verified
+      if (token.verified) {
+        return res.status(400).json({ error: "Phone already verified. Please proceed to complete signup." });
+      }
+
+      // Send OTP via email
+      const emailSent = await notificationService.sendPhoneVerificationCodeByEmail(email, phone, token.verificationCode);
+
+      if (emailSent) {
+        res.json({ 
+          message: "Verification code sent to your email",
+          emailSent: true,
+        });
+      } else {
+        res.status(500).json({ 
+          error: "Failed to send email. Please try again or contact support@lervit.com",
+          emailSent: false,
+        });
+      }
+    } catch (error) {
+      logger.error({ error }, "Pre-signup email fallback error");
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
   // Pre-signup: Verify phone code and get signup token
   app.post("/api/auth/pre-signup/verify-code", async (req: Request, res: Response) => {
     try {

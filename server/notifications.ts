@@ -84,6 +84,83 @@ class NotificationService {
     });
   }
 
+  // Send phone verification code via Email (fallback when SMS fails)
+  async sendPhoneVerificationCodeByEmail(email: string, phone: string, code: string): Promise<boolean> {
+    console.log('\n[EMAIL OTP] Sending verification code:');
+    console.log('To:', email);
+    console.log('For phone:', phone);
+    
+    if (!resend) {
+      console.log('[EMAIL OTP] Resend not configured - email logged only');
+      console.log('---\n');
+      return false;
+    }
+    
+    try {
+      const { data, error } = await resend.emails.send({
+        from: this.fromEmail,
+        to: email,
+        replyTo: 'support@lervit.com',
+        subject: 'Your LervIT Verification Code',
+        html: `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;text-align:center;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Your Verification Code</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">
+                We couldn't send an SMS to your phone, so here's your verification code via email:
+              </p>
+              <div style="background-color:#f0f0f0;border-radius:8px;padding:20px;margin:0 0 30px 0;">
+                <span style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#333333;">${code}</span>
+              </div>
+              <p style="color:#777777;font-size:14px;margin:0;">
+                This code expires in 10 minutes.<br>
+                If you didn't request this code, please ignore this email.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f9f9f9;padding:20px 30px;text-align:center;">
+              <p style="color:#999999;font-size:12px;margin:0;">
+                © ${new Date().getFullYear()} LervIT. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+        `,
+      });
+      
+      if (error) {
+        console.error('[EMAIL OTP] Resend error:', error);
+        return false;
+      }
+      
+      console.log('[EMAIL OTP] Sent successfully! ID:', data?.id);
+      console.log('---\n');
+      return true;
+    } catch (error: any) {
+      console.error('[EMAIL OTP] Failed to send:', error.message);
+      console.log('---\n');
+      return false;
+    }
+  }
+
   // Send SMS via Telnyx REST API
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     // Normalize phone number to E.164 format
