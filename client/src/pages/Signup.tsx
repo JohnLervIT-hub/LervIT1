@@ -95,6 +95,11 @@ export default function Signup() {
 
   // Dev code state (only used in development when SMS fails)
   const [devCode, setDevCode] = useState<string | null>(null);
+  
+  // SMS failed state - show email fallback option
+  const [smsFailed, setSmsFailed] = useState(false);
+  const [fallbackEmail, setFallbackEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   // Send OTP mutation
   const sendOtpMutation = useMutation({
@@ -104,15 +109,26 @@ export default function Signup() {
     },
     onSuccess: (data) => {
       setStep("otp");
-      // In development, show the code if SMS failed
-      if (data.devCode) {
-        setDevCode(data.devCode);
-        toast({
-          title: "Code Sent (Dev Mode)",
-          description: `SMS not configured. Your code is: ${data.devCode}`,
-          duration: 30000,
-        });
+      // Track if SMS failed for email fallback
+      if (data.smsFailed) {
+        setSmsFailed(true);
+        // In development, show the code if SMS failed
+        if (data.devCode) {
+          setDevCode(data.devCode);
+          toast({
+            title: "Code Sent (Dev Mode)",
+            description: `SMS not configured. Your code is: ${data.devCode}`,
+            duration: 30000,
+          });
+        } else {
+          toast({
+            title: "SMS Delivery Issue",
+            description: "We couldn't send an SMS. You can receive your code via email instead.",
+            duration: 10000,
+          });
+        }
       } else {
+        setSmsFailed(false);
         toast({
           title: "Code Sent",
           description: "A 6-digit verification code has been sent to your phone.",
@@ -127,6 +143,46 @@ export default function Signup() {
       });
     },
   });
+
+  // Send OTP via email fallback mutation
+  const sendOtpViaEmailMutation = useMutation({
+    mutationFn: async ({ phoneNumber, email }: { phoneNumber: string; email: string }) => {
+      const response = await apiRequest("POST", "/api/auth/pre-signup/resend-via-email", { 
+        phone: phoneNumber, 
+        email 
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setEmailSent(true);
+      toast({
+        title: "Code Sent via Email",
+        description: "Check your email for the verification code.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Send Email",
+        description: error.message || "Please try again.",
+      });
+    },
+  });
+
+  const handleSendViaEmail = () => {
+    if (!validateEmail(fallbackEmail)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Email",
+        description: "Please enter a valid email address.",
+      });
+      return;
+    }
+    sendOtpViaEmailMutation.mutate({ 
+      phoneNumber: cleanPhoneNumber(phone), 
+      email: fallbackEmail 
+    });
+  };
 
   // Verify OTP mutation
   const verifyOtpMutation = useMutation({
@@ -342,6 +398,57 @@ export default function Signup() {
                 Resend
               </button>
             </p>
+            
+            {/* Email fallback when SMS fails */}
+            {smsFailed && !emailSent && (
+              <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-2 mb-3">
+                  <Mail className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                      SMS not delivered?
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      Enter your email to receive the code instead
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    value={fallbackEmail}
+                    onChange={(e) => setFallbackEmail(e.target.value)}
+                    className="flex-1 h-9 text-sm"
+                    data-testid="input-fallback-email"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSendViaEmail}
+                    disabled={sendOtpViaEmailMutation.isPending || !fallbackEmail}
+                    data-testid="button-send-via-email"
+                  >
+                    {sendOtpViaEmailMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Send"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            {/* Email sent confirmation */}
+            {emailSent && (
+              <div className="mt-4 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    Code sent to {fallbackEmail}
+                  </p>
+                </div>
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col gap-4 pt-2">
             <Button
