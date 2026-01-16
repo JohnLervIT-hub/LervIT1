@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   Table, 
   TableBody, 
@@ -20,14 +21,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type Mover = {
   id: string;
   vehicleType: string;
+  vehiclePhoto?: string;
   isVerified: boolean;
   rating: string;
   totalMoves: number;
@@ -47,6 +57,11 @@ export default function AdminMoversPage() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedMover, setSelectedMover] = useState<Mover | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: moversData, isLoading, error } = useQuery<Mover[]>({
     queryKey: ["/api/movers"],
@@ -61,7 +76,6 @@ export default function AdminMoversPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
       
-      // Log diagnostics to console for debugging
       console.log('[Sync Diagnostics]', data.diagnostics);
       
       const statusCounts = data.diagnostics?.bookingStatusCounts || [];
@@ -81,6 +95,79 @@ export default function AdminMoversPage() {
       });
     },
   });
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: async ({ moverId, file }: { moverId: string; file: File }) => {
+      const formData = new FormData();
+      formData.append("images", file);
+      const uploadResponse = await fetch("/api/upload/images", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!uploadResponse.ok) throw new Error("Upload failed");
+      const uploadData = await uploadResponse.json();
+      const photoUrl = uploadData.urls?.[0];
+
+      const updateResponse = await apiRequest("PATCH", `/api/movers/${moverId}`, {
+        vehiclePhoto: photoUrl,
+      });
+      return updateResponse.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      toast({
+        title: "Vehicle photo uploaded",
+        description: `Successfully updated ${selectedMover?.user?.name || "mover"}'s vehicle photo.`,
+      });
+      handleCloseDialog();
+    },
+    onError: () => {
+      toast({
+        title: "Upload failed",
+        description: "Could not upload the vehicle photo. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleOpenDialog = (mover: Mover) => {
+    setSelectedMover(mover);
+    setSelectedFile(null);
+    setPreviewUrl(mover.vehiclePhoto || null);
+    setUploadDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setUploadDialogOpen(false);
+    setSelectedMover(null);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please select an image under 5MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setPreviewUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpload = () => {
+    if (selectedMover && selectedFile) {
+      uploadPhotoMutation.mutate({ moverId: selectedMover.id, file: selectedFile });
+    }
+  };
 
   if (!user || user.role !== "admin") {
     return (
@@ -212,9 +299,11 @@ export default function AdminMoversPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Vehicle</TableHead>
+                      <TableHead>Photo</TableHead>
                       <TableHead>Rating</TableHead>
                       <TableHead>Moves</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -226,6 +315,19 @@ export default function AdminMoversPage() {
                         <TableCell>{m.user?.email || "N/A"}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{m.vehicleType || "Not specified"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {m.vehiclePhoto ? (
+                            <div className="w-12 h-12 rounded overflow-hidden bg-muted">
+                              <img 
+                                src={m.vehiclePhoto} 
+                                alt="Vehicle" 
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">No photo</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -246,6 +348,17 @@ export default function AdminMoversPage() {
                             )}
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleOpenDialog(m)}
+                            data-testid={`button-upload-photo-${m.id}`}
+                          >
+                            <Camera className="w-4 h-4 mr-1" />
+                            Upload Photo
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -259,6 +372,63 @@ export default function AdminMoversPage() {
             )}
           </CardContent>
         </Card>
+
+        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Upload Vehicle Photo</DialogTitle>
+              <DialogDescription>
+                Upload a vehicle photo for {selectedMover?.user?.name || "this mover"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {previewUrl && (
+                <div className="w-full h-48 rounded-lg overflow-hidden bg-muted border">
+                  <img 
+                    src={previewUrl} 
+                    alt="Vehicle preview" 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+              
+              <div className="flex flex-col gap-2">
+                <Label>Select Image</Label>
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  data-testid="input-admin-vehicle-photo"
+                />
+                <p className="text-sm text-muted-foreground">Maximum file size: 5MB</p>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleCloseDialog} data-testid="button-cancel-upload">
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleUpload}
+                  disabled={!selectedFile || uploadPhotoMutation.isPending}
+                  data-testid="button-confirm-upload"
+                >
+                  {uploadPhotoMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Upload Photo
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
