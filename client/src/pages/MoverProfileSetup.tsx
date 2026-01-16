@@ -124,7 +124,9 @@ export default function MoverProfileSetup() {
       return apiRequest("PATCH", `/api/movers/${mover.id}`, data);
     },
     onSuccess: () => {
+      // Invalidate both the user's specific mover query and the general movers list (Find Movers page)
       queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/movers'] });
       toast({
         title: "Profile updated",
         description: "Your mover profile has been updated successfully.",

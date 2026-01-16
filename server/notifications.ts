@@ -8,6 +8,54 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const telnyxApiKey = process.env.TELNYX_API_KEY;
 const telnyxPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
 
+// Email Rate Limiter - Resend allows 2 requests per second
+// This queue ensures we don't exceed that limit
+class EmailRateLimiter {
+  private queue: Array<() => Promise<any>> = [];
+  private isProcessing = false;
+  private lastSendTime = 0;
+  private readonly minIntervalMs = 550; // 550ms between emails = ~1.8/sec (safe margin)
+
+  async enqueue<T>(emailFn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const result = await emailFn();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      this.processQueue();
+    });
+  }
+
+  private async processQueue() {
+    if (this.isProcessing || this.queue.length === 0) return;
+    
+    this.isProcessing = true;
+    
+    while (this.queue.length > 0) {
+      const now = Date.now();
+      const timeSinceLastSend = now - this.lastSendTime;
+      
+      if (timeSinceLastSend < this.minIntervalMs) {
+        await new Promise(resolve => setTimeout(resolve, this.minIntervalMs - timeSinceLastSend));
+      }
+      
+      const emailFn = this.queue.shift();
+      if (emailFn) {
+        this.lastSendTime = Date.now();
+        await emailFn();
+      }
+    }
+    
+    this.isProcessing = false;
+  }
+}
+
+const emailRateLimiter = new EmailRateLimiter();
+
 // Email notification service with Resend integration
 export interface EmailNotification {
   to: string;
@@ -97,7 +145,7 @@ class NotificationService {
     }
     
     try {
-      const { data, error } = await resend.emails.send({
+      const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
         from: this.fromEmail,
         to: email,
         replyTo: 'support@lervit.com',
@@ -144,7 +192,7 @@ class NotificationService {
 </body>
 </html>
         `,
-      });
+      }));
       
       if (error) {
         console.error('[EMAIL OTP] Resend error:', error);
@@ -227,16 +275,16 @@ class NotificationService {
     console.log('Subject:', notification.subject);
     console.log('Type:', notification.type);
     
-    // Send real email via Resend
+    // Send real email via Resend with rate limiting
     if (resend) {
       try {
-        const { data, error } = await resend.emails.send({
+        const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
           from: this.fromEmail,
           to: notification.to,
           replyTo: 'support@lervit.com',
           subject: notification.subject,
           html: notification.body,
-        });
+        }));
         
         if (error) {
           console.error('Resend error:', error);
@@ -1273,7 +1321,7 @@ class NotificationService {
           emailPayload.attachments = resendAttachments;
         }
         
-        const { data, error } = await resend.emails.send(emailPayload);
+        const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send(emailPayload));
         
         if (error) {
           console.error('[CAMPAIGN EMAIL] Resend error:', error);
