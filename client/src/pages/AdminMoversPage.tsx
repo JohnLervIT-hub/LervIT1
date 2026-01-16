@@ -308,7 +308,12 @@ export default function AdminMoversPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredMovers.map((m) => (
-                      <TableRow key={m.id} data-testid={`row-mover-${m.id}`}>
+                      <TableRow 
+                        key={m.id} 
+                        data-testid={`row-mover-${m.id}`}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleOpenDialog(m)}
+                      >
                         <TableCell className="font-medium">
                           {m.user?.name || "Unknown Mover"}
                         </TableCell>
@@ -352,7 +357,10 @@ export default function AdminMoversPage() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => handleOpenDialog(m)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDialog(m);
+                            }}
                             data-testid={`button-upload-photo-${m.id}`}
                           >
                             <Camera className="w-4 h-4 mr-1" />
