@@ -826,6 +826,14 @@ class NotificationService {
       ? (process.env.BASE_URL || 'https://app.lervit.com')
       : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+    
+    console.log('[PASSWORD_RESET] Sending password reset email:', {
+      to: email,
+      name,
+      isProduction,
+      baseUrl,
+      resetUrl: resetUrl.substring(0, 60) + '...',
+    });
     const subject = 'Reset Your LervIT Password';
     const body = `
 <!DOCTYPE html>
