@@ -283,6 +283,13 @@ export default function MoverDashboard() {
     select: (data) => Array.isArray(data) ? data[0] : data,
   });
 
+  // Redirect new movers to onboarding wizard if not completed
+  useEffect(() => {
+    if (mover && mover.onboardingCompleted === false) {
+      setLocation("/mover-onboarding");
+    }
+  }, [mover, setLocation]);
+
   // Get verification status
   const { data: verificationStatus, isLoading: isVerificationLoading } = useQuery<any>({
     queryKey: [`/api/movers/${mover?.id}/verification-status`],

@@ -34,6 +34,7 @@ const CustomerDashboard = lazy(() => import("@/pages/CustomerDashboard"));
 const MyBookings = lazy(() => import("@/pages/MyBookings"));
 const MoverDashboard = lazy(() => import("@/pages/MoverDashboard"));
 const MoverProfileSetup = lazy(() => import("@/pages/MoverProfileSetup"));
+const MoverOnboardingWizard = lazy(() => import("@/pages/MoverOnboardingWizard"));
 const Messages = lazy(() => import("@/pages/Messages"));
 const Review = lazy(() => import("@/pages/Review"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
@@ -129,6 +130,11 @@ function Router() {
         <Route path="/mover-verification">
           <ProtectedRoute allowedRoles={["mover"]}>
             <MoverVerification />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/mover-onboarding">
+          <ProtectedRoute allowedRoles={["mover"]}>
+            <MoverOnboardingWizard />
           </ProtectedRoute>
         </Route>
 
