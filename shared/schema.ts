@@ -96,6 +96,7 @@ export const movers = pgTable("movers", {
   pilotApprovedAt: timestamp("pilot_approved_at"),
   pilotNotes: text("pilot_notes"),
   pilotExpiresAt: timestamp("pilot_expires_at"),
+  onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("movers_user_id_idx").on(table.userId),
