@@ -131,14 +131,20 @@ export default function MoverOnboardingWizard() {
   };
 
   const handleNext = async () => {
-    if (currentStep === 1 && profilePhotoFile) {
-      try {
-        const result = await uploadImageMutation.mutateAsync(profilePhotoFile);
-        await updateProfileMutation.mutateAsync({ moverImage: result.url });
-        setProfilePhotoFile(null);
-      } catch (error) {
-        toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+    if (currentStep === 1) {
+      if (!profilePhotoFile && !profilePhotoPreview) {
+        toast({ title: "Profile photo required", description: "Please upload a profile photo", variant: "destructive" });
         return;
+      }
+      if (profilePhotoFile) {
+        try {
+          const result = await uploadImageMutation.mutateAsync(profilePhotoFile);
+          await updateProfileMutation.mutateAsync({ moverImage: result.url });
+          setProfilePhotoFile(null);
+        } catch (error) {
+          toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+          return;
+        }
       }
     }
     
@@ -155,14 +161,20 @@ export default function MoverOnboardingWizard() {
       }
     }
     
-    if (currentStep === 3 && vehiclePhotoFile) {
-      try {
-        const result = await uploadImageMutation.mutateAsync(vehiclePhotoFile);
-        await updateProfileMutation.mutateAsync({ vehiclePhoto: result.url });
-        setVehiclePhotoFile(null);
-      } catch (error) {
-        toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+    if (currentStep === 3) {
+      if (!vehiclePhotoFile && !vehiclePhotoPreview) {
+        toast({ title: "Vehicle photo required", description: "Please upload a photo of your vehicle", variant: "destructive" });
         return;
+      }
+      if (vehiclePhotoFile) {
+        try {
+          const result = await uploadImageMutation.mutateAsync(vehiclePhotoFile);
+          await updateProfileMutation.mutateAsync({ vehiclePhoto: result.url });
+          setVehiclePhotoFile(null);
+        } catch (error) {
+          toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+          return;
+        }
       }
     }
     
@@ -184,10 +196,6 @@ export default function MoverOnboardingWizard() {
 
   const handleBack = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
-  };
-
-  const handleSkip = () => {
-    setCurrentStep((prev) => Math.min(prev + 1, 4));
   };
 
   const isLoading_ = uploadImageMutation.isPending || updateProfileMutation.isPending || completeOnboardingMutation.isPending;
@@ -436,11 +444,6 @@ export default function MoverOnboardingWizard() {
             )}
 
             <div className="flex gap-2">
-              {currentStep !== 2 && currentStep < 4 && (
-                <Button variant="ghost" onClick={handleSkip} disabled={isLoading_} data-testid="button-skip">
-                  Skip
-                </Button>
-              )}
               <Button onClick={handleNext} disabled={isLoading_} data-testid="button-next-step">
                 {isLoading_ ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
