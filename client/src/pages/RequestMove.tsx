@@ -178,12 +178,49 @@ export default function RequestMove() {
     const dropoffAccess = wouterParams.get('dropoffAccess') || windowParams.get('dropoffAccess');
     const urlLoadSize = wouterParams.get('loadSize') || windowParams.get('loadSize');
     const resumeStepParam = wouterParams.get('resumeStep') || windowParams.get('resumeStep');
+    const abandonedId = wouterParams.get('abandonedId') || windowParams.get('abandonedId');
 
     console.log('[RequestMove] URL params check:', {
       wouterSearch: searchString,
       windowSearch: window.location.search,
-      pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam
+      pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam, abandonedId
     });
+
+    // PRIORITY 0: Fetch abandoned booking data from server if abandonedId is provided
+    if (abandonedId && !pickup && !dropoff) {
+      console.log('[RequestMove] Fetching abandoned booking data:', abandonedId);
+      hasRestoredRef.current = true;
+      
+      fetch(`/api/abandoned-bookings/${abandonedId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && !data.error) {
+            console.log('[RequestMove] Restored from abandoned booking:', data);
+            if (data.pickupAddress) setPickupAddress(data.pickupAddress);
+            if (data.dropoffAddress) setDropoffAddress(data.dropoffAddress);
+            if (data.loadSize) setLoadSize(data.loadSize);
+            if (data.selectedMoverId) setPreSelectedMoverId(data.selectedMoverId);
+            
+            const resumeStep = data.lastStep || 2;
+            setStep(resumeStep > 1 ? resumeStep : 2);
+            
+            // Store the abandonedId for recovery marking later
+            abandonedBookingRef.current = abandonedId;
+            
+            toast({
+              title: "Welcome Back!",
+              description: "We restored your saved booking. Pick up where you left off!",
+            });
+            
+            // Clean up URL
+            window.history.replaceState({}, '', '/request-move' + (data.selectedMoverId ? `?moverId=${data.selectedMoverId}` : ''));
+          }
+        })
+        .catch(err => {
+          console.log('[RequestMove] Failed to fetch abandoned booking:', err);
+        });
+      return;
+    }
 
     // Check if this is a return from login with full booking data (URL params)
     const isReturningFromLogin = !!(pickup && dropoff && resumeStepParam);

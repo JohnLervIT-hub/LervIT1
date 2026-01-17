@@ -574,31 +574,104 @@ async function sendAbandonedBookingReminders() {
       // Send email reminder if we have email
       if (abandoned.email) {
         try {
-          const bookingUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com'}/request-move`;
+          const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com';
+          // Build URL with all saved booking data for restoration
+          const params = new URLSearchParams();
+          params.set('abandonedId', abandoned.id);
+          if (abandoned.pickupAddress) params.set('pickup', abandoned.pickupAddress);
+          if (abandoned.dropoffAddress) params.set('dropoff', abandoned.dropoffAddress);
+          if (abandoned.selectedMoverId) params.set('moverId', abandoned.selectedMoverId);
+          if (abandoned.loadSize) params.set('loadSize', abandoned.loadSize);
+          params.set('resumeStep', '2');
+          const bookingUrl = `${baseUrl}/request-move?${params.toString()}`;
+          
+          // Determine reminder urgency message based on count
+          const reminderNumber = abandoned.reminderCount + 1;
+          let urgencyMessage = '';
+          if (reminderNumber === 1) {
+            urgencyMessage = "We saved your booking progress!";
+          } else if (reminderNumber === 2) {
+            urgencyMessage = "Don't forget - your booking is still waiting!";
+          } else {
+            urgencyMessage = "Last chance to complete your saved booking!";
+          }
+          
+          const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#EA580C;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">Complete Your Booking</h1>
+              <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">${urgencyMessage}</p>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding:30px;">
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi there,</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">We noticed you started booking a move but didn't finish. Good news - we saved all your details!</p>
+              
+              ${(abandoned.pickupAddress || abandoned.dropoffAddress || moverName) ? `
+              <h3 style="color:#333333;font-size:16px;margin:0 0 15px 0;border-bottom:1px solid #eee;padding-bottom:10px;">Your Saved Details</h3>
+              <table width="100%" style="margin-bottom:25px;">
+                ${abandoned.pickupAddress ? `<tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>From:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${abandoned.pickupAddress}</td>
+                </tr>` : ''}
+                ${abandoned.dropoffAddress ? `<tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>To:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${abandoned.dropoffAddress}</td>
+                </tr>` : ''}
+                ${moverName ? `<tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Mover:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${moverName}</td>
+                </tr>` : ''}
+                ${abandoned.loadSize ? `<tr>
+                  <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Load Size:</strong></td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${abandoned.loadSize}</td>
+                </tr>` : ''}
+              </table>
+              ` : ''}
+              
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 25px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${bookingUrl}" style="display:inline-block;background-color:#EA580C;color:#ffffff;font-size:18px;font-weight:bold;text-decoration:none;padding:15px 40px;border-radius:6px;">Complete Your Booking</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="color:#888888;font-size:13px;line-height:20px;margin:0;text-align:center;">
+                Click the button above to pick up right where you left off.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+              <p style="color:#888888;font-size:11px;margin:5px 0 0 0;">Calgary's Smart Moving Platform</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+          `;
           
           await notificationService.sendEmail({
             to: abandoned.email,
-            subject: 'Complete Your Moving Booking - LervIT',
-            body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1a56db;">Complete Your Moving Booking</h2>
-              <p>Hi there,</p>
-              <p>We noticed you started booking a move but didn't complete it. No worries - we saved your progress!</p>
-              ${abandoned.pickupAddress ? `<p><strong>From:</strong> ${abandoned.pickupAddress}</p>` : ''}
-              ${abandoned.dropoffAddress ? `<p><strong>To:</strong> ${abandoned.dropoffAddress}</p>` : ''}
-              ${moverName ? `<p><strong>Selected Mover:</strong> ${moverName}</p>` : ''}
-              <p style="margin: 20px 0;">
-                <a href="${bookingUrl}" style="background-color: #1a56db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                  Complete Your Booking
-                </a>
-              </p>
-              <p style="color: #666; font-size: 14px;">
-                If you have any questions, our support team is here to help.
-              </p>
-              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-              <p style="color: #999; font-size: 12px;">
-                LervIT - Smart Moving for Calgary
-              </p>
-            </div>`,
+            subject: reminderNumber === 3 ? 'Last Chance: Complete Your Moving Booking - LervIT' : 'Complete Your Moving Booking - LervIT',
+            body,
             type: 'status_update',
           });
           emailsSent++;
@@ -610,9 +683,12 @@ async function sendAbandonedBookingReminders() {
       // Send SMS reminder if we have phone (only for first reminder)
       if (abandoned.phone && abandoned.reminderCount === 0) {
         try {
+          const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com';
+          // Build short URL with abandoned ID (SMS char limit)
+          const smsUrl = `${baseUrl}/request-move?abandonedId=${abandoned.id}&resumeStep=2`;
           await notificationService.sendSMS({
             to: abandoned.phone,
-            message: `LervIT: We saved your moving booking progress! Complete it now: ${process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com'}/request-move`,
+            message: `LervIT: We saved your moving booking! Complete it now: ${smsUrl}`,
             type: 'booking_update',
           });
           smsSent++;

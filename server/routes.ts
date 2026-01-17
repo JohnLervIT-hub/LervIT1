@@ -8485,6 +8485,37 @@ Respond with VALID JSON only:
     }
   });
   
+  // GET /api/abandoned-bookings/:id - Get abandoned booking data for restoration
+  app.get("/api/abandoned-bookings/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const [abandoned] = await db.select()
+        .from(abandonedBookings)
+        .where(eq(abandonedBookings.id, id))
+        .limit(1);
+      
+      if (!abandoned) {
+        return res.status(404).json({ error: "Abandoned booking not found" });
+      }
+      
+      // Return the booking data for restoration
+      res.json({
+        id: abandoned.id,
+        pickupAddress: abandoned.pickupAddress,
+        dropoffAddress: abandoned.dropoffAddress,
+        loadSize: abandoned.loadSize,
+        preferredDate: abandoned.preferredDate,
+        selectedMoverId: abandoned.selectedMoverId,
+        lastStep: abandoned.lastStep,
+        recovered: abandoned.recovered,
+      });
+    } catch (error) {
+      console.error('[Abandoned Booking] Error fetching:', error);
+      res.status(500).json({ error: "Failed to fetch abandoned booking" });
+    }
+  });
+
   // POST /api/abandoned-bookings/:id/recover - Mark abandoned booking as recovered
   app.post("/api/abandoned-bookings/:id/recover", async (req: Request, res: Response) => {
     try {
