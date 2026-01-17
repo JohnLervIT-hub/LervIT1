@@ -574,7 +574,7 @@ async function sendAbandonedBookingReminders() {
       // Send email reminder if we have email
       if (abandoned.email) {
         try {
-          const bookingUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`;
+          const bookingUrl = `${process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com'}/request-move`;
           
           await notificationService.sendEmail({
             to: abandoned.email,
@@ -612,7 +612,7 @@ async function sendAbandonedBookingReminders() {
         try {
           await notificationService.sendSMS({
             to: abandoned.phone,
-            message: `LervIT: We saved your moving booking progress! Complete it now: ${process.env.REPLIT_DEPLOYMENT_URL || 'https://lervit.com'}/request-move`,
+            message: `LervIT: We saved your moving booking progress! Complete it now: ${process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com'}/request-move`,
             type: 'booking_update',
           });
           smsSent++;
@@ -792,7 +792,7 @@ async function sendStripeOnboardingReminders() {
         : 'a few more details';
       
       const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://lervit.com');
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
       
       // Customize message based on reminder count
       const reminderNumber = account.reminderCount + 1;
