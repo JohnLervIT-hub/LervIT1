@@ -29,11 +29,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send } from "lucide-react";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+type AvailableMover = {
+  id: string;
+  name: string;
+  phone: string;
+  vehicleType: string;
+  rating: string;
+  totalMoves: number;
+};
 
 type Booking = {
   id: string;
@@ -68,9 +77,16 @@ export default function AdminMovesPage() {
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [editPickup, setEditPickup] = useState("");
   const [editDropoff, setEditDropoff] = useState("");
+  const [selectedMoverId, setSelectedMoverId] = useState<string>("");
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
+  });
+
+  // Fetch available movers for assignment
+  const { data: availableMovers } = useQuery<AvailableMover[]>({
+    queryKey: ["/api/admin/available-movers"],
+    enabled: !!editingBooking && !editingBooking.mover?.id,
   });
 
   const updateAddressMutation = useMutation({
@@ -155,10 +171,41 @@ export default function AdminMovesPage() {
     resendNotificationsMutation.mutate(editingBooking.id);
   };
 
+  const assignMoverMutation = useMutation({
+    mutationFn: async ({ bookingId, moverId }: { bookingId: string; moverId: string }) => {
+      return apiRequest("POST", `/api/admin/bookings/${bookingId}/assign-mover`, { moverId });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Mover Assigned",
+        description: data.message || "Mover has been assigned successfully.",
+      });
+      setEditingBooking(null);
+      setSelectedMoverId("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Assignment Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAssignMover = () => {
+    if (!editingBooking || !selectedMoverId) return;
+    assignMoverMutation.mutate({
+      bookingId: editingBooking.id,
+      moverId: selectedMoverId,
+    });
+  };
+
   const openEditDialog = (booking: Booking) => {
     setEditingBooking(booking);
     setEditPickup(booking.pickupAddress);
     setEditDropoff(booking.dropoffAddress);
+    setSelectedMoverId("");
   };
 
   const handleSaveAddresses = () => {
@@ -416,6 +463,55 @@ export default function AdminMovesPage() {
                 data-testid="input-edit-dropoff"
               />
             </div>
+
+            {/* Mover Assignment Section - Only show if no mover assigned */}
+            {!editingBooking?.mover?.id && editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
+              <div className="space-y-2 pt-4 border-t">
+                <Label htmlFor="assign-mover" className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-green-600" />
+                  Assign Mover
+                </Label>
+                <div className="flex gap-2">
+                  <Select value={selectedMoverId} onValueChange={setSelectedMoverId}>
+                    <SelectTrigger className="flex-1" data-testid="select-assign-mover">
+                      <SelectValue placeholder="Select a mover..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableMovers?.map((mover) => (
+                        <SelectItem key={mover.id} value={mover.id}>
+                          {mover.name} - {mover.vehicleType} ({mover.totalMoves} moves)
+                        </SelectItem>
+                      ))}
+                      {(!availableMovers || availableMovers.length === 0) && (
+                        <SelectItem value="none" disabled>No available movers</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={handleAssignMover}
+                    disabled={!selectedMoverId || assignMoverMutation.isPending}
+                    className="bg-green-600 hover:bg-green-700"
+                    data-testid="button-assign-mover"
+                  >
+                    {assignMoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Assign
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Show current mover if assigned */}
+            {editingBooking?.mover?.id && (
+              <div className="pt-4 border-t">
+                <Label className="text-muted-foreground">Assigned Mover</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                    <Truck className="w-3 h-3 mr-1" />
+                    {editingBooking.mover.name} - {editingBooking.mover.vehicleType}
+                  </Badge>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-4 pt-4 border-t">

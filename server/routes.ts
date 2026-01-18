@@ -7453,7 +7453,7 @@ Respond with VALID JSON only:
       
       // Notify the mover about the assignment
       moverWebSocket.notifyMover(mover.userId, {
-        type: 'job_assigned',
+        type: 'job_notification',
         bookingId: booking.id,
         pickupAddress: booking.pickupAddress,
         dropoffAddress: booking.dropoffAddress,
@@ -7477,7 +7477,7 @@ Respond with VALID JSON only:
         type: 'job_assigned',
         title: 'New Job Assigned',
         message: `You have been assigned a move from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
-        data: { bookingId: booking.id },
+        bookingId: booking.id,
       });
       
       // Also notify the customer
@@ -7488,7 +7488,7 @@ Respond with VALID JSON only:
           type: 'mover_assigned',
           title: 'Mover Assigned',
           message: `${moverUser.name} has been assigned to your move`,
-          data: { bookingId: booking.id, moverId: mover.id },
+          bookingId: booking.id,
         });
       }
       
