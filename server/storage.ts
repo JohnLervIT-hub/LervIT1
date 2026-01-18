@@ -97,7 +97,8 @@ class PostgresStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    // Case-insensitive email lookup
+    const result = await db.select().from(users).where(sql`lower(${users.email}) = lower(${email})`).limit(1);
     return result[0];
   }
 
