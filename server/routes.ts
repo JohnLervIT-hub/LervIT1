@@ -7405,6 +7405,155 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: MANUAL MOVER ASSIGNMENT =====
+  // Allows admin to manually assign a mover to a booking
+  app.post("/api/admin/bookings/:bookingId/assign-mover", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // SECURITY: Only admins can manually assign movers
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const { bookingId } = req.params;
+      const { moverId } = req.body;
+      
+      if (!moverId) {
+        return res.status(400).json({ error: "Mover ID is required" });
+      }
+      
+      // Get the booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Get the mover
+      const mover = await storage.getMover(moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      // Get mover's user info
+      const moverUser = await storage.getUser(mover.userId);
+      if (!moverUser) {
+        return res.status(404).json({ error: "Mover user not found" });
+      }
+      
+      // Update the booking with the mover
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        moverId: moverId,
+        status: 'accepted', // Mark as accepted since admin assigned it
+      });
+      
+      // Clear any pending job notifications for this booking
+      await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+      
+      // Notify the mover about the assignment
+      moverWebSocket.notifyMover(mover.userId, {
+        type: 'job_assigned',
+        bookingId: booking.id,
+        pickupAddress: booking.pickupAddress,
+        dropoffAddress: booking.dropoffAddress,
+        price: booking.price?.toString(),
+        message: 'You have been assigned a new job by admin',
+      });
+      
+      // Send SMS to mover
+      if (moverUser.phone) {
+        await notificationService.sendJobAssignment(
+          moverUser,
+          booking,
+          (parseFloat(booking.price || '0') * 0.85).toFixed(2), // 85% earnings
+          '0' // No distance calculation for manual assignment
+        );
+      }
+      
+      // Create in-app notification for mover
+      await storage.createNotification({
+        userId: mover.userId,
+        type: 'job_assigned',
+        title: 'New Job Assigned',
+        message: `You have been assigned a move from ${booking.pickupAddress} to ${booking.dropoffAddress}`,
+        data: { bookingId: booking.id },
+      });
+      
+      // Also notify the customer
+      const customer = await storage.getUser(booking.customerId);
+      if (customer) {
+        await storage.createNotification({
+          userId: customer.id,
+          type: 'mover_assigned',
+          title: 'Mover Assigned',
+          message: `${moverUser.name} has been assigned to your move`,
+          data: { bookingId: booking.id, moverId: mover.id },
+        });
+      }
+      
+      logEvent.booking('admin_manual_assignment', {
+        bookingId,
+        moverId,
+        moverName: moverUser.name,
+        adminUserId: user.id,
+      });
+      
+      res.json({
+        success: true,
+        message: `${moverUser.name} has been assigned to this booking`,
+        booking: updatedBooking,
+        mover: {
+          id: mover.id,
+          name: moverUser.name,
+          phone: moverUser.phone,
+          vehicleType: mover.vehicleType,
+        }
+      });
+      
+    } catch (error) {
+      logEvent.error('admin_manual_assignment', error);
+      res.status(500).json({ error: "Failed to assign mover" });
+    }
+  });
+
+  // Get list of available movers for admin assignment dropdown
+  app.get("/api/admin/available-movers", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      // Get all movers who are available
+      const availableMovers = await db.select().from(moversTable).where(eq(moversTable.isAvailable, true));
+      
+      // Get user details for each mover
+      const moversWithDetails = await Promise.all(
+        availableMovers.map(async (mover) => {
+          const moverUser = await storage.getUser(mover.userId);
+          return {
+            id: mover.id,
+            userId: mover.userId,
+            name: moverUser?.name || 'Unknown',
+            phone: moverUser?.phone || '',
+            vehicleType: mover.vehicleType,
+            rating: mover.rating,
+            totalMoves: mover.totalMoves,
+            isVerified: mover.isVerified,
+          };
+        })
+      );
+      
+      res.json(moversWithDetails);
+    } catch (error) {
+      logEvent.error('admin_get_available_movers', error);
+      res.status(500).json({ error: "Failed to get available movers" });
+    }
+  });
+
   // ===== REAL-TIME LOCATION TRACKING =====
   
   // Update mover's current location during active trip
