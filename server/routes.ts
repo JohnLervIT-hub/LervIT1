@@ -1443,6 +1443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         licensePlate: true,
         vehiclePhoto: true,
         moverImage: true,
+        onboardingCompleted: true,
       });
       const updates = validateBody(updateSchema, req.body);
       
