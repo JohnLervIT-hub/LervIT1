@@ -7269,7 +7269,7 @@ Respond with VALID JSON only:
       const recommendedVehicle = booking.aiRecommendedVehicle || booking.loadSize;
       
       // Find nearest movers with matching vehicle types
-      const nearestMovers = findNearestMovers(
+      let nearestMovers = findNearestMovers(
         pickupCoords,
         dropoffCoords,
         (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
@@ -7278,10 +7278,30 @@ Respond with VALID JSON only:
         booking.aiRecommendedVehicle || null
       );
       
+      // If no matching movers found, fall back to ALL available movers (admin override)
+      let usedFallback = false;
+      if (nearestMovers.length === 0 && moversWithUserData.length > 0) {
+        usedFallback = true;
+        // Create a simple list from all operational movers with estimated earnings
+        nearestMovers = moversWithUserData.map(m => ({
+          moverId: m.moverId,
+          userId: m.userId,
+          name: m.name,
+          vehicleType: m.vehicleType,
+          rating: m.rating,
+          totalMoves: m.totalMoves,
+          isAvailable: m.isAvailable,
+          latitude: m.latitude,
+          longitude: m.longitude,
+          distanceToPickup: 10, // Default estimate
+          estimatedEarnings: parseFloat(booking.price || '0') * 0.85, // 85% of booking price
+          priceBreakdown: {} as any, // Fallback - not used in notifications
+        }));
+      }
+      
       if (nearestMovers.length === 0) {
         return res.status(404).json({ 
-          error: "No available movers found matching the vehicle requirements",
-          vehicleRequired: recommendedVehicle,
+          error: "No available movers found. Please ensure movers are online and available.",
           totalOperationalMovers: allMovers.length
         });
       }
@@ -7349,15 +7369,20 @@ Respond with VALID JSON only:
         bookingId,
         adminUserId: user.id,
         moversNotified: successCount,
-        vehicleType: recommendedVehicle
+        vehicleType: recommendedVehicle,
+        usedFallback
       });
       
       res.json({
         success: true,
-        message: `Job notifications sent to ${successCount} mover(s)`,
+        message: usedFallback 
+          ? `No matching vehicle found. Sent to ALL ${successCount} available mover(s)` 
+          : `Job notifications sent to ${successCount} mover(s)`,
         bookingId,
         vehicleType: recommendedVehicle,
+        usedFallback,
         expiresAt,
+        notifiedMovers: successCount,
         moversNotified: notificationResults
       });
       
