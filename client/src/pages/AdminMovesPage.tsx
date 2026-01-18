@@ -430,7 +430,7 @@ export default function AdminMovesPage() {
                 <XCircle className="w-4 h-4 mr-2" />
                 Mark as Refunded
               </Button>
-              {editingBooking?.status === 'pending' && !editingBooking?.mover?.id && (
+              {(editingBooking?.status === 'pending' || editingBooking?.status === 'pending_payment' || !editingBooking?.mover?.id) && editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
                 <Button
                   variant="outline"
                   onClick={handleResendNotifications}

@@ -7221,12 +7221,11 @@ Respond with VALID JSON only:
         return res.status(404).json({ error: "Booking not found" });
       }
       
-      // Only resend for pending bookings that are waiting for mover acceptance
-      if (booking.status !== 'pending' || booking.moverId) {
+      // Only resend for bookings that are not completed or cancelled
+      if (booking.status === 'completed' || booking.status === 'cancelled') {
         return res.status(400).json({ 
-          error: "Can only resend notifications for pending bookings without an assigned mover",
-          currentStatus: booking.status,
-          hasMoverId: !!booking.moverId
+          error: "Cannot resend notifications for completed or cancelled bookings",
+          currentStatus: booking.status
         });
       }
       
