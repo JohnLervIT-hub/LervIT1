@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle } from "lucide-react";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -121,6 +121,26 @@ export default function AdminMovesPage() {
     },
   });
 
+  const resendNotificationsMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      return apiRequest("POST", `/api/admin/resend-job-notifications`, { bookingId });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Notifications Sent",
+        description: `Job notifications sent to ${data.notifiedMovers || 0} movers.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to Send",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleMarkRefunded = () => {
     if (!editingBooking) return;
     updateStatusMutation.mutate({
@@ -128,6 +148,11 @@ export default function AdminMovesPage() {
       status: 'cancelled',
       paymentStatus: 'refunded',
     });
+  };
+
+  const handleResendNotifications = () => {
+    if (!editingBooking) return;
+    resendNotificationsMutation.mutate(editingBooking.id);
   };
 
   const openEditDialog = (booking: Booking) => {
@@ -394,17 +419,31 @@ export default function AdminMovesPage() {
           </div>
 
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="destructive"
-              onClick={handleMarkRefunded}
-              disabled={updateStatusMutation.isPending || editingBooking?.status === 'cancelled'}
-              data-testid="button-mark-refunded"
-              className="sm:mr-auto"
-            >
-              {updateStatusMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              <XCircle className="w-4 h-4 mr-2" />
-              Mark as Refunded
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 sm:mr-auto">
+              <Button
+                variant="destructive"
+                onClick={handleMarkRefunded}
+                disabled={updateStatusMutation.isPending || editingBooking?.status === 'cancelled'}
+                data-testid="button-mark-refunded"
+              >
+                {updateStatusMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                <XCircle className="w-4 h-4 mr-2" />
+                Mark as Refunded
+              </Button>
+              {editingBooking?.status === 'pending' && !editingBooking?.mover?.id && (
+                <Button
+                  variant="outline"
+                  onClick={handleResendNotifications}
+                  disabled={resendNotificationsMutation.isPending}
+                  data-testid="button-resend-notifications"
+                  className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                >
+                  {resendNotificationsMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <Send className="w-4 h-4 mr-2" />
+                  Resend to Movers
+                </Button>
+              )}
+            </div>
             <Button
               variant="outline"
               onClick={() => setEditingBooking(null)}
