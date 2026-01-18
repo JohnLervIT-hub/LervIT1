@@ -29,7 +29,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2 } from "lucide-react";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck } from "lucide-react";
 import { useState, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -38,14 +38,18 @@ type Mover = {
   id: string;
   vehicleType: string;
   vehiclePhoto?: string;
+  vehiclePhotoUrl?: string;
+  profilePhotoUrl?: string;
   isVerified: boolean;
   rating: string;
   totalMoves: number;
   isAvailable: boolean;
+  onboardingCompleted?: boolean;
   user: {
     name: string;
     email: string;
     phone?: string;
+    avatarUrl?: string;
   } | null;
 };
 
@@ -126,6 +130,28 @@ export default function AdminMoversPage() {
       toast({
         title: "Upload failed",
         description: "Could not upload the vehicle photo. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const overrideOnboardingMutation = useMutation({
+    mutationFn: async (moverId: string) => {
+      const res = await apiRequest("PATCH", `/api/admin/movers/${moverId}/override-onboarding`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      toast({
+        title: "Onboarding Override Applied",
+        description: `${selectedMover?.user?.name || "Mover"} can now access their dashboard without completing onboarding.`,
+      });
+      handleCloseDialog();
+    },
+    onError: () => {
+      toast({
+        title: "Override failed",
+        description: "Could not override onboarding. Please try again.",
         variant: "destructive",
       });
     },
@@ -390,6 +416,32 @@ export default function AdminMoversPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              {selectedMover && selectedMover.onboardingCompleted === false && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Onboarding Incomplete</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400">This mover hasn't completed their onboarding wizard.</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => overrideOnboardingMutation.mutate(selectedMover.id)}
+                      disabled={overrideOnboardingMutation.isPending}
+                      className="border-amber-500 text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900"
+                      data-testid="button-override-onboarding"
+                    >
+                      {overrideOnboardingMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <UserCheck className="w-4 h-4 mr-1" />
+                      )}
+                      Override
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {previewUrl && (
                 <div className="w-full h-48 rounded-lg overflow-hidden bg-muted border">
                   <img 

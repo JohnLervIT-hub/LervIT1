@@ -2139,6 +2139,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // PATCH /api/admin/movers/:id/override-onboarding - Admin override to mark onboarding complete
+  app.patch("/api/admin/movers/:id/override-onboarding", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const moverId = req.params.id;
+      const adminId = (req.session as any).userId;
+      
+      const mover = await storage.getMover(moverId);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover not found" });
+      }
+      
+      const result = await storage.updateMover(moverId, { onboardingCompleted: true });
+      
+      console.log(`[Admin] Onboarding override for mover ${moverId} by admin ${adminId}`);
+      
+      res.json({ success: true, message: "Onboarding marked complete", mover: result });
+    } catch (error) {
+      console.error('Admin onboarding override error:', error);
+      res.status(500).json({ error: "Failed to override onboarding" });
+    }
+  });
+  
   // GET /api/admin/movers/pilot - Get all movers by pilot status
   app.get("/api/admin/movers/pilot", async (req: Request, res: Response) => {
     try {
