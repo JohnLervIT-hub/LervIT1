@@ -418,48 +418,55 @@ export default function AdminMovesPage() {
             </div>
           </div>
 
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <div className="flex flex-col sm:flex-row gap-2 sm:mr-auto">
+          <div className="flex flex-col gap-4 pt-4 border-t">
+            {/* Admin Actions Row */}
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="destructive"
+                size="sm"
                 onClick={handleMarkRefunded}
                 disabled={updateStatusMutation.isPending || editingBooking?.status === 'cancelled'}
                 data-testid="button-mark-refunded"
               >
                 {updateStatusMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                <XCircle className="w-4 h-4 mr-2" />
-                Mark as Refunded
+                <XCircle className="w-4 h-4 mr-1" />
+                Refunded
               </Button>
               {(editingBooking?.status === 'pending' || editingBooking?.status === 'pending_payment' || !editingBooking?.mover?.id) && editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={handleResendNotifications}
                   disabled={resendNotificationsMutation.isPending}
                   data-testid="button-resend-notifications"
                   className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
                 >
                   {resendNotificationsMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  <Send className="w-4 h-4 mr-2" />
-                  Resend to Movers
+                  <Send className="w-4 h-4 mr-1" />
+                  Resend
                 </Button>
               )}
             </div>
-            <Button
-              variant="outline"
-              onClick={() => setEditingBooking(null)}
-              data-testid="button-cancel-edit"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveAddresses}
-              disabled={updateAddressMutation.isPending || !editPickup.trim() || !editDropoff.trim()}
-              data-testid="button-save-addresses"
-            >
-              {updateAddressMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Save Changes
-            </Button>
-          </DialogFooter>
+            
+            {/* Standard Dialog Actions */}
+            <DialogFooter className="flex flex-row gap-2 sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setEditingBooking(null)}
+                data-testid="button-cancel-edit"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveAddresses}
+                disabled={updateAddressMutation.isPending || !editPickup.trim() || !editDropoff.trim()}
+                data-testid="button-save-addresses"
+              >
+                {updateAddressMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
