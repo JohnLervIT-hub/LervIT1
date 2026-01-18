@@ -7197,6 +7197,177 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: RESEND JOB NOTIFICATIONS =====
+  // Use this to resend job notifications to movers for a pending booking
+  app.post("/api/admin/resend-job-notifications", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      
+      // SECURITY: Only admins can resend notifications
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const { bookingId } = req.body;
+      
+      if (!bookingId) {
+        return res.status(400).json({ error: "Booking ID is required" });
+      }
+      
+      // Get the booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      // Only resend for pending bookings that are waiting for mover acceptance
+      if (booking.status !== 'pending' || booking.moverId) {
+        return res.status(400).json({ 
+          error: "Can only resend notifications for pending bookings without an assigned mover",
+          currentStatus: booking.status,
+          hasMoverId: !!booking.moverId
+        });
+      }
+      
+      // Delete any existing pending notifications for this booking
+      await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+      
+      // Get matching movers and send notifications
+      const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+      const { toDecimalString } = await import("@shared/utils");
+      
+      const pickupCoords = {
+        lat: parseFloat(String(booking.pickupLatitude || '0')),
+        lng: parseFloat(String(booking.pickupLongitude || '0')),
+      };
+      const dropoffCoords = {
+        lat: parseFloat(String(booking.dropoffLatitude || '0')),
+        lng: parseFloat(String(booking.dropoffLongitude || '0')),
+      };
+      
+      // Get all operational movers
+      const allMovers = await storage.getOperationalMovers();
+      const moversWithUserData = await Promise.all(
+        allMovers.map(async (m) => {
+          const moverUser = await storage.getUser(m.userId);
+          if (!moverUser) return null;
+          return {
+            moverId: m.id,
+            userId: m.userId,
+            name: moverUser.name,
+            vehicleType: m.vehicleType,
+            rating: m.rating || '0',
+            totalMoves: m.totalMoves,
+            isAvailable: m.isAvailable,
+            latitude: m.latitude as number,
+            longitude: m.longitude as number,
+          };
+        })
+      ).then(results => results.filter((m): m is NonNullable<typeof m> => m !== null));
+      
+      // Use AI-recommended vehicle type if available, otherwise use booking's load size
+      const recommendedVehicle = booking.aiRecommendedVehicle || booking.loadSize;
+      
+      // Find nearest movers with matching vehicle types
+      const nearestMovers = findNearestMovers(
+        pickupCoords,
+        dropoffCoords,
+        (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+        moversWithUserData,
+        {},
+        booking.aiRecommendedVehicle || null
+      );
+      
+      if (nearestMovers.length === 0) {
+        return res.status(404).json({ 
+          error: "No available movers found matching the vehicle requirements",
+          vehicleRequired: recommendedVehicle,
+          totalOperationalMovers: allMovers.length
+        });
+      }
+      
+      // Calculate expiry time (10 minutes)
+      const expiresAt = calculateExpiryTime();
+      
+      // Send notifications to each mover
+      const notificationResults: { moverId: string; moverName: string; success: boolean; error?: string }[] = [];
+      
+      await Promise.all(
+        nearestMovers.map(async (mover: any) => {
+          try {
+            // Create job notification record
+            await storage.createJobNotification({
+              bookingId: booking.id,
+              moverId: mover.moverId,
+              distanceToPickup: toDecimalString(mover.distanceToPickup),
+              estimatedEarnings: toDecimalString(mover.estimatedEarnings),
+              status: 'pending',
+              expiresAt,
+            });
+            
+            // Send WebSocket notification
+            moverWebSocket.notifyMover(mover.userId, {
+              type: 'job_notification',
+              bookingId: booking.id,
+              estimatedEarnings: mover.estimatedEarnings.toFixed(2),
+              pickupAddress: booking.pickupAddress,
+              dropoffAddress: booking.dropoffAddress,
+              price: booking.price?.toString(),
+              expiresAt,
+            });
+            
+            // Send SMS notification
+            const moverUser = await storage.getUser(mover.userId);
+            if (moverUser?.phone) {
+              await notificationService.sendJobAssignment(
+                moverUser,
+                booking,
+                mover.estimatedEarnings.toFixed(2),
+                mover.distanceToPickup.toFixed(1)
+              );
+            }
+            
+            notificationResults.push({
+              moverId: mover.moverId,
+              moverName: moverUser?.name || 'Unknown',
+              success: true
+            });
+          } catch (err: any) {
+            notificationResults.push({
+              moverId: mover.moverId,
+              moverName: 'Unknown',
+              success: false,
+              error: err.message
+            });
+          }
+        })
+      );
+      
+      const successCount = notificationResults.filter(r => r.success).length;
+      
+      logEvent.booking('job_notifications_resent', {
+        bookingId,
+        adminUserId: user.id,
+        moversNotified: successCount,
+        vehicleType: recommendedVehicle
+      });
+      
+      res.json({
+        success: true,
+        message: `Job notifications sent to ${successCount} mover(s)`,
+        bookingId,
+        vehicleType: recommendedVehicle,
+        expiresAt,
+        moversNotified: notificationResults
+      });
+      
+    } catch (error) {
+      logEvent.error('admin_resend_notifications', error);
+      res.status(500).json({ error: "Failed to resend job notifications" });
+    }
+  });
+
   // ===== REAL-TIME LOCATION TRACKING =====
   
   // Update mover's current location during active trip
