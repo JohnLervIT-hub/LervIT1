@@ -7245,8 +7245,8 @@ Respond with VALID JSON only:
         lng: parseFloat(String(booking.dropoffLongitude || '0')),
       };
       
-      // Get all operational movers
-      const allMovers = await storage.getOperationalMovers();
+      // Get all available movers (more lenient for admin override - just needs isAvailable=true)
+      const allMovers = await db.select().from(moversTable).where(eq(moversTable.isAvailable, true));
       const moversWithUserData = await Promise.all(
         allMovers.map(async (m) => {
           const moverUser = await storage.getUser(m.userId);
