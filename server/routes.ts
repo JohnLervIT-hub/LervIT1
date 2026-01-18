@@ -7229,6 +7229,19 @@ Respond with VALID JSON only:
         });
       }
       
+      // Only resend for bookings with future or today's date
+      const bookingDate = new Date(booking.preferredDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      bookingDate.setHours(0, 0, 0, 0);
+      
+      if (bookingDate < today) {
+        return res.status(400).json({ 
+          error: "Cannot resend notifications for past bookings. This booking was scheduled for " + booking.preferredDate.toLocaleDateString(),
+          preferredDate: booking.preferredDate
+        });
+      }
+      
       // Delete any existing pending notifications for this booking
       await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
       
