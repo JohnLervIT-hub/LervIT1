@@ -104,8 +104,9 @@ export default function MoverOnboardingWizard() {
     mutationFn: async () => {
       return apiRequest("PATCH", `/api/movers/${mover?.id}`, { onboardingCompleted: true });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+    onSuccess: async () => {
+      // Wait for the query to actually refetch with new data before redirecting
+      await queryClient.refetchQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
       toast({
         title: "Profile Complete!",
         description: "You're all set to start receiving job requests.",
