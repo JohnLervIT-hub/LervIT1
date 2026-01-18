@@ -111,6 +111,26 @@ export default function CustomerDashboard() {
     }
   }, [user]);
 
+  // Uber-style auto-popup for pending reviews on completed bookings
+  useEffect(() => {
+    if (!bookings || isLoading || showTutorial || feedbackDialogOpen) return;
+    
+    // Find completed bookings that need reviews (no review yet)
+    const pendingReviewBooking = bookings.find(
+      (b) => b.status === "completed" && !b.hasReview && b.moverId
+    );
+    
+    if (pendingReviewBooking) {
+      // Small delay to let the page render first
+      const timer = setTimeout(() => {
+        setFeedbackBooking(pendingReviewBooking);
+        setActualLoadSize(pendingReviewBooking.loadSize);
+        setFeedbackDialogOpen(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [bookings, isLoading, showTutorial, feedbackDialogOpen]);
+
   const handleTutorialComplete = async () => {
     setShowTutorial(false);
     await refreshUser();
@@ -757,19 +777,47 @@ export default function CustomerDashboard() {
 
         {/* Post-Move Feedback Dialog */}
         <Dialog open={feedbackDialogOpen} onOpenChange={(open) => {
+          if (!open && feedbackBooking && !feedbackBooking.hasReview) {
+            toast({
+              title: "Review Required",
+              description: "Please rate your mover to continue using the app.",
+              variant: "destructive",
+            });
+            return;
+          }
           setFeedbackDialogOpen(open);
           if (!open) resetFeedbackForm();
         }}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                How was your move?
+          <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => {
+            if (feedbackBooking && !feedbackBooking.hasReview) {
+              e.preventDefault();
+            }
+          }}>
+            <DialogHeader className="text-center">
+              {feedbackBooking?.mover && (
+                <div className="flex flex-col items-center mb-2">
+                  <div className="w-20 h-20 rounded-full overflow-hidden bg-muted border-4 border-primary/20 mb-3">
+                    {feedbackBooking.mover.moverImage ? (
+                      <img 
+                        src={feedbackBooking.mover.moverImage} 
+                        alt={feedbackBooking.mover.user?.name || "Mover"} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-primary/10">
+                        <Truck className="w-8 h-8 text-primary" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-lg font-semibold">{feedbackBooking.mover.user?.name || "Your Mover"}</p>
+                </div>
+              )}
+              <DialogTitle className="flex items-center justify-center gap-2">
+                <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                Rate Your Move
               </DialogTitle>
-              <DialogDescription>
-                {feedbackBooking && (
-                  <>Your feedback helps us improve and train our matching system.</>
-                )}
+              <DialogDescription className="text-center">
+                Your rating helps other customers find great movers
               </DialogDescription>
             </DialogHeader>
 
