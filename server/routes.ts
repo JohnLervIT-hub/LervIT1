@@ -3895,6 +3895,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "Invalid fee calculation" });
         }
         
+        // Get the mover ID even if they don't have a Stripe account (for tracking in metadata)
+        const bookingMoverId = booking.moverId || booking.preSelectedMoverId || '';
+        
         // Build payment intent params - use grossAmountCents for consistent rounding
         const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
           amount: grossAmountCents,
@@ -3911,8 +3914,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             dropoffAddress: booking.dropoffAddress || '',
             isRetry: isRetry ? 'true' : 'false',
             paymentType: moverAccount ? 'destination_charge' : 'platform_charge',
-            moverId: moverAccount?.moverId || '',
+            moverId: bookingMoverId, // Always include mover ID if available (even without Stripe account)
             moverStripeAccountId: moverAccount?.stripeAccountId || '',
+            moverStripeOnboarded: moverAccount ? 'true' : 'false', // Indicates if mover has Stripe account ready
             platformFeePercent: platformFeePercent.toString(),
             platformFeeCents: platformFeeCents.toString(),
           },
@@ -4329,6 +4333,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid fee calculation" });
       }
       
+      // Get the mover ID even if they don't have a Stripe account (for tracking in metadata)
+      const bookingMoverId = booking.moverId || booking.preSelectedMoverId || '';
+      
       // Build payment intent params for saved card - use grossAmountCents for consistent rounding
       const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
         amount: grossAmountCents,
@@ -4341,8 +4348,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           bookingId: booking.id,
           customerId: user.id,
           paymentType: moverAccount ? 'destination_charge' : 'platform_charge',
-          moverId: moverAccount?.moverId || '',
+          moverId: bookingMoverId, // Always include mover ID if available (even without Stripe account)
           moverStripeAccountId: moverAccount?.stripeAccountId || '',
+          moverStripeOnboarded: moverAccount ? 'true' : 'false', // Indicates if mover has Stripe account ready
           platformFeePercent: platformFeePercent.toString(),
         },
       };
