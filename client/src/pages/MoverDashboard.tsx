@@ -283,12 +283,21 @@ export default function MoverDashboard() {
     select: (data) => Array.isArray(data) ? data[0] : data,
   });
 
-  // Redirect new movers to onboarding wizard if not completed
+  // Redirect new movers to onboarding wizard if not completed AND missing required fields
+  // Old movers who already have profile info should not be redirected
   useEffect(() => {
     if (mover && mover.onboardingCompleted === false) {
-      setLocation("/mover-onboarding");
+      // Only redirect if actually missing required onboarding info
+      const hasAvatar = user?.avatarUrl || mover.profilePhotoUrl;
+      const hasVehicleType = mover.vehicleType;
+      const hasVehiclePhoto = mover.vehiclePhotoUrl;
+      
+      // If missing any required field, redirect to onboarding
+      if (!hasAvatar || !hasVehicleType || !hasVehiclePhoto) {
+        setLocation("/mover-onboarding");
+      }
     }
-  }, [mover, setLocation]);
+  }, [mover, user, setLocation]);
 
   // Get verification status
   const { data: verificationStatus, isLoading: isVerificationLoading } = useQuery<any>({
