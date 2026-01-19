@@ -97,6 +97,9 @@ export const movers = pgTable("movers", {
   pilotNotes: text("pilot_notes"),
   pilotExpiresAt: timestamp("pilot_expires_at"),
   onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  // Profile completion reminder tracking
+  profileReminderCount: integer("profile_reminder_count").default(0).notNull(),
+  lastProfileReminderAt: timestamp("last_profile_reminder_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("movers_user_id_idx").on(table.userId),
