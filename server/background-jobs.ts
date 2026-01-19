@@ -1106,6 +1106,10 @@ async function sendProfileCompletionReminders() {
                 <strong>Did you know?</strong> ${benefit}
               </p>
               <p>It only takes a few minutes to complete, and you'll start receiving job matches right away.</p>
+              <p style="margin-top: 16px;">
+                <strong>Need help?</strong> Watch our quick tutorial video: 
+                <a href="https://youtu.be/qaRKHwrUTQU?si=EuPfgMvyVkm9l4Ro" style="color: #1a56db;">How to Complete Your Mover Profile</a>
+              </p>
               <div style="margin: 24px 0;">
                 <a href="${baseUrl}/mover-onboarding" 
                    style="background-color: #1a56db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
