@@ -1097,33 +1097,70 @@ async function sendProfileCompletionReminders() {
             to: user.email,
             subject,
             type: 'status_update',
-            body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1a56db;">Complete Your Mover Profile</h2>
-              <p>Hi ${user.name || 'there'},</p>
-              <p>${urgency}! Your LervIT mover profile is missing a few things that help customers choose you.</p>
-              <p><strong>What's still needed:</strong> ${stillNeeded}</p>
-              <p style="background: #f0f9ff; padding: 12px; border-radius: 6px; border-left: 4px solid #1a56db;">
-                <strong>Did you know?</strong> ${benefit}
+            body: `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+              <p style="color:#ffffff;margin:8px 0 0 0;font-size:14px;">Smart Moving Platform</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">Complete Your Mover Profile</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">
+                Hi ${user.name || 'there'},
               </p>
-              <p>It only takes a few minutes to complete, and you'll start receiving job matches right away.</p>
-              <p style="margin-top: 16px;">
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">
+                ${urgency}! Your LervIT mover profile is missing a few things that help customers choose you.
+              </p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">
+                <strong>What's still needed:</strong> ${stillNeeded}
+              </p>
+              <div style="background-color:#E8F5E9;border-left:4px solid #4CAF50;padding:15px;margin:0 0 20px 0;border-radius:4px;">
+                <p style="color:#2E7D32;font-size:14px;margin:0;">
+                  <strong>Did you know?</strong> ${benefit}
+                </p>
+              </div>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">
+                It only takes a few minutes to complete, and you'll start receiving job matches right away.
+              </p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">
                 <strong>Need help?</strong> Watch our quick tutorial video: 
-                <a href="https://youtu.be/qaRKHwrUTQU?si=EuPfgMvyVkm9l4Ro" style="color: #1a56db;">How to Complete Your Mover Profile</a>
+                <a href="https://youtu.be/qaRKHwrUTQU?si=EuPfgMvyVkm9l4Ro" style="color:#4CAF50;text-decoration:underline;">How to Complete Your Mover Profile</a>
               </p>
-              <div style="margin: 24px 0;">
+              <div style="text-align:center;margin:30px 0;">
                 <a href="${baseUrl}/mover-onboarding" 
-                   style="background-color: #1a56db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                   style="display:inline-block;background-color:#4CAF50;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:15px 40px;border-radius:6px;">
                   Complete My Profile
                 </a>
               </div>
-              <p style="color: #666; font-size: 14px;">
+              <p style="color:#777777;font-size:14px;line-height:22px;margin:20px 0 0 0;">
                 Questions? Reply to this email or visit our support page.
               </p>
-              <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-              <p style="color: #999; font-size: 12px;">
-                You're receiving this because you signed up as a mover on LervIT but haven't completed your profile yet.
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0 0 5px 0;">
+                You're receiving this because you signed up as a mover on LervIT.
               </p>
-            </div>`,
+              <p style="color:#999999;font-size:12px;margin:0;">
+                &copy; ${new Date().getFullYear()} LervIT. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
           });
           emailsSent++;
         } catch (err) {
