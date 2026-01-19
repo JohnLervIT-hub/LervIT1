@@ -62,6 +62,11 @@ export function initBackgroundJobs() {
   cron.schedule('0 */6 * * *', async () => {
     await sendStripeOnboardingReminders();
   });
+  
+  // Send profile completion reminders every 6 hours (offset by 3 hours from Stripe reminders)
+  cron.schedule('0 3,9,15,21 * * *', async () => {
+    await sendProfileCompletionReminders();
+  });
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
 }
@@ -959,6 +964,207 @@ async function sendStripeOnboardingReminders() {
     return { emailsSent, smsSent };
   } catch (error) {
     logEvent.error('sendStripeOnboardingReminders', error);
+    return { emailsSent: 0, smsSent: 0 };
+  }
+}
+
+// Track sent profile reminders in memory to avoid duplicates within same session
+const sentProfileReminders = new Set<string>();
+
+// Constants for profile completion reminders
+const PROFILE_REMINDER_INTERVALS = [
+  24 * 60 * 60 * 1000,      // 1st reminder: 24 hours after signup
+  3 * 24 * 60 * 60 * 1000,  // 2nd reminder: 3 days after signup
+  7 * 24 * 60 * 60 * 1000,  // 3rd reminder: 7 days after signup
+];
+const MAX_PROFILE_REMINDERS = 3;
+
+async function sendProfileCompletionReminders() {
+  try {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Find movers with incomplete profiles:
+    // - Created > 24 hours ago
+    // - onboardingCompleted = false OR missing key profile fields
+    // - Less than max reminders sent
+    // - Last reminder was at least 24 hours ago (or never sent)
+    const incompleteMovers = await db.select({
+      moverId: movers.id,
+      userId: movers.userId,
+      vehicleType: movers.vehicleType,
+      vehiclePhoto: movers.vehiclePhoto,
+      moverImage: movers.moverImage,
+      bio: movers.bio,
+      onboardingCompleted: movers.onboardingCompleted,
+      profileReminderCount: movers.profileReminderCount,
+      lastProfileReminderAt: movers.lastProfileReminderAt,
+      createdAt: movers.createdAt,
+    })
+    .from(movers)
+    .where(
+      and(
+        lt(movers.createdAt, oneDayAgo),
+        lt(movers.profileReminderCount, MAX_PROFILE_REMINDERS),
+        or(
+          eq(movers.onboardingCompleted, false),
+          isNull(movers.moverImage),
+          isNull(movers.vehiclePhoto),
+          isNull(movers.bio)
+        )
+      )
+    );
+    
+    let emailsSent = 0;
+    let smsSent = 0;
+    
+    for (const mover of incompleteMovers) {
+      const reminderKey = `profile_${mover.moverId}_${mover.profileReminderCount}`;
+      
+      // Skip if already sent this reminder in this session
+      if (sentProfileReminders.has(reminderKey)) {
+        continue;
+      }
+      
+      // Check if enough time has passed since account creation
+      const timeSinceCreation = now.getTime() - new Date(mover.createdAt).getTime();
+      const requiredInterval = PROFILE_REMINDER_INTERVALS[mover.profileReminderCount] || PROFILE_REMINDER_INTERVALS[PROFILE_REMINDER_INTERVALS.length - 1];
+      
+      if (timeSinceCreation < requiredInterval) {
+        continue;
+      }
+      
+      // Check last reminder time - ensure at least 24 hours between reminders
+      if (mover.lastProfileReminderAt) {
+        const timeSinceLastReminder = now.getTime() - new Date(mover.lastProfileReminderAt).getTime();
+        if (timeSinceLastReminder < 24 * 60 * 60 * 1000) {
+          continue;
+        }
+      }
+      
+      // Get user info
+      const userResult = await db.select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+      })
+      .from(users)
+      .where(eq(users.id, mover.userId))
+      .limit(1);
+      
+      const user = userResult[0];
+      if (!user) continue;
+      
+      // Determine what's missing from profile
+      const missingItems: string[] = [];
+      if (!mover.onboardingCompleted) missingItems.push('onboarding wizard');
+      if (!mover.moverImage) missingItems.push('profile photo');
+      if (!mover.vehiclePhoto) missingItems.push('vehicle photo');
+      if (!mover.bio) missingItems.push('bio/description');
+      
+      const stillNeeded = missingItems.length > 0 
+        ? missingItems.slice(0, 3).join(', ')
+        : 'complete your profile';
+      
+      const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      
+      // Customize message based on reminder count
+      const reminderNumber = mover.profileReminderCount + 1;
+      let subject: string;
+      let urgency: string;
+      let benefit: string;
+      
+      if (reminderNumber === 1) {
+        subject = 'Complete Your Mover Profile - LervIT';
+        urgency = 'Quick reminder';
+        benefit = 'Complete profiles get 3x more job offers';
+      } else if (reminderNumber === 2) {
+        subject = 'Movers Are Getting Jobs - Are You? - LervIT';
+        urgency = 'Don\'t miss out';
+        benefit = 'Movers with photos and bios earn 40% more';
+      } else {
+        subject = 'Final Reminder: Complete Your Profile - LervIT';
+        urgency = 'Last chance reminder';
+        benefit = 'Incomplete profiles are hidden from customers';
+      }
+      
+      // Send email reminder
+      if (user.email) {
+        try {
+          await notificationService.sendEmail({
+            to: user.email,
+            subject,
+            type: 'status_update',
+            body: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #1a56db;">Complete Your Mover Profile</h2>
+              <p>Hi ${user.name || 'there'},</p>
+              <p>${urgency}! Your LervIT mover profile is missing a few things that help customers choose you.</p>
+              <p><strong>What's still needed:</strong> ${stillNeeded}</p>
+              <p style="background: #f0f9ff; padding: 12px; border-radius: 6px; border-left: 4px solid #1a56db;">
+                <strong>Did you know?</strong> ${benefit}
+              </p>
+              <p>It only takes a few minutes to complete, and you'll start receiving job matches right away.</p>
+              <div style="margin: 24px 0;">
+                <a href="${baseUrl}/mover-onboarding" 
+                   style="background-color: #1a56db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  Complete My Profile
+                </a>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                Questions? Reply to this email or visit our support page.
+              </p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+              <p style="color: #999; font-size: 12px;">
+                You're receiving this because you signed up as a mover on LervIT but haven't completed your profile yet.
+              </p>
+            </div>`,
+          });
+          emailsSent++;
+        } catch (err) {
+          console.error(`[Profile Reminder] Failed to send email to ${user.email}:`, err);
+        }
+      }
+      
+      // Send SMS reminder (only for 2nd and 3rd reminders to avoid spamming)
+      if (user.phone && reminderNumber >= 2) {
+        try {
+          const smsMessage = `LervIT: ${urgency}! Complete your mover profile to start receiving jobs. ${benefit}. Takes 2 min: ${baseUrl}/mover-onboarding`;
+          await notificationService.sendSMS({
+            to: user.phone,
+            message: smsMessage,
+            type: 'booking_update',
+          });
+          smsSent++;
+        } catch (err) {
+          console.error(`[Profile Reminder] Failed to send SMS to ${user.phone}:`, err);
+        }
+      }
+      
+      // Update reminder count
+      await db.update(movers)
+        .set({
+          profileReminderCount: mover.profileReminderCount + 1,
+          lastProfileReminderAt: now,
+        })
+        .where(eq(movers.id, mover.moverId));
+      
+      sentProfileReminders.add(reminderKey);
+    }
+    
+    if (emailsSent > 0 || smsSent > 0) {
+      logger.info({ 
+        event: 'profile_completion_reminders', 
+        emailsSent, 
+        smsSent,
+        total: incompleteMovers.length 
+      }, `Sent ${emailsSent} emails and ${smsSent} SMS for incomplete mover profiles`);
+    }
+    
+    return { emailsSent, smsSent };
+  } catch (error) {
+    logEvent.error('sendProfileCompletionReminders', error);
     return { emailsSent: 0, smsSent: 0 };
   }
 }
