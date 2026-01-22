@@ -43,7 +43,7 @@ import { moverWebSocket, generateWebSocketToken } from "./websocket";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray, sql, desc, inArray, lt } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -4950,6 +4950,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (moverAccounts.length > 0) {
             const moverAccount = moverAccounts[0];
+            const wasFullyOnboarded = moverAccount.chargesEnabled && moverAccount.payoutsEnabled;
+            const isNowFullyOnboarded = updatedAccount.charges_enabled && updatedAccount.payouts_enabled;
             
             const newOnboardingStatus = updatedAccount.details_submitted ? 'complete' : 
                                         (updatedAccount.requirements?.currently_due?.length ? 'restricted' : 'in_progress');
@@ -4970,6 +4972,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
               moverId: moverAccount.moverId,
               onboardingStatus: newOnboardingStatus,
             });
+            
+            // AUTO-TRANSFER: If mover just became fully onboarded, process any pending earnings
+            if (!wasFullyOnboarded && isNowFullyOnboarded) {
+              logEvent.payment('mover_onboarding_complete_auto_transfer_check', { 
+                moverId: moverAccount.moverId,
+                stripeAccountId: updatedAccount.id,
+              });
+              
+              // Find pending earnings for this mover that need transfer
+              const pendingEarnings = await db.select()
+                .from(moverEarnings)
+                .where(and(
+                  eq(moverEarnings.moverId, moverAccount.moverId),
+                  or(
+                    eq(moverEarnings.status, 'pending'),
+                    eq(moverEarnings.status, 'needs_backfill')
+                  ),
+                  isNull(moverEarnings.stripeTransferId)
+                ));
+              
+              for (const earning of pendingEarnings) {
+                try {
+                  // Get the booking to calculate correct fee
+                  const booking = await storage.getBooking(earning.bookingId);
+                  if (!booking || booking.paymentStatus !== 'paid') continue;
+                  
+                  // Calculate amounts using centralized helper
+                  const grossAmount = parseFloat(booking.price || '0');
+                  const feeCalc = calculatePlatformFee(grossAmount, booking.loadSize);
+                  const { moverPayoutCents, platformFeeCents, platformFeePercent } = feeCalc;
+                  
+                  // Create transfer to mover's connected account
+                  const transfer = await stripe.transfers.create({
+                    amount: moverPayoutCents,
+                    currency: 'cad',
+                    destination: updatedAccount.id,
+                    metadata: {
+                      bookingId: earning.bookingId,
+                      moverId: moverAccount.moverId,
+                      grossAmount: grossAmount.toFixed(2),
+                      platformFee: (platformFeeCents / 100).toFixed(2),
+                      processedBy: 'auto_onboarding_complete',
+                    },
+                  }, {
+                    idempotencyKey: `auto-transfer-onboard-${earning.bookingId}`,
+                  });
+                  
+                  // Update earnings record
+                  await db.update(moverEarnings)
+                    .set({
+                      stripeTransferId: transfer.id,
+                      status: 'paid',
+                      paidAt: new Date(),
+                    })
+                    .where(eq(moverEarnings.id, earning.id));
+                  
+                  logEvent.payment('auto_transfer_on_onboarding_success', {
+                    moverId: moverAccount.moverId,
+                    bookingId: earning.bookingId,
+                    transferId: transfer.id,
+                    amount: moverPayoutCents / 100,
+                  });
+                } catch (transferError: any) {
+                  logEvent.error('auto_transfer_on_onboarding_failed', transferError, {
+                    moverId: moverAccount.moverId,
+                    bookingId: earning.bookingId,
+                  });
+                }
+              }
+            }
           }
           break;
         
