@@ -1310,6 +1310,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? new Date(mover.lastLocationUpdate) > ONE_HOUR_AGO
             : false;
           
+          // Get Stripe Connect account status for this mover
+          const stripeAccounts = await db.select()
+            .from(moverStripeAccounts)
+            .where(eq(moverStripeAccounts.moverId, mover.userId))
+            .limit(1);
+          const stripeAccount = stripeAccounts[0] || null;
+          
           return {
             ...mover,
             // Mask location for privacy - only show city/area, not full street address
@@ -1317,7 +1324,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distance,
             drivingMinutes,
             isLiveLocation,
-            user: user ? { name: user.name, email: user.email, phone: user.phone } : null
+            user: user ? { name: user.name, email: user.email, phone: user.phone } : null,
+            stripeConnect: stripeAccount ? {
+              status: stripeAccount.onboardingStatus,
+              chargesEnabled: stripeAccount.chargesEnabled,
+              payoutsEnabled: stripeAccount.payoutsEnabled,
+            } : null
           };
         })
       );

@@ -29,13 +29,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck } from "lucide-react";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck, CreditCard } from "lucide-react";
 import { useState, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type Mover = {
   id: string;
+  userId: string;
   vehicleType: string;
   vehiclePhoto?: string;
   vehiclePhotoUrl?: string;
@@ -50,6 +51,11 @@ type Mover = {
     email: string;
     phone?: string;
     avatarUrl?: string;
+  } | null;
+  stripeConnect: {
+    status: string;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
   } | null;
 };
 
@@ -329,6 +335,7 @@ export default function AdminMoversPage() {
                       <TableHead>Rating</TableHead>
                       <TableHead>Moves</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Stripe</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -378,6 +385,25 @@ export default function AdminMoversPage() {
                               <Badge className="bg-blue-500 text-white">Available</Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {m.stripeConnect ? (
+                            m.stripeConnect.chargesEnabled && m.stripeConnect.payoutsEnabled ? (
+                              <Badge className="bg-green-500 text-white" data-testid={`stripe-enabled-${m.userId}`}>
+                                <CreditCard className="w-3 h-3 mr-1" />
+                                Connected
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-amber-600 border-amber-500" data-testid={`stripe-pending-${m.userId}`}>
+                                <CreditCard className="w-3 h-3 mr-1" />
+                                Pending
+                              </Badge>
+                            )
+                          ) : (
+                            <Badge variant="secondary" className="text-muted-foreground" data-testid={`stripe-none-${m.userId}`}>
+                              Not Setup
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Button 
