@@ -9096,6 +9096,35 @@ Respond with VALID JSON only:
       const results: any[] = [];
       
       for (const account of accounts.data) {
+        const onboardingStatus = account.charges_enabled && account.payouts_enabled 
+          ? 'complete' 
+          : account.details_submitted 
+            ? 'pending' 
+            : 'incomplete';
+        
+        // First check if this Stripe account already exists in our database
+        const existingByStripeId = await db.select()
+          .from(moverStripeAccounts)
+          .where(eq(moverStripeAccounts.stripeAccountId, account.id))
+          .limit(1);
+        
+        if (existingByStripeId.length > 0) {
+          // Update existing record by Stripe account ID
+          await db.update(moverStripeAccounts)
+            .set({
+              onboardingStatus,
+              chargesEnabled: account.charges_enabled || false,
+              payoutsEnabled: account.payouts_enabled || false,
+              detailsSubmitted: account.details_submitted || false,
+              updatedAt: new Date(),
+            })
+            .where(eq(moverStripeAccounts.stripeAccountId, account.id));
+          updated++;
+          results.push({ accountId: account.id, email: account.email, moverId: existingByStripeId[0].moverId, status: 'updated', chargesEnabled: account.charges_enabled, payoutsEnabled: account.payouts_enabled });
+          synced++;
+          continue;
+        }
+        
         // Try to find the mover by email
         const email = account.email;
         if (!email) {
@@ -9116,20 +9145,14 @@ Respond with VALID JSON only:
         
         const userId = userMatches[0].id;
         
-        // Check if we already have a record for this mover
-        const existingRecords = await db.select()
+        // Check if we already have a record for this mover (different Stripe account)
+        const existingByMoverId = await db.select()
           .from(moverStripeAccounts)
           .where(eq(moverStripeAccounts.moverId, userId))
           .limit(1);
         
-        const onboardingStatus = account.charges_enabled && account.payouts_enabled 
-          ? 'complete' 
-          : account.details_submitted 
-            ? 'pending' 
-            : 'incomplete';
-        
-        if (existingRecords.length > 0) {
-          // Update existing record
+        if (existingByMoverId.length > 0) {
+          // Update existing mover record with new Stripe account
           await db.update(moverStripeAccounts)
             .set({
               stripeAccountId: account.id,
