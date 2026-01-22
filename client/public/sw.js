@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const STATIC_CACHE = `lervit-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `lervit-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `lervit-api-${CACHE_VERSION}`;
@@ -16,11 +16,15 @@ const STATIC_ASSETS = [
 
 const CACHEABLE_API_ROUTES = [
   '/api/movers',
-  '/api/bookings'
+  '/api/bookings',
+  '/api/config/support-phone',
+  '/api/config/stripe-public-key'
 ];
 
+const OFFLINE_FALLBACK_PAGE = '/';
+
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker...');
+  console.log('[SW] Installing service worker v3...');
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => {
@@ -32,7 +36,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker...');
+  console.log('[SW] Activating service worker v3...');
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
@@ -70,7 +74,7 @@ self.addEventListener('fetch', (event) => {
     );
     
     if (isCacheableRoute) {
-      event.respondWith(networkFirstWithCache(request, API_CACHE));
+      event.respondWith(networkFirstWithCache(request, API_CACHE, 5000));
     }
     return;
   }
@@ -80,28 +84,37 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (url.pathname.match(/\.(js|css|woff2?|ttf|eot)$/)) {
+    event.respondWith(staleWhileRevalidate(request, STATIC_CACHE));
+    return;
+  }
+
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirstWithCache(request, STATIC_CACHE));
+    event.respondWith(networkFirstWithCache(request, STATIC_CACHE, 3000));
     return;
   }
 
   event.respondWith(staleWhileRevalidate(request, DYNAMIC_CACHE));
 });
 
-async function networkFirstWithCache(request, cacheName) {
+async function networkFirstWithCache(request, cacheName, timeout = 5000) {
   const cache = await caches.open(cacheName);
   
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
   try {
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetch(request, { signal: controller.signal });
+    clearTimeout(timeoutId);
     
     if (networkResponse.ok) {
       const responseToCache = networkResponse.clone();
       cache.put(request, responseToCache);
-      console.log('[SW] Cached:', request.url);
     }
     
     return networkResponse;
   } catch (error) {
+    clearTimeout(timeoutId);
     console.log('[SW] Network failed, checking cache for:', request.url);
     const cachedResponse = await cache.match(request);
     
@@ -111,7 +124,7 @@ async function networkFirstWithCache(request, cacheName) {
     }
     
     if (request.mode === 'navigate') {
-      const fallback = await cache.match('/');
+      const fallback = await cache.match(OFFLINE_FALLBACK_PAGE);
       if (fallback) {
         console.log('[SW] Serving app shell fallback');
         return fallback;
@@ -169,4 +182,49 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  
+  try {
+    const data = event.data.json();
+    const options = {
+      body: data.body || 'New notification from LervIT',
+      icon: '/icon-192.png',
+      badge: '/favicon-32.png',
+      vibrate: [100, 50, 100],
+      data: {
+        url: data.url || '/'
+      },
+      actions: data.actions || []
+    };
+    
+    event.waitUntil(
+      self.registration.showNotification(data.title || 'LervIT', options)
+    );
+  } catch (e) {
+    console.log('[SW] Push event error:', e);
+  }
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  
+  const url = event.notification.data?.url || '/';
+  
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            client.navigate(url);
+            return client.focus();
+          }
+        }
+        if (clients.openWindow) {
+          return clients.openWindow(url);
+        }
+      })
+  );
 });

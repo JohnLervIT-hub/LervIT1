@@ -14,6 +14,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageLoader } from "@/components/PageLoader";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import Header from "@/components/Header";
 
 // Import directly to avoid HMR timing issues
@@ -259,6 +260,7 @@ function App() {
                 </div>
                 <MobileBottomNav />
                 <JobNotificationSound />
+                <InstallPrompt />
               </ErrorBoundary>
                 <Toaster />
               </TooltipProvider>
