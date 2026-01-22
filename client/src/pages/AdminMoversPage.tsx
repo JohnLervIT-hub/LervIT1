@@ -109,7 +109,11 @@ export default function AdminMoversPage() {
   const syncStripeMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/sync-stripe-accounts");
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to sync Stripe accounts");
+      }
+      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
@@ -119,10 +123,11 @@ export default function AdminMoversPage() {
         description: `Synced ${data.synced} account(s): ${data.created} created, ${data.updated} updated.`,
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Stripe sync error:', error);
       toast({
         title: "Stripe sync failed",
-        description: "Could not sync Stripe accounts. Please try again.",
+        description: error?.message || "Could not sync Stripe accounts. Please try again.",
         variant: "destructive",
       });
     },
