@@ -1310,10 +1310,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? new Date(mover.lastLocationUpdate) > ONE_HOUR_AGO
             : false;
           
-          // Get Stripe Connect account status for this mover
+          // Get Stripe Connect account status for this mover (moverId references movers.id)
           const stripeAccounts = await db.select()
             .from(moverStripeAccounts)
-            .where(eq(moverStripeAccounts.moverId, mover.userId))
+            .where(eq(moverStripeAccounts.moverId, mover.id))
             .limit(1);
           const stripeAccount = stripeAccounts[0] || null;
           
@@ -9145,7 +9145,7 @@ Respond with VALID JSON only:
         
         const userId = userMatches[0].id;
         
-        // Check if this user is actually a mover
+        // Check if this user is actually a mover and get their mover ID
         const moverCheck = await db.select()
           .from(moversTable)
           .where(eq(moversTable.userId, userId))
@@ -9156,10 +9156,12 @@ Respond with VALID JSON only:
           continue;
         }
         
+        const moverId = moverCheck[0].id; // Use mover's ID, not user's ID
+        
         // Check if we already have a record for this mover (different Stripe account)
         const existingByMoverId = await db.select()
           .from(moverStripeAccounts)
-          .where(eq(moverStripeAccounts.moverId, userId))
+          .where(eq(moverStripeAccounts.moverId, moverId))
           .limit(1);
         
         if (existingByMoverId.length > 0) {
@@ -9173,13 +9175,13 @@ Respond with VALID JSON only:
               detailsSubmitted: account.details_submitted || false,
               updatedAt: new Date(),
             })
-            .where(eq(moverStripeAccounts.moverId, userId));
+            .where(eq(moverStripeAccounts.moverId, moverId));
           updated++;
-          results.push({ accountId: account.id, email, userId, status: 'updated', chargesEnabled: account.charges_enabled, payoutsEnabled: account.payouts_enabled });
+          results.push({ accountId: account.id, email, moverId, status: 'updated', chargesEnabled: account.charges_enabled, payoutsEnabled: account.payouts_enabled });
         } else {
           // Create new record
           await db.insert(moverStripeAccounts).values({
-            moverId: userId,
+            moverId,
             stripeAccountId: account.id,
             accountType: 'express',
             onboardingStatus,
