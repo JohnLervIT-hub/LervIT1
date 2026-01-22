@@ -106,6 +106,28 @@ export default function AdminMoversPage() {
     },
   });
 
+  const syncStripeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/sync-stripe-accounts");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      
+      toast({
+        title: "Stripe accounts synced",
+        description: `Synced ${data.synced} account(s): ${data.created} created, ${data.updated} updated.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Stripe sync failed",
+        description: "Could not sync Stripe accounts. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const uploadPhotoMutation = useMutation({
     mutationFn: async ({ moverId, file }: { moverId: string; file: File }) => {
       const formData = new FormData();
@@ -247,16 +269,28 @@ export default function AdminMoversPage() {
               </div>
               <h1 className="text-3xl md:text-4xl font-bold">All Movers</h1>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              data-testid="button-sync-mover-counts"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-              {syncMutation.isPending ? 'Syncing...' : 'Sync Mover Counts'}
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => syncStripeMutation.mutate()}
+                disabled={syncStripeMutation.isPending}
+                data-testid="button-sync-stripe-accounts"
+              >
+                <CreditCard className={`w-4 h-4 mr-2 ${syncStripeMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncStripeMutation.isPending ? 'Syncing...' : 'Sync Stripe'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                data-testid="button-sync-mover-counts"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncMutation.isPending ? 'Syncing...' : 'Sync Mover Counts'}
+              </Button>
+            </div>
           </div>
           <p className="text-muted-foreground text-lg">Manage registered movers and their verification status</p>
         </div>

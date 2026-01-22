@@ -9077,6 +9077,112 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: Sync Stripe Connect Accounts from Stripe =====
+  // Fetches all connected accounts from Stripe and syncs them to our database
+  app.post("/api/admin/sync-stripe-accounts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      logEvent.payment('stripe_accounts_sync_started', {
+        triggeredBy: (req as any).user?.id,
+      });
+      
+      // Fetch all connected accounts from Stripe
+      const accounts = await stripe.accounts.list({ limit: 100 });
+      
+      let synced = 0;
+      let created = 0;
+      let updated = 0;
+      const results: any[] = [];
+      
+      for (const account of accounts.data) {
+        // Try to find the mover by email
+        const email = account.email;
+        if (!email) {
+          results.push({ accountId: account.id, status: 'skipped', reason: 'No email on Stripe account' });
+          continue;
+        }
+        
+        // Find user by email
+        const userMatches = await db.select()
+          .from(usersTable)
+          .where(eq(usersTable.email, email))
+          .limit(1);
+        
+        if (userMatches.length === 0) {
+          results.push({ accountId: account.id, email, status: 'skipped', reason: 'No matching user found' });
+          continue;
+        }
+        
+        const userId = userMatches[0].id;
+        
+        // Check if we already have a record for this mover
+        const existingRecords = await db.select()
+          .from(moverStripeAccounts)
+          .where(eq(moverStripeAccounts.moverId, userId))
+          .limit(1);
+        
+        const onboardingStatus = account.charges_enabled && account.payouts_enabled 
+          ? 'complete' 
+          : account.details_submitted 
+            ? 'pending' 
+            : 'incomplete';
+        
+        if (existingRecords.length > 0) {
+          // Update existing record
+          await db.update(moverStripeAccounts)
+            .set({
+              stripeAccountId: account.id,
+              onboardingStatus,
+              chargesEnabled: account.charges_enabled || false,
+              payoutsEnabled: account.payouts_enabled || false,
+              detailsSubmitted: account.details_submitted || false,
+              updatedAt: new Date(),
+            })
+            .where(eq(moverStripeAccounts.moverId, userId));
+          updated++;
+          results.push({ accountId: account.id, email, userId, status: 'updated', chargesEnabled: account.charges_enabled, payoutsEnabled: account.payouts_enabled });
+        } else {
+          // Create new record
+          await db.insert(moverStripeAccounts).values({
+            moverId: userId,
+            stripeAccountId: account.id,
+            accountType: 'express',
+            onboardingStatus,
+            chargesEnabled: account.charges_enabled || false,
+            payoutsEnabled: account.payouts_enabled || false,
+            detailsSubmitted: account.details_submitted || false,
+            defaultCurrency: account.default_currency || 'cad',
+            country: account.country || 'CA',
+          });
+          created++;
+          results.push({ accountId: account.id, email, userId, status: 'created', chargesEnabled: account.charges_enabled, payoutsEnabled: account.payouts_enabled });
+        }
+        synced++;
+      }
+      
+      logEvent.payment('stripe_accounts_sync_completed', {
+        totalAccounts: accounts.data.length,
+        synced,
+        created,
+        updated,
+      });
+      
+      res.json({
+        success: true,
+        totalStripeAccounts: accounts.data.length,
+        synced,
+        created,
+        updated,
+        results,
+      });
+    } catch (error: any) {
+      console.error('Stripe accounts sync error:', error);
+      logEvent.error('stripe_accounts_sync_failed', error);
+      res.status(500).json({ error: error.message || "Failed to sync Stripe accounts" });
+    }
+  });
+
   // ===== TEST ENDPOINT: Simulate Auto-Transfer on Onboarding =====
   // This endpoint simulates what happens when a mover completes Stripe Connect onboarding
   // Use this to test the auto-transfer flow without going through actual onboarding
