@@ -9145,6 +9145,17 @@ Respond with VALID JSON only:
         
         const userId = userMatches[0].id;
         
+        // Check if this user is actually a mover
+        const moverCheck = await db.select()
+          .from(moversTable)
+          .where(eq(moversTable.userId, userId))
+          .limit(1);
+        
+        if (moverCheck.length === 0) {
+          results.push({ accountId: account.id, email, status: 'skipped', reason: 'User is not a mover' });
+          continue;
+        }
+        
         // Check if we already have a record for this mover (different Stripe account)
         const existingByMoverId = await db.select()
           .from(moverStripeAccounts)
