@@ -9065,6 +9065,148 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== TEST ENDPOINT: Simulate Auto-Transfer on Onboarding =====
+  // This endpoint simulates what happens when a mover completes Stripe Connect onboarding
+  // Use this to test the auto-transfer flow without going through actual onboarding
+  app.post("/api/admin/test-auto-transfer/:moverId", async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const { moverId } = req.params;
+      
+      // Get mover's Stripe account
+      const moverAccounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, moverId))
+        .limit(1);
+      
+      if (moverAccounts.length === 0) {
+        return res.status(404).json({ error: "Mover has no Stripe Connect account" });
+      }
+      
+      const moverAccount = moverAccounts[0];
+      
+      if (!moverAccount.chargesEnabled || !moverAccount.payoutsEnabled) {
+        return res.status(400).json({ 
+          error: "Mover is not fully onboarded yet",
+          chargesEnabled: moverAccount.chargesEnabled,
+          payoutsEnabled: moverAccount.payoutsEnabled,
+          hint: "Mover must complete Stripe Connect onboarding first"
+        });
+      }
+      
+      logEvent.payment('test_auto_transfer_triggered', { 
+        moverId,
+        triggeredBy: user.id,
+      });
+      
+      // Find pending earnings for this mover that need transfer
+      const pendingEarnings = await db.select()
+        .from(moverEarnings)
+        .where(and(
+          eq(moverEarnings.moverId, moverId),
+          or(
+            eq(moverEarnings.status, 'pending'),
+            eq(moverEarnings.status, 'needs_backfill')
+          ),
+          isNull(moverEarnings.stripeTransferId)
+        ));
+      
+      if (pendingEarnings.length === 0) {
+        return res.json({ 
+          success: true, 
+          message: "No pending earnings found for this mover",
+          transfersCreated: 0 
+        });
+      }
+      
+      const results: any[] = [];
+      
+      for (const earning of pendingEarnings) {
+        try {
+          // Get the booking to calculate correct fee
+          const booking = await storage.getBooking(earning.bookingId);
+          if (!booking || booking.paymentStatus !== 'paid') {
+            results.push({
+              bookingId: earning.bookingId,
+              status: 'skipped',
+              reason: booking ? 'Payment not completed' : 'Booking not found'
+            });
+            continue;
+          }
+          
+          // Calculate amounts using centralized helper
+          const grossAmount = parseFloat(booking.price || '0');
+          const feeCalc = calculatePlatformFee(grossAmount, booking.loadSize);
+          const { moverPayoutCents, platformFeeCents } = feeCalc;
+          
+          // Create transfer to mover's connected account
+          const transfer = await stripe.transfers.create({
+            amount: moverPayoutCents,
+            currency: 'cad',
+            destination: moverAccount.stripeAccountId,
+            metadata: {
+              bookingId: earning.bookingId,
+              moverId,
+              grossAmount: grossAmount.toFixed(2),
+              platformFee: (platformFeeCents / 100).toFixed(2),
+              processedBy: 'test_auto_transfer',
+            },
+          }, {
+            idempotencyKey: `test-auto-transfer-${earning.bookingId}-${Date.now()}`,
+          });
+          
+          // Update earnings record
+          await db.update(moverEarnings)
+            .set({
+              stripeTransferId: transfer.id,
+              status: 'paid',
+              paidAt: new Date(),
+            })
+            .where(eq(moverEarnings.id, earning.id));
+          
+          results.push({
+            bookingId: earning.bookingId,
+            status: 'success',
+            transferId: transfer.id,
+            amount: moverPayoutCents / 100,
+          });
+          
+          logEvent.payment('test_auto_transfer_success', {
+            moverId,
+            bookingId: earning.bookingId,
+            transferId: transfer.id,
+            amount: moverPayoutCents / 100,
+          });
+        } catch (transferError: any) {
+          results.push({
+            bookingId: earning.bookingId,
+            status: 'failed',
+            error: transferError.message,
+          });
+          
+          logEvent.error('test_auto_transfer_failed', transferError, {
+            moverId,
+            bookingId: earning.bookingId,
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Processed ${results.length} pending earnings`,
+        transfersCreated: results.filter(r => r.status === 'success').length,
+        results,
+      });
+    } catch (error: any) {
+      console.error('[Admin] Test auto-transfer error:', error);
+      res.status(500).json({ error: error.message || "Failed to run test auto-transfer" });
+    }
+  });
+
   // ===== ABANDONED BOOKINGS API =====
   
   // POST /api/abandoned-bookings - Save abandoned booking for reminder follow-up
