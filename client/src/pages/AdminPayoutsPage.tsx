@@ -111,6 +111,29 @@ type MarkManuallyPaidResponse = {
   failed: { earningsId: string; reason: string }[];
 };
 
+type SyncStripeResponse = {
+  success: boolean;
+  message: string;
+  status: {
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+    onboardingStatus: string;
+    currentlyDue: string[];
+  };
+};
+
+type ManualTransferResponse = {
+  success: boolean;
+  message: string;
+  transfer: {
+    id: string;
+    amount: string;
+    grossAmount: string;
+    platformFee: string;
+  };
+};
+
 export default function AdminPayoutsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -192,6 +215,50 @@ export default function AdminPayoutsPage() {
       toast({
         title: "Error",
         description: error.message || "Failed to mark as paid",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const syncStripeStatusMutation = useMutation({
+    mutationFn: async (moverId: string) => {
+      const res = await apiRequest("POST", `/api/admin/sync-mover-stripe/${moverId}`);
+      return res.json();
+    },
+    onSuccess: (data: SyncStripeResponse) => {
+      toast({
+        title: "Stripe Status Synced",
+        description: `Charges: ${data.status.chargesEnabled ? 'Enabled' : 'Disabled'}, Payouts: ${data.status.payoutsEnabled ? 'Enabled' : 'Disabled'}`,
+      });
+      refetchPending();
+      refetchEarnings();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Failed to sync Stripe status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const manualTransferMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const res = await apiRequest("POST", `/api/admin/manual-transfer/${bookingId}`);
+      return res.json();
+    },
+    onSuccess: (data: ManualTransferResponse) => {
+      toast({
+        title: "Transfer Successful",
+        description: `Transferred $${data.transfer.amount} to mover (Platform fee: $${data.transfer.platformFee})`,
+      });
+      refetchPending();
+      refetchEarnings();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Transfer Failed",
+        description: error.message || "Failed to create transfer",
         variant: "destructive",
       });
     },
@@ -489,6 +556,7 @@ export default function AdminPayoutsPage() {
                           <TableHead className="text-right">Net Payout</TableHead>
                           <TableHead>Stripe Status</TableHead>
                           <TableHead>Date</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -522,6 +590,41 @@ export default function AdminPayoutsPage() {
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">
                               {payout.createdAt ? format(new Date(payout.createdAt), "MMM d, yyyy") : "-"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                {payout.hasStripeAccount && !payout.isReadyToPay && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => syncStripeStatusMutation.mutate(payout.moverId)}
+                                    disabled={syncStripeStatusMutation.isPending}
+                                    data-testid={`button-sync-stripe-${payout.moverId}`}
+                                  >
+                                    {syncStripeStatusMutation.isPending ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-3 h-3" />
+                                    )}
+                                  </Button>
+                                )}
+                                {payout.isReadyToPay && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-green-600 border-green-300 hover:bg-green-50"
+                                    onClick={() => manualTransferMutation.mutate(payout.bookingId)}
+                                    disabled={manualTransferMutation.isPending}
+                                    data-testid={`button-transfer-${payout.bookingId}`}
+                                  >
+                                    {manualTransferMutation.isPending ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Send className="w-3 h-3" />
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -615,6 +718,7 @@ export default function AdminPayoutsPage() {
                         <TableHead className="text-right">Net</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Created</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -636,6 +740,27 @@ export default function AdminPayoutsPage() {
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {earning.createdAt ? format(new Date(earning.createdAt), "MMM d, yyyy") : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {(earning.status === 'needs_backfill' || earning._isMissing || earning.status === 'pending') && (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-green-600 border-green-300 hover:bg-green-50"
+                                  onClick={() => manualTransferMutation.mutate(earning.bookingId)}
+                                  disabled={manualTransferMutation.isPending}
+                                  title="Create Stripe transfer to mover"
+                                  data-testid={`button-transfer-all-${earning.bookingId}`}
+                                >
+                                  {manualTransferMutation.isPending ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Send className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

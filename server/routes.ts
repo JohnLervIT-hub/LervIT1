@@ -8808,6 +8808,191 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: SYNC MOVER STRIPE STATUS =====
+  // Manually refresh a mover's Stripe Connect status from Stripe API
+  app.post("/api/admin/sync-mover-stripe/:moverId", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { moverId } = req.params;
+      
+      // Get mover's Stripe account from our database
+      const moverAccounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, moverId))
+        .limit(1);
+      
+      if (moverAccounts.length === 0) {
+        return res.status(404).json({ error: "No Stripe account found for this mover" });
+      }
+      
+      const moverAccount = moverAccounts[0];
+      
+      // Fetch latest status from Stripe
+      const stripeAccount = await stripe.accounts.retrieve(moverAccount.stripeAccountId);
+      
+      // Determine onboarding status
+      const newOnboardingStatus = stripeAccount.details_submitted ? 'complete' : 
+                                  (stripeAccount.requirements?.currently_due?.length ? 'restricted' : 'in_progress');
+      
+      // Update our database with latest Stripe status
+      await db.update(moverStripeAccounts)
+        .set({
+          chargesEnabled: stripeAccount.charges_enabled,
+          payoutsEnabled: stripeAccount.payouts_enabled,
+          detailsSubmitted: stripeAccount.details_submitted,
+          onboardingStatus: newOnboardingStatus,
+          requirementsDue: stripeAccount.requirements?.eventually_due || [],
+          currentlyDue: stripeAccount.requirements?.currently_due || [],
+          updatedAt: new Date(),
+        })
+        .where(eq(moverStripeAccounts.id, moverAccount.id));
+      
+      console.log(`[Admin] Synced Stripe status for mover ${moverId}: charges=${stripeAccount.charges_enabled}, payouts=${stripeAccount.payouts_enabled}`);
+      
+      res.json({
+        success: true,
+        message: "Stripe status synced successfully",
+        status: {
+          chargesEnabled: stripeAccount.charges_enabled,
+          payoutsEnabled: stripeAccount.payouts_enabled,
+          detailsSubmitted: stripeAccount.details_submitted,
+          onboardingStatus: newOnboardingStatus,
+          currentlyDue: stripeAccount.requirements?.currently_due || [],
+        }
+      });
+    } catch (error: any) {
+      console.error('[Admin] Sync mover Stripe error:', error);
+      res.status(500).json({ error: error.message || "Failed to sync Stripe status" });
+    }
+  });
+
+  // ===== ADMIN: MANUAL TRANSFER FOR BOOKING =====
+  // Create a manual Stripe transfer for a platform charge booking
+  app.post("/api/admin/manual-transfer/:bookingId", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const { bookingId } = req.params;
+      
+      // Get the booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      if (!booking.moverId) {
+        return res.status(400).json({ error: "Booking has no assigned mover" });
+      }
+      
+      if (booking.paymentStatus !== 'succeeded') {
+        return res.status(400).json({ error: "Booking payment not completed" });
+      }
+      
+      // Check if already transferred
+      const existingEarnings = await db.select()
+        .from(moverEarnings)
+        .where(eq(moverEarnings.bookingId, bookingId))
+        .limit(1);
+      
+      if (existingEarnings.length > 0 && existingEarnings[0].stripeTransferId) {
+        return res.status(400).json({ 
+          error: "Transfer already exists",
+          transferId: existingEarnings[0].stripeTransferId 
+        });
+      }
+      
+      // Get mover's Stripe account
+      const moverAccounts = await db.select()
+        .from(moverStripeAccounts)
+        .where(eq(moverStripeAccounts.moverId, booking.moverId))
+        .limit(1);
+      
+      if (moverAccounts.length === 0) {
+        return res.status(400).json({ error: "Mover has no Stripe Connect account" });
+      }
+      
+      const moverAccount = moverAccounts[0];
+      
+      if (!moverAccount.payoutsEnabled) {
+        return res.status(400).json({ 
+          error: "Mover's Stripe account not ready for payouts. They need to complete onboarding.",
+          chargesEnabled: moverAccount.chargesEnabled,
+          payoutsEnabled: moverAccount.payoutsEnabled,
+        });
+      }
+      
+      // Calculate amounts using the centralized fee calculation helper
+      const grossAmount = parseFloat(booking.price || '0');
+      const feeCalc = calculatePlatformFee(grossAmount, booking.loadSize);
+      const { grossAmountCents, platformFeeCents, moverPayoutCents, platformFeePercent } = feeCalc;
+      const platformFeeAmount = platformFeeCents / 100;
+      const netAmount = moverPayoutCents / 100;
+      
+      // Create Stripe Transfer (use moverPayoutCents from fee calculation)
+      const transfer = await stripe.transfers.create({
+        amount: moverPayoutCents,
+        currency: 'cad',
+        destination: moverAccount.stripeAccountId,
+        metadata: {
+          bookingId,
+          moverId: booking.moverId,
+          grossAmount: grossAmount.toFixed(2),
+          platformFee: platformFeeAmount.toFixed(2),
+          processedBy: 'admin_manual_transfer',
+        },
+      }, {
+        idempotencyKey: `manual-transfer-${bookingId}`,
+      });
+      
+      // Create or update earnings record
+      if (existingEarnings.length > 0) {
+        await db.update(moverEarnings)
+          .set({
+            stripeTransferId: transfer.id,
+            status: 'paid',
+            paidAt: new Date(),
+          })
+          .where(eq(moverEarnings.id, existingEarnings[0].id));
+      } else {
+        await db.insert(moverEarnings).values({
+          moverId: booking.moverId,
+          bookingId,
+          grossAmount: grossAmount.toFixed(2),
+          platformFeePercent: platformFeePercent.toFixed(2),
+          platformFeeAmount: platformFeeAmount.toFixed(2),
+          netAmount: netAmount.toFixed(2),
+          stripeTransferId: transfer.id,
+          status: 'paid',
+          paidAt: new Date(),
+        });
+      }
+      
+      // Update booking with commission data
+      await storage.updateBooking(bookingId, {
+        platformFeePercent: platformFeePercent.toString(),
+        platformFeeAmount: platformFeeAmount.toFixed(2),
+        moverNetAmount: netAmount.toFixed(2),
+      });
+      
+      console.log(`[Admin] Manual transfer created: $${netAmount.toFixed(2)} to mover ${booking.moverId} (transfer: ${transfer.id})`);
+      
+      res.json({
+        success: true,
+        message: `Successfully transferred $${netAmount.toFixed(2)} to mover`,
+        transfer: {
+          id: transfer.id,
+          amount: netAmount.toFixed(2),
+          grossAmount: grossAmount.toFixed(2),
+          platformFee: platformFeeAmount.toFixed(2),
+        }
+      });
+    } catch (error: any) {
+      console.error('[Admin] Manual transfer error:', error);
+      res.status(500).json({ error: error.message || "Failed to create transfer" });
+    }
+  });
+
   // ===== ABANDONED BOOKINGS API =====
   
   // POST /api/abandoned-bookings - Save abandoned booking for reminder follow-up
