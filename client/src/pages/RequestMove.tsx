@@ -2050,6 +2050,7 @@ export default function RequestMove() {
             breakdown={priceBreakdown}
             isCalculating={isCalculatingPrice}
             error={pricingError}
+            showFirstMoveDiscount={!!user && !user.hasUsedFirstMoveDiscount}
           />
         </div>
       </div>

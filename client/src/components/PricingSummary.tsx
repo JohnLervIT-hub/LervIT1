@@ -3,7 +3,8 @@ import { memo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift } from "lucide-react";
 import type { PriceBreakdown } from "@shared/pricing";
 
 interface PricingSummaryProps {
@@ -11,9 +12,10 @@ interface PricingSummaryProps {
   isCalculating?: boolean;
   error?: string | null;
   className?: string;
+  showFirstMoveDiscount?: boolean;
 }
 
-export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className }: PricingSummaryProps) {
+export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showFirstMoveDiscount = false }: PricingSummaryProps) {
   if (error) {
     return (
       <Card className={`${className} border-destructive/30`} data-testid="pricing-error">
@@ -175,6 +177,23 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
           </div>
         )}
 
+        {/* First-Move Discount */}
+        {showFirstMoveDiscount && (
+          <div className="flex items-center justify-between py-2 px-3 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="fee-first-move-discount">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-green-500/20 flex items-center justify-center">
+                <Gift className="w-3 h-3 text-green-600 dark:text-green-400" />
+              </div>
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">First-Move Discount</span>
+              <Badge variant="default" className="bg-green-500 text-white text-[10px]">
+                <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                NEW
+              </Badge>
+            </div>
+            <span className="text-sm font-semibold text-green-600 dark:text-green-400">-10%</span>
+          </div>
+        )}
+
         <Separator />
 
         {/* Total Price - Hero Section */}
@@ -185,16 +204,29 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
           <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl" />
           <div className="relative flex items-center justify-between">
             <div>
-              <p className="text-xs text-primary-foreground/80 mb-1">Estimated Total</p>
+              <p className="text-xs text-primary-foreground/80 mb-1">
+                {showFirstMoveDiscount ? "Estimated (With Discount)" : "Estimated Total"}
+              </p>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold tracking-tight">
-                  ${breakdown.totalCost.toFixed(2)}
-                </span>
+                {showFirstMoveDiscount ? (
+                  <>
+                    <span className="text-lg line-through text-primary-foreground/50 mr-1">
+                      ${breakdown.totalCost.toFixed(2)}
+                    </span>
+                    <span className="text-3xl font-bold tracking-tight">
+                      ${(breakdown.totalCost * 0.9).toFixed(2)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-3xl font-bold tracking-tight">
+                    ${breakdown.totalCost.toFixed(2)}
+                  </span>
+                )}
                 <span className="text-sm font-medium text-primary-foreground/80">CAD</span>
               </div>
             </div>
             <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
-              <Zap className="w-6 h-6" />
+              {showFirstMoveDiscount ? <Gift className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
             </div>
           </div>
         </div>
