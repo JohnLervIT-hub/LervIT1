@@ -191,7 +191,7 @@ export default function MyBookings() {
     onSuccess: () => {
       // Invalidate all booking-related queries
       queryClient.invalidateQueries({ predicate: (query) => 
-        query.queryKey[0]?.toString().includes('/api/bookings')
+        query.queryKey[0]?.toString().includes('/api/bookings') || false
       });
       toast({
         title: "Booking cancelled",
@@ -753,7 +753,7 @@ export default function MyBookings() {
                         Message Mover
                       </Button>
                     )}
-                    {booking.status === "completed" && booking.paymentStatus === "paid" && booking.mover && !booking.hasReview && (
+                    {booking.status === "completed" && booking.mover && !booking.hasReview && (
                       <Button
                         onClick={() => setLocation(`/review/${booking.id}`)}
                         data-testid={`button-review-${booking.id}`}
@@ -762,7 +762,7 @@ export default function MyBookings() {
                         Leave Review
                       </Button>
                     )}
-                    {booking.status === "completed" && booking.paymentStatus === "paid" && booking.hasReview && (
+                    {booking.status === "completed" && booking.hasReview && (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="w-4 h-4 text-green-500" />
                         Review submitted

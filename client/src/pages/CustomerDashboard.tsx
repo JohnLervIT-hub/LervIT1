@@ -117,9 +117,9 @@ export default function CustomerDashboard() {
     if (!bookings || isLoading || showTutorial || feedbackDialogOpen) return;
     
     // Find completed bookings that need reviews (no review yet)
-    // Only prompt if both booking status is completed AND payment is successful
+    // Only prompt when mover has successfully completed the job (status === "completed")
     const pendingReviewBooking = bookings.find(
-      (b) => b.status === "completed" && b.paymentStatus === "paid" && !b.hasReview && b.moverId
+      (b) => b.status === "completed" && !b.hasReview && b.moverId
     );
     
     if (pendingReviewBooking) {
