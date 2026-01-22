@@ -98,7 +98,7 @@ export function InstallPrompt() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 -mt-1 -mr-1"
+                    className="-mt-1 -mr-1"
                     onClick={handleDismiss}
                     data-testid="button-dismiss-install"
                   >
@@ -122,10 +122,10 @@ export function InstallPrompt() {
                 </div>
 
                 {isIOS ? (
-                  <div className="mt-3 p-2 bg-muted rounded-lg">
+                  <div className="mt-3 p-2 bg-muted rounded-lg" data-testid="ios-install-instructions">
                     <p className="text-xs text-muted-foreground">
-                      Tap <span className="inline-flex items-center mx-1 px-1 py-0.5 bg-background rounded text-[10px]">
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                      Tap <span className="inline-flex items-center mx-1 px-1 py-0.5 bg-background rounded text-[10px]" data-testid="icon-share">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                           <path d="M12 2L8 6h3v8h2V6h3L12 2z"/>
                           <path d="M4 14v6h16v-6h-2v4H6v-4H4z"/>
                         </svg>
