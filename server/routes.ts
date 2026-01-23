@@ -7575,7 +7575,7 @@ Respond with VALID JSON only:
         pickupAddress: booking.pickupAddress,
         dropoffAddress: booking.dropoffAddress,
         price: booking.price?.toString(),
-        message: 'You have been assigned a new job by admin',
+        data: { message: 'You have been assigned a new job by admin' },
       });
       
       // Send SMS to mover
