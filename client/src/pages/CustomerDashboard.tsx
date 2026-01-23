@@ -723,7 +723,7 @@ export default function CustomerDashboard() {
                 <div>
                   <p className="font-medium text-sm">Need help?</p>
                   <p className="text-xs text-muted-foreground">
-                    Call us: <a href="tel:+18336362879" className="text-primary font-medium hover:underline" data-testid="link-toll-free">1-833-636-2879</a>
+                    Call us: <a href="tel:+18889820885" className="text-primary font-medium hover:underline" data-testid="link-toll-free">1-888-982-0885</a>
                   </p>
                 </div>
               </div>

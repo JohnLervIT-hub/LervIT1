@@ -229,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Return formatted phone number for display
     res.json({ 
       phoneNumber: phoneNumber,
-      formattedPhone: phoneNumber ? formatPhoneNumber(phoneNumber) : "1-833-LERVIT"
+      formattedPhone: phoneNumber ? formatPhoneNumber(phoneNumber) : "1-888-982-0885"
     });
   });
   

@@ -398,12 +398,12 @@ export default function Support() {
               <span>support@lervit.com</span>
             </div>
             <a 
-              href="tel:+18336362879" 
+              href="tel:+18889820885" 
               className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full text-sm hover:bg-muted transition-colors"
               data-testid="link-support-phone"
             >
               <Phone className="w-4 h-4 text-primary" />
-              <span>1-833-636-2879</span>
+              <span>1-888-982-0885</span>
             </a>
           </div>
         </div>
