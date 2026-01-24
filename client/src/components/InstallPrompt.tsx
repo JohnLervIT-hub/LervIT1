@@ -122,15 +122,26 @@ export function InstallPrompt() {
                 </div>
 
                 {isIOS ? (
-                  <div className="mt-3 p-2 bg-muted rounded-lg" data-testid="ios-install-instructions">
-                    <p className="text-xs text-muted-foreground">
-                      Tap <span className="inline-flex items-center mx-1 px-1 py-0.5 bg-background rounded text-[10px]" data-testid="icon-share">
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M12 2L8 6h3v8h2V6h3L12 2z"/>
-                          <path d="M4 14v6h16v-6h-2v4H6v-4H4z"/>
-                        </svg>
-                      </span> then <strong>"Add to Home Screen"</strong>
-                    </p>
+                  <div className="mt-3 space-y-2" data-testid="ios-install-instructions">
+                    <p className="text-xs font-medium text-foreground">How to install:</p>
+                    <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">1</span>
+                      <p className="text-xs text-muted-foreground">
+                        Tap the <span className="inline-flex items-center mx-1 px-1.5 py-0.5 bg-background rounded border text-[10px] font-medium" data-testid="icon-share">
+                          <svg className="w-3.5 h-3.5 mr-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 2L8 6h3v8h2V6h3L12 2z"/>
+                            <path d="M4 14v6h16v-6h-2v4H6v-4H4z"/>
+                          </svg>
+                          Share
+                        </span> button below
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">2</span>
+                      <p className="text-xs text-muted-foreground">
+                        Scroll and tap <strong>"Add to Home Screen"</strong>
+                      </p>
+                    </div>
                   </div>
                 ) : (
                   <Button
