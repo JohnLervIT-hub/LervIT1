@@ -22,7 +22,7 @@ import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
@@ -330,6 +330,8 @@ export default function RequestMove() {
     onSuccess: (data) => {
       setCreatedBooking(data);
       setShowSuccessDialog(true);
+      // Invalidate bookings cache so My Bookings page shows the new booking immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
     },
     onError: (error: Error) => {
       toast({
