@@ -19,29 +19,29 @@ function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" |
       : "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)] dark:drop-shadow-[0_0_18px_rgba(80,160,255,0.55)]";
 
   return (
-    <div className={`${className} ${glowClass} opacity-80 dark:opacity-95`}>
+    <div className={`${className} ${glowClass} opacity-90 dark:opacity-95`}>
       {kind === "truck" && (
         <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
-          <path d="M6 38V18c0-2 2-4 4-4h26v24H6Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
-          <path d="M36 22h12l8 8v8H36V22Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
-          <circle cx="18" cy="42" r="4" stroke="rgba(255,190,90,0.9)" strokeWidth="2.5" />
-          <circle cx="46" cy="42" r="4" stroke="rgba(255,190,90,0.9)" strokeWidth="2.5" />
+          <path d="M6 38V18c0-2 2-4 4-4h26v24H6Z" className="stroke-blue-500 dark:stroke-[rgba(130,190,255,0.9)]" strokeWidth="2.5" />
+          <path d="M36 22h12l8 8v8H36V22Z" className="stroke-blue-500 dark:stroke-[rgba(130,190,255,0.9)]" strokeWidth="2.5" />
+          <circle cx="18" cy="42" r="4" className="stroke-orange-500 dark:stroke-[rgba(255,190,90,0.9)]" strokeWidth="2.5" />
+          <circle cx="46" cy="42" r="4" className="stroke-orange-500 dark:stroke-[rgba(255,190,90,0.9)]" strokeWidth="2.5" />
         </svg>
       )}
 
       {kind === "pin" && (
         <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
           <path d="M32 58s18-16 18-30A18 18 0 0 0 14 28c0 14 18 30 18 30Z"
-                stroke="rgba(255,120,200,0.9)" strokeWidth="2.5" />
-          <circle cx="32" cy="28" r="6" stroke="rgba(180,230,255,0.9)" strokeWidth="2.5" />
+                className="stroke-pink-500 dark:stroke-[rgba(255,120,200,0.9)]" strokeWidth="2.5" />
+          <circle cx="32" cy="28" r="6" className="stroke-blue-400 dark:stroke-[rgba(180,230,255,0.9)]" strokeWidth="2.5" />
         </svg>
       )}
 
       {kind === "box" && (
         <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
-          <path d="M12 24 32 14l20 10v26L32 60 12 50V24Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
-          <path d="M12 24l20 10 20-10" stroke="rgba(130,190,255,0.6)" strokeWidth="2.5" />
-          <path d="M32 34v26" stroke="rgba(255,190,90,0.6)" strokeWidth="2.5" />
+          <path d="M12 24 32 14l20 10v26L32 60 12 50V24Z" className="stroke-blue-500 dark:stroke-[rgba(130,190,255,0.9)]" strokeWidth="2.5" />
+          <path d="M12 24l20 10 20-10" className="stroke-blue-400 dark:stroke-[rgba(130,190,255,0.6)]" strokeWidth="2.5" />
+          <path d="M32 34v26" className="stroke-orange-400 dark:stroke-[rgba(255,190,90,0.6)]" strokeWidth="2.5" />
         </svg>
       )}
     </div>
