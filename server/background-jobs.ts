@@ -1141,7 +1141,10 @@ async function sendProfileCompletionReminders() {
                 </a>
               </div>
               <p style="color:#777777;font-size:14px;line-height:22px;margin:20px 0 0 0;">
-                Questions? Reply to this email or visit our support page.
+                <strong>Need help?</strong> Call our toll-free support line: <a href="tel:1-888-982-0885" style="color:#4CAF50;text-decoration:none;font-weight:bold;">1-888-982-0885</a>
+              </p>
+              <p style="color:#777777;font-size:14px;line-height:22px;margin:10px 0 0 0;">
+                Our team is ready to guide you through the profile completion process.
               </p>
             </td>
           </tr>
@@ -1171,7 +1174,7 @@ async function sendProfileCompletionReminders() {
       // Send SMS reminder (only for 2nd and 3rd reminders to avoid spamming)
       if (user.phone && reminderNumber >= 2) {
         try {
-          const smsMessage = `LervIT: ${urgency}! Complete your mover profile to start receiving jobs. ${benefit}. Takes 2 min: ${baseUrl}/mover-onboarding`;
+          const smsMessage = `LervIT: ${urgency}! Complete your mover profile to start receiving jobs. ${benefit}. Takes 2 min: ${baseUrl}/mover-onboarding - Need help? Call 1-888-982-0885`;
           await notificationService.sendSMS({
             to: user.phone,
             message: smsMessage,
