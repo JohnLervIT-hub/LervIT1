@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
   const glowClass =
@@ -183,6 +184,9 @@ export default function Login() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#050A14]">
       <LervitBackground />
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
       <div className="relative z-10 flex min-h-screen items-center justify-center px-3 sm:px-4 py-6 sm:py-12">
       <Card className="w-full max-w-md bg-[rgba(10,14,24,0.65)] border-white/[0.08] backdrop-blur-[14px] shadow-[0_25px_80px_rgba(0,0,0,0.55)] mx-2 sm:mx-0">
         <CardHeader className="space-y-1 text-center pb-2">
