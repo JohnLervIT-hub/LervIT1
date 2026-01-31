@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { FormFieldError } from "@/components/FormFieldError";
 import { Truck, Eye, EyeOff, Loader2, Package, Users, Phone, ArrowLeft, CheckCircle, Mail } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
 
@@ -280,7 +281,10 @@ export default function Signup() {
   // Step 1: Phone Number Entry (Uber-style)
   if (step === "phone") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <div className="absolute top-4 right-4 z-20">
+          <ThemeToggle />
+        </div>
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
@@ -344,7 +348,10 @@ export default function Signup() {
   // Step 2: OTP Verification (Uber-style)
   if (step === "otp") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <div className="absolute top-4 right-4 z-20">
+          <ThemeToggle />
+        </div>
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1 text-center pb-2">
             <button
@@ -475,7 +482,10 @@ export default function Signup() {
   // Step 4: Success - Check Email (after account creation)
   if (step === "success") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+        <div className="absolute top-4 right-4 z-20">
+          <ThemeToggle />
+        </div>
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
@@ -523,7 +533,10 @@ export default function Signup() {
 
   // Step 3: Account Details (after phone verification)
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+    <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
