@@ -7,7 +7,75 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert, MapPin, Package } from "lucide-react";
+
+function Icon({ kind, className, glow }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
+  const glowColors = {
+    blue: "drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]",
+    pink: "drop-shadow-[0_0_12px_rgba(236,72,153,0.5)]",
+    orange: "drop-shadow-[0_0_12px_rgba(249,115,22,0.5)]",
+  };
+  const glowClass = glow ? glowColors[glow] : "";
+  
+  const iconColors = {
+    blue: "text-blue-400/70",
+    pink: "text-pink-400/70",
+    orange: "text-orange-400/70",
+  };
+  const colorClass = glow ? iconColors[glow] : "text-blue-400/70";
+  
+  const icons = {
+    truck: <Truck className={`w-full h-full ${colorClass} ${glowClass}`} />,
+    pin: <MapPin className={`w-full h-full ${colorClass} ${glowClass}`} />,
+    box: <Package className={`w-full h-full ${colorClass} ${glowClass}`} />,
+  };
+  
+  return <div className={className}>{icons[kind]}</div>;
+}
+
+function LervitBackground() {
+  return (
+    <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,#0E2A7A40,transparent_55%),radial-gradient(circle_at_15%_75%,#0B5DFF22,transparent_55%),radial-gradient(circle_at_85%_20%,#7A2EFF22,transparent_50%)]" />
+      <div className="absolute inset-0 bg-[#050A14]" style={{ mixBlendMode: "overlay" }} />
+
+      <svg className="absolute inset-0 h-full w-full opacity-70" viewBox="0 0 1440 900" preserveAspectRatio="none">
+        <path d="M -50 250 C 280 120, 520 380, 760 250 S 1200 80, 1500 180"
+              fill="none" stroke="rgba(90,170,255,0.35)" strokeWidth="3"
+              strokeDasharray="8 12" strokeLinecap="round" />
+        <path d="M -20 680 C 300 600, 520 760, 820 690 S 1250 560, 1500 640"
+              fill="none" stroke="rgba(90,170,255,0.28)" strokeWidth="3"
+              strokeDasharray="8 14" strokeLinecap="round" />
+        <path d="M 120 420 C 340 520, 520 420, 720 520 S 1120 780, 1420 720"
+              fill="none" stroke="rgba(90,170,255,0.22)" strokeWidth="3"
+              strokeDasharray="7 16" strokeLinecap="round" />
+
+        <circle r="6" fill="rgba(160,220,255,0.9)">
+          <animateMotion dur="5.5s" repeatCount="indefinite" path="M -50 250 C 280 120, 520 380, 760 250 S 1200 80, 1500 180" />
+          <animate attributeName="opacity" values="0;1;1;0" dur="5.5s" repeatCount="indefinite" />
+        </circle>
+
+        <circle r="5" fill="rgba(160,220,255,0.85)">
+          <animateMotion dur="6.8s" repeatCount="indefinite" path="M -20 680 C 300 600, 520 760, 820 690 S 1250 560, 1500 640" />
+          <animate attributeName="opacity" values="0;1;1;0" dur="6.8s" repeatCount="indefinite" />
+        </circle>
+
+        <circle r="4.5" fill="rgba(160,220,255,0.8)">
+          <animateMotion dur="7.2s" repeatCount="indefinite" path="M 120 420 C 340 520, 520 420, 720 520 S 1120 780, 1420 720" />
+          <animate attributeName="opacity" values="0;1;1;0" dur="7.2s" repeatCount="indefinite" />
+        </circle>
+      </svg>
+
+      <Icon kind="truck" className="absolute left-[6%] top-[18%] w-20 animate-floatSlow" glow="blue" />
+      <Icon kind="pin" className="absolute right-[10%] top-[8%] w-16 animate-pulseSoft" glow="pink" />
+      <Icon kind="pin" className="absolute left-[10%] bottom-[12%] w-16 animate-pulseSoft" glow="blue" />
+      <Icon kind="box" className="absolute right-[16%] top-[36%] w-24 animate-float" glow="blue" />
+      <Icon kind="truck" className="absolute right-[8%] bottom-[10%] w-20 animate-floatSlow" glow="orange" />
+
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(5,10,20,0.2)_45%,rgba(5,10,20,0.75)_80%)]" />
+    </div>
+  );
+}
 
 type LockoutError = {
   locked: boolean;
@@ -99,8 +167,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
-      <Card className="w-full max-w-md">
+    <div className="relative min-h-screen overflow-hidden bg-[#050A14]">
+      <LervitBackground />
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-12">
+      <Card className="w-full max-w-md bg-[#0A1628]/90 backdrop-blur-sm border-[#1E3A5F]/50">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
             <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
@@ -252,6 +322,7 @@ export default function Login() {
           </CardFooter>
         </form>
       </Card>
+      </div>
     </div>
   );
 }
