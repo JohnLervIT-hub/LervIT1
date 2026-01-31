@@ -13,13 +13,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
   const glowClass =
     glow === "pink"
-      ? "drop-shadow-[0_0_18px_rgba(255,80,180,0.55)]"
+      ? "drop-shadow-[0_0_12px_rgba(219,39,119,0.6)] dark:drop-shadow-[0_0_18px_rgba(255,80,180,0.55)]"
       : glow === "orange"
-      ? "drop-shadow-[0_0_18px_rgba(255,170,80,0.55)]"
-      : "drop-shadow-[0_0_18px_rgba(80,160,255,0.55)]";
+      ? "drop-shadow-[0_0_12px_rgba(234,88,12,0.6)] dark:drop-shadow-[0_0_18px_rgba(255,170,80,0.55)]"
+      : "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)] dark:drop-shadow-[0_0_18px_rgba(80,160,255,0.55)]";
 
   return (
-    <div className={`${className} ${glowClass} opacity-95`}>
+    <div className={`${className} ${glowClass} opacity-80 dark:opacity-95`}>
       {kind === "truck" && (
         <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
           <path d="M6 38V18c0-2 2-4 4-4h26v24H6Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
@@ -51,31 +51,31 @@ function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" |
 function LervitBackground() {
   return (
     <div className="absolute inset-0 z-0">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,#0E2A7A40,transparent_55%),radial-gradient(circle_at_15%_75%,#0B5DFF22,transparent_55%),radial-gradient(circle_at_85%_20%,#7A2EFF22,transparent_50%)]" />
-      <div className="absolute inset-0 bg-[#050A14]" style={{ mixBlendMode: "overlay" }} />
+      <div className="absolute inset-0 hidden dark:block bg-[radial-gradient(circle_at_50%_35%,#0E2A7A40,transparent_55%),radial-gradient(circle_at_15%_75%,#0B5DFF22,transparent_55%),radial-gradient(circle_at_85%_20%,#7A2EFF22,transparent_50%)]" />
+      <div className="absolute inset-0 hidden dark:block bg-[#050A14]" style={{ mixBlendMode: "overlay" }} />
 
-      <svg className="absolute inset-0 h-full w-full opacity-70" viewBox="0 0 1440 900" preserveAspectRatio="none">
+      <svg className="absolute inset-0 h-full w-full opacity-40 dark:opacity-70" viewBox="0 0 1440 900" preserveAspectRatio="none">
         <path d="M -50 250 C 280 120, 520 380, 760 250 S 1200 80, 1500 180"
-              fill="none" stroke="rgba(90,170,255,0.35)" strokeWidth="3"
-              strokeDasharray="8 12" strokeLinecap="round" />
+              fill="none" stroke="rgba(59,130,246,0.5)" strokeWidth="3"
+              strokeDasharray="8 12" strokeLinecap="round" className="dark:stroke-[rgba(90,170,255,0.35)]" />
         <path d="M -20 680 C 300 600, 520 760, 820 690 S 1250 560, 1500 640"
-              fill="none" stroke="rgba(90,170,255,0.28)" strokeWidth="3"
-              strokeDasharray="8 14" strokeLinecap="round" />
+              fill="none" stroke="rgba(59,130,246,0.4)" strokeWidth="3"
+              strokeDasharray="8 14" strokeLinecap="round" className="dark:stroke-[rgba(90,170,255,0.28)]" />
         <path d="M 120 420 C 340 520, 520 420, 720 520 S 1120 780, 1420 720"
-              fill="none" stroke="rgba(90,170,255,0.22)" strokeWidth="3"
-              strokeDasharray="7 16" strokeLinecap="round" />
+              fill="none" stroke="rgba(59,130,246,0.3)" strokeWidth="3"
+              strokeDasharray="7 16" strokeLinecap="round" className="dark:stroke-[rgba(90,170,255,0.22)]" />
 
-        <circle r="6" fill="rgba(160,220,255,0.9)">
+        <circle r="6" fill="rgba(59,130,246,0.9)" className="dark:fill-[rgba(160,220,255,0.9)]">
           <animateMotion dur="5.5s" repeatCount="indefinite" path="M -50 250 C 280 120, 520 380, 760 250 S 1200 80, 1500 180" />
           <animate attributeName="opacity" values="0;1;1;0" dur="5.5s" repeatCount="indefinite" />
         </circle>
 
-        <circle r="5" fill="rgba(160,220,255,0.85)">
+        <circle r="5" fill="rgba(59,130,246,0.85)" className="dark:fill-[rgba(160,220,255,0.85)]">
           <animateMotion dur="6.8s" repeatCount="indefinite" path="M -20 680 C 300 600, 520 760, 820 690 S 1250 560, 1500 640" />
           <animate attributeName="opacity" values="0;1;1;0" dur="6.8s" repeatCount="indefinite" />
         </circle>
 
-        <circle r="4.5" fill="rgba(160,220,255,0.8)">
+        <circle r="4.5" fill="rgba(59,130,246,0.8)" className="dark:fill-[rgba(160,220,255,0.8)]">
           <animateMotion dur="7.2s" repeatCount="indefinite" path="M 120 420 C 340 520, 520 420, 720 520 S 1120 780, 1420 720" />
           <animate attributeName="opacity" values="0;1;1;0" dur="7.2s" repeatCount="indefinite" />
         </circle>
@@ -87,7 +87,7 @@ function LervitBackground() {
       <Icon kind="box" className="absolute right-4 sm:right-[16%] top-1/3 sm:top-[36%] w-10 sm:w-18 md:w-24 animate-float" glow="blue" />
       <Icon kind="truck" className="absolute right-4 sm:right-[8%] bottom-20 sm:bottom-[10%] w-10 sm:w-16 md:w-20 animate-floatSlow" glow="orange" />
 
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(5,10,20,0.2)_45%,rgba(5,10,20,0.75)_80%)]" />
+      <div className="absolute inset-0 hidden dark:block bg-[radial-gradient(circle_at_center,transparent_0%,rgba(5,10,20,0.2)_45%,rgba(5,10,20,0.75)_80%)]" />
     </div>
   );
 }
@@ -182,10 +182,8 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background dark:bg-[#050A14]">
-      <div className="hidden dark:block">
-        <LervitBackground />
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent">
+      <LervitBackground />
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
