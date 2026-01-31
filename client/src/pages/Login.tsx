@@ -7,30 +7,44 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert, MapPin, Package } from "lucide-react";
+import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert } from "lucide-react";
 
-function Icon({ kind, className, glow }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
-  const glowColors = {
-    blue: "drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]",
-    pink: "drop-shadow-[0_0_12px_rgba(236,72,153,0.5)]",
-    orange: "drop-shadow-[0_0_12px_rgba(249,115,22,0.5)]",
-  };
-  const glowClass = glow ? glowColors[glow] : "";
-  
-  const iconColors = {
-    blue: "text-blue-400/70",
-    pink: "text-pink-400/70",
-    orange: "text-orange-400/70",
-  };
-  const colorClass = glow ? iconColors[glow] : "text-blue-400/70";
-  
-  const icons = {
-    truck: <Truck className={`w-full h-full ${colorClass} ${glowClass}`} />,
-    pin: <MapPin className={`w-full h-full ${colorClass} ${glowClass}`} />,
-    box: <Package className={`w-full h-full ${colorClass} ${glowClass}`} />,
-  };
-  
-  return <div className={className}>{icons[kind]}</div>;
+function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
+  const glowClass =
+    glow === "pink"
+      ? "drop-shadow-[0_0_18px_rgba(255,80,180,0.55)]"
+      : glow === "orange"
+      ? "drop-shadow-[0_0_18px_rgba(255,170,80,0.55)]"
+      : "drop-shadow-[0_0_18px_rgba(80,160,255,0.55)]";
+
+  return (
+    <div className={`${className} ${glowClass} opacity-95`}>
+      {kind === "truck" && (
+        <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+          <path d="M6 38V18c0-2 2-4 4-4h26v24H6Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
+          <path d="M36 22h12l8 8v8H36V22Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
+          <circle cx="18" cy="42" r="4" stroke="rgba(255,190,90,0.9)" strokeWidth="2.5" />
+          <circle cx="46" cy="42" r="4" stroke="rgba(255,190,90,0.9)" strokeWidth="2.5" />
+        </svg>
+      )}
+
+      {kind === "pin" && (
+        <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+          <path d="M32 58s18-16 18-30A18 18 0 0 0 14 28c0 14 18 30 18 30Z"
+                stroke="rgba(255,120,200,0.9)" strokeWidth="2.5" />
+          <circle cx="32" cy="28" r="6" stroke="rgba(180,230,255,0.9)" strokeWidth="2.5" />
+        </svg>
+      )}
+
+      {kind === "box" && (
+        <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+          <path d="M12 24 32 14l20 10v26L32 60 12 50V24Z" stroke="rgba(130,190,255,0.9)" strokeWidth="2.5" />
+          <path d="M12 24l20 10 20-10" stroke="rgba(130,190,255,0.6)" strokeWidth="2.5" />
+          <path d="M32 34v26" stroke="rgba(255,190,90,0.6)" strokeWidth="2.5" />
+        </svg>
+      )}
+    </div>
+  );
 }
 
 function LervitBackground() {
