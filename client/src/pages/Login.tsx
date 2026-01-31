@@ -184,7 +184,7 @@ export default function Login() {
     <div className="relative min-h-screen overflow-hidden bg-[#050A14]">
       <LervitBackground />
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-md bg-[#0A1628]/90 backdrop-blur-sm border-[#1E3A5F]/50">
+      <Card className="w-full max-w-md bg-[rgba(10,14,24,0.65)] border-white/[0.08] backdrop-blur-[14px] shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
             <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
