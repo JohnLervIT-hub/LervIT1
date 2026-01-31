@@ -81,9 +81,9 @@ function LervitBackground() {
       </svg>
 
       <Icon kind="truck" className="absolute left-4 sm:left-[6%] top-16 sm:top-[18%] w-10 sm:w-16 md:w-20 animate-floatSlow" glow="blue" />
-      <Icon kind="pin" className="absolute right-[10%] top-[8%] w-10 sm:w-12 md:w-16 animate-pulseSoft hidden sm:block" glow="pink" />
+      <Icon kind="pin" className="absolute right-4 sm:right-[10%] top-16 sm:top-[8%] w-10 sm:w-12 md:w-16 animate-pulseSoft" glow="pink" />
       <Icon kind="pin" className="absolute left-4 sm:left-[10%] bottom-20 sm:bottom-[12%] w-10 sm:w-12 md:w-16 animate-pulseSoft" glow="blue" />
-      <Icon kind="box" className="absolute right-[16%] top-[36%] w-14 sm:w-18 md:w-24 animate-float hidden sm:block" glow="blue" />
+      <Icon kind="box" className="absolute right-4 sm:right-[16%] top-1/3 sm:top-[36%] w-10 sm:w-18 md:w-24 animate-float" glow="blue" />
       <Icon kind="truck" className="absolute right-4 sm:right-[8%] bottom-20 sm:bottom-[10%] w-10 sm:w-16 md:w-20 animate-floatSlow" glow="orange" />
 
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(5,10,20,0.2)_45%,rgba(5,10,20,0.75)_80%)]" />
