@@ -92,7 +92,7 @@ export default function AdminVerificationDashboard() {
     if (search) params.append("search", search);
     if (statusFilter !== "ALL") params.append("statusFilter", statusFilter);
     params.append("page", page.toString());
-    params.append("pageSize", "20");
+    params.append("pageSize", "100");
     return `/api/admin/verification/drivers?${params}`;
   };
 
