@@ -1676,7 +1676,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
-      const fileUrls = (req.files as Express.Multer.File[] || []).map(file => `/uploads/${file.filename}`);
+      // Upload to Object Storage for production persistence
+      const objectStorageService = new ObjectStorageService();
+      const fileUrls: string[] = [];
+      
+      for (const file of req.files as Express.Multer.File[]) {
+        try {
+          // Read the file from local disk (multer saves it temporarily)
+          const fileBuffer = fs.readFileSync(file.path);
+          
+          // Upload to cloud storage with verification prefix
+          const cloudPath = await objectStorageService.uploadBuffer(
+            fileBuffer,
+            `verification_${req.params.type}_${file.originalname}`,
+            file.mimetype,
+            user.id
+          );
+          
+          fileUrls.push(cloudPath);
+          
+          // Clean up local file after successful upload
+          fs.unlinkSync(file.path);
+        } catch (uploadError) {
+          console.error('Object Storage upload failed for verification doc, using local fallback:', uploadError);
+          // Fallback to local path if Object Storage fails
+          fileUrls.push(`/uploads/${file.filename}`);
+        }
+      }
       
       const itemData = {
         moverId: req.params.moverId,
