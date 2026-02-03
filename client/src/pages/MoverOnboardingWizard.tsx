@@ -80,14 +80,15 @@ export default function MoverOnboardingWizard() {
   const uploadImageMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
-      formData.append("file", file);
-      const response = await fetch("/api/upload", {
+      formData.append("images", file);
+      const response = await fetch("/api/upload/images", {
         method: "POST",
         body: formData,
         credentials: "include",
       });
       if (!response.ok) throw new Error("Upload failed");
-      return response.json();
+      const data = await response.json();
+      return { url: data.urls?.[0] || data.url };
     },
   });
 
