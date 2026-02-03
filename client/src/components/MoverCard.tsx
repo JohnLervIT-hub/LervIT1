@@ -100,8 +100,8 @@ const MoverCard = memo(function MoverCard({
                   src={vehiclePhoto} 
                   alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
                   className={`w-full h-full object-contain transition-opacity duration-300 ${vehicleImageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                  loading="lazy"
-                  decoding="async"
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
                   onLoad={() => setVehicleImageLoaded(true)}
                   onError={() => setVehicleImageError(true)}
                   data-testid={`img-vehicle-${id}`}
