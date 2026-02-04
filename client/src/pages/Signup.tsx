@@ -368,7 +368,7 @@ export default function Signup() {
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-lg dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
+        <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
               <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
@@ -436,7 +436,7 @@ export default function Signup() {
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-lg dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
+        <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <CardHeader className="space-y-1 text-center pb-2">
             <button
               type="button"
@@ -571,7 +571,7 @@ export default function Signup() {
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-lg dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
+        <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
@@ -623,7 +623,7 @@ export default function Signup() {
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
-      <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-lg dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
+      <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
             <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
