@@ -182,7 +182,7 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background dark:bg-[#050A14]">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent">
       <LervitBackground />
       <div className="relative z-10 flex min-h-screen items-center justify-center px-3 sm:px-4 py-6 sm:py-12">
       <Card className="w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-lg dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)] mx-2 sm:mx-0">

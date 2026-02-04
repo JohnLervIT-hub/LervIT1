@@ -363,7 +363,7 @@ export default function Signup() {
   // Step 1: Phone Number Entry (Uber-style)
   if (step === "phone") {
     return (
-      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+      <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
         <LervitBackground />
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
@@ -431,7 +431,7 @@ export default function Signup() {
   // Step 2: OTP Verification (Uber-style)
   if (step === "otp") {
     return (
-      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+      <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
         <LervitBackground />
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
@@ -566,7 +566,7 @@ export default function Signup() {
   // Step 4: Success - Check Email (after account creation)
   if (step === "success") {
     return (
-      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+      <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
         <LervitBackground />
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
@@ -618,7 +618,7 @@ export default function Signup() {
 
   // Step 3: Account Details (after phone verification)
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
       <LervitBackground />
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
