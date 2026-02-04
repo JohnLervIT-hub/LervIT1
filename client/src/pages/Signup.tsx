@@ -9,7 +9,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { FormFieldError } from "@/components/FormFieldError";
 import { Truck, Eye, EyeOff, Loader2, Package, Users, Phone, ArrowLeft, CheckCircle, Mail } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
 
@@ -365,9 +364,6 @@ export default function Signup() {
     return (
       <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
         <LervitBackground />
-        <div className="absolute top-4 right-4 z-20">
-          <ThemeToggle />
-        </div>
         <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
@@ -433,9 +429,6 @@ export default function Signup() {
     return (
       <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
         <LervitBackground />
-        <div className="absolute top-4 right-4 z-20">
-          <ThemeToggle />
-        </div>
         <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <CardHeader className="space-y-1 text-center pb-2">
             <button
@@ -568,9 +561,6 @@ export default function Signup() {
     return (
       <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
         <LervitBackground />
-        <div className="absolute top-4 right-4 z-20">
-          <ThemeToggle />
-        </div>
         <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
@@ -620,9 +610,6 @@ export default function Signup() {
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/60 dark:bg-[#050A14] dark:from-transparent dark:via-transparent dark:to-transparent px-4 py-12 overflow-hidden">
       <LervitBackground />
-      <div className="absolute top-4 right-4 z-20">
-        <ThemeToggle />
-      </div>
       <Card className="relative z-10 w-full max-w-md bg-card dark:bg-[rgba(10,14,24,0.65)] border border-white/50 dark:border-white/[0.08] dark:backdrop-blur-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">

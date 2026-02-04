@@ -8,7 +8,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
   const glowClass =
