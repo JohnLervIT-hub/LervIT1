@@ -241,7 +241,7 @@ export default function LandingPage() {
             {/* Hero Right - Quick Booking Form - 40% on desktop */}
             <div className="lg:col-span-2 relative">
               {/* Quick Booking Form Card */}
-              <div className="relative bg-card rounded-2xl border shadow-xl p-6 md:p-8">
+              <div className="relative bg-card rounded-2xl border border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-xl p-6 md:p-8">
                 <div className="absolute -top-3 -right-3">
                   <Badge className="bg-primary text-primary-foreground px-3 py-1">
                     <Zap className="w-3 h-3 mr-1" /> Get Instant Quote
@@ -309,7 +309,7 @@ export default function LandingPage() {
               </div>
               
               {/* Floating Elements */}
-              <div className="absolute -bottom-4 -left-4 bg-card rounded-xl border shadow-lg p-4 hidden md:block">
+              <div className="absolute -bottom-4 -left-4 bg-card rounded-xl border border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-lg p-4 hidden md:block">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
                     <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -322,7 +322,7 @@ export default function LandingPage() {
               </div>
               
               {/* Floating Mover Badge */}
-              <div className="absolute -top-2 -left-2 bg-card rounded-xl border shadow-lg p-3 hidden lg:block">
+              <div className="absolute -top-2 -left-2 bg-card rounded-xl border border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-lg p-3 hidden lg:block">
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-2">
                     <div className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-xs font-bold">JD</div>
@@ -404,7 +404,7 @@ export default function LandingPage() {
                 {index < 3 && (
                   <div className="hidden md:block absolute top-12 left-full w-full h-px bg-border z-0" />
                 )}
-                <Card className={`relative z-10 h-full transition-all duration-300 ${activeStep === index ? 'border-primary shadow-lg' : ''}`}>
+                <Card className={`relative z-10 h-full transition-all duration-300 border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-md ${activeStep === index ? 'border-primary shadow-lg' : ''}`}>
                   <CardContent className="pt-8 pb-6 px-6">
                     <div className="flex items-center gap-3 mb-4">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${activeStep === index ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
@@ -473,7 +473,7 @@ export default function LandingPage() {
             </div>
             
             <div className="relative">
-              <div className="bg-card rounded-2xl border shadow-xl overflow-hidden">
+              <div className="bg-card rounded-2xl border border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-xl overflow-hidden">
                 {/* AI Process Visualization */}
                 <div className="bg-gradient-to-br from-primary/10 to-accent/10 p-8">
                   <div className="flex items-center gap-2 mb-6">
@@ -527,7 +527,7 @@ export default function LandingPage() {
               </div>
               
               {/* Stats Floating Card */}
-              <div className="absolute -bottom-6 -right-6 bg-card rounded-xl border shadow-lg p-5 hidden lg:block">
+              <div className="absolute -bottom-6 -right-6 bg-card rounded-xl border border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-lg p-5 hidden lg:block">
                 <div className="text-3xl font-bold text-primary mb-1">10,000+</div>
                 <div className="text-sm text-muted-foreground">Items Analyzed</div>
               </div>
@@ -581,7 +581,7 @@ export default function LandingPage() {
                 description: "Choose movers based on real customer reviews and ratings.",
               },
             ].map((feature, index) => (
-              <Card key={index} className={`hover-elevate ${feature.highlight ? 'border-primary' : ''}`}>
+              <Card key={index} className={`hover-elevate border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-md ${feature.highlight ? 'border-primary' : ''}`}>
                 <CardContent className="pt-8 pb-6 px-6">
                   <div className={`w-12 h-12 rounded-xl mb-4 flex items-center justify-center ${feature.highlight ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
                     <feature.icon className="w-6 h-6" />
@@ -638,7 +638,7 @@ export default function LandingPage() {
                 icon: "🏠",
               },
             ].map((tier, index) => (
-              <Card key={index} className={`relative ${tier.popular ? 'border-primary shadow-lg' : ''}`}>
+              <Card key={index} className={`relative border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-md ${tier.popular ? 'border-primary shadow-lg' : ''}`}>
                 {tier.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className="bg-primary text-primary-foreground">Most Popular</Badge>
@@ -760,7 +760,7 @@ export default function LandingPage() {
                 rating: 5,
               },
             ].map((testimonial, index) => (
-              <Card key={index}>
+              <Card key={index} className="border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.12),0_4px_10px_rgba(0,0,0,0.06)] dark:shadow-md">
                 <CardContent className="pt-6 pb-6 px-6">
                   <div className="flex gap-1 mb-4">
                     {[...Array(testimonial.rating)].map((_, i) => (
