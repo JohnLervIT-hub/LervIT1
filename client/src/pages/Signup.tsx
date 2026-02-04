@@ -13,6 +13,88 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
 
+function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
+  const glowClass =
+    glow === "pink"
+      ? "drop-shadow-[0_0_12px_rgba(219,39,119,0.6)] dark:drop-shadow-[0_0_18px_rgba(255,80,180,0.55)]"
+      : glow === "orange"
+      ? "drop-shadow-[0_0_12px_rgba(234,88,12,0.6)] dark:drop-shadow-[0_0_18px_rgba(255,170,80,0.55)]"
+      : "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)] dark:drop-shadow-[0_0_18px_rgba(80,160,255,0.55)]";
+
+  return (
+    <div className={`${className} ${glowClass} opacity-90 dark:opacity-95`}>
+      {kind === "truck" && (
+        <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+          <path d="M6 38V18c0-2 2-4 4-4h26v24H6Z" className="stroke-blue-500 dark:stroke-[rgba(130,190,255,0.9)]" strokeWidth="2.5" />
+          <path d="M36 22h12l8 8v8H36V22Z" className="stroke-blue-500 dark:stroke-[rgba(130,190,255,0.9)]" strokeWidth="2.5" />
+          <circle cx="18" cy="42" r="4" className="stroke-orange-500 dark:stroke-[rgba(255,190,90,0.9)]" strokeWidth="2.5" />
+          <circle cx="46" cy="42" r="4" className="stroke-orange-500 dark:stroke-[rgba(255,190,90,0.9)]" strokeWidth="2.5" />
+        </svg>
+      )}
+
+      {kind === "pin" && (
+        <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+          <path d="M32 58s18-16 18-30A18 18 0 0 0 14 28c0 14 18 30 18 30Z"
+                className="stroke-pink-500 dark:stroke-[rgba(255,120,200,0.9)]" strokeWidth="2.5" />
+          <circle cx="32" cy="28" r="6" className="stroke-blue-400 dark:stroke-[rgba(180,230,255,0.9)]" strokeWidth="2.5" />
+        </svg>
+      )}
+
+      {kind === "box" && (
+        <svg viewBox="0 0 64 64" fill="none" className="w-full h-full">
+          <path d="M12 24 32 14l20 10v26L32 60 12 50V24Z" className="stroke-blue-500 dark:stroke-[rgba(130,190,255,0.9)]" strokeWidth="2.5" />
+          <path d="M12 24l20 10 20-10" className="stroke-blue-400 dark:stroke-[rgba(130,190,255,0.6)]" strokeWidth="2.5" />
+          <path d="M32 34v26" className="stroke-orange-400 dark:stroke-[rgba(255,190,90,0.6)]" strokeWidth="2.5" />
+        </svg>
+      )}
+    </div>
+  );
+}
+
+function LervitBackground() {
+  return (
+    <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 hidden dark:block bg-[radial-gradient(circle_at_50%_35%,#0E2A7A40,transparent_55%),radial-gradient(circle_at_15%_75%,#0B5DFF22,transparent_55%),radial-gradient(circle_at_85%_20%,#7A2EFF22,transparent_50%)]" />
+      <div className="absolute inset-0 hidden dark:block bg-[#050A14]" style={{ mixBlendMode: "overlay" }} />
+
+      <svg className="absolute inset-0 h-full w-full opacity-40 dark:opacity-70" viewBox="0 0 1440 900" preserveAspectRatio="none">
+        <path d="M -50 250 C 280 120, 520 380, 760 250 S 1200 80, 1500 180"
+              fill="none" stroke="rgba(59,130,246,0.5)" strokeWidth="3"
+              strokeDasharray="8 12" strokeLinecap="round" className="dark:stroke-[rgba(90,170,255,0.35)]" />
+        <path d="M -20 680 C 300 600, 520 760, 820 690 S 1250 560, 1500 640"
+              fill="none" stroke="rgba(59,130,246,0.4)" strokeWidth="3"
+              strokeDasharray="8 14" strokeLinecap="round" className="dark:stroke-[rgba(90,170,255,0.28)]" />
+        <path d="M 120 420 C 340 520, 520 420, 720 520 S 1120 780, 1420 720"
+              fill="none" stroke="rgba(59,130,246,0.3)" strokeWidth="3"
+              strokeDasharray="7 16" strokeLinecap="round" className="dark:stroke-[rgba(90,170,255,0.22)]" />
+
+        <circle r="6" fill="rgba(59,130,246,0.9)" className="dark:fill-[rgba(160,220,255,0.9)]">
+          <animateMotion dur="5.5s" repeatCount="indefinite" path="M -50 250 C 280 120, 520 380, 760 250 S 1200 80, 1500 180" />
+          <animate attributeName="opacity" values="0;1;1;0" dur="5.5s" repeatCount="indefinite" />
+        </circle>
+
+        <circle r="5" fill="rgba(59,130,246,0.85)" className="dark:fill-[rgba(160,220,255,0.85)]">
+          <animateMotion dur="6.8s" repeatCount="indefinite" path="M -20 680 C 300 600, 520 760, 820 690 S 1250 560, 1500 640" />
+          <animate attributeName="opacity" values="0;1;1;0" dur="6.8s" repeatCount="indefinite" />
+        </circle>
+
+        <circle r="4.5" fill="rgba(59,130,246,0.8)" className="dark:fill-[rgba(160,220,255,0.8)]">
+          <animateMotion dur="7.2s" repeatCount="indefinite" path="M 120 420 C 340 520, 520 420, 720 520 S 1120 780, 1420 720" />
+          <animate attributeName="opacity" values="0;1;1;0" dur="7.2s" repeatCount="indefinite" />
+        </circle>
+      </svg>
+
+      <Icon kind="truck" className="absolute left-4 sm:left-[6%] top-16 sm:top-[18%] w-10 sm:w-16 md:w-20 animate-floatSlow" glow="blue" />
+      <Icon kind="pin" className="absolute right-4 sm:right-[10%] top-16 sm:top-[8%] w-10 sm:w-12 md:w-16 animate-pulseSoft" glow="pink" />
+      <Icon kind="pin" className="absolute left-4 sm:left-[10%] bottom-20 sm:bottom-[12%] w-10 sm:w-12 md:w-16 animate-pulseSoft" glow="blue" />
+      <Icon kind="box" className="absolute right-4 sm:right-[16%] top-1/3 sm:top-[36%] w-10 sm:w-18 md:w-24 animate-float" glow="blue" />
+      <Icon kind="truck" className="absolute right-4 sm:right-[8%] bottom-20 sm:bottom-[10%] w-10 sm:w-16 md:w-20 animate-floatSlow" glow="orange" />
+
+      <div className="absolute inset-0 hidden dark:block bg-[radial-gradient(circle_at_center,transparent_0%,rgba(5,10,20,0.2)_45%,rgba(5,10,20,0.75)_80%)]" />
+    </div>
+  );
+}
+
 type SignupStep = "phone" | "otp" | "details" | "success";
 
 export default function Signup() {
@@ -281,11 +363,12 @@ export default function Signup() {
   // Step 1: Phone Number Entry (Uber-style)
   if (step === "phone") {
     return (
-      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+        <LervitBackground />
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="w-full max-w-md">
+        <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
               <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
@@ -348,11 +431,12 @@ export default function Signup() {
   // Step 2: OTP Verification (Uber-style)
   if (step === "otp") {
     return (
-      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+        <LervitBackground />
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="w-full max-w-md">
+        <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
           <CardHeader className="space-y-1 text-center pb-2">
             <button
               type="button"
@@ -482,11 +566,12 @@ export default function Signup() {
   // Step 4: Success - Check Email (after account creation)
   if (step === "success") {
     return (
-      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+        <LervitBackground />
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="w-full max-w-md">
+        <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
@@ -533,11 +618,12 @@ export default function Signup() {
 
   // Step 3: Account Details (after phone verification)
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12">
+    <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-12 overflow-hidden">
+      <LervitBackground />
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
-      <Card className="w-full max-w-md">
+      <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
             <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
