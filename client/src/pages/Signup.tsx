@@ -368,7 +368,7 @@ export default function Signup() {
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
+        <Card className="relative z-10 w-full max-w-md bg-card/80 dark:bg-card/70 backdrop-blur-md border border-white/20 dark:border-white/10 shadow-xl">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
               <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
@@ -436,7 +436,7 @@ export default function Signup() {
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
+        <Card className="relative z-10 w-full max-w-md bg-card/80 dark:bg-card/70 backdrop-blur-md border border-white/20 dark:border-white/10 shadow-xl">
           <CardHeader className="space-y-1 text-center pb-2">
             <button
               type="button"
@@ -571,7 +571,7 @@ export default function Signup() {
         <div className="absolute top-4 right-4 z-20">
           <ThemeToggle />
         </div>
-        <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
+        <Card className="relative z-10 w-full max-w-md bg-card/80 dark:bg-card/70 backdrop-blur-md border border-white/20 dark:border-white/10 shadow-xl">
           <CardHeader className="space-y-1 text-center pb-2">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
@@ -623,7 +623,7 @@ export default function Signup() {
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
-      <Card className="relative z-10 w-full max-w-md bg-card/95 backdrop-blur-sm">
+      <Card className="relative z-10 w-full max-w-md bg-card/80 dark:bg-card/70 backdrop-blur-md border border-white/20 dark:border-white/10 shadow-xl">
         <CardHeader className="space-y-1 text-center pb-2">
           <div className="flex justify-center mb-4">
             <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
