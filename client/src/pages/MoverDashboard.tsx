@@ -794,9 +794,9 @@ export default function MoverDashboard() {
       return;
     }
     
-    // Force location refresh if we don't have coords yet and permission isn't denied
+    // Force location refresh if we don't have coords yet and permission is granted or prompt
     // This ensures GPS starts immediately when mover is already online on page load
-    if (!geoCoords && geoPermissionState !== 'denied' && refreshLocation) {
+    if (!geoCoords && (geoPermissionState === 'granted' || geoPermissionState === 'prompt') && refreshLocation) {
       console.log("[GPS] Forcing location refresh for online mover");
       refreshLocation();
     }

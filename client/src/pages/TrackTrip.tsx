@@ -134,6 +134,7 @@ export default function TrackTrip() {
   const currentAnimatedRef = useRef<{ lat: number; lng: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const isFirstPositionRef = useRef(true);
+  const markerRef = useRef<google.maps.Marker | null>(null);
 
   // Resilient polling - 3 second intervals for smoother tracking
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
@@ -173,7 +174,7 @@ export default function TrackTrip() {
     }
   }, [locationData?.status]);
 
-  // Smooth animation of vehicle position
+  // Smooth animation of vehicle position - uses direct marker manipulation for reliability
   useEffect(() => {
     if (!locationData?.currentLocation) {
       setAnimatedPosition(null);
@@ -188,22 +189,29 @@ export default function TrackTrip() {
       lng: locationData.currentLocation.longitude,
     };
 
+    // Skip if position hasn't changed
     if (
       targetPositionRef.current &&
-      targetPositionRef.current.lat === newPosition.lat &&
-      targetPositionRef.current.lng === newPosition.lng
+      Math.abs(targetPositionRef.current.lat - newPosition.lat) < 0.000001 &&
+      Math.abs(targetPositionRef.current.lng - newPosition.lng) < 0.000001
     ) {
       return;
     }
 
+    // First position - set immediately
     if (isFirstPositionRef.current || !currentAnimatedRef.current) {
       setAnimatedPosition(newPosition);
       currentAnimatedRef.current = newPosition;
       targetPositionRef.current = newPosition;
       isFirstPositionRef.current = false;
+      // Also update marker directly if it exists
+      if (markerRef.current) {
+        markerRef.current.setPosition(newPosition);
+      }
       return;
     }
 
+    // Cancel any existing animation
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
@@ -211,14 +219,22 @@ export default function TrackTrip() {
     const startPosition = { ...currentAnimatedRef.current };
     targetPositionRef.current = newPosition;
     const startTime = performance.now();
-    const duration = 2000;
+    const duration = 2500; // Slightly longer for smoother animation
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
+      // Smooth ease-out cubic
       const easeProgress = 1 - Math.pow(1 - progress, 3);
       
       const interpolated = interpolatePosition(startPosition, newPosition, easeProgress);
+      
+      // Update marker directly for smoother animation
+      if (markerRef.current) {
+        markerRef.current.setPosition(interpolated);
+      }
+      
+      // Also update state for React components that depend on it
       setAnimatedPosition(interpolated);
       currentAnimatedRef.current = interpolated;
 
@@ -226,6 +242,7 @@ export default function TrackTrip() {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
         currentAnimatedRef.current = newPosition;
+        setAnimatedPosition(newPosition);
       }
     };
 
@@ -428,7 +445,7 @@ export default function TrackTrip() {
           data-testid="marker-dropoff"
         />
 
-        {/* Vehicle marker */}
+        {/* Vehicle marker - uses ref for direct position updates */}
         {animatedPosition && (
           <Marker
             position={animatedPosition}
@@ -436,6 +453,13 @@ export default function TrackTrip() {
               url: CAR_ICON_URL,
               scaledSize: new google.maps.Size(40, 40),
               anchor: new google.maps.Point(20, 20),
+            }}
+            zIndex={1000}
+            onLoad={(marker) => {
+              markerRef.current = marker;
+            }}
+            onUnmount={() => {
+              markerRef.current = null;
             }}
             data-testid="marker-mover"
           />
