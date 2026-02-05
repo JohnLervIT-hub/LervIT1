@@ -41,27 +41,34 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-// Clean light map theme
-const LIGHT_MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
-  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+// Uber-style dark map theme - sleek dark background with subtle details
+const UBER_DARK_MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a2e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8a8a9a" }] },
+  { featureType: "administrative", elementType: "geometry", stylers: [{ visibility: "off" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d2d44" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1a1a2e" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d3d5c" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1a1a2e" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#2d2d44" }] },
+  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#252538" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e0e1a" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4a4a6a" }] },
+  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#1e1e32" }] },
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
 ];
 
-// Car icon SVG - Uber style black car
-const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-  <circle cx="20" cy="20" r="18" fill="#000000"/>
-  <circle cx="20" cy="20" r="15" fill="#1a1a1a"/>
-  <path d="M13 22 L13 18 L15 13 L25 13 L27 18 L27 22 L25 24 L15 24 Z" fill="#ffffff"/>
-  <rect x="14" y="14" width="12" height="5" rx="1" fill="#87CEEB"/>
-  <circle cx="15" cy="22" r="1.5" fill="#333"/>
-  <circle cx="25" cy="22" r="1.5" fill="#333"/>
+// Car icon SVG - Uber style white car on dark background for visibility
+const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <circle cx="24" cy="24" r="22" fill="#ffffff"/>
+  <circle cx="24" cy="24" r="19" fill="#f8f8f8"/>
+  <path d="M15 27 L15 22 L18 15 L30 15 L33 22 L33 27 L30 30 L18 30 Z" fill="#1a1a2e"/>
+  <rect x="17" y="16" width="14" height="6" rx="1" fill="#276EF1"/>
+  <circle cx="18" cy="27" r="2" fill="#333"/>
+  <circle cx="30" cy="27" r="2" fill="#333"/>
 </svg>`;
 
 const CAR_ICON_URL = `data:image/svg+xml;base64,${btoa(CAR_ICON_SVG)}`;
@@ -124,7 +131,7 @@ export default function TrackTrip() {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      styles: LIGHT_MAP_STYLES,
+      styles: UBER_DARK_MAP_STYLES,
     };
   }, [isLoaded]);
   
@@ -393,8 +400,8 @@ export default function TrackTrip() {
     : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
 
   return (
-    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-gray-100">
-      {/* Full-screen Google Map with light theme */}
+    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-[#1a1a2e]">
+      {/* Full-screen Google Map with Uber dark theme */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
@@ -451,8 +458,8 @@ export default function TrackTrip() {
             position={animatedPosition}
             icon={{
               url: CAR_ICON_URL,
-              scaledSize: new google.maps.Size(40, 40),
-              anchor: new google.maps.Point(20, 20),
+              scaledSize: new google.maps.Size(48, 48),
+              anchor: new google.maps.Point(24, 24),
             }}
             zIndex={1000}
             onLoad={(marker) => {
