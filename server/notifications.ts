@@ -220,6 +220,17 @@ class NotificationService {
     console.log('From:', telnyxPhoneNumber ? `${telnyxPhoneNumber.slice(0, 4)}****${telnyxPhoneNumber.slice(-2)}` : 'NOT SET');
     console.log('Type:', notification.type);
     
+    // Block SMS in development mode (except OTP verification codes needed for login testing)
+    if (process.env.NODE_ENV === 'development' && notification.type !== 'phone_verification') {
+      const maskedMessage = notification.message.length > 80 
+        ? notification.message.substring(0, 80) + '...' 
+        : notification.message;
+      console.log('[SMS] BLOCKED in development mode (not sent to real users)');
+      console.log('Message preview:', maskedMessage);
+      console.log('---\n');
+      return true;
+    }
+    
     if (!formattedPhone) {
       console.log('[SMS] Invalid phone number - cannot send');
       console.log('---\n');
@@ -274,6 +285,13 @@ class NotificationService {
     console.log('To:', notification.to);
     console.log('Subject:', notification.subject);
     console.log('Type:', notification.type);
+    
+    // Block emails in development mode to avoid spamming real users
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[EMAIL] BLOCKED in development mode (not sent to real users)');
+      console.log('---\n');
+      return;
+    }
     
     // Send real email via Resend with rate limiting
     if (resend) {
