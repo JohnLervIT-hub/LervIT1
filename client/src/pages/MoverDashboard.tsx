@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -20,6 +20,7 @@ import { getVehicleDisplayName } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { generatePriceExplanation, AI_FEATURES } from "@shared/ai";
 import { useEffect, useState, useRef } from "react";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
@@ -408,6 +409,9 @@ export default function MoverDashboard() {
   const hasActiveTrip = bookings.some((b) => 
     b.status === "in_transit" || ACTIVE_STATUSES.includes(b.status as BookingStatus)
   );
+  
+  // Keep screen awake during active trips to ensure GPS updates continue
+  const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(hasActiveTrip);
 
   // Get earnings data for this mover
   const { data: earnings } = useQuery<any>({
@@ -1464,6 +1468,12 @@ export default function MoverDashboard() {
             {/* Status Toggle & Actions */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
+                {hasActiveTrip && isWakeLockActive && (
+                  <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30 text-xs gap-1" data-testid="badge-screen-awake">
+                    <Smartphone className="w-3 h-3" />
+                    Screen On
+                  </Badge>
+                )}
                 {mover?.isAvailable && isLiveGpsActive && (
                   <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs gap-1" data-testid="badge-live-gps">
                     <MapPin className="w-3 h-3" />
