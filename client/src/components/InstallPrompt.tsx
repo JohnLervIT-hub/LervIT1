@@ -12,16 +12,14 @@ interface BeforeInstallPromptEvent extends Event {
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+    const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isInStandaloneMode = window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true;
 
-    setIsIOS(isIOSDevice);
-    setIsStandalone(isInStandaloneMode);
+        setIsStandalone(isInStandaloneMode);
 
     if (isInStandaloneMode) {
       return;
@@ -43,9 +41,8 @@ export function InstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
-    if (isIOSDevice) {
-      setTimeout(() => setShowPrompt(true), 5000);
-    }
+    // Don't show prompt on iOS - the beforeinstallprompt event only fires on Android/Chrome
+    // iOS users must manually use "Add to Home Screen" from Safari's share menu
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -121,19 +118,7 @@ export function InstallPrompt() {
                   </div>
                 </div>
 
-                {isIOS ? (
-                  <div className="mt-3 p-2 bg-muted rounded-lg" data-testid="ios-install-instructions">
-                    <p className="text-xs text-muted-foreground">
-                      Tap <span className="inline-flex items-center mx-1 px-1 py-0.5 bg-background rounded text-[10px]" data-testid="icon-share">
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M12 2L8 6h3v8h2V6h3L12 2z"/>
-                          <path d="M4 14v6h16v-6h-2v4H6v-4H4z"/>
-                        </svg>
-                      </span> then <strong>"Add to Home Screen"</strong>
-                    </p>
-                  </div>
-                ) : (
-                  <Button
+<Button
                     className="w-full mt-3"
                     size="sm"
                     onClick={handleInstall}
@@ -142,7 +127,6 @@ export function InstallPrompt() {
                     <Download className="w-4 h-4 mr-2" />
                     Install Now
                   </Button>
-                )}
               </div>
             </div>
           </CardContent>
