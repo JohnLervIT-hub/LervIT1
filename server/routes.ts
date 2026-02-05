@@ -3145,6 +3145,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Failed to accept booking" });
       }
       
+      // 1b. CRITICAL: Update Stripe PaymentIntent metadata with mover details
+      // This ensures Stripe can match payments to movers for settlements
+      if (booking.stripePaymentIntentId) {
+        try {
+          const moverStripeAccountResult = await db.select()
+            .from(moverStripeAccounts)
+            .where(eq(moverStripeAccounts.moverId, moverId))
+            .limit(1);
+          
+          const moverAccount = moverStripeAccountResult[0];
+          const isFullyOnboarded = moverAccount?.chargesEnabled && moverAccount?.payoutsEnabled;
+          
+          // Retrieve existing metadata to merge (Stripe replaces entire metadata object)
+          const existingPI = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+          const mergedMetadata = {
+            ...existingPI.metadata,
+            moverId: moverId,
+            moverStripeOnboarded: isFullyOnboarded ? 'true' : 'false',
+            moverStripeAccountId: moverAccount?.stripeAccountId || '',
+            ...(isFullyOnboarded ? { paymentType: 'platform_charge_with_transfer' } : {}),
+          };
+          
+          await stripe.paymentIntents.update(booking.stripePaymentIntentId, {
+            metadata: mergedMetadata,
+          });
+          
+          logEvent.payment('payment_metadata_updated_on_accept', {
+            bookingId,
+            moverId,
+            paymentIntentId: booking.stripePaymentIntentId,
+            moverStripeAccountId: moverAccount?.stripeAccountId || 'none',
+            moverOnboarded: isFullyOnboarded,
+          });
+        } catch (stripeErr) {
+          console.error('[Accept] Failed to update Stripe metadata:', stripeErr);
+        }
+      }
+      
       // 2. Mark this mover's notification as accepted
       await db
         .update(jobNotifications)
@@ -5034,7 +5072,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 try {
                   // Get the booking to calculate correct fee
                   const booking = await storage.getBooking(earning.bookingId);
-                  if (!booking || booking.paymentStatus !== 'paid') continue;
+                  if (!booking || booking.paymentStatus !== 'succeeded') continue;
                   
                   // Calculate amounts using centralized helper
                   const grossAmount = parseFloat(booking.price || '0');
@@ -5065,6 +5103,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       paidAt: new Date(),
                     })
                     .where(eq(moverEarnings.id, earning.id));
+                  
+                  // Update PaymentIntent metadata to reflect the auto-transfer (merge with existing)
+                  if (booking.stripePaymentIntentId) {
+                    try {
+                      const existingPI = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+                      await stripe.paymentIntents.update(booking.stripePaymentIntentId, {
+                        metadata: {
+                          ...existingPI.metadata,
+                          stripeTransferId: transfer.id,
+                          moverStripeAccountId: updatedAccount.id,
+                          moverStripeOnboarded: 'true',
+                          paymentType: 'platform_charge_with_transfer',
+                          transferAmount: (moverPayoutCents / 100).toFixed(2),
+                          moverId: moverAccount.moverId,
+                        },
+                      });
+                    } catch (metaErr) {
+                      console.error('[Webhook] Failed to update PaymentIntent metadata:', metaErr);
+                    }
+                  }
                   
                   logEvent.payment('auto_transfer_on_onboarding_success', {
                     moverId: moverAccount.moverId,
@@ -6915,7 +6973,7 @@ Respond with VALID JSON only:
       }
     }
     
-    // If not a destination charge, try to create a transfer (legacy flow)
+    // If not a destination charge, try to create a transfer (platform charge flow)
     if (!wasDestinationCharge) {
       // Get mover's Stripe Connect account for transfer
       const moverStripeAccountResult = await db.select()
@@ -6939,6 +6997,7 @@ Respond with VALID JSON only:
               moverId,
               grossAmount: grossAmount.toFixed(2),
               platformFee: platformFeeAmount.toFixed(2),
+              processedBy: 'booking_completion',
             },
           }, {
             idempotencyKey: `transfer-${bookingId}`,
@@ -6953,6 +7012,26 @@ Respond with VALID JSON only:
             transferId: transfer.id,
             amount: netAmount,
           });
+          
+          // Update PaymentIntent metadata to reflect the transfer (merge with existing)
+          if (booking.stripePaymentIntentId) {
+            try {
+              const existingPI = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+              await stripe.paymentIntents.update(booking.stripePaymentIntentId, {
+                metadata: {
+                  ...existingPI.metadata,
+                  stripeTransferId: transfer.id,
+                  moverStripeAccountId: moverStripeAccount.stripeAccountId,
+                  moverStripeOnboarded: 'true',
+                  paymentType: 'platform_charge_with_transfer',
+                  transferAmount: (transferAmountCents / 100).toFixed(2),
+                  moverId: moverId,
+                },
+              });
+            } catch (metaErr) {
+              console.error('[Earnings] Failed to update PaymentIntent metadata:', metaErr);
+            }
+          }
         } catch (transferError: any) {
           logEvent.error('transfer_failed', transferError);
           earningsStatus = 'pending';
@@ -6961,7 +7040,9 @@ Respond with VALID JSON only:
         logEvent.payment('transfer_skipped', {
           bookingId,
           moverId,
-          reason: 'No enabled Stripe Connect account',
+          reason: moverStripeAccountResult.length === 0 
+            ? 'No Stripe Connect account' 
+            : 'Payouts not enabled - mover onboarding incomplete',
         });
       }
     }
