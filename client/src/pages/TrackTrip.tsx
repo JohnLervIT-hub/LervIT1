@@ -41,32 +41,25 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-// Uber-style dark map theme - sleek dark background with subtle details
-const UBER_DARK_MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a8a9a" }] },
-  { featureType: "administrative", elementType: "geometry", stylers: [{ visibility: "off" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d2d44" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d3d5c" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1a1a2e" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#2d2d44" }] },
-  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#252538" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e0e1a" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4a4a6a" }] },
-  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#1e1e32" }] },
-  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#1a1a2e" }] },
+// Clean light map theme
+const LIGHT_MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c5e8c5" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
 ];
 
-// Car icon SVG - Uber style white car on dark background for visibility
+// Car icon SVG - Dark car on light background for visibility
 const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <circle cx="24" cy="24" r="22" fill="#ffffff"/>
-  <circle cx="24" cy="24" r="19" fill="#f8f8f8"/>
-  <path d="M15 27 L15 22 L18 15 L30 15 L33 22 L33 27 L30 30 L18 30 Z" fill="#1a1a2e"/>
-  <rect x="17" y="16" width="14" height="6" rx="1" fill="#276EF1"/>
+  <circle cx="24" cy="24" r="22" fill="#1a1a2e"/>
+  <circle cx="24" cy="24" r="19" fill="#2d2d44"/>
+  <path d="M15 27 L15 22 L18 15 L30 15 L33 22 L33 27 L30 30 L18 30 Z" fill="#ffffff"/>
+  <rect x="17" y="16" width="14" height="6" rx="1" fill="#87CEEB"/>
   <circle cx="18" cy="27" r="2" fill="#333"/>
   <circle cx="30" cy="27" r="2" fill="#333"/>
 </svg>`;
@@ -131,7 +124,7 @@ export default function TrackTrip() {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      styles: UBER_DARK_MAP_STYLES,
+      styles: LIGHT_MAP_STYLES,
     };
   }, [isLoaded]);
   
@@ -400,8 +393,8 @@ export default function TrackTrip() {
     : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
 
   return (
-    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-[#1a1a2e]">
-      {/* Full-screen Google Map with Uber dark theme */}
+    <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-gray-100">
+      {/* Full-screen Google Map with light theme */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
