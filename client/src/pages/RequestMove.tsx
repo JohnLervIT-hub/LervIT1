@@ -638,17 +638,17 @@ export default function RequestMove() {
         const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
           sum + parseFloat(item.volumeCuft || '0'), 0);
         
-        // Determine load size based on total volume thresholds
-        // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 50-170 ft³, Apartment: 170+ ft³
+        // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
+        // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
         let recommendedLoadSize = 'boxes';
         let recommendedVehicle = 'car';
-        if (totalVolume > 170) {
+        if (totalVolume > 300) {
           recommendedLoadSize = 'apartment';
           recommendedVehicle = 'truck';
-        } else if (totalVolume > 50) {
+        } else if (totalVolume > 165) {
           recommendedLoadSize = 'large';
           recommendedVehicle = 'pickup';
-        } else if (totalVolume > 10) {
+        } else if (totalVolume > 20) {
           recommendedLoadSize = 'medium';
           recommendedVehicle = 'van';
         }
@@ -701,13 +701,13 @@ export default function RequestMove() {
     const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed');
     if (completedItems.length === 0) return;
     
-    // Calculate total volume and determine load size
-    // Boxes: 1-10 ft³, Medium: 11-50 ft³, Large: 50-170 ft³, Apartment: 170+ ft³
+    // Calculate total volume and determine load size (synced with shared/pricing.ts)
+    // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
     let recommendedLoadSize = 'boxes';
-    if (totalVolume > 170) recommendedLoadSize = 'apartment';
-    else if (totalVolume > 50) recommendedLoadSize = 'large';
-    else if (totalVolume > 10) recommendedLoadSize = 'medium';
+    if (totalVolume > 300) recommendedLoadSize = 'apartment';
+    else if (totalVolume > 165) recommendedLoadSize = 'large';
+    else if (totalVolume > 20) recommendedLoadSize = 'medium';
     
     // Get max recommended movers
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));

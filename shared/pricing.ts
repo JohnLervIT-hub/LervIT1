@@ -41,10 +41,12 @@ export interface VehicleClassConfig {
  * 
  * IMPORTANT: These thresholds are synced with furniture-database.ts
  * Volume thresholds:
- *   0-20 ft³   → Class A (SUV/Small Vehicle)
- *   21-80 ft³  → Class B/C (Cargo Van)
- *   81-170 ft³ → Class D (Pickup Truck)
- *   >170 ft³   → Class E (Moving Truck)
+ *   0-20 ft³    → Class A (SUV/Small Vehicle)
+ *   21-165 ft³  → Class C (Cargo Van)
+ *   166-300 ft³ → Class D (Pickup Truck / Small Moving Truck)
+ *   >300 ft³    → Class E (Large Moving Truck)
+ * 
+ * Note: Class B is deprecated (merged into Class C). Kept in type for backward compatibility.
  */
 export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   A: {
@@ -60,43 +62,43 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   },
   B: {
     class: 'B',
-    name: 'Large SUV / Small Cargo Van',
+    name: 'Cargo Van (Legacy)',
     vehicleType: 'van',
-    volumeRangeMin: 20,
-    volumeRangeMax: 50,
-    baseFee: 12.00,
-    perKmRate: 1.00,
-    loadType: 'Small furniture, pair of chairs',
-    examples: 'Pair of chairs, small table, 6+ boxes',
+    volumeRangeMin: 21,
+    volumeRangeMax: 165,
+    baseFee: 15.00,
+    perKmRate: 1.25,
+    loadType: 'Deprecated - use Class C',
+    examples: 'Deprecated - merged into Class C',
   },
   C: {
     class: 'C',
     name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 50,
-    volumeRangeMax: 80,
+    volumeRangeMin: 21,
+    volumeRangeMax: 165,
     baseFee: 15.00,
     perKmRate: 1.25,
-    loadType: 'Medium furniture loads',
-    examples: 'Small sofa, mattress, bedroom items',
+    loadType: 'Medium to large furniture loads',
+    examples: 'Sofa, mattress, bedroom set, multiple furniture',
   },
   D: {
     class: 'D',
     name: 'Pickup Truck / Small Moving Truck',
     vehicleType: 'pickup',
-    volumeRangeMin: 80,
-    volumeRangeMax: 170,
+    volumeRangeMin: 166,
+    volumeRangeMax: 300,
     baseFee: 20.00,
     perKmRate: 1.60,
-    loadType: 'Full bedroom / large items',
-    examples: 'Bed frame + mattress, dresser, multiple furniture',
+    loadType: 'Large loads / partial moves',
+    examples: 'Full bedroom + living room, multiple rooms',
   },
   E: {
     class: 'E',
     name: 'Moving Truck (Large)',
     vehicleType: 'truck',
-    volumeRangeMin: 170,
-    volumeRangeMax: 500,
+    volumeRangeMin: 301,
+    volumeRangeMax: 600,
     baseFee: 40.00,
     perKmRate: 2.00,
     loadType: 'Full apartment / home moves',
@@ -108,25 +110,25 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
 export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
   'boxes': 'A',        // 0-20 ft³ → Class A (SUV) - boxes, small items
   'small': 'A',        // Alias for boxes
-  'medium': 'C',       // 21-80 ft³ → Class C (Cargo Van)
-  'large': 'D',        // 81-170 ft³ → Class D (Pickup Truck)
-  'apartment': 'E',    // >170 ft³ → Class E (Moving Truck)
+  'medium': 'C',       // 21-165 ft³ → Class C (Cargo Van)
+  'large': 'D',        // 166-300 ft³ → Class D (Pickup Truck / Small Moving Truck)
+  'apartment': 'E',    // >300 ft³ → Class E (Large Moving Truck)
 };
 
 /**
  * Determine vehicle class from total volume
  * Synced with furniture-database.ts thresholds:
- *   0-20 ft³   → A (SUV)
- *   21-50 ft³  → B (Large SUV/Small Van)
- *   51-80 ft³  → C (Cargo Van)
- *   81-170 ft³ → D (Pickup Truck)
- *   >170 ft³   → E (Moving Truck)
+ *   0-20 ft³    → A (SUV)
+ *   21-165 ft³  → C (Cargo Van)
+ *   166-300 ft³ → D (Pickup Truck / Small Moving Truck)
+ *   >300 ft³    → E (Large Moving Truck)
+ * 
+ * Note: Class B is deprecated (merged into C)
  */
 export function getVehicleClassFromVolume(volumeCuft: number): VehicleClass {
   if (volumeCuft <= 20) return 'A';
-  if (volumeCuft <= 50) return 'B';
-  if (volumeCuft <= 80) return 'C';
-  if (volumeCuft <= 170) return 'D';
+  if (volumeCuft <= 165) return 'C';
+  if (volumeCuft <= 300) return 'D';
   return 'E';
 }
 

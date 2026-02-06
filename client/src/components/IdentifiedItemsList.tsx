@@ -47,21 +47,21 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   );
   
   // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
-  // CAR_MAX: 20, VAN_MAX: 80, PICKUP_MAX: 170, >170 → Truck
+  // CAR_MAX: 20, VAN_MAX: 165, PICKUP_MAX: 300, >300 → Truck
   const getVehicleRecommendation = () => {
-    if (totalVolume > 170) return { 
+    if (totalVolume > 300) return { 
       vehicle: 'Moving Truck', 
       loadSize: 'Apartment Move', 
-      description: '170+ ft³',
+      description: '300+ ft³',
       gradient: 'from-red-500 to-orange-500',
       bgColor: 'bg-red-50 dark:bg-red-950/30',
       textColor: 'text-red-700 dark:text-red-400',
       borderColor: 'border-red-200 dark:border-red-800'
     };
-    if (totalVolume > 80) return { 
+    if (totalVolume > 165) return { 
       vehicle: 'Pickup Truck', 
       loadSize: 'Large Load', 
-      description: '81-170 ft³',
+      description: '166-300 ft³',
       gradient: 'from-orange-500 to-amber-500',
       bgColor: 'bg-orange-50 dark:bg-orange-950/30',
       textColor: 'text-orange-700 dark:text-orange-400',
@@ -70,7 +70,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     if (totalVolume > 20) return { 
       vehicle: 'Cargo Van', 
       loadSize: 'Medium Load', 
-      description: '21-80 ft³',
+      description: '21-165 ft³',
       gradient: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-50 dark:bg-blue-950/30',
       textColor: 'text-blue-700 dark:text-blue-400',
