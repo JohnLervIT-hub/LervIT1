@@ -410,8 +410,8 @@ export default function MoverDashboard() {
     b.status === "in_transit" || ACTIVE_STATUSES.includes(b.status as BookingStatus)
   );
   
-  // Keep screen awake during active trips to ensure GPS updates continue
-  const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(hasActiveTrip);
+  const shouldKeepScreenAwake = hasActiveTrip || (!!mover?.isAvailable && isLiveGpsActive && geoPermissionState === 'granted');
+  const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(shouldKeepScreenAwake);
 
   // Get earnings data for this mover
   const { data: earnings } = useQuery<any>({
@@ -1468,10 +1468,16 @@ export default function MoverDashboard() {
             {/* Status Toggle & Actions */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                {hasActiveTrip && isWakeLockActive && (
-                  <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30 text-xs gap-1" data-testid="badge-screen-awake">
+                {isWakeLockActive && (
+                  <Badge variant="outline" className="bg-pink-500/15 text-pink-600 dark:text-pink-400 border-pink-500/40 text-xs gap-1 font-medium" data-testid="badge-screen-awake">
                     <Smartphone className="w-3 h-3" />
                     Screen On
+                  </Badge>
+                )}
+                {shouldKeepScreenAwake && !isWakeLockActive && isWakeLockSupported && (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs gap-1 animate-pulse" data-testid="badge-screen-awake-pending">
+                    <Smartphone className="w-3 h-3" />
+                    Acquiring...
                   </Badge>
                 )}
                 {mover?.isAvailable && isLiveGpsActive && (
