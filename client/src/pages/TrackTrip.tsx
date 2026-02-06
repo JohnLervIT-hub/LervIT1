@@ -135,6 +135,7 @@ export default function TrackTrip() {
   const animationFrameRef = useRef<number | null>(null);
   const isFirstPositionRef = useRef(true);
   const markerRef = useRef<google.maps.Marker | null>(null);
+  const hasFittedBoundsRef = useRef(false);
 
   // Resilient polling - 3 second intervals for smoother tracking
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
@@ -333,26 +334,48 @@ export default function TrackTrip() {
     }
   }, [locationData, isLoaded]);
 
-  // Update map bounds
+  // Fit map bounds once when both map and data are ready (on mount/remount)
   useEffect(() => {
-    if (map && locationData) {
-      const bounds = new google.maps.LatLngBounds();
-      bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
-      bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
-      
-      if (locationData.currentLocation) {
-        bounds.extend({ 
-          lat: locationData.currentLocation.latitude, 
-          lng: locationData.currentLocation.longitude 
-        });
-      }
-      
-      map.fitBounds(bounds, { top: 100, bottom: isSheetExpanded ? 380 : 200, left: 40, right: 40 });
+    if (!map || !locationData || hasFittedBoundsRef.current) return;
+    
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
+    bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
+    
+    if (locationData.currentLocation) {
+      bounds.extend({ 
+        lat: locationData.currentLocation.latitude, 
+        lng: locationData.currentLocation.longitude 
+      });
     }
+    
+    map.fitBounds(bounds, { top: 100, bottom: isSheetExpanded ? 380 : 200, left: 40, right: 40 });
+    hasFittedBoundsRef.current = true;
+  }, [map, locationData, isSheetExpanded]);
+  
+  // Adjust map padding when bottom sheet expands/collapses (without re-centering on every poll)
+  const prevSheetExpandedRef = useRef(isSheetExpanded);
+  useEffect(() => {
+    if (!map || !locationData || prevSheetExpandedRef.current === isSheetExpanded) return;
+    prevSheetExpandedRef.current = isSheetExpanded;
+    
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
+    bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
+    
+    if (locationData.currentLocation) {
+      bounds.extend({ 
+        lat: locationData.currentLocation.latitude, 
+        lng: locationData.currentLocation.longitude 
+      });
+    }
+    
+    map.fitBounds(bounds, { top: 100, bottom: isSheetExpanded ? 380 : 200, left: 40, right: 40 });
   }, [map, locationData, isSheetExpanded]);
 
-  const onMapLoad = useCallback((map: google.maps.Map) => {
-    setMap(map);
+  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+    hasFittedBoundsRef.current = false;
   }, []);
 
   // Loading states
@@ -388,17 +411,21 @@ export default function TrackTrip() {
   const statusMessage = getStatusMessage(locationData.status, locationData.mover?.name);
   const isLive = !!currentLocation && ACTIVE_STATUSES.includes(locationData.status as BookingStatus);
 
-  const center = currentLocation
-    ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
-    : { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
+  const defaultCenter = useMemo(() => {
+    if (currentLocation) {
+      return { lat: currentLocation.latitude, lng: currentLocation.longitude };
+    }
+    return { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-gray-100">
       {/* Full-screen Google Map with light theme */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
-        center={center}
-        zoom={14}
+        center={defaultCenter}
+        zoom={13}
         options={mapOptions}
         onLoad={onMapLoad}
       >
