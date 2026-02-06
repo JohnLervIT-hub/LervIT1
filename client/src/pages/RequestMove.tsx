@@ -640,28 +640,33 @@ export default function RequestMove() {
         
         // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
         // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
-        let recommendedLoadSize = 'boxes';
-        let recommendedVehicle = 'car';
-        if (totalVolume > 300) {
-          recommendedLoadSize = 'apartment';
-          recommendedVehicle = 'truck';
-        } else if (totalVolume > 165) {
-          recommendedLoadSize = 'large';
-          recommendedVehicle = 'pickup';
-        } else if (totalVolume > 20) {
-          recommendedLoadSize = 'medium';
-          recommendedVehicle = 'van';
-        }
+        const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+        const vehicleTiers = ['car', 'van', 'pickup', 'truck'] as const;
+        let tierIndex = 0;
+        if (totalVolume > 300) tierIndex = 3;
+        else if (totalVolume > 165) tierIndex = 2;
+        else if (totalVolume > 20) tierIndex = 1;
         
         // Get max recommended movers from all items
         const maxMovers = Math.max(...completedItems.map((item: IdentifiedItem) => item.recommendedMovers || 1));
         
         // Check for heavy/complex items
+        const itemTotalWeight = completedItems.reduce((sum: number, item: IdentifiedItem) => sum + parseFloat(item.weightKg || '0'), 0);
         const hasHeavyItems = completedItems.some((item: IdentifiedItem) => 
           item.handlingComplexity === 'high' || 
           item.handlingComplexity === 'very_high' ||
           parseFloat(item.weightKg || '0') > 30
         );
+        
+        // WEIGHT OVERRIDE (matching server getVehicleRecommendationWithCategory):
+        // >150kg total → at least Moving Truck (apartment), >100kg → at least Pickup Truck (large)
+        // High complexity items in small loads → at least Cargo Van (medium)
+        if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
+        else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
+        if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
+        
+        const recommendedLoadSize = loadSizeTiers[tierIndex];
+        const recommendedVehicle = vehicleTiers[tierIndex];
         
         // Auto-apply all recommendations
         setLoadSize(recommendedLoadSize);
@@ -704,20 +709,31 @@ export default function RequestMove() {
     // Calculate total volume and determine load size (synced with shared/pricing.ts)
     // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
-    let recommendedLoadSize = 'boxes';
-    if (totalVolume > 300) recommendedLoadSize = 'apartment';
-    else if (totalVolume > 165) recommendedLoadSize = 'large';
-    else if (totalVolume > 20) recommendedLoadSize = 'medium';
+    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    let tierIndex = 0;
+    if (totalVolume > 300) tierIndex = 3;
+    else if (totalVolume > 165) tierIndex = 2;
+    else if (totalVolume > 20) tierIndex = 1;
     
     // Get max recommended movers
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
     
     // Check for heavy/complex items
+    const itemTotalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
     const hasHeavyItems = completedItems.some(item => 
       item.handlingComplexity === 'high' || 
       item.handlingComplexity === 'very_high' ||
       parseFloat(item.weightKg || '0') > 30
     );
+    
+    // WEIGHT OVERRIDE (matching server getVehicleRecommendationWithCategory):
+    // >150kg total → at least Moving Truck (apartment), >100kg → at least Pickup Truck (large)
+    // High complexity items in small loads → at least Cargo Van (medium)
+    if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
+    else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
+    if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
+    
+    const recommendedLoadSize = loadSizeTiers[tierIndex];
     
     // Apply recommendations
     setLoadSize(recommendedLoadSize);

@@ -48,8 +48,11 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   
   // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
   // CAR_MAX: 20, VAN_MAX: 165, PICKUP_MAX: 300, >300 → Truck
+  // WEIGHT OVERRIDES (matching server getVehicleRecommendationWithCategory):
+  // >150kg → at least Moving Truck, >100kg → at least Pickup Truck
+  // COMPLEXITY OVERRIDE: high/very_high items in small loads → at least Cargo Van
   const getVehicleRecommendation = () => {
-    if (totalVolume > 300) return { 
+    const truckRec = { 
       vehicle: 'Moving Truck', 
       loadSize: 'Apartment Move', 
       description: '300+ ft³',
@@ -58,7 +61,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
       textColor: 'text-red-700 dark:text-red-400',
       borderColor: 'border-red-200 dark:border-red-800'
     };
-    if (totalVolume > 165) return { 
+    const pickupRec = { 
       vehicle: 'Pickup Truck', 
       loadSize: 'Large Load', 
       description: '166-300 ft³',
@@ -67,7 +70,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
       textColor: 'text-orange-700 dark:text-orange-400',
       borderColor: 'border-orange-200 dark:border-orange-800'
     };
-    if (totalVolume > 20) return { 
+    const vanRec = { 
       vehicle: 'Cargo Van', 
       loadSize: 'Medium Load', 
       description: '21-165 ft³',
@@ -76,7 +79,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
       textColor: 'text-blue-700 dark:text-blue-400',
       borderColor: 'border-blue-200 dark:border-blue-800'
     };
-    return { 
+    const carRec = { 
       vehicle: 'Car/SUV', 
       loadSize: 'Small Load', 
       description: '0-20 ft³',
@@ -85,6 +88,21 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
       textColor: 'text-green-700 dark:text-green-400',
       borderColor: 'border-green-200 dark:border-green-800'
     };
+
+    let volumeRec = carRec;
+    if (totalVolume > 300) volumeRec = truckRec;
+    else if (totalVolume > 165) volumeRec = pickupRec;
+    else if (totalVolume > 20) volumeRec = vanRec;
+
+    const recOrder = [carRec, vanRec, pickupRec, truckRec];
+    let recIndex = recOrder.indexOf(volumeRec);
+
+    if (totalWeight > 150 && recIndex < 3) recIndex = 3;
+    else if (totalWeight > 100 && recIndex < 2) recIndex = 2;
+
+    if (hasHighComplexity && recIndex < 1) recIndex = 1;
+
+    return recOrder[recIndex];
   };
   const vehicleRec = getVehicleRecommendation();
 
