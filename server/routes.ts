@@ -3504,6 +3504,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (booking.moverId) {
           return res.status(409).json({ error: "This job has already been assigned to another mover" });
         }
+        
+        // CRITICAL: Update Stripe PaymentIntent metadata with mover details
+        if (booking.stripePaymentIntentId) {
+          try {
+            const moverStripeAccountResult = await db.select()
+              .from(moverStripeAccounts)
+              .where(eq(moverStripeAccounts.moverId, updates.moverId))
+              .limit(1);
+            
+            const moverAccount = moverStripeAccountResult[0];
+            const isFullyOnboarded = moverAccount?.chargesEnabled && moverAccount?.payoutsEnabled;
+            
+            const existingPI = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+            const mergedMetadata = {
+              ...existingPI.metadata,
+              moverId: updates.moverId,
+              moverStripeOnboarded: isFullyOnboarded ? 'true' : 'false',
+              moverStripeAccountId: moverAccount?.stripeAccountId || '',
+              ...(isFullyOnboarded ? { paymentType: 'platform_charge_with_transfer' } : {}),
+            };
+            
+            await stripe.paymentIntents.update(booking.stripePaymentIntentId, {
+              metadata: mergedMetadata,
+            });
+            
+            console.log(`[PATCH Accept] Updated Stripe metadata for PI ${booking.stripePaymentIntentId} with moverId ${updates.moverId}`);
+          } catch (stripeErr) {
+            console.error('[PATCH Accept] Failed to update Stripe metadata:', stripeErr);
+          }
+        }
       }
       
       // Convert preferredDate to Date if it's a string
