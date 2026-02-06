@@ -7017,8 +7017,24 @@ Respond with VALID JSON only:
         const transferAmountCents = Math.round(netAmount * 100);
         
         try {
+          // Get the charge ID from the payment intent to link as source_transaction
+          // This ensures funds come from the specific customer payment, not platform balance
+          let sourceChargeId: string | undefined;
+          if (booking.stripePaymentIntentId) {
+            try {
+              const pi = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+              if (pi.latest_charge) {
+                sourceChargeId = typeof pi.latest_charge === 'string' 
+                  ? pi.latest_charge 
+                  : pi.latest_charge.id;
+              }
+            } catch (chargeErr) {
+              console.error(`[Earnings] Failed to get charge for source_transaction:`, chargeErr);
+            }
+          }
+          
           // Create Stripe Transfer to mover's connected account
-          const transfer = await stripe.transfers.create({
+          const transferParams: Stripe.TransferCreateParams = {
             amount: transferAmountCents,
             currency: 'cad',
             destination: moverStripeAccount.stripeAccountId,
@@ -7029,8 +7045,15 @@ Respond with VALID JSON only:
               platformFee: platformFeeAmount.toFixed(2),
               processedBy: 'booking_completion',
             },
-          }, {
-            idempotencyKey: `transfer-${bookingId}`,
+          };
+          
+          // Link to the source charge so funds come from the specific payment
+          if (sourceChargeId) {
+            transferParams.source_transaction = sourceChargeId;
+          }
+          
+          const transfer = await stripe.transfers.create(transferParams, {
+            idempotencyKey: `transfer-${bookingId}-v2`,
           });
           
           stripeTransferId = transfer.id;
@@ -7063,6 +7086,8 @@ Respond with VALID JSON only:
             }
           }
         } catch (transferError: any) {
+          console.error(`[Earnings] Transfer failed for booking ${bookingId}:`, 
+            transferError?.type, transferError?.message, transferError?.code);
           logEvent.error('transfer_failed', transferError);
           earningsStatus = 'pending';
         }
@@ -8787,8 +8812,24 @@ Respond with VALID JSON only:
         const netAmountCents = Math.round(parseFloat(earning.netAmount) * 100);
         
         try {
+          // Get the charge ID from the booking's payment intent for source_transaction
+          let sourceChargeId: string | undefined;
+          const bookingData = await storage.getBooking(earning.bookingId);
+          if (bookingData?.stripePaymentIntentId) {
+            try {
+              const pi = await stripe.paymentIntents.retrieve(bookingData.stripePaymentIntentId);
+              if (pi.latest_charge) {
+                sourceChargeId = typeof pi.latest_charge === 'string' 
+                  ? pi.latest_charge 
+                  : pi.latest_charge.id;
+              }
+            } catch (chargeErr) {
+              console.error(`[Admin Payout] Failed to get charge for source_transaction:`, chargeErr);
+            }
+          }
+          
           // Create Stripe Transfer to mover's connected account
-          const transfer = await stripe.transfers.create({
+          const transferParams: Stripe.TransferCreateParams = {
             amount: netAmountCents,
             currency: 'cad',
             destination: moverAccount.stripeAccountId,
@@ -8798,7 +8839,13 @@ Respond with VALID JSON only:
               moverId: earning.moverId,
               processedBy: 'admin_batch_payout',
             },
-          });
+          };
+          
+          if (sourceChargeId) {
+            transferParams.source_transaction = sourceChargeId;
+          }
+          
+          const transfer = await stripe.transfers.create(transferParams);
           
           // Update earnings status to paid
           await db.update(moverEarnings)
