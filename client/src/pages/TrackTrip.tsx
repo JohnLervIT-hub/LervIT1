@@ -378,7 +378,19 @@ export default function TrackTrip() {
     hasFittedBoundsRef.current = false;
   }, []);
 
-  // Loading states
+  const defaultCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+  if (locationData && !defaultCenterRef.current) {
+    const loc = locationData.currentLocation;
+    if (loc) {
+      defaultCenterRef.current = { lat: loc.latitude, lng: loc.longitude };
+    } else {
+      defaultCenterRef.current = {
+        lat: (locationData.pickup.latitude + locationData.dropoff.latitude) / 2,
+        lng: (locationData.pickup.longitude + locationData.dropoff.longitude) / 2,
+      };
+    }
+  }
+
   if (!isLoaded || isLoading || !locationData) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -410,14 +422,7 @@ export default function TrackTrip() {
   const currentLocation = locationData.currentLocation;
   const statusMessage = getStatusMessage(locationData.status, locationData.mover?.name);
   const isLive = !!currentLocation && ACTIVE_STATUSES.includes(locationData.status as BookingStatus);
-
-  const defaultCenter = useMemo(() => {
-    if (currentLocation) {
-      return { lat: currentLocation.latitude, lng: currentLocation.longitude };
-    }
-    return { lat: (pickup.latitude + dropoff.latitude) / 2, lng: (pickup.longitude + dropoff.longitude) / 2 };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const defaultCenter = defaultCenterRef.current || { lat: pickup.latitude, lng: pickup.longitude };
 
   return (
     <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-gray-100">
@@ -582,7 +587,7 @@ export default function TrackTrip() {
                   </p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span data-testid="text-mover-rating">{locationData.mover.rating.toFixed(1)}</span>
+                    <span data-testid="text-mover-rating">{(locationData.mover.rating ?? 0).toFixed(1)}</span>
                     <span className="mx-1">•</span>
                     <Truck className="w-4 h-4" />
                     <span className="capitalize">{locationData.mover.vehicleType}</span>
