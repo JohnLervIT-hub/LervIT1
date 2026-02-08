@@ -104,6 +104,8 @@ Bookings also track payment status independently:
 
 ## State Diagram
 
+*Rendered diagram: see `diagrams/diagram_03_booking_state_machine.png`*
+
 ```mermaid
 stateDiagram-v2
     [*] --> pending_payment: Booking Created

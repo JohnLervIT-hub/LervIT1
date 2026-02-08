@@ -84,6 +84,8 @@ Customer Browser                   Mover Browser
 
 ## High-Level Architecture Diagram
 
+*Rendered diagram: see `diagrams/diagram_01_system_architecture.png`*
+
 ```mermaid
 graph TB
     subgraph "Client Layer"
@@ -146,6 +148,8 @@ graph TB
 ---
 
 ## Sequence Diagram: Quote to Book to Complete to Payout
+
+*Rendered diagram: see `diagrams/diagram_02_booking_sequence.png`*
 
 ```mermaid
 sequenceDiagram

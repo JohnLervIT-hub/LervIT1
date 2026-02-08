@@ -31,6 +31,15 @@ This deposit is intended to demonstrate authorship of the platform's design, str
 | 09 | `09_UX_Flow_Summary.md` | Screen-by-screen flows and navigation map |
 | 10 | `10_Original_Authorship_Statement.md` | Original authorship declaration |
 | 11 | `11_Appendix_Representative_Snippets.md` | Up to 5 short representative code snippets |
+| -- | `diagrams/` | Rendered PNG images of all system diagrams |
+
+### Rendered Diagrams
+
+| File | Description |
+|------|-------------|
+| `diagrams/diagram_01_system_architecture.png` | High-level architecture: Client, API, Business Logic, Data, and External Service layers |
+| `diagrams/diagram_02_booking_sequence.png` | End-to-end sequence: Quote, Payment, Mover Matching, Active Move, Payout |
+| `diagrams/diagram_03_booking_state_machine.png` | Booking lifecycle state machine with all valid transitions |
 
 ---
 
