@@ -1,0 +1,108 @@
+You are my technical documentation assistant. This repo is a Lervit platform built with Next.js (frontend), Express (backend), and Postgres (database). I need a “System-Level Copyright Deposit Package” that describes the system architecture, workflows, and orchestration logic at a system level—without exposing secrets.
+
+CRITICAL RULES (must follow):
+1) Do NOT include any secrets: no API keys, tokens, passwords, env values, webhook signing secrets, Stripe keys, DB connection strings, private URLs, or .env content.
+2) Do NOT dump the entire codebase. Only include SMALL representative snippets when necessary to demonstrate authorship (max 30–60 lines each). Prefer pseudocode.
+3) Focus on EXPRESSIONS of the system: architecture, user flows, states, decision orchestration, data flow, and UX flow.
+4) Output in Markdown, professionally formatted, with versioning and date (v1.0 — today’s date).
+5) Add a “Redactions & Exclusions” section to confirm no secrets were included.
+
+DELIVERABLES:
+Create a folder: /docs/copyright_deposit_v1/
+Generate the following files:
+
+A) 00_README.md
+- What this package is (copyright deposit)
+- Version/date
+- What is excluded (secrets, full code dumps)
+- “Source Map” table: section → key files reviewed (filenames only)
+
+B) 01_System_Overview.md
+- Mission-level overview
+- Roles: Customer, Mover, Admin/Support
+- Core capabilities: instant booking, photo-based pricing, smart matching, live tracking, payouts
+
+C) 02_Architecture.md
+- Component overview: Next.js UI, Express API, Postgres DB, pricing/matching modules, payments/payouts integration
+- Interfaces and data flow
+- Include diagrams using mermaid:
+  1) High-level architecture diagram
+  2) Sequence diagram for “Quote → Book → Complete → Payout”
+
+D) 03_Workflows.md
+- End-to-end workflows:
+  - Customer: signup → quote → booking → tracking → completion
+  - Mover: onboarding → accept job → in-progress → complete → payout
+  - Admin/support: cancellations, disputes, refunds (if implemented)
+- For each workflow: triggers, validations, errors/fallbacks
+
+E) 04_State_Machine.md
+- Job lifecycle states and transitions (e.g., Draft/Quoted/Booked/Assigned/InProgress/Completed/Cancelled/Disputed)
+- Transition triggers (API calls, user actions, webhook events)
+- Validation rules and failure states
+- Include a mermaid state diagram
+
+F) 05_Decision_Orchestration.md
+Describe pricing + vehicle-fit + matching at system level:
+- Inputs → outputs
+- Constraints and priorities
+- Pseudocode steps (NOT full formulas)
+- How photo-based estimation feeds the quote (conceptual)
+- Matching logic (right job → right vehicle class → right mover availability)
+- Only include up to 2 short representative code snippets if necessary (max 60 lines each), redacted for secrets.
+
+G) 06_Payments_and_Payouts.md
+- Stripe/Connect flow at system level:
+  - customer charge → platform fee → transfer to connected account → payout to bank
+  - payout schedules (daily/weekly/manual)
+  - first payout delay behavior
+  - reconciliation concepts (balances, transfers, payouts)
+- Include a “Common payout delay causes” subsection (bank verification, first payout hold, payout schedule, disputes)
+
+H) 07_Postgres_Data_Model_Summary.md
+- High-level list of tables/entities and key fields (NO PII dumps)
+- Relationships between Customer/Mover/Job/Quote/Payment/Transfer/Payout/VehicleClass/PricingConfig
+- Mention indexes/constraints at a high level if present
+
+I) 08_API_Surface_Summary.md
+- List key Express routes/endpoints grouped by domain:
+  - auth/users
+  - quotes/pricing
+  - jobs/assignments
+  - tracking
+  - payments/payouts/webhooks
+- For each: purpose + main request/response fields (high-level)
+
+J) 09_UX_Flow_Summary.md
+- Screen-by-screen flow (no images required)
+- Navigation map for Next.js routes/pages
+- Key UI states (loading, error, success)
+- What information is shown to customer vs mover
+
+K) 10_Original_Authorship_Statement.md
+- Statement that this documentation and the underlying system expression is original work of Lervit Technologies Corporation
+- Include version/date and repository name
+
+L) 11_Appendix_Representative_Snippets.md (OPTIONAL)
+- Up to 5 short snippets (max 60 lines each)
+- Each snippet must include: filename, purpose, redaction note
+- Absolutely no secrets
+
+WORK PROCESS:
+1) First, print a brief “Repository Scan Plan” listing the folders you will inspect (common ones: /pages or /app, /components, /server or /api, /routes, /controllers, /services, /db, /models, /prisma, /migrations, /utils, /lib, /middleware).
+2) Identify the key files related to:
+   - Next.js routing + core pages
+   - Express route handlers and controllers
+   - Postgres models/schema/migrations
+   - Pricing/quote logic
+   - Matching logic
+   - Job state transitions
+   - Stripe/Connect integration + webhooks
+3) Generate the docs listed above in /docs/copyright_deposit_v1/
+4) Ensure consistent terminology across docs (Job, Quote, Mover, Customer, VehicleClass, Transfer, Payout).
+5) Confirm at the end: “No secrets included” checklist.
+
+START NOW:
+- Create /docs/copyright_deposit_v1/
+- Print the Repository Scan Plan
+- Then generate all documents A–L.
