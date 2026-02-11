@@ -666,12 +666,10 @@ export default function RequestMove() {
         
         // DIMENSION OVERRIDE: Check max dimension across all items
         const maxDimension = Math.max(...completedItems.map((item: IdentifiedItem) => {
-          const dims = item.dimensions;
-          if (!dims) return 0;
           return Math.max(
-            parseFloat(String(dims.length_cm || dims.lengthCm || 0)),
-            parseFloat(String(dims.width_cm || dims.widthCm || 0)),
-            parseFloat(String(dims.height_cm || dims.heightCm || 0))
+            parseFloat(String(item.dimensionsLcm || 0)),
+            parseFloat(String(item.dimensionsWcm || 0)),
+            parseFloat(String(item.dimensionsHcm || 0))
           );
         }));
         if (maxDimension > 200 && tierIndex < 2) tierIndex = 2;
@@ -740,10 +738,21 @@ export default function RequestMove() {
     );
     
     // WEIGHT OVERRIDE (matching server getVehicleRecommendationWithCategory):
-    // >150kg total → at least Moving Truck (apartment), >100kg → at least Pickup Truck (large)
-    // High complexity items in small loads → at least Cargo Van (medium)
+    // >150kg → truck, >100kg → pickup, >50kg → van
     if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
     else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
+    else if (itemTotalWeight > 50 && tierIndex < 1) tierIndex = 1;
+    
+    // DIMENSION OVERRIDE: Check max dimension across all items
+    const maxDimRecalc = Math.max(...completedItems.map(item => {
+      return Math.max(
+        parseFloat(String(item.dimensionsLcm || 0)),
+        parseFloat(String(item.dimensionsWcm || 0)),
+        parseFloat(String(item.dimensionsHcm || 0))
+      );
+    }));
+    if (maxDimRecalc > 200 && tierIndex < 2) tierIndex = 2;
+    else if (maxDimRecalc > 150 && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
     
     const recommendedLoadSize = loadSizeTiers[tierIndex];
