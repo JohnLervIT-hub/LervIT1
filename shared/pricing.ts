@@ -1,31 +1,23 @@
 // LervIT PrecisionMatch™ Dynamic Pricing Calculator
 // Vehicle class-based pricing system for moving services
 
-export interface ItemLoadFeeDetail {
-  volumeCuft: number;
-  rate: number;       // $/ft³ applied (base or surcharge rate)
-  fee: number;        // volume × rate
-  isAdditional: boolean;  // true = 60% surcharge applied
-}
-
 export interface PriceBreakdown {
   baseFee: number;
   distanceFee: number;
-  distanceKm: number;  // Distance in kilometers for display
-  perKmRate: number;   // Price per km for the vehicle class
+  distanceKm: number;
+  perKmRate: number;
   loadFee: number;
-  loadSizeFee: number;  // New: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
+  loadSizeFee: number;
   moverTravelFee: number;
   pickupDifficultyFee: number;
   dropoffDifficultyFee: number;
-  heavyItemFee: number;  // Kept for backwards compatibility
+  heavyItemFee: number;
   subtotal: number;
   numberOfMoversMultiplier: number;
   totalCost: number;
   vehicleClass?: VehicleClass;
-  loadSize?: string;  // Store the load size for display
-  volumeCuft?: number;  // AI-detected total volume for volume-based pricing
-  itemLoadFees?: ItemLoadFeeDetail[];  // Per-item load fee breakdown (when multiple AI items)
+  loadSize?: string;
+  volumeCuft?: number;
 }
 
 // ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
@@ -182,7 +174,6 @@ const PRICING_CONFIG = {
     large: 30.00,    // Pickup Truck loads
     apartment: 45.00, // Moving Truck loads - minimum for 300+ ft³
   } as Record<string, number>,
-  ADDITIONAL_ITEM_DISCOUNT: 0.20,  // Additional items (medium-apartment) get 20% discount on their tier fee
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   
@@ -251,30 +242,14 @@ export function calculatePrice(
   // Load fee is now included in base fee (class-based pricing)
   const loadFee = 0;
   
-  // Load Size Fee calculation with per-item tier fees
   let loadSizeFee: number;
-  let itemLoadFees: ItemLoadFeeDetail[] | undefined;
   
   if (itemVolumes && itemVolumes.length > 0) {
-    const sorted = [...itemVolumes].sort((a, b) => b - a);
-    itemLoadFees = sorted.map((vol, index) => {
+    loadSizeFee = itemVolumes.reduce((sum, vol) => {
       const tier = getTierFeeForVolume(vol);
-      const isAdditional = index > 0;
-      const discountApplies = isAdditional && tier.tierName !== 'boxes';
-      const discount = discountApplies ? PRICING_CONFIG.ADDITIONAL_ITEM_DISCOUNT : 0;
-      const fee = Math.round(tier.fee * (1 - discount) * 100) / 100;
-      return {
-        volumeCuft: vol,
-        rate: 1 - discount,
-        fee,
-        isAdditional: discountApplies,
-        tierName: tier.tierName,
-        tierFee: tier.fee,
-      };
-    });
-    loadSizeFee = itemLoadFees.reduce((sum, item) => sum + item.fee, 0);
+      return sum + tier.fee;
+    }, 0);
   } else {
-    // Single volume or manual selection: flat tier fee
     loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
   }
   
@@ -319,7 +294,6 @@ export function calculatePrice(
     vehicleClass,
     loadSize,
     volumeCuft: totalVolume || undefined,
-    itemLoadFees,
   };
 }
 
