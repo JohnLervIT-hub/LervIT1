@@ -660,7 +660,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       
       // Use TOTAL volume for load size and vehicle with CATEGORY OVERRIDE
       const loadSize = getLoadSizeFromVolume(totalVolume);
-      const vehicle = getVehicleRecommendationWithCategory(totalVolume, item.category, totalWeight);
+      const maxDim = Math.max(item.dimensions_cm.length, item.dimensions_cm.width, item.dimensions_cm.height);
+      const vehicle = getVehicleRecommendationWithCategory(totalVolume, item.category, totalWeight, maxDim);
       
       // Adjust movers based on total weight
       let movers: 1 | 2 = item.movers_required;
@@ -773,7 +774,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       
       // Re-calculate load size and vehicle based on TOTAL volume/weight with CATEGORY OVERRIDE
       const finalLoadSize = getLoadSizeFromVolume(totalVolume);
-      const finalVehicle = getVehicleRecommendationWithCategory(totalVolume, visionResult.category, totalWeight);
+      const maxDimVision = Math.max(corrected.length_cm, corrected.width_cm, corrected.height_cm);
+      const finalVehicle = getVehicleRecommendationWithCategory(totalVolume, visionResult.category, totalWeight, maxDimVision);
       
       // Adjust movers based on total weight
       if (totalWeight > 50) movers = 2;
