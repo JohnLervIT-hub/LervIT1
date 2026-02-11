@@ -1,6 +1,13 @@
 // LervIT PrecisionMatch™ Dynamic Pricing Calculator
 // Vehicle class-based pricing system for moving services
 
+export interface ItemLoadFeeDetail {
+  volumeCuft: number;
+  rate: number;       // $/ft³ applied (base or surcharge rate)
+  fee: number;        // volume × rate
+  isAdditional: boolean;  // true = 60% surcharge applied
+}
+
 export interface PriceBreakdown {
   baseFee: number;
   distanceFee: number;
@@ -17,7 +24,8 @@ export interface PriceBreakdown {
   totalCost: number;
   vehicleClass?: VehicleClass;
   loadSize?: string;  // Store the load size for display
-  volumeCuft?: number;  // AI-detected volume for volume-based pricing
+  volumeCuft?: number;  // AI-detected total volume for volume-based pricing
+  itemLoadFees?: ItemLoadFeeDetail[];  // Per-item load fee breakdown (when multiple AI items)
 }
 
 // ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
