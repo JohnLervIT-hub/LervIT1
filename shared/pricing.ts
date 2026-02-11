@@ -8,6 +8,7 @@ export interface PriceBreakdown {
   perKmRate: number;   // Price per km for the vehicle class
   loadFee: number;
   loadSizeFee: number;  // New: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
+  apartmentPremium: number;  // $50 premium for 300+ ft³ apartment moves
   moverTravelFee: number;
   pickupDifficultyFee: number;
   dropoffDifficultyFee: number;
@@ -177,6 +178,7 @@ const PRICING_CONFIG = {
   // Scales proportionally for larger loads: 335ft³=$50, 500ft³=$75, 600ft³=$90
   VOLUME_LOAD_FEE_PER_CUFT: 0.15,
   VOLUME_LOAD_FEE_MINIMUM: 5.00,  // Minimum load fee regardless of volume
+  APARTMENT_MOVE_PREMIUM: 50.00, // $50 premium for 300+ ft³ loads (apartment moves)
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   
@@ -238,9 +240,12 @@ export function calculatePrice(
   // Dropoff difficulty fee
   const dropoffDifficultyFee = PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES[dropoffDifficulty] || 0;
   
+  // Apartment move premium: $50 for loads 300+ ft³
+  const isApartmentMove = volumeCuft ? volumeCuft >= 300 : loadSize === 'apartment';
+  const apartmentPremium = isApartmentMove ? PRICING_CONFIG.APARTMENT_MOVE_PREMIUM : 0;
+
   // Heavy item fee - kept in form but NOT included in pricing calculation anymore
-  // (User can still toggle it but it doesn't affect the price)
-  const heavyItemFee = 0;  // Previously: heavyItem ? PRICING_CONFIG.HEAVY_ITEM_FEE : 0;
+  const heavyItemFee = 0;
   
   // Mover travel fee (only if mover travels more than free radius)
   let moverTravelFee = 0;
@@ -249,8 +254,8 @@ export function calculatePrice(
     moverTravelFee = chargeableDistance * PRICING_CONFIG.MOVER_TRAVEL_RATE_PER_KM;
   }
   
-  // Calculate subtotal: baseFee + distanceFee + loadSizeFee + accessFees
-  const subtotal = baseFee + distanceFee + loadSizeFee + pickupDifficultyFee + 
+  // Calculate subtotal: baseFee + distanceFee + loadSizeFee + apartmentPremium + accessFees
+  const subtotal = baseFee + distanceFee + loadSizeFee + apartmentPremium + pickupDifficultyFee + 
                    dropoffDifficultyFee + moverTravelFee;
   
   // Apply number of movers multiplier
@@ -264,6 +269,7 @@ export function calculatePrice(
     perKmRate: classConfig.perKmRate,
     loadFee: Math.round(loadFee * 100) / 100,
     loadSizeFee: Math.round(loadSizeFee * 100) / 100,
+    apartmentPremium: Math.round(apartmentPremium * 100) / 100,
     pickupDifficultyFee: Math.round(pickupDifficultyFee * 100) / 100,
     dropoffDifficultyFee: Math.round(dropoffDifficultyFee * 100) / 100,
     heavyItemFee: Math.round(heavyItemFee * 100) / 100,
@@ -308,6 +314,7 @@ export function formatPriceBreakdown(breakdown: PriceBreakdown): string {
     classConfig ? `Vehicle Class ${breakdown.vehicleClass}: ${classConfig.name}` : null,
     `Base Fee: $${breakdown.baseFee.toFixed(2)}`,
     `Distance Fee (${classConfig ? `$${classConfig.perKmRate.toFixed(2)}/km` : 'per km'}): $${breakdown.distanceFee.toFixed(2)}`,
+    breakdown.apartmentPremium > 0 ? `Apartment Move Premium: $${breakdown.apartmentPremium.toFixed(2)}` : null,
     breakdown.pickupDifficultyFee > 0 ? `Pickup Difficulty: $${breakdown.pickupDifficultyFee.toFixed(2)}` : null,
     breakdown.dropoffDifficultyFee > 0 ? `Dropoff Difficulty: $${breakdown.dropoffDifficultyFee.toFixed(2)}` : null,
     breakdown.heavyItemFee > 0 ? `Heavy Item: $${breakdown.heavyItemFee.toFixed(2)}` : null,

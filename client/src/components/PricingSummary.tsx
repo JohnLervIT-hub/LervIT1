@@ -94,6 +94,13 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
       show: true
     },
     { 
+      label: "Apartment Move Premium", 
+      amount: breakdown.apartmentPremium, 
+      testId: "fee-apartment-premium",
+      icon: Package,
+      show: (breakdown.apartmentPremium || 0) > 0
+    },
+    { 
       label: "Pickup Access", 
       amount: breakdown.pickupDifficultyFee, 
       testId: "fee-pickup",
