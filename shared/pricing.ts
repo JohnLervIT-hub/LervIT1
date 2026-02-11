@@ -18,6 +18,7 @@ export interface PriceBreakdown {
   vehicleClass?: VehicleClass;
   loadSize?: string;  // Store the load size for display
   volumeCuft?: number;  // AI-detected volume for volume-based pricing
+  itemCount?: number;  // Number of items for per-item difficulty fee display
 }
 
 // ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
@@ -201,7 +202,8 @@ export function calculatePrice(
   heavyItem: boolean,
   numberOfMovers: 1 | 2,
   moverToPickupDistance?: number,
-  volumeCuft?: number  // Optional: use volume directly for more accurate class determination
+  volumeCuft?: number,  // Optional: use volume directly for more accurate class determination
+  itemCount?: number    // Optional: number of items for per-item difficulty fees
 ): PriceBreakdown {
   // Determine vehicle class (prefer volume if provided, otherwise use loadSize)
   const vehicleClass = volumeCuft 
@@ -232,11 +234,14 @@ export function calculatePrice(
     loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
   }
   
-  // Pickup difficulty fee
-  const pickupDifficultyFee = PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0;
+  // Difficulty fees apply per item (minimum 1 item)
+  const effectiveItemCount = Math.max(itemCount || 1, 1);
   
-  // Dropoff difficulty fee
-  const dropoffDifficultyFee = PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES[dropoffDifficulty] || 0;
+  // Pickup difficulty fee (per item × number of items)
+  const pickupDifficultyFee = (PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0) * effectiveItemCount;
+  
+  // Dropoff difficulty fee (per item × number of items)
+  const dropoffDifficultyFee = (PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES[dropoffDifficulty] || 0) * effectiveItemCount;
   
   // Heavy item fee - kept in form but NOT included in pricing calculation anymore
   // (User can still toggle it but it doesn't affect the price)
@@ -274,6 +279,7 @@ export function calculatePrice(
     vehicleClass,
     loadSize,
     volumeCuft: volumeCuft || undefined,
+    itemCount: effectiveItemCount,
   };
 }
 

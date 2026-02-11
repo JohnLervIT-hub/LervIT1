@@ -100,6 +100,7 @@ export default function RequestMove() {
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
+  const [aiItemCount, setAiItemCount] = useState<number | undefined>(undefined);
   
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
@@ -416,7 +417,8 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers as 1 | 2,
           undefined, // moverToPickupDistance - will be calculated after mover assignment
-          aiDetectedVolume // Pass AI-detected volume for volume-based load fee
+          aiDetectedVolume, // Pass AI-detected volume for volume-based load fee
+          aiItemCount // Pass item count for per-item difficulty fees
         );
         console.log('[Pricing] New breakdown:', breakdown);
         setPriceBreakdown(breakdown);
@@ -428,7 +430,7 @@ export default function RequestMove() {
     } else {
       setPriceBreakdown(null);
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, aiItemCount]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {
@@ -640,6 +642,7 @@ export default function RequestMove() {
         const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
           sum + parseFloat(item.volumeCuft || '0'), 0);
         setAiDetectedVolume(totalVolume);
+        setAiItemCount(completedItems.length);
         
         // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
         // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
@@ -1771,6 +1774,7 @@ export default function RequestMove() {
                               onSelectSize={(size) => {
                                 setLoadSize(size);
                                 setAiDetectedVolume(undefined);
+                                setAiItemCount(undefined);
                               }}
                             />
                           </div>
