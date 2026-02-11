@@ -99,6 +99,7 @@ export default function RequestMove() {
   const [isIdentifyingItems, setIsIdentifyingItems] = useState(false);
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
+  const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
   
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
@@ -414,7 +415,8 @@ export default function RequestMove() {
           dropoffDifficulty as DropoffDifficultyType,
           heavyItem,
           numberOfMovers as 1 | 2,
-          undefined // moverToPickupDistance - will be calculated after mover assignment
+          undefined, // moverToPickupDistance - will be calculated after mover assignment
+          aiDetectedVolume // Pass AI-detected volume for volume-based load fee
         );
         console.log('[Pricing] New breakdown:', breakdown);
         setPriceBreakdown(breakdown);
@@ -426,7 +428,7 @@ export default function RequestMove() {
     } else {
       setPriceBreakdown(null);
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress]);
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {
@@ -637,6 +639,7 @@ export default function RequestMove() {
         // AUTO-APPLY AI recommendations based on total volume
         const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
           sum + parseFloat(item.volumeCuft || '0'), 0);
+        setAiDetectedVolume(totalVolume);
         
         // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
         // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
@@ -720,6 +723,7 @@ export default function RequestMove() {
     // Calculate total volume and determine load size (synced with shared/pricing.ts)
     // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
+    setAiDetectedVolume(totalVolume);
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
     if (totalVolume > 300) tierIndex = 3;
@@ -1763,7 +1767,10 @@ export default function RequestMove() {
                             </Label>
                             <LoadSizeSelector
                               selectedSize={loadSize}
-                              onSelectSize={setLoadSize}
+                              onSelectSize={(size) => {
+                                setLoadSize(size);
+                                setAiDetectedVolume(undefined);
+                              }}
                             />
                           </div>
                         )}
