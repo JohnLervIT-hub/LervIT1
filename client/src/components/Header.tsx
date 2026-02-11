@@ -220,9 +220,9 @@ export default function Header() {
                       Sign In
                     </Button>
                   </Link>
-                  <Link href="/request-move" data-testid="link-mobile-request" onClick={closeMobileMenu}>
+                  <Link href="/signup" data-testid="link-mobile-signup" onClick={closeMobileMenu}>
                     <Button className="w-full">
-                      Book a Move
+                      Create an Account
                     </Button>
                   </Link>
                 </div>
