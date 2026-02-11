@@ -605,10 +605,11 @@ export default function RequestMove() {
 
   // AI Product Identifier - Identify items from uploaded photos
   // This function can be called manually or automatically after photo upload
-  const handleIdentifyItems = async (photoUrls?: string[]) => {
-    const urlsToAnalyze = photoUrls || images;
+  // When incremental=true, only analyzes new photos and merges with existing results
+  const handleIdentifyItems = async (photoUrls?: string[], incremental = false) => {
+    const allUrls = photoUrls || images;
     
-    if (urlsToAnalyze.length === 0) {
+    if (allUrls.length === 0) {
       toast({
         title: "No photos to analyze",
         description: "Please upload at least one photo first.",
@@ -617,8 +618,20 @@ export default function RequestMove() {
       return;
     }
     
+    // For incremental analysis, only analyze photos not already identified
+    const alreadyAnalyzedUrls = new Set(identifiedItems.map(item => item.photoUrl));
+    const urlsToAnalyze = incremental 
+      ? allUrls.filter(url => !alreadyAnalyzedUrls.has(url))
+      : allUrls;
+    
+    if (urlsToAnalyze.length === 0) {
+      return;
+    }
+    
     setIsIdentifyingItems(true);
-    setIdentifiedItems([]);
+    if (!incremental) {
+      setIdentifiedItems([]);
+    }
     
     try {
       const response = await apiRequest("POST", "/api/ai/items/identify", {
@@ -630,7 +643,10 @@ export default function RequestMove() {
       }
       
       const result = await response.json();
-      const items = result.items || [];
+      const newItems = result.items || [];
+      
+      // Merge new results with existing items (preserving previous results)
+      const items = incremental ? [...identifiedItems, ...newItems] : newItems;
       setIdentifiedItems(items);
       
       const completedItems = items.filter((item: IdentifiedItem) => item.processingStatus === 'completed');
@@ -711,8 +727,9 @@ export default function RequestMove() {
   };
   
   // Auto-analyze callback for ImageUpload - runs in background after photo upload
+  // Uses incremental mode to only analyze newly added photos, preserving existing results
   const handleAutoAnalyze = (photoUrls: string[]) => {
-    handleIdentifyItems(photoUrls);
+    handleIdentifyItems(photoUrls, true);
   };
 
   // Apply AI recommendations to booking form
@@ -1724,7 +1741,25 @@ export default function RequestMove() {
                         At least one photo required - Our AI will automatically analyze your items
                       </p>
                       <ImageUpload 
-                        onImagesChange={setImages} 
+                        onImagesChange={(newImages) => {
+                          setImages(newImages);
+                          // Remove identified items for photos that were deleted
+                          const imageSet = new Set(newImages);
+                          setIdentifiedItems(prev => {
+                            const filtered = prev.filter(item => imageSet.has(item.photoUrl));
+                            if (filtered.length !== prev.length) {
+                              // Recalculate AI volume from remaining items
+                              const remaining = filtered.filter(item => item.processingStatus === 'completed');
+                              if (remaining.length > 0) {
+                                const vol = remaining.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
+                                setAiDetectedVolume(vol);
+                              } else {
+                                setAiDetectedVolume(undefined);
+                              }
+                            }
+                            return filtered;
+                          });
+                        }} 
                         onAnalyze={handleAutoAnalyze}
                         maxImages={10} 
                       />
