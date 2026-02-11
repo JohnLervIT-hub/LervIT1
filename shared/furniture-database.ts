@@ -1707,6 +1707,22 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
   const hasBedHint = nameLower.includes('bed');
   const hasTableHint = nameLower.includes('table') || nameLower.includes('desk');
   
+  const SUBCATEGORY_KEYWORDS: Record<string, string[]> = {
+    'Sectional': ['sectional', 'l-shaped', 'u-shaped', 'corner'],
+    'Loveseat': ['loveseat', '2-seater'],
+    '3-Seater': ['3-seater', 'three-seater'],
+    'Sofa Bed': ['sofa bed', 'sleeper', 'pull-out', 'pullout', 'convertible'],
+    'Recliner': ['recliner', 'reclining'],
+  };
+  
+  let inputSubcategory: string | null = null;
+  for (const [subcat, keywords] of Object.entries(SUBCATEGORY_KEYWORDS)) {
+    if (keywords.some(kw => nameLower.includes(kw))) {
+      inputSubcategory = subcat;
+      break;
+    }
+  }
+  
   const SIZE_KEYWORDS = ['small', 'medium', 'large', 'oversized', 'compact', 'standard', 'mini', 'king', 'queen', 'twin', 'full', 'double', 'single'];
   const inputSize = SIZE_KEYWORDS.find(s => nameLower.includes(s)) || null;
   
@@ -1757,6 +1773,15 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     let similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
     
     similarity = similarity * (1 - categoryMismatchPenalty);
+    
+    if (inputSubcategory) {
+      if (item.subcategory === inputSubcategory) {
+        similarity *= 1.5;
+      } else {
+        similarity *= 0.3;
+      }
+      similarity = Math.min(similarity, 1);
+    }
     
     if (inputSize) {
       const itemAllText = itemNameLower + ' ' + item.keywords.join(' ');
