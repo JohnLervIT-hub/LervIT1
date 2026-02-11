@@ -1824,17 +1824,12 @@ export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
  * Category-aware vehicle recommendation
  * Applies category-specific overrides for more accurate recommendations
  * 
- * UPGRADE RULES (can only upgrade, never downgrade):
- * - Weight > 200kg → truck
- * - Weight > 150kg → van (cargo van needed for heavy loads)
- * - Weight > 50kg → pickup
- * - Max dimension > 250cm → van (too long for pickup bed)
- * - Max dimension > 150cm → pickup
+ * Vehicle matching is based purely on volume thresholds.
  * 
  * @param totalVolumeFt3 - TOTAL volume including quantity
- * @param category - Furniture category (for future overrides)
- * @param totalWeightKg - Optional weight for heavy item override
- * @param maxDimensionCm - Optional largest dimension for oversized item override
+ * @param category - Furniture category (reserved for future use)
+ * @param totalWeightKg - Reserved for future use
+ * @param maxDimensionCm - Reserved for future use
  */
 export function getVehicleRecommendationWithCategory(
   totalVolumeFt3: number,
@@ -1842,29 +1837,7 @@ export function getVehicleRecommendationWithCategory(
   totalWeightKg?: number,
   maxDimensionCm?: number
 ): VehicleType {
-  // Start with volume-based vehicle
-  // Rank order: 0=car, 1=pickup, 2=van, 3=truck (pickup < van in cargo capacity)
-  let vehicleRank = 0;
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) vehicleRank = 0;
-  else if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) vehicleRank = 1;
-  else if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) vehicleRank = 2;
-  else vehicleRank = 3;
-
-  // WEIGHT UPGRADES: Heavy items need bigger vehicles (can only upgrade, never downgrade)
-  if (totalWeightKg) {
-    if (totalWeightKg > 200) vehicleRank = Math.max(vehicleRank, 3);
-    else if (totalWeightKg > 150) vehicleRank = Math.max(vehicleRank, 2);
-    else if (totalWeightKg > 50) vehicleRank = Math.max(vehicleRank, 1);
-  }
-
-  // DIMENSION UPGRADES: Oversized items won't fit in smaller vehicles
-  if (maxDimensionCm) {
-    if (maxDimensionCm > 250) vehicleRank = Math.max(vehicleRank, 2);
-    else if (maxDimensionCm > 150) vehicleRank = Math.max(vehicleRank, 1);
-  }
-
-  const vehicles: VehicleType[] = ['car', 'pickup', 'van', 'truck'];
-  return vehicles[vehicleRank];
+  return getVehicleFromVolume(totalVolumeFt3);
 }
 
 /**
@@ -1872,9 +1845,9 @@ export function getVehicleRecommendationWithCategory(
  * Kept for backward compatibility - prefer getVehicleRecommendationWithCategory
  */
 export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: number): VehicleType {
-  if (loadSize === 'apartment' || weightKg > 150) return 'truck';
-  if (loadSize === 'large' || weightKg > 100) return 'van';
-  if (loadSize === 'medium' || weightKg > 50) return 'pickup';
+  if (loadSize === 'apartment') return 'truck';
+  if (loadSize === 'large') return 'van';
+  if (loadSize === 'medium') return 'pickup';
   return 'car';
 }
 
