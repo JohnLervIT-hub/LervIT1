@@ -85,7 +85,22 @@ export default function RequestMove() {
   */
   
   // Live Pricing state
-  const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
+  const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
+    baseFee: 0,
+    distanceFee: 0,
+    distanceKm: 0,
+    perKmRate: 0,
+    loadFee: 0,
+    loadSizeFee: 0,
+    apartmentPremium: 0,
+    moverTravelFee: 0,
+    pickupDifficultyFee: 0,
+    dropoffDifficultyFee: 0,
+    heavyItemFee: 0,
+    subtotal: 0,
+    numberOfMoversMultiplier: 1,
+    totalCost: 0,
+  });
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
 
