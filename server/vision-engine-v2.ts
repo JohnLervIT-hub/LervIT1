@@ -244,7 +244,7 @@ function correctCategory(itemName: string, detectedCategory: string): {
   
   // Check if item name contains chair keywords but was misclassified
   const chairKeywords = ['chair', 'armchair', 'recliner', 'seat', 'stool'];
-  const sofaKeywords = ['sofa', 'couch', 'loveseat', 'sectional', 'futon'];
+  const sofaKeywords = ['sofa', 'couch', 'loveseat', 'sectional', 'futon', 'sofa bed', 'sleeper'];
   const bedKeywords = ['bed', 'mattress', 'bunk', 'crib'];
   const tableKeywords = ['table', 'desk', 'stand', 'nightstand'];
   const dresserKeywords = ['dresser', 'chest', 'drawer', 'wardrobe', 'cabinet'];
@@ -419,7 +419,7 @@ Analyze this image and identify the item with maximum detail.
 IDENTIFY:
 1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
-3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
+3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
 4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
 5. Material if visible (leather, fabric, wood, metal, glass)
 
@@ -443,6 +443,29 @@ U-SHAPED SECTIONAL TIERS:
 
 Include the size tier in the item name (e.g., "Small L-shaped sectional sofa", "Large U-shaped sectional sofa").
 
+SOFA BED / SLEEPER DETECTION (CRITICAL — check for these indicators):
+Before classifying any sofa, check for sofa bed / sleeper indicators:
+• Pull handles or straps on the seat front (used to pull out the bed mechanism)
+• Visible seams or gaps between seat cushions and base (where the bed folds out)
+• Thick, boxy base with storage compartments (heavier than standard sofas)
+• Visible metal frame or mechanism underneath
+• Storage chaise with a lid that lifts up
+• Unusually thick/heavy base panels compared to standard sofas
+
+If ANY sofa bed indicators are detected, classify as "Sofa Bed" NOT as regular "Sofa" or "Sectional":
+
+REGULAR SOFA BED TIERS:
+• TWIN (loveseat sleeper): 2 seat cushions, compact. ~170×90×85cm, 55kg
+• FULL/DOUBLE (3-seat sleeper): 3 seat cushions, standard size. ~200×95×85cm, 75kg
+• QUEEN (large sleeper): 3-4 seat cushions, wider/deeper frame. ~230×100×90cm, 95kg
+
+SECTIONAL SOFA BED TIERS:
+• SMALL (2-piece L-shaped with sleeper): 3-4 cushions, pull-out + chaise. ~250×170×85cm, 110kg
+• MEDIUM (3-piece L-shaped with sleeper + storage): 4-5 cushions, deep seats, storage chaise. ~290×200×90cm, 145kg
+• LARGE (4+ piece L/U-shaped with sleeper + storage): 6+ cushions, oversized. ~340×220×90cm, 180kg
+
+Include "sofa bed" in the item name (e.g., "Medium sectional sofa bed", "Queen sofa bed").
+
 PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
 - Use standard furniture dimensions for the identified type
 - Be consistent: same item type = same dimensions
@@ -459,6 +482,12 @@ REFERENCE DIMENSIONS (use these):
 • Small U-shaped sectional (3-piece): ~280×200×85cm, 130kg
 • Medium U-shaped sectional (4-5 piece): ~350×250×85cm, 180kg
 • Large U-shaped sectional (6+ piece): ~420×300×90cm, 240kg
+• Twin sofa bed (loveseat sleeper): ~170×90×85cm, 55kg
+• Full/Double sofa bed (3-seat sleeper): ~200×95×85cm, 75kg
+• Queen sofa bed (large sleeper): ~230×100×90cm, 95kg
+• Small sectional sofa bed (2-piece, sleeper+chaise): ~250×170×85cm, 110kg
+• Medium sectional sofa bed (3-piece, sleeper+storage): ~290×200×90cm, 145kg
+• Large sectional sofa bed (4+ piece, sleeper+storage): ~340×220×90cm, 180kg
 • 4-person dining table: ~120×75×75cm, 35kg
 • 6-person dining table: ~180×90×75cm, 50kg
 • Coffee table: ~120×60×45cm, 25kg
