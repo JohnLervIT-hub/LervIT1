@@ -97,8 +97,8 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const recOrder = [carRec, pickupRec, vanRec, truckRec];
     let recIndex = recOrder.indexOf(volumeRec);
 
-    if (totalWeight > 150 && recIndex < 3) recIndex = 3;
-    else if (totalWeight > 100 && recIndex < 2) recIndex = 2;
+    if (totalWeight > 200 && recIndex < 3) recIndex = 3;
+    else if (totalWeight > 150 && recIndex < 2) recIndex = 2;
     else if (totalWeight > 50 && recIndex < 1) recIndex = 1;
 
     // DIMENSION OVERRIDE: Check max dimension across all items
@@ -109,7 +109,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
         parseFloat(String(item.dimensionsHcm || 0))
       );
     }));
-    if (maxDim > 200 && recIndex < 2) recIndex = 2;
+    if (maxDim > 250 && recIndex < 2) recIndex = 2;
     else if (maxDim > 150 && recIndex < 1) recIndex = 1;
 
     if (hasHighComplexity && recIndex < 1) recIndex = 1;

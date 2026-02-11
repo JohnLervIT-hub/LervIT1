@@ -118,8 +118,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 152, height: 40 },
     volume_ft3: calcVolume(203, 152, 40),
     weight_kg: 55,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -133,8 +133,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 210, width: 165, height: 110 },
     volume_ft3: calcVolume(210, 165, 110),
     weight_kg: 75,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -148,8 +148,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 193, height: 40 },
     volume_ft3: calcVolume(203, 193, 40),
     weight_kg: 70,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -225,8 +225,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 210, width: 90, height: 85 },
     volume_ft3: calcVolume(210, 90, 85),
     weight_kg: 70,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -240,8 +240,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 230, width: 150, height: 85 },
     volume_ft3: calcVolume(230, 150, 85),
     weight_kg: 70,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'medium',
@@ -270,8 +270,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 370, width: 220, height: 90 },
     volume_ft3: calcVolume(370, 220, 90),
     weight_kg: 170,
-    load_size: 'apartment',
-    vehicle: 'truck',
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -300,8 +300,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 350, width: 250, height: 85 },
     volume_ft3: calcVolume(350, 250, 85),
     weight_kg: 180,
-    load_size: 'apartment',
-    vehicle: 'truck',
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -360,8 +360,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 230, width: 100, height: 90 },
     volume_ft3: calcVolume(230, 100, 90),
     weight_kg: 95,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -375,8 +375,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 250, width: 170, height: 85 },
     volume_ft3: calcVolume(250, 170, 85),
     weight_kg: 110,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -405,8 +405,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 340, width: 220, height: 90 },
     volume_ft3: calcVolume(340, 220, 90),
     weight_kg: 180,
-    load_size: 'apartment',
-    vehicle: 'truck',
+    load_size: 'large',
+    vehicle: 'van',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -420,8 +420,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 230, width: 100, height: 100 },
     volume_ft3: calcVolume(230, 100, 100),
     weight_kg: 110,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -497,8 +497,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 240, width: 100, height: 75 },
     volume_ft3: calcVolume(240, 100, 75),
     weight_kg: 70,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -833,8 +833,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 90, width: 80, height: 180 },
     volume_ft3: calcVolume(90, 80, 180),
     weight_kg: 130,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'premium',
@@ -1013,8 +1013,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 65, width: 65, height: 180 },
     volume_ft3: calcVolume(65, 65, 180),
     weight_kg: 130,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -1424,8 +1424,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 152, height: 25 },
     volume_ft3: calcVolume(203, 152, 25),
     weight_kg: 40,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'medium',
     insurance_level: 'standard',
@@ -1439,8 +1439,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 203, width: 193, height: 25 },
     volume_ft3: calcVolume(203, 193, 25),
     weight_kg: 50,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'high',
     insurance_level: 'standard',
@@ -1825,11 +1825,11 @@ export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
  * Applies category-specific overrides for more accurate recommendations
  * 
  * UPGRADE RULES (can only upgrade, never downgrade):
- * - Weight > 150kg → truck
- * - Weight > 100kg → pickup
- * - Weight > 50kg → van
- * - Max dimension > 200cm → pickup (won't fit in smaller vehicles)
- * - Max dimension > 150cm → van
+ * - Weight > 200kg → truck
+ * - Weight > 150kg → van (cargo van needed for heavy loads)
+ * - Weight > 50kg → pickup
+ * - Max dimension > 250cm → van (too long for pickup bed)
+ * - Max dimension > 150cm → pickup
  * 
  * @param totalVolumeFt3 - TOTAL volume including quantity
  * @param category - Furniture category (for future overrides)
@@ -1852,14 +1852,14 @@ export function getVehicleRecommendationWithCategory(
 
   // WEIGHT UPGRADES: Heavy items need bigger vehicles (can only upgrade, never downgrade)
   if (totalWeightKg) {
-    if (totalWeightKg > 150) vehicleRank = Math.max(vehicleRank, 3);
-    else if (totalWeightKg > 100) vehicleRank = Math.max(vehicleRank, 2);
+    if (totalWeightKg > 200) vehicleRank = Math.max(vehicleRank, 3);
+    else if (totalWeightKg > 150) vehicleRank = Math.max(vehicleRank, 2);
     else if (totalWeightKg > 50) vehicleRank = Math.max(vehicleRank, 1);
   }
 
   // DIMENSION UPGRADES: Oversized items won't fit in smaller vehicles
   if (maxDimensionCm) {
-    if (maxDimensionCm > 200) vehicleRank = Math.max(vehicleRank, 2);
+    if (maxDimensionCm > 250) vehicleRank = Math.max(vehicleRank, 2);
     else if (maxDimensionCm > 150) vehicleRank = Math.max(vehicleRank, 1);
   }
 
