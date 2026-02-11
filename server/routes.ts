@@ -2836,13 +2836,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         source: drivingDistanceResult.success ? 'google_maps' : 'haversine_fallback',
       });
       const distance = drivingDistanceResult.distanceKm;
+      const aiDetectedVolumeCuft = typeof req.body.aiDetectedVolumeCuft === 'number' ? req.body.aiDetectedVolumeCuft : undefined;
       const priceBreakdown = calculatePrice(
         distance,
         bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
         bookingData.pickupDifficulty as any,
         bookingData.dropoffDifficulty as any,
         bookingData.heavyItem || false,
-        bookingData.numberOfMovers as 1 | 2
+        bookingData.numberOfMovers as 1 | 2,
+        undefined,
+        aiDetectedVolumeCuft
       );
       
       // Calculate first-move discount for new customers

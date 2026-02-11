@@ -973,6 +973,7 @@ export default function RequestMove() {
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
+        aiDetectedVolumeCuft: aiDetectedVolume || undefined,
       };
       createBookingMutation.mutate(bookingData);
     }
