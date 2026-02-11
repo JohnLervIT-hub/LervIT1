@@ -33,8 +33,8 @@ import { Progress } from "@/components/ui/progress";
 
 const VEHICLE_TYPES = [
   { value: "car", label: "SUV / Small Vehicle", description: "Small moves, single items" },
-  { value: "pickup", label: "Pickup Truck", description: "Moderate loads, open bed" },
-  { value: "van", label: "Cargo Van", description: "Large furniture, enclosed space" },
+  { value: "pickup", label: "Pickup Truck", description: "Medium furniture, moderate loads" },
+  { value: "van", label: "Cargo Van", description: "Large furniture, multiple rooms" },
   { value: "truck", label: "Moving Truck", description: "Full house moves" },
 ];
 

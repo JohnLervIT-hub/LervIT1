@@ -42,8 +42,8 @@ export type FurnitureCategory =
  * Load size categories for pricing and display
  * NOTE: These map to vehicle classes in pricing.ts:
  *   - boxes/small: 0-20 ft³    → Class A (SUV) - boxes, small items, single chair
- *   - medium:      21-80 ft³   → Class B (Pickup Truck) - open bed, moderate loads
- *   - large:       81-300 ft³  → Class C (Cargo Van) - enclosed, large furniture
+ *   - medium:      21-165 ft³  → Class B (Pickup Truck) - medium furniture, moderate loads
+ *   - large:       166-300 ft³ → Class C (Cargo Van) - large furniture, multiple rooms
  *   - apartment:   >300 ft³    → Class E (Large Moving Truck) - full move
  */
 export type LoadSizeCategory = 'boxes' | 'small' | 'medium' | 'large' | 'apartment';
@@ -163,8 +163,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     dimensions_cm: { length: 200, width: 100, height: 170 },
     volume_ft3: calcVolume(200, 100, 170),
     weight_kg: 80,
-    load_size: 'large',
-    vehicle: 'van',
+    load_size: 'medium',
+    vehicle: 'pickup',
     movers_required: 2,
     handling_complexity: 'very_high',
     insurance_level: 'high',
@@ -1786,17 +1786,15 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
  * Single source of truth for volume-to-vehicle mapping
  * 
  * Updated thresholds (2026):
- *   0-20 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes
- *   21-80 ft³  → Pickup Truck (pickup)       - Open bed, moderate loads
- *   81-300 ft³ → Cargo Van (van)             - Enclosed, sofa, bedroom set, multiple furniture
- *   >300 ft³   → Moving Truck (truck)        - Apartment move, large loads
- * 
- * Note: Pickup truck bed (~50-80 ft³) holds LESS than a cargo van (~250-350 ft³ enclosed)
+ *   0-20 ft³    → SUV / Small Vehicle (car)   - Single chair, few boxes
+ *   21-165 ft³  → Pickup Truck (pickup)       - Medium furniture, moderate loads
+ *   166-300 ft³ → Cargo Van (van)             - Large furniture, bedroom sets, multiple rooms
+ *   >300 ft³    → Moving Truck (truck)        - Apartment move, large loads
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
   CAR_MAX: 20,       // 0-20 ft³ → SUV/Small Vehicle
-  PICKUP_MAX: 80,    // 21-80 ft³ → Pickup Truck (open bed)
-  VAN_MAX: 300,      // 81-300 ft³ → Cargo Van (enclosed, more space than pickup)
+  PICKUP_MAX: 165,   // 21-165 ft³ → Pickup Truck
+  VAN_MAX: 300,      // 166-300 ft³ → Cargo Van
   // Above 300 ft³ → Large Moving Truck
 };
 
@@ -1806,8 +1804,8 @@ export const VEHICLE_VOLUME_THRESHOLDS = {
  */
 export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
   if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // 0-20 ft³ → SUV
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // 21-80 ft³ → Pickup Truck
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // 81-300 ft³ → Cargo Van
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // 21-165 ft³ → Pickup Truck
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // 166-300 ft³ → Cargo Van
   return 'apartment';  // >300 ft³ → Large Moving Truck
 }
 
@@ -1817,8 +1815,8 @@ export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
  */
 export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
   if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // 0-20 ft³ → SUV
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // 21-80 ft³ → Pickup Truck
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // 81-300 ft³ → Cargo Van
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // 21-165 ft³ → Pickup Truck
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // 166-300 ft³ → Cargo Van
   return 'truck';  // >300 ft³ → Moving Truck
 }
 
