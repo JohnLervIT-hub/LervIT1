@@ -26,7 +26,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
-import { aiPredictPrice, generatePriceExplanation, AI_FEATURES, type AIEstimateResult, type PhotoAnalysisResult } from "@shared/ai";
+import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
@@ -72,8 +72,6 @@ export default function RequestMove() {
   const [createdBooking, setCreatedBooking] = useState<any>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   
-  // AI Feature 1: Auto-Quote Predictor state
-  const [aiEstimate, setAiEstimate] = useState<AIEstimateResult | null>(null);
   const [estimateDistance, setEstimateDistance] = useState(0);
   
   // AI Feature 2: Price Explainer state
@@ -343,24 +341,6 @@ export default function RequestMove() {
     },
   });
 
-  // AI Feature 1: Auto-Quote Predictor - Update estimate when form fields change
-  useEffect(() => {
-    if (pickupAddress && dropoffAddress && estimateDistance > 0) {
-      const estimate = aiPredictPrice({
-        pickupAddress,
-        dropoffAddress,
-        distance: estimateDistance,
-        loadSize,
-        pickupDifficulty,
-        dropoffDifficulty,
-        heavyItem,
-        numberOfMovers
-      });
-      setAiEstimate(estimate);
-    } else {
-      setAiEstimate(null);
-    }
-  }, [pickupAddress, dropoffAddress, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers]);
 
   // Calculate real distance estimate when addresses change using geocoding
   useEffect(() => {
