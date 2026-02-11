@@ -413,11 +413,11 @@ export default function RequestMove() {
           aiDetectedVolume
         );
         if (step === 1) {
-          const distanceOnly: PriceBreakdown = {
+          const step1Preview: PriceBreakdown = {
             baseFee: 0,
-            distanceFee: breakdown.distanceFee,
+            distanceFee: 0,
             distanceKm: breakdown.distanceKm,
-            perKmRate: breakdown.perKmRate,
+            perKmRate: 0,
             loadFee: 0,
             loadSizeFee: 0,
             apartmentPremium: 0,
@@ -425,14 +425,11 @@ export default function RequestMove() {
             pickupDifficultyFee: 0,
             dropoffDifficultyFee: 0,
             heavyItemFee: 0,
-            subtotal: breakdown.distanceFee,
+            subtotal: 0,
             numberOfMoversMultiplier: 1,
-            totalCost: breakdown.distanceFee,
-            vehicleClass: breakdown.vehicleClass,
-            loadSize: breakdown.loadSize,
-            volumeCuft: breakdown.volumeCuft,
+            totalCost: 0,
           };
-          setPriceBreakdown(distanceOnly);
+          setPriceBreakdown(step1Preview);
         } else {
           setPriceBreakdown(breakdown);
         }
