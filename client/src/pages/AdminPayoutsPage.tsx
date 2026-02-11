@@ -35,7 +35,8 @@ import {
   Send,
   RefreshCw,
   Wallet,
-  Banknote
+  Banknote,
+  Tag
 } from "lucide-react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -98,6 +99,22 @@ type MoverEarning = {
   _isMissing?: boolean;
 };
 
+type PromoBalance = {
+  id: string;
+  promoCode: string;
+  discountPercent: string;
+  discountAmount: string;
+  moverBalanceOwed: string;
+  moverBalancePaid: boolean;
+  price: string;
+  subtotal: string;
+  status: string;
+  moverId: string | null;
+  moverName: string;
+  customerName: string;
+  createdAt: string;
+};
+
 type BackfillResponse = {
   success: boolean;
   message: string;
@@ -148,6 +165,24 @@ export default function AdminPayoutsPage() {
 
   const { data: allEarnings, isLoading: loadingEarnings, refetch: refetchEarnings } = useQuery<MoverEarning[]>({
     queryKey: ["/api/admin/mover-earnings"],
+  });
+
+  const { data: promoBalances, isLoading: loadingPromoBalances, refetch: refetchPromoBalances } = useQuery<PromoBalance[]>({
+    queryKey: ["/api/admin/promo-balances"],
+  });
+
+  const markPromoBalancePaidMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const res = await apiRequest("POST", `/api/admin/promo-balances/${bookingId}/mark-paid`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Balance Marked Paid", description: "Mover balance has been marked as paid." });
+      refetchPromoBalances();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const processPayoutsMutation = useMutation({
@@ -504,6 +539,9 @@ export default function AdminPayoutsPage() {
             <TabsTrigger value="all" data-testid="tab-all">
               All Earnings ({allEarnings?.length || 0})
             </TabsTrigger>
+            <TabsTrigger value="promo" data-testid="tab-promo">
+              Promo Balances {promoBalances?.filter(b => !b.moverBalancePaid).length ? `(${promoBalances.filter(b => !b.moverBalancePaid).length})` : ''}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending">
@@ -766,6 +804,108 @@ export default function AdminPayoutsPage() {
                       ))}
                     </TableBody>
                   </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="promo">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Tag className="w-5 h-5" />
+                    Promo Code Mover Balances
+                  </CardTitle>
+                  <CardDescription>
+                    When promo codes are used, movers receive 85% of the discounted price via Stripe auto-payout. 
+                    The balance (85% of discount amount) must be manually topped up to ensure movers get their full 85%.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => refetchPromoBalances()} data-testid="button-refresh-promo">
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {loadingPromoBalances ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                ) : !promoBalances?.length ? (
+                  <p className="text-center text-muted-foreground py-8">No promo code bookings yet</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Total Balance Owed</p>
+                        <p className="text-2xl font-bold text-amber-600">
+                          ${promoBalances.filter(b => !b.moverBalancePaid).reduce((sum, b) => sum + parseFloat(b.moverBalanceOwed || '0'), 0).toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Already Paid</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          ${promoBalances.filter(b => b.moverBalancePaid).reduce((sum, b) => sum + parseFloat(b.moverBalanceOwed || '0'), 0).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Booking</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Mover</TableHead>
+                          <TableHead>Promo</TableHead>
+                          <TableHead className="text-right">Original</TableHead>
+                          <TableHead className="text-right">Discount</TableHead>
+                          <TableHead className="text-right">Balance Owed</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {promoBalances.map((b) => (
+                          <TableRow key={b.id}>
+                            <TableCell className="text-xs">{b.id.slice(0, 8)}...</TableCell>
+                            <TableCell className="text-xs">{b.customerName}</TableCell>
+                            <TableCell className="text-xs">{b.moverName}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">{b.promoCode} (-{b.discountPercent}%)</Badge>
+                            </TableCell>
+                            <TableCell className="text-right">${b.subtotal}</TableCell>
+                            <TableCell className="text-right text-green-600">-${b.discountAmount}</TableCell>
+                            <TableCell className="text-right font-semibold text-amber-600">${b.moverBalanceOwed}</TableCell>
+                            <TableCell>
+                              {b.moverBalancePaid ? (
+                                <Badge variant="default" className="bg-green-500">Paid</Badge>
+                              ) : (
+                                <Badge variant="secondary">Unpaid</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {!b.moverBalancePaid && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => markPromoBalancePaidMutation.mutate(b.id)}
+                                  disabled={markPromoBalancePaidMutation.isPending}
+                                  data-testid={`button-mark-promo-paid-${b.id}`}
+                                >
+                                  {markPromoBalancePaidMutation.isPending ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                  )}
+                                  Mark Paid
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
                 )}
               </CardContent>
             </Card>

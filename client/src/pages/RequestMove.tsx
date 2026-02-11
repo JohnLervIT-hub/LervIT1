@@ -84,6 +84,15 @@ export default function RequestMove() {
   const [analyzedPhotoUrl, setAnalyzedPhotoUrl] = useState<string | null>(null);
   */
   
+  // Promo code state
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    valid: boolean;
+    discountPercent: number;
+    usesRemaining: number;
+    message: string;
+  } | null>(null);
+
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
     baseFee: 0,
@@ -1002,6 +1011,7 @@ export default function RequestMove() {
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
+        promoCode: appliedPromo?.code || undefined,
       };
       createBookingMutation.mutate(bookingData);
     }
@@ -2064,7 +2074,9 @@ export default function RequestMove() {
             breakdown={priceBreakdown}
             isCalculating={isCalculatingPrice}
             error={pricingError}
-            showFirstMoveDiscount={!!user && !user.hasUsedFirstMoveDiscount}
+            showPromoInput={!!user}
+            appliedPromo={appliedPromo}
+            onPromoApplied={setAppliedPromo}
           />
         </div>
       </div>

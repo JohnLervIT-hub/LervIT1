@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield, Gift, Sparkles } from "lucide-react";
+import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield, Gift, Sparkles, Tag } from "lucide-react";
 import type { Booking } from "@shared/schema";
 
 // Lazy-load Stripe with key from server (handles dev/prod automatically)
@@ -318,13 +318,17 @@ export default function Payment() {
                   </div>
                   <div className="flex items-center justify-between py-2 px-3 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="payment-discount">
                     <div className="flex items-center gap-2">
-                      <Gift className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      {booking.promoCode ? (
+                        <Tag className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <Gift className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      )}
                       <span className="text-sm text-green-600 dark:text-green-400 font-medium">
-                        {booking.discountReason || 'First-Move Discount'}
+                        {booking.promoCode ? `Promo: ${booking.promoCode}` : (booking.discountReason || 'Discount')}
                       </span>
                       <Badge variant="default" className="bg-green-500 text-white text-[10px]">
                         <Sparkles className="w-2.5 h-2.5 mr-0.5" />
-                        SAVED
+                        -{booking.discountPercent}%
                       </Badge>
                     </div>
                     <span className="text-sm font-semibold text-green-600 dark:text-green-400">

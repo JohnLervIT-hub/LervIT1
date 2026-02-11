@@ -2755,6 +2755,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== PROMO CODE VALIDATION =====
+  app.post("/api/promo/validate", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const { code } = req.body;
+
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ valid: false, message: "Promo code is required" });
+      }
+
+      const normalizedCode = code.trim().toUpperCase();
+
+      if (normalizedCode !== "LERVIT20") {
+        return res.status(200).json({ valid: false, message: "Invalid promo code" });
+      }
+
+      const latestUser = await storage.getUser(user.id);
+      if (!latestUser) {
+        return res.status(200).json({ valid: false, message: "User not found" });
+      }
+
+      if ((latestUser.promoUsesCount || 0) >= 2) {
+        return res.status(200).json({ valid: false, message: "You've already used this promo code on 2 moves" });
+      }
+
+      const usesRemaining = 2 - (latestUser.promoUsesCount || 0);
+      return res.status(200).json({
+        valid: true,
+        code: "LERVIT20",
+        discountPercent: 20,
+        usesRemaining,
+        message: `20% off applied! ${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining.`
+      });
+    } catch (error: any) {
+      console.error("Promo validation error:", error);
+      return res.status(500).json({ valid: false, message: "Failed to validate promo code" });
+    }
+  });
+
   // ===== BOOKING ROUTES =====
   app.post("/api/bookings", async (req: Request, res: Response) => {
     try {
@@ -2848,19 +2888,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiDetectedVolumeCuft
       );
       
-      // Calculate first-move discount for new customers
-      // Re-fetch latest user state to avoid race conditions with concurrent bookings
+      // Calculate promo code discount
       const latestUser = await storage.getUser(user.id);
       let finalPrice = priceBreakdown.totalCost;
       let discountPercent = 0;
       let discountAmount = 0;
       let discountReason: string | null = null;
+      let promoCode: string | null = null;
+      let moverBalanceOwed = 0;
 
-      if (latestUser && !latestUser.hasUsedFirstMoveDiscount) {
-        discountPercent = 10;
-        discountAmount = Math.round(priceBreakdown.totalCost * 0.10 * 100) / 100;
+      // NOTE: Re-fetches latest user state above to minimize race conditions.
+      // For high-concurrency scenarios, consider adding row-level locking.
+      const submittedPromo = bookingData.promoCode?.trim().toUpperCase();
+      if (submittedPromo === "LERVIT20" && latestUser && (latestUser.promoUsesCount || 0) < 2) {
+        promoCode = "LERVIT20";
+        discountPercent = 20;
+        discountAmount = Math.round(priceBreakdown.totalCost * 0.20 * 100) / 100;
         finalPrice = priceBreakdown.totalCost - discountAmount;
-        discountReason = "First-move 10% discount";
+        const usesRemaining = 2 - (latestUser.promoUsesCount || 0) - 1;
+        discountReason = `LERVIT20 promo - 20% off (${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining)`;
+        // Platform absorbs discount: mover gets 85% of ORIGINAL price
+        // Stripe auto-payout gives mover 85% of discounted price
+        // Balance owed = 85% of original - 85% of discounted = 85% * discountAmount
+        moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       }
       
       // Create booking with geocoded data, price breakdown, and AI metadata
@@ -2896,15 +2946,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
         heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
         subtotal: toDecimalString(priceBreakdown.subtotal),
+        promoCode: promoCode,
         discountPercent: toDecimalString(discountPercent),
         discountAmount: toDecimalString(discountAmount),
         discountReason: discountReason,
+        moverBalanceOwed: toDecimalString(moverBalanceOwed),
         notifiedAt: new Date(),
       } as any);
       
-      // Mark discount as used if applied
-      if (discountAmount > 0) {
-        await storage.updateUser(user.id, { hasUsedFirstMoveDiscount: true });
+      // Increment promo usage count if promo applied
+      if (promoCode && discountAmount > 0) {
+        await storage.updateUser(user.id, { 
+          hasUsedFirstMoveDiscount: true,
+          promoUsesCount: (latestUser?.promoUsesCount || 0) + 1 
+        });
       }
       
       logEvent.booking('created', {
@@ -3597,6 +3652,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin-only: Get bookings with promo balance owed to movers
+  app.get("/api/admin/promo-balances", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const allBookings = await storage.getAllBookings();
+      const promoBookings = allBookings.filter(
+        (b: any) => b.promoCode && parseFloat(b.moverBalanceOwed || '0') > 0
+      );
+      
+      const results = await Promise.all(promoBookings.map(async (b: any) => {
+        const customer = b.customerId ? await storage.getUser(b.customerId) : null;
+        const mover = b.moverId ? await storage.getUser(b.moverId) : null;
+        return {
+          id: b.id,
+          promoCode: b.promoCode,
+          discountPercent: b.discountPercent,
+          discountAmount: b.discountAmount,
+          moverBalanceOwed: b.moverBalanceOwed,
+          moverBalancePaid: b.moverBalancePaid,
+          price: b.price,
+          subtotal: b.subtotal,
+          status: b.status,
+          moverId: b.moverId,
+          moverName: mover?.name || 'Unassigned',
+          customerName: customer?.name || 'Unknown',
+          createdAt: b.createdAt,
+        };
+      }));
+      
+      res.json(results);
+    } catch (error: any) {
+      console.error("Admin promo balances error:", error);
+      res.status(500).json({ error: "Failed to fetch promo balances" });
+    }
+  });
+
+  // Admin-only: Mark mover balance as paid for a promo booking
+  app.post("/api/admin/promo-balances/:bookingId/mark-paid", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { bookingId } = req.params;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      await storage.updateBooking(bookingId, { moverBalancePaid: true } as any);
+      res.json({ success: true, message: "Mover balance marked as paid" });
+    } catch (error: any) {
+      console.error("Mark balance paid error:", error);
+      res.status(500).json({ error: "Failed to mark balance as paid" });
+    }
+  });
+
   // Admin-only endpoint to force-update booking status (for refunds/corrections)
   app.patch("/api/admin/bookings/:id/status", async (req: Request, res: Response) => {
     try {
@@ -3820,17 +3928,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         finalNumberOfMovers as 1 | 2
       );
       
-      // Apply first-move discount if applicable
+      // Apply promo code discount if booking has one
       let discountPercent = 0;
       let discountAmount = 0;
       let discountReason = null;
       let finalPrice = priceBreakdown.totalCost;
+      let moverBalanceOwed = 0;
       
-      if (!user.hasUsedFirstMoveDiscount) {
-        discountPercent = 10;
-        discountAmount = priceBreakdown.totalCost * 0.10;
-        discountReason = 'First move 10% discount';
+      if (booking.promoCode === "LERVIT20") {
+        discountPercent = 20;
+        discountAmount = priceBreakdown.totalCost * 0.20;
+        discountReason = booking.discountReason;
         finalPrice = priceBreakdown.totalCost - discountAmount;
+        moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       }
       
       // Calculate platform fees for mover payouts
@@ -3848,6 +3958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       updateData.discountPercent = discountPercent.toFixed(2);
       updateData.discountAmount = discountAmount.toFixed(2);
       updateData.discountReason = discountReason;
+      updateData.moverBalanceOwed = moverBalanceOwed.toFixed(2);
       updateData.platformFeePercent = earnings.platformFeePercent.toFixed(2);
       updateData.platformFeeAmount = earnings.platformFee.toFixed(2);
       updateData.moverNetAmount = earnings.net.toFixed(2);

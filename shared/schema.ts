@@ -29,9 +29,10 @@ export const users = pgTable("users", {
   phoneVerified: boolean("phone_verified").default(false).notNull(),
   phoneVerificationCode: text("phone_verification_code"),
   phoneVerificationExpiry: timestamp("phone_verification_expiry"),
-  // Onboarding and first-move discount fields
+  // Onboarding and promo code fields
   hasCompletedOnboarding: boolean("has_completed_onboarding").default(false).notNull(),
   hasUsedFirstMoveDiscount: boolean("has_used_first_move_discount").default(false).notNull(),
+  promoUsesCount: integer("promo_uses_count").default(0).notNull(),
   // Notification preference fields
   smsJobAlerts: boolean("sms_job_alerts").default(true).notNull(),
   smsBookingUpdates: boolean("sms_booking_updates").default(false).notNull(),
@@ -164,10 +165,13 @@ export const bookings = pgTable("bookings", {
   heavyItemFee: decimal("heavy_item_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   
-  // First-move discount
+  // Promo code discount
+  promoCode: text("promo_code"),
   discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   discountReason: text("discount_reason"),
+  moverBalanceOwed: decimal("mover_balance_owed", { precision: 10, scale: 2 }).notNull().default("0"),
+  moverBalancePaid: boolean("mover_balance_paid").default(false).notNull(),
   
   // AI-powered features
   aiEstimate: text("ai_estimate"),

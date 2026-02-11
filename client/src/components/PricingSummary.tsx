@@ -1,21 +1,68 @@
-// PERFORMANCE: React.memo optimization to prevent unnecessary re-renders
-import { memo } from "react";
+import { memo, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import type { PriceBreakdown } from "@shared/pricing";
+
+interface PromoState {
+  code: string;
+  valid: boolean;
+  discountPercent: number;
+  usesRemaining: number;
+  message: string;
+}
 
 interface PricingSummaryProps {
   breakdown: PriceBreakdown | null;
   isCalculating?: boolean;
   error?: string | null;
   className?: string;
-  showFirstMoveDiscount?: boolean;
+  showPromoInput?: boolean;
+  appliedPromo?: PromoState | null;
+  onPromoApplied?: (promo: PromoState | null) => void;
 }
 
-export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showFirstMoveDiscount = false }: PricingSummaryProps) {
+export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showPromoInput = false, appliedPromo, onPromoApplied }: PricingSummaryProps) {
+  const [promoInput, setPromoInput] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
+  const handleApplyPromo = useCallback(async () => {
+    if (!promoInput.trim()) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const res = await apiRequest("POST", "/api/promo/validate", { code: promoInput.trim() });
+      const data = await res.json();
+      if (data.valid) {
+        onPromoApplied?.({
+          code: data.code,
+          valid: true,
+          discountPercent: data.discountPercent,
+          usesRemaining: data.usesRemaining,
+          message: data.message,
+        });
+        setPromoInput("");
+      } else {
+        setPromoError(data.message || "Invalid promo code");
+      }
+    } catch {
+      setPromoError("Failed to validate promo code");
+    } finally {
+      setPromoLoading(false);
+    }
+  }, [promoInput, onPromoApplied]);
+
+  const handleRemovePromo = useCallback(() => {
+    onPromoApplied?.(null);
+    setPromoError(null);
+  }, [onPromoApplied]);
+
   if (error) {
     return (
       <Card className={`${className} border-destructive/30`} data-testid="pricing-error">
@@ -59,12 +106,10 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     );
   }
 
-  // Format load size label for display - show volume when AI-detected
   const loadSizeLabel = breakdown.volumeCuft
     ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $0.15)`
     : "Load Size";
 
-  // Distance label with KM only
   const distanceLabel = breakdown.distanceKm 
     ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
@@ -123,10 +168,12 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
 
   const visibleFees = feeItems.filter(item => item.show);
   const hasTwoMovers = breakdown.numberOfMoversMultiplier > 1;
+  const hasPromo = appliedPromo?.valid;
+  const discountMultiplier = hasPromo ? (1 - appliedPromo.discountPercent / 100) : 1;
+  const discountedTotal = breakdown.totalCost * discountMultiplier;
 
   return (
     <Card className={`${className} overflow-hidden`} data-testid="pricing-summary">
-      {/* Header with gradient accent */}
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
@@ -142,7 +189,6 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
       </div>
 
       <CardContent className="pt-0 space-y-4">
-        {/* Fee Breakdown */}
         <div className="space-y-2">
           {visibleFees.map((item) => (
             <div 
@@ -165,13 +211,11 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
 
         <Separator />
 
-        {/* Subtotal */}
         <div className="flex items-center justify-between" data-testid="pricing-subtotal">
           <span className="text-sm text-muted-foreground">Subtotal</span>
           <span className="text-sm font-medium tabular-nums">${breakdown.subtotal.toFixed(2)}</span>
         </div>
 
-        {/* Two Movers Multiplier */}
         {hasTwoMovers && (
           <div className="flex items-center justify-between py-2 px-3 bg-primary/5 rounded-lg border border-primary/10" data-testid="fee-movers-note">
             <div className="flex items-center gap-2">
@@ -184,26 +228,66 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
           </div>
         )}
 
-        {/* First-Move Discount */}
-        {showFirstMoveDiscount && (
-          <div className="flex items-center justify-between py-2 px-3 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="fee-first-move-discount">
+        {hasPromo && (
+          <div className="flex items-center justify-between py-2 px-3 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="fee-promo-discount">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-green-500/20 flex items-center justify-center">
-                <Gift className="w-3 h-3 text-green-600 dark:text-green-400" />
+                <Tag className="w-3 h-3 text-green-600 dark:text-green-400" />
               </div>
-              <span className="text-sm text-green-600 dark:text-green-400 font-medium">First-Move Discount</span>
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">Promo: {appliedPromo.code}</span>
               <Badge variant="default" className="bg-green-500 text-white text-[10px]">
                 <Sparkles className="w-2.5 h-2.5 mr-0.5" />
-                NEW
+                SAVE
               </Badge>
             </div>
-            <span className="text-sm font-semibold text-green-600 dark:text-green-400">-10%</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-green-600 dark:text-green-400">-{appliedPromo.discountPercent}%</span>
+              <button 
+                onClick={handleRemovePromo} 
+                className="text-muted-foreground hover:text-destructive transition-colors"
+                data-testid="button-remove-promo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showPromoInput && !hasPromo && (
+          <div className="space-y-2" data-testid="promo-input-section">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Enter promo code"
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value.toUpperCase());
+                    setPromoError(null);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
+                  className="pl-8 text-sm"
+                  data-testid="input-promo-code"
+                />
+              </div>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleApplyPromo}
+                disabled={!promoInput.trim() || promoLoading}
+                data-testid="button-apply-promo"
+              >
+                {promoLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
+              </Button>
+            </div>
+            {promoError && (
+              <p className="text-xs text-destructive pl-1" data-testid="text-promo-error">{promoError}</p>
+            )}
           </div>
         )}
 
         <Separator />
 
-        {/* Total Price - Hero Section */}
         <div 
           className="relative overflow-hidden bg-gradient-to-br from-primary to-primary/80 rounded-xl p-4 text-primary-foreground"
           data-testid="pricing-total"
@@ -212,16 +296,16 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
           <div className="relative flex items-center justify-between">
             <div>
               <p className="text-xs text-primary-foreground/80 mb-1">
-                {showFirstMoveDiscount ? "Estimated (With Discount)" : "Estimated Total"}
+                {hasPromo ? "Estimated (With Promo)" : "Estimated Total"}
               </p>
-              <div className="flex items-baseline gap-1">
-                {showFirstMoveDiscount ? (
+              <div className="flex items-baseline gap-1 flex-wrap">
+                {hasPromo ? (
                   <>
                     <span className="text-lg line-through text-primary-foreground/50 mr-1">
                       ${breakdown.totalCost.toFixed(2)}
                     </span>
                     <span className="text-3xl font-bold tracking-tight">
-                      ${(breakdown.totalCost * 0.9).toFixed(2)}
+                      ${discountedTotal.toFixed(2)}
                     </span>
                   </>
                 ) : (
@@ -233,12 +317,20 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
               </div>
             </div>
             <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
-              {showFirstMoveDiscount ? <Gift className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
+              {hasPromo ? <Gift className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
             </div>
           </div>
         </div>
 
-        {/* Disclaimer */}
+        {hasPromo && (
+          <div className="flex items-center gap-1.5 justify-center">
+            <CheckCircle2 className="w-3 h-3 text-green-500" />
+            <p className="text-[11px] text-green-600 dark:text-green-400 font-medium">
+              You save ${(breakdown.totalCost - discountedTotal).toFixed(2)} with promo code {appliedPromo.code}
+            </p>
+          </div>
+        )}
+
         <p className="text-[11px] text-center text-muted-foreground leading-relaxed">
           Final price confirmed at checkout. Travel fee calculated based on mover distance to pickup.
         </p>
