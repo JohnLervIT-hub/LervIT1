@@ -30,8 +30,8 @@ import { getVehicleDisplayName } from "@/lib/utils";
 // Vehicle type filter options with display name and normalized DB values
 const VEHICLE_TYPE_FILTERS = [
   { display: "SUV / Small Vehicle", dbValues: ["car", "suv", "small"] },
-  { display: "Cargo Van", dbValues: ["van", "cargo van"] },
   { display: "Pickup Truck", dbValues: ["pickup", "pickup truck"] },
+  { display: "Cargo Van", dbValues: ["van", "cargo van"] },
   { display: "Moving Truck", dbValues: ["truck", "moving truck", "large truck"] },
 ];
 

@@ -38,13 +38,15 @@ import { VehicleType } from './furniture-database';
  * Single-tier vehicle upgrade compatibility
  * Only allows upgrade to ONE tier higher to prevent extreme mismatches
  * 
- * Examples:
- * - car → [car, van] (can upgrade to van, but not pickup or truck)
- * - van → [van, pickup] (can upgrade to pickup, but not truck)
- * - pickup → [pickup, truck]
+ * Vehicle capacity order (smallest to largest):
+ * - car → [car, pickup] (can upgrade to pickup, but not van or truck)
+ * - pickup → [pickup, van] (can upgrade to van, but not truck)
+ * - van → [van, truck] (can upgrade to truck)
  * - truck → [truck] (no higher tier)
+ * 
+ * Note: Pickup truck bed (~50-80 ft³) holds LESS than cargo van (~250-350 ft³ enclosed)
  */
-const VEHICLE_PRIORITY_ORDER: VehicleType[] = ['car', 'van', 'pickup', 'truck'];
+const VEHICLE_PRIORITY_ORDER: VehicleType[] = ['car', 'pickup', 'van', 'truck'];
 
 function getSingleTierCompatibility(baseType: VehicleType): VehicleType[] {
   const index = VEHICLE_PRIORITY_ORDER.indexOf(baseType);
@@ -61,16 +63,16 @@ function getSingleTierCompatibility(baseType: VehicleType): VehicleType[] {
 
 // Legacy vehicle type compatibility (kept for backward compatibility with display names)
 const VEHICLE_TYPE_COMPATIBILITY: Record<string, string[]> = {
-  'Car': ['car', 'van'],           // Single tier: Car → Van
-  'car': ['car', 'van'],
-  'SUV': ['car', 'van'],           // SUV is treated as 'car' class
-  'Van': ['van', 'pickup'],        // Single tier: Van → Pickup
-  'van': ['van', 'pickup'],
-  'Cargo Van': ['van', 'pickup'],
-  'Pickup': ['pickup', 'truck'],   // Single tier: Pickup → Truck
-  'pickup': ['pickup', 'truck'],
-  'Pickup Truck': ['pickup', 'truck'],
-  'Truck': ['truck'],              // Largest tier, no upgrade
+  'Car': ['car', 'pickup'],           // Single tier: Car → Pickup
+  'car': ['car', 'pickup'],
+  'SUV': ['car', 'pickup'],           // SUV is treated as 'car' class
+  'Pickup': ['pickup', 'van'],        // Single tier: Pickup → Van
+  'pickup': ['pickup', 'van'],
+  'Pickup Truck': ['pickup', 'van'],
+  'Van': ['van', 'truck'],            // Single tier: Van → Truck
+  'van': ['van', 'truck'],
+  'Cargo Van': ['van', 'truck'],
+  'Truck': ['truck'],                 // Largest tier, no upgrade
   'truck': ['truck'],
   'Moving Truck': ['truck'],
   'Cube Truck': ['truck'],

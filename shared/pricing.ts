@@ -41,13 +41,14 @@ export interface VehicleClassConfig {
  * ===== VEHICLE CLASS CONFIGURATION =====
  * 
  * IMPORTANT: These thresholds are synced with furniture-database.ts
- * Volume thresholds:
+ * Volume thresholds (2026 - corrected vehicle order):
  *   0-20 ft³    → Class A (SUV/Small Vehicle)
- *   21-165 ft³  → Class C (Cargo Van)
- *   166-300 ft³ → Class D (Pickup Truck / Small Moving Truck)
+ *   21-80 ft³   → Class B (Pickup Truck - open bed, less capacity)
+ *   81-300 ft³  → Class C (Cargo Van - enclosed, more capacity than pickup)
  *   >300 ft³    → Class E (Large Moving Truck)
  * 
- * Note: Class B is deprecated (merged into Class C). Kept in type for backward compatibility.
+ * Note: Pickup truck bed (~50-80 ft³) holds LESS than a cargo van (~250-350 ft³ enclosed).
+ * Class D is deprecated (old pickup slot). Kept in type for backward compatibility.
  */
 export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   A: {
@@ -63,36 +64,36 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   },
   B: {
     class: 'B',
-    name: 'Cargo Van (Legacy)',
-    vehicleType: 'van',
+    name: 'Pickup Truck',
+    vehicleType: 'pickup',
     volumeRangeMin: 21,
-    volumeRangeMax: 165,
+    volumeRangeMax: 80,
     baseFee: 15.00,
     perKmRate: 1.25,
-    loadType: 'Deprecated - use Class C',
-    examples: 'Deprecated - merged into Class C',
+    loadType: 'Moderate loads, open bed',
+    examples: 'Several boxes, small furniture, outdoor items',
   },
   C: {
     class: 'C',
     name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 21,
-    volumeRangeMax: 165,
-    baseFee: 15.00,
-    perKmRate: 1.25,
-    loadType: 'Medium to large furniture loads',
-    examples: 'Sofa, mattress, bedroom set, multiple furniture',
-  },
-  D: {
-    class: 'D',
-    name: 'Pickup Truck / Small Moving Truck',
-    vehicleType: 'pickup',
-    volumeRangeMin: 166,
+    volumeRangeMin: 81,
     volumeRangeMax: 300,
     baseFee: 20.00,
     perKmRate: 1.60,
-    loadType: 'Large loads / partial moves',
-    examples: 'Full bedroom + living room, multiple rooms',
+    loadType: 'Large furniture loads, enclosed space',
+    examples: 'Sofa, mattress, bedroom set, multiple furniture, multiple rooms',
+  },
+  D: {
+    class: 'D',
+    name: 'Pickup Truck (Legacy)',
+    vehicleType: 'pickup',
+    volumeRangeMin: 21,
+    volumeRangeMax: 80,
+    baseFee: 15.00,
+    perKmRate: 1.25,
+    loadType: 'Deprecated - use Class B',
+    examples: 'Deprecated - merged into Class B',
   },
   E: {
     class: 'E',
@@ -111,8 +112,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
 export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
   'boxes': 'A',        // 0-20 ft³ → Class A (SUV) - boxes, small items
   'small': 'A',        // Alias for boxes
-  'medium': 'C',       // 21-165 ft³ → Class C (Cargo Van)
-  'large': 'D',        // 166-300 ft³ → Class D (Pickup Truck / Small Moving Truck)
+  'medium': 'B',       // 21-80 ft³ → Class B (Pickup Truck)
+  'large': 'C',        // 81-300 ft³ → Class C (Cargo Van)
   'apartment': 'E',    // >300 ft³ → Class E (Large Moving Truck)
 };
 
@@ -120,16 +121,16 @@ export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
  * Determine vehicle class from total volume
  * Synced with furniture-database.ts thresholds:
  *   0-20 ft³    → A (SUV)
- *   21-165 ft³  → C (Cargo Van)
- *   166-300 ft³ → D (Pickup Truck / Small Moving Truck)
+ *   21-80 ft³   → B (Pickup Truck)
+ *   81-300 ft³  → C (Cargo Van)
  *   >300 ft³    → E (Large Moving Truck)
  * 
- * Note: Class B is deprecated (merged into C)
+ * Note: Class D is deprecated (old pickup slot, merged into B)
  */
 export function getVehicleClassFromVolume(volumeCuft: number): VehicleClass {
   if (volumeCuft <= 20) return 'A';
-  if (volumeCuft <= 165) return 'C';
-  if (volumeCuft <= 300) return 'D';
+  if (volumeCuft <= 80) return 'B';
+  if (volumeCuft <= 300) return 'C';
   return 'E';
 }
 
@@ -170,8 +171,8 @@ const PRICING_CONFIG = {
   LOAD_SIZE_FEES: {
     boxes: 5.00,     // Class A (SUV) - $5 mandatory load fee for 0-20 ft³
     small: 5.00,     // Alias for boxes - $5 mandatory load fee
-    medium: 15.00,   // Cargo Van loads
-    large: 30.00,    // Pickup Truck loads
+    medium: 15.00,   // Pickup Truck loads (21-80 ft³)
+    large: 30.00,    // Cargo Van loads (81-300 ft³)
     apartment: 45.00, // Moving Truck loads - minimum for 300+ ft³
   } as Record<string, number>,
   // Volume-based load fee rate (used when AI provides exact volume)

@@ -32,8 +32,8 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 // Vehicle types aligned with Vision Engine categories for proper matching
 const VEHICLE_TYPES = [
   { value: "car", label: "SUV / Small Vehicle" },
-  { value: "van", label: "Cargo Van" },
   { value: "pickup", label: "Pickup Truck" },
+  { value: "van", label: "Cargo Van" },
   { value: "truck", label: "Moving Truck" },
 ];
 
