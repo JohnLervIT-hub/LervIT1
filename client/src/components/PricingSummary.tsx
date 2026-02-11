@@ -59,14 +59,16 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     );
   }
 
-  // Format load size label for display - show volume when AI-detected
-  const loadSizeLabel = breakdown.volumeCuft
-    ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $0.15)`
-    : breakdown.loadSize 
-      ? `Load Size (${breakdown.loadSize.charAt(0).toUpperCase() + breakdown.loadSize.slice(1)})`
-      : "Load Size";
+  const hasItemBreakdown = breakdown.itemLoadFees && breakdown.itemLoadFees.length > 1;
 
-  // Distance label with KM only
+  const loadSizeLabel = hasItemBreakdown
+    ? `Load Fee (${breakdown.itemLoadFees!.length} items)`
+    : breakdown.volumeCuft
+      ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³)`
+      : breakdown.loadSize 
+        ? `Load Size (${breakdown.loadSize.charAt(0).toUpperCase() + breakdown.loadSize.slice(1)})`
+        : "Load Size";
+
   const distanceLabel = breakdown.distanceKm 
     ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
@@ -140,20 +142,36 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
         {/* Fee Breakdown */}
         <div className="space-y-2">
           {visibleFees.map((item) => (
-            <div 
-              key={item.testId} 
-              className="flex items-center justify-between py-1.5 group"
-              data-testid={item.testId}
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-muted/50 flex items-center justify-center group-hover:bg-muted transition-colors">
-                  <item.icon className="w-3 h-3 text-muted-foreground" />
+            <div key={item.testId}>
+              <div 
+                className="flex items-center justify-between py-1.5 group"
+                data-testid={item.testId}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-muted/50 flex items-center justify-center group-hover:bg-muted transition-colors">
+                    <item.icon className="w-3 h-3 text-muted-foreground" />
+                  </div>
+                  <span className="text-sm text-muted-foreground">{item.label}</span>
                 </div>
-                <span className="text-sm text-muted-foreground">{item.label}</span>
+                <span className="text-sm font-medium tabular-nums">
+                  ${item.amount.toFixed(2)}
+                </span>
               </div>
-              <span className="text-sm font-medium tabular-nums">
-                ${item.amount.toFixed(2)}
-              </span>
+              {item.testId === "fee-loadsize" && hasItemBreakdown && (
+                <div className="ml-8 mb-1 space-y-0.5" data-testid="item-load-breakdown">
+                  {breakdown.itemLoadFees!.map((detail, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs text-muted-foreground/80" data-testid={`item-fee-${idx}`}>
+                      <span>
+                        Item {idx + 1} ({detail.volumeCuft.toFixed(0)} ft³)
+                        {detail.isAdditional && (
+                          <span className="ml-1 text-primary/70">60%</span>
+                        )}
+                      </span>
+                      <span className="tabular-nums">${detail.fee.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
