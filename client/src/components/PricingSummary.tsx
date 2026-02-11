@@ -59,12 +59,14 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     );
   }
 
+  // Format load size label for display - show volume when AI-detected
   const loadSizeLabel = breakdown.volumeCuft
-    ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³)`
+    ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $0.15)`
     : breakdown.loadSize 
       ? `Load Size (${breakdown.loadSize.charAt(0).toUpperCase() + breakdown.loadSize.slice(1)})`
       : "Load Size";
 
+  // Distance label with KM only
   const distanceLabel = breakdown.distanceKm 
     ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";

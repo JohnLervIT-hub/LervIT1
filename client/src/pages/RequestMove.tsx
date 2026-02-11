@@ -100,7 +100,6 @@ export default function RequestMove() {
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
-  const [aiItemVolumes, setAiItemVolumes] = useState<number[]>([]);
   
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
@@ -417,8 +416,7 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers as 1 | 2,
           undefined, // moverToPickupDistance - will be calculated after mover assignment
-          aiDetectedVolume, // Pass AI-detected total volume for vehicle class
-          aiItemVolumes.length > 0 ? aiItemVolumes : undefined // Per-item volumes for tier-based load fees
+          aiDetectedVolume // Pass AI-detected volume for volume-based load fee
         );
         console.log('[Pricing] New breakdown:', breakdown);
         setPriceBreakdown(breakdown);
@@ -430,7 +428,7 @@ export default function RequestMove() {
     } else {
       setPriceBreakdown(null);
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, aiItemVolumes]);
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {
@@ -607,11 +605,10 @@ export default function RequestMove() {
 
   // AI Product Identifier - Identify items from uploaded photos
   // This function can be called manually or automatically after photo upload
-  // When incremental=true, only analyzes new photos and merges with existing results
-  const handleIdentifyItems = async (photoUrls?: string[], incremental = false) => {
-    const allUrls = photoUrls || images;
+  const handleIdentifyItems = async (photoUrls?: string[]) => {
+    const urlsToAnalyze = photoUrls || images;
     
-    if (allUrls.length === 0) {
+    if (urlsToAnalyze.length === 0) {
       toast({
         title: "No photos to analyze",
         description: "Please upload at least one photo first.",
@@ -620,20 +617,8 @@ export default function RequestMove() {
       return;
     }
     
-    // For incremental analysis, only analyze photos not already identified
-    const alreadyAnalyzedUrls = new Set(identifiedItems.map(item => item.photoUrl));
-    const urlsToAnalyze = incremental 
-      ? allUrls.filter(url => !alreadyAnalyzedUrls.has(url))
-      : allUrls;
-    
-    if (urlsToAnalyze.length === 0) {
-      return;
-    }
-    
     setIsIdentifyingItems(true);
-    if (!incremental) {
-      setIdentifiedItems([]);
-    }
+    setIdentifiedItems([]);
     
     try {
       const response = await apiRequest("POST", "/api/ai/items/identify", {
@@ -645,20 +630,16 @@ export default function RequestMove() {
       }
       
       const result = await response.json();
-      const newItems = result.items || [];
-      
-      // Merge new results with existing items (preserving previous results)
-      const items = incremental ? [...identifiedItems, ...newItems] : newItems;
+      const items = result.items || [];
       setIdentifiedItems(items);
       
       const completedItems = items.filter((item: IdentifiedItem) => item.processingStatus === 'completed');
       
       if (completedItems.length > 0) {
         // AUTO-APPLY AI recommendations based on total volume
-        const individualVolumes = completedItems.map((item: IdentifiedItem) => parseFloat(item.volumeCuft || '0'));
-        const totalVolume = individualVolumes.reduce((sum, v) => sum + v, 0);
+        const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
+          sum + parseFloat(item.volumeCuft || '0'), 0);
         setAiDetectedVolume(totalVolume);
-        setAiItemVolumes(individualVolumes);
         
         // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
         // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
@@ -730,9 +711,8 @@ export default function RequestMove() {
   };
   
   // Auto-analyze callback for ImageUpload - runs in background after photo upload
-  // Uses incremental mode to only analyze newly added photos, preserving existing results
   const handleAutoAnalyze = (photoUrls: string[]) => {
-    handleIdentifyItems(photoUrls, true);
+    handleIdentifyItems(photoUrls);
   };
 
   // Apply AI recommendations to booking form
@@ -994,7 +974,6 @@ export default function RequestMove() {
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
-        aiItemVolumes: aiItemVolumes.length > 0 ? aiItemVolumes : undefined,
       };
       createBookingMutation.mutate(bookingData);
     }
@@ -1745,27 +1724,7 @@ export default function RequestMove() {
                         At least one photo required - Our AI will automatically analyze your items
                       </p>
                       <ImageUpload 
-                        onImagesChange={(newImages) => {
-                          setImages(newImages);
-                          // Remove identified items for photos that were deleted
-                          const imageSet = new Set(newImages);
-                          setIdentifiedItems(prev => {
-                            const filtered = prev.filter(item => imageSet.has(item.photoUrl));
-                            if (filtered.length !== prev.length) {
-                              // Recalculate AI volume from remaining items
-                              const remaining = filtered.filter(item => item.processingStatus === 'completed');
-                              if (remaining.length > 0) {
-                                const vols = remaining.map(item => parseFloat(item.volumeCuft || '0'));
-                                setAiDetectedVolume(vols.reduce((s, v) => s + v, 0));
-                                setAiItemVolumes(vols);
-                              } else {
-                                setAiDetectedVolume(undefined);
-                                setAiItemVolumes([]);
-                              }
-                            }
-                            return filtered;
-                          });
-                        }} 
+                        onImagesChange={setImages} 
                         onAnalyze={handleAutoAnalyze}
                         maxImages={10} 
                       />
@@ -1812,7 +1771,6 @@ export default function RequestMove() {
                               onSelectSize={(size) => {
                                 setLoadSize(size);
                                 setAiDetectedVolume(undefined);
-                                setAiItemVolumes([]);
                               }}
                             />
                           </div>

@@ -2837,9 +2837,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const distance = drivingDistanceResult.distanceKm;
       const aiDetectedVolumeCuft = typeof req.body.aiDetectedVolumeCuft === 'number' ? req.body.aiDetectedVolumeCuft : undefined;
-      const aiItemVolumes = Array.isArray(req.body.aiItemVolumes) 
-        ? req.body.aiItemVolumes.filter((v: any) => typeof v === 'number' && v > 0) 
-        : undefined;
       const priceBreakdown = calculatePrice(
         distance,
         bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
@@ -2848,8 +2845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bookingData.heavyItem || false,
         bookingData.numberOfMovers as 1 | 2,
         undefined,
-        aiDetectedVolumeCuft,
-        aiItemVolumes && aiItemVolumes.length > 0 ? aiItemVolumes : undefined
+        aiDetectedVolumeCuft
       );
       
       // Calculate first-move discount for new customers

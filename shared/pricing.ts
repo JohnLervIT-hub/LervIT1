@@ -4,20 +4,20 @@
 export interface PriceBreakdown {
   baseFee: number;
   distanceFee: number;
-  distanceKm: number;
-  perKmRate: number;
+  distanceKm: number;  // Distance in kilometers for display
+  perKmRate: number;   // Price per km for the vehicle class
   loadFee: number;
-  loadSizeFee: number;
+  loadSizeFee: number;  // New: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
   moverTravelFee: number;
   pickupDifficultyFee: number;
   dropoffDifficultyFee: number;
-  heavyItemFee: number;
+  heavyItemFee: number;  // Kept for backwards compatibility
   subtotal: number;
   numberOfMoversMultiplier: number;
   totalCost: number;
   vehicleClass?: VehicleClass;
-  loadSize?: string;
-  volumeCuft?: number;
+  loadSize?: string;  // Store the load size for display
+  volumeCuft?: number;  // AI-detected volume for volume-based pricing
 }
 
 // ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
@@ -174,6 +174,11 @@ const PRICING_CONFIG = {
     large: 30.00,    // Pickup Truck loads
     apartment: 45.00, // Moving Truck loads - minimum for 300+ ft³
   } as Record<string, number>,
+  // Volume-based load fee rate (used when AI provides exact volume)
+  // $0.15/ft³ naturally matches tier minimums: 100ft³=$15, 200ft³=$30, 300ft³=$45
+  // Scales proportionally for larger loads: 335ft³=$50, 500ft³=$75, 600ft³=$90
+  VOLUME_LOAD_FEE_PER_CUFT: 0.15,
+  VOLUME_LOAD_FEE_MINIMUM: 5.00,  // Minimum load fee regardless of volume
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   
@@ -185,30 +190,10 @@ export type PickupDifficultyType = keyof typeof PRICING_CONFIG.PICKUP_DIFFICULTY
 export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES;
 
 /**
- * Get the flat tier fee for a given volume (based on which load size tier the volume falls into)
- * Volume thresholds:
- *   0-20 ft³    → boxes ($5)
- *   21-165 ft³  → medium ($15)
- *   166-300 ft³ → large ($30)
- *   >300 ft³    → apartment ($45)
- */
-export function getTierFeeForVolume(volumeCuft: number): { tierName: string; fee: number } {
-  if (volumeCuft <= 20) return { tierName: 'boxes', fee: PRICING_CONFIG.LOAD_SIZE_FEES['boxes'] };
-  if (volumeCuft <= 165) return { tierName: 'medium', fee: PRICING_CONFIG.LOAD_SIZE_FEES['medium'] };
-  if (volumeCuft <= 300) return { tierName: 'large', fee: PRICING_CONFIG.LOAD_SIZE_FEES['large'] };
-  return { tierName: 'apartment', fee: PRICING_CONFIG.LOAD_SIZE_FEES['apartment'] };
-}
-
-/**
  * Calculate the total price using vehicle class-based pricing
  * New formula: total = baseFee + distanceFee + loadSizeFee + accessFees
- * 
- * Load Size Fee calculation:
- * - When individual item volumes are provided (AI-detected per photo):
- *   Item 1 (largest): full tier fee based on its volume
- *   Item 2+: 60% of their tier fee (additional item surcharge)
- * - When only total volume is provided: flat tier fee based on total
- * - When no volume: flat tier fee based on selected load size
+ * Load Size Fees: Boxes: $5 (Class A), Medium: $15, Large: $30, Apartment: $45
+ * Class A Distance Rate: $0.90/km
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,
@@ -218,17 +203,11 @@ export function calculatePrice(
   heavyItem: boolean,
   numberOfMovers: 1 | 2,
   moverToPickupDistance?: number,
-  volumeCuft?: number,  // Optional: total volume for vehicle class determination
-  itemVolumes?: number[]  // Optional: individual item volumes from AI (per uploaded photo)
+  volumeCuft?: number  // Optional: use volume directly for more accurate class determination
 ): PriceBreakdown {
-  // Calculate total volume from individual items if provided
-  const totalVolume = itemVolumes && itemVolumes.length > 0
-    ? itemVolumes.reduce((sum, v) => sum + v, 0)
-    : volumeCuft;
-
   // Determine vehicle class (prefer volume if provided, otherwise use loadSize)
-  const vehicleClass = totalVolume 
-    ? getVehicleClassFromVolume(totalVolume)
+  const vehicleClass = volumeCuft 
+    ? getVehicleClassFromVolume(volumeCuft)
     : getVehicleClassFromLoadSize(loadSize);
   
   const classConfig = VEHICLE_CLASSES[vehicleClass];
@@ -240,15 +219,17 @@ export function calculatePrice(
   const distanceFee = pickupToDropoffDistance * classConfig.perKmRate;
   
   // Load fee is now included in base fee (class-based pricing)
+  // Keeping loadFee = 0 for backwards compatibility in breakdown display
   const loadFee = 0;
   
+  // Load Size Fee: Use volume-based scaling when AI provides exact volume,
+  // otherwise fall back to flat tier fee
   let loadSizeFee: number;
-  
-  if (itemVolumes && itemVolumes.length > 0) {
-    loadSizeFee = itemVolumes.reduce((sum, vol) => {
-      const tier = getTierFeeForVolume(vol);
-      return sum + tier.fee;
-    }, 0);
+  if (volumeCuft && volumeCuft > 0) {
+    loadSizeFee = Math.max(
+      volumeCuft * PRICING_CONFIG.VOLUME_LOAD_FEE_PER_CUFT,
+      PRICING_CONFIG.VOLUME_LOAD_FEE_MINIMUM
+    );
   } else {
     loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
   }
@@ -260,7 +241,8 @@ export function calculatePrice(
   const dropoffDifficultyFee = PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES[dropoffDifficulty] || 0;
   
   // Heavy item fee - kept in form but NOT included in pricing calculation anymore
-  const heavyItemFee = 0;
+  // (User can still toggle it but it doesn't affect the price)
+  const heavyItemFee = 0;  // Previously: heavyItem ? PRICING_CONFIG.HEAVY_ITEM_FEE : 0;
   
   // Mover travel fee (only if mover travels more than free radius)
   let moverTravelFee = 0;
@@ -280,7 +262,7 @@ export function calculatePrice(
   return {
     baseFee: Math.round(baseFee * 100) / 100,
     distanceFee: Math.round(distanceFee * 100) / 100,
-    distanceKm: Math.round(pickupToDropoffDistance * 10) / 10,
+    distanceKm: Math.round(pickupToDropoffDistance * 10) / 10,  // Round to 1 decimal
     perKmRate: classConfig.perKmRate,
     loadFee: Math.round(loadFee * 100) / 100,
     loadSizeFee: Math.round(loadSizeFee * 100) / 100,
@@ -293,7 +275,7 @@ export function calculatePrice(
     totalCost: Math.round(totalCost * 100) / 100,
     vehicleClass,
     loadSize,
-    volumeCuft: totalVolume || undefined,
+    volumeCuft: volumeCuft || undefined,
   };
 }
 

@@ -1702,29 +1702,11 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
   const nameLower = itemName.toLowerCase();
   const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
   
+  // Extract key category hints from the input name
   const hasChairHint = nameLower.includes('chair');
   const hasSofaHint = nameLower.includes('sofa') || nameLower.includes('couch');
   const hasBedHint = nameLower.includes('bed');
   const hasTableHint = nameLower.includes('table') || nameLower.includes('desk');
-  
-  const SUBCATEGORY_KEYWORDS: Record<string, string[]> = {
-    'Sectional': ['sectional', 'l-shaped', 'u-shaped', 'corner'],
-    'Loveseat': ['loveseat', '2-seater'],
-    '3-Seater': ['3-seater', 'three-seater'],
-    'Sofa Bed': ['sofa bed', 'sleeper', 'pull-out', 'pullout', 'convertible'],
-    'Recliner': ['recliner', 'reclining'],
-  };
-  
-  let inputSubcategory: string | null = null;
-  for (const [subcat, keywords] of Object.entries(SUBCATEGORY_KEYWORDS)) {
-    if (keywords.some(kw => nameLower.includes(kw))) {
-      inputSubcategory = subcat;
-      break;
-    }
-  }
-  
-  const SIZE_KEYWORDS = ['small', 'medium', 'large', 'oversized', 'compact', 'standard', 'mini', 'king', 'queen', 'twin', 'full', 'double', 'single'];
-  const inputSize = SIZE_KEYWORDS.find(s => nameLower.includes(s)) || null;
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
@@ -1734,21 +1716,29 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     const itemKeywords = [...item.keywords, item.subcategory.toLowerCase()];
     const allItemWords = [...itemNameLower.split(/\s+/), ...itemKeywords];
     
+    // CATEGORY MISMATCH PENALTY: If input clearly says "chair" but item is not a Chair, penalize heavily
     let categoryMismatchPenalty = 0;
     if (hasChairHint && item.category !== 'Chair') categoryMismatchPenalty = 0.5;
     if (hasSofaHint && item.category !== 'Sofa') categoryMismatchPenalty = 0.5;
     if (hasBedHint && item.category !== 'Bed') categoryMismatchPenalty = 0.5;
     if (hasTableHint && item.category !== 'Table') categoryMismatchPenalty = 0.5;
     
+    // Calculate similarity based on word matching
     let matchCount = 0;
     let totalWeight = 0;
     
     for (const word of nameWords) {
+      // Check exact match (highest value)
       if (allItemWords.some(iw => iw === word)) {
         matchCount += 3;
         totalWeight += 3;
-      } else if (allItemWords.some(iw => {
+      }
+      // Check partial match - REQUIRE minimum 4 chars for both words to prevent false positives
+      // This prevents "accent" matching "ac" 
+      else if (allItemWords.some(iw => {
         const minLen = Math.min(iw.length, word.length);
+        const maxLen = Math.max(iw.length, word.length);
+        // Only allow partial match if shorter word is at least 4 chars AND overlap is meaningful
         if (minLen < 4) return false;
         return (iw.includes(word) || word.includes(iw));
       })) {
@@ -1759,12 +1749,15 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
       }
     }
     
+    // Check category keywords for bonus (but only exact matches, not substrings)
     for (const keyword of itemKeywords) {
+      // Require keyword to be at least 4 chars to avoid "ac" matching "accent"
       if (keyword.length >= 4 && nameLower.includes(keyword)) {
         matchCount += 1;
       }
     }
     
+    // CATEGORY MATCH BONUS: If category explicitly matches, boost score
     if (hasChairHint && item.category === 'Chair') matchCount += 2;
     if (hasSofaHint && item.category === 'Sofa') matchCount += 2;
     if (hasBedHint && item.category === 'Bed') matchCount += 2;
@@ -1772,27 +1765,8 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     
     let similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
     
+    // Apply category mismatch penalty
     similarity = similarity * (1 - categoryMismatchPenalty);
-    
-    if (inputSubcategory) {
-      if (item.subcategory === inputSubcategory) {
-        similarity *= 1.5;
-      } else {
-        similarity *= 0.3;
-      }
-      similarity = Math.min(similarity, 1);
-    }
-    
-    if (inputSize) {
-      const itemAllText = itemNameLower + ' ' + item.keywords.join(' ');
-      const itemSize = SIZE_KEYWORDS.find(s => itemAllText.includes(s)) || null;
-      if (itemSize && inputSize !== itemSize) {
-        similarity *= 0.4;
-      } else if (itemSize && inputSize === itemSize) {
-        similarity *= 1.3;
-        similarity = Math.min(similarity, 1);
-      }
-    }
     
     if (similarity > bestScore) {
       bestScore = similarity;
@@ -1800,7 +1774,7 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     }
   }
   
-  if (bestMatch && bestScore > 0.3) {
+  if (bestMatch && bestScore > 0.3) {  // Minimum threshold for a match
     return { item: bestMatch, similarity: bestScore };
   }
   
