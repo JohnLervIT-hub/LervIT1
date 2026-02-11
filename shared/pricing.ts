@@ -17,6 +17,7 @@ export interface PriceBreakdown {
   totalCost: number;
   vehicleClass?: VehicleClass;
   loadSize?: string;  // Store the load size for display
+  volumeCuft?: number;  // AI-detected volume for volume-based pricing
 }
 
 // ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
@@ -165,14 +166,19 @@ const PRICING_CONFIG = {
     stairs: 5.00,
     elevator: 8.00,
   },
-  // Load Size Fees (replaces heavy item fee in pricing calculation)
+  // Load Size Fees (flat tier fees - used when no AI volume data)
   LOAD_SIZE_FEES: {
     boxes: 5.00,     // Class A (SUV) - $5 mandatory load fee for 0-20 ft³
     small: 5.00,     // Alias for boxes - $5 mandatory load fee
     medium: 15.00,   // Cargo Van loads
     large: 30.00,    // Pickup Truck loads
-    apartment: 45.00, // Moving Truck loads
+    apartment: 45.00, // Moving Truck loads - minimum for 300+ ft³
   } as Record<string, number>,
+  // Volume-based load fee rate (used when AI provides exact volume)
+  // $0.15/ft³ naturally matches tier minimums: 100ft³=$15, 200ft³=$30, 300ft³=$45
+  // Scales proportionally for larger loads: 335ft³=$50, 500ft³=$75, 600ft³=$90
+  VOLUME_LOAD_FEE_PER_CUFT: 0.15,
+  VOLUME_LOAD_FEE_MINIMUM: 5.00,  // Minimum load fee regardless of volume
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   
@@ -216,8 +222,17 @@ export function calculatePrice(
   // Keeping loadFee = 0 for backwards compatibility in breakdown display
   const loadFee = 0;
   
-  // NEW: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
-  const loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
+  // Load Size Fee: Use volume-based scaling when AI provides exact volume,
+  // otherwise fall back to flat tier fee
+  let loadSizeFee: number;
+  if (volumeCuft && volumeCuft > 0) {
+    loadSizeFee = Math.max(
+      volumeCuft * PRICING_CONFIG.VOLUME_LOAD_FEE_PER_CUFT,
+      PRICING_CONFIG.VOLUME_LOAD_FEE_MINIMUM
+    );
+  } else {
+    loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
+  }
   
   // Pickup difficulty fee
   const pickupDifficultyFee = PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0;
@@ -260,6 +275,7 @@ export function calculatePrice(
     totalCost: Math.round(totalCost * 100) / 100,
     vehicleClass,
     loadSize,
+    volumeCuft: volumeCuft || undefined,
   };
 }
 
