@@ -1571,68 +1571,6 @@ export default function RequestMove() {
                       </div>
                     )}
 
-                    {/* AI Feature 1: Auto-Quote Predictor */}
-                    {aiEstimate && (
-                      <div className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 border border-primary/20 rounded-xl p-5 mt-6">
-                        {/* Decorative background element */}
-                        <div className="absolute -right-8 -top-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl" />
-                        
-                        <div className="relative">
-                          <div className="flex items-start gap-3 mb-4">
-                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-                              <Sparkles className="w-5 h-5 text-primary-foreground" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-base">AI Price Estimate</h3>
-                                <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">BETA</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">Smart prediction based on route & load</p>
-                            </div>
-                          </div>
-                          
-                          <div className="bg-card/80 backdrop-blur-sm rounded-lg p-4 border border-border/50">
-                            <div className="flex items-end justify-between mb-3">
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Estimated Range</p>
-                                <div className="flex items-baseline gap-1">
-                                  <span className="text-2xl sm:text-3xl font-bold tracking-tight">
-                                    ${aiEstimate.minPrice.toFixed(0)}
-                                  </span>
-                                  <span className="text-lg text-muted-foreground mx-1">-</span>
-                                  <span className="text-2xl sm:text-3xl font-bold tracking-tight">
-                                    ${aiEstimate.maxPrice.toFixed(0)}
-                                  </span>
-                                  <span className="text-sm font-medium text-muted-foreground ml-1">CAD</span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="flex items-center justify-end gap-1 mb-1">
-                                  <div className={`w-2 h-2 rounded-full ${aiEstimate.confidence >= 80 ? 'bg-green-500' : aiEstimate.confidence >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} />
-                                  <span className="text-sm font-semibold">{aiEstimate.confidence}%</span>
-                                </div>
-                                <p className="text-[10px] text-muted-foreground">confidence</p>
-                              </div>
-                            </div>
-                            
-                            <div className="relative h-2 bg-muted rounded-full overflow-hidden">
-                              <div 
-                                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${
-                                  aiEstimate.confidence >= 80 ? 'bg-gradient-to-r from-green-500 to-green-400' : 
-                                  aiEstimate.confidence >= 60 ? 'bg-gradient-to-r from-amber-500 to-amber-400' : 
-                                  'bg-gradient-to-r from-red-500 to-red-400'
-                                }`}
-                                style={{ width: `${aiEstimate.confidence}%` }}
-                              />
-                            </div>
-                            
-                            <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-                              {aiEstimate.explanation}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
 
