@@ -100,6 +100,7 @@ export default function RequestMove() {
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
+  const [aiItemVolumes, setAiItemVolumes] = useState<number[]>([]);
   
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
@@ -416,7 +417,8 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers as 1 | 2,
           undefined, // moverToPickupDistance - will be calculated after mover assignment
-          aiDetectedVolume // Pass AI-detected volume for volume-based load fee
+          aiDetectedVolume, // Pass AI-detected total volume for vehicle class
+          aiItemVolumes.length > 0 ? aiItemVolumes : undefined // Per-item volumes for tier-based load fees
         );
         console.log('[Pricing] New breakdown:', breakdown);
         setPriceBreakdown(breakdown);
@@ -428,7 +430,7 @@ export default function RequestMove() {
     } else {
       setPriceBreakdown(null);
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
+  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, aiItemVolumes]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {
@@ -653,9 +655,10 @@ export default function RequestMove() {
       
       if (completedItems.length > 0) {
         // AUTO-APPLY AI recommendations based on total volume
-        const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
-          sum + parseFloat(item.volumeCuft || '0'), 0);
+        const individualVolumes = completedItems.map((item: IdentifiedItem) => parseFloat(item.volumeCuft || '0'));
+        const totalVolume = individualVolumes.reduce((sum, v) => sum + v, 0);
         setAiDetectedVolume(totalVolume);
+        setAiItemVolumes(individualVolumes);
         
         // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
         // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
@@ -991,6 +994,7 @@ export default function RequestMove() {
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
+        aiItemVolumes: aiItemVolumes.length > 0 ? aiItemVolumes : undefined,
       };
       createBookingMutation.mutate(bookingData);
     }
@@ -1751,10 +1755,12 @@ export default function RequestMove() {
                               // Recalculate AI volume from remaining items
                               const remaining = filtered.filter(item => item.processingStatus === 'completed');
                               if (remaining.length > 0) {
-                                const vol = remaining.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
-                                setAiDetectedVolume(vol);
+                                const vols = remaining.map(item => parseFloat(item.volumeCuft || '0'));
+                                setAiDetectedVolume(vols.reduce((s, v) => s + v, 0));
+                                setAiItemVolumes(vols);
                               } else {
                                 setAiDetectedVolume(undefined);
+                                setAiItemVolumes([]);
                               }
                             }
                             return filtered;
@@ -1806,6 +1812,7 @@ export default function RequestMove() {
                               onSelectSize={(size) => {
                                 setLoadSize(size);
                                 setAiDetectedVolume(undefined);
+                                setAiItemVolumes([]);
                               }}
                             />
                           </div>
