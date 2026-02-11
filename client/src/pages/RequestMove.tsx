@@ -412,7 +412,30 @@ export default function RequestMove() {
           undefined,
           aiDetectedVolume
         );
-        setPriceBreakdown(breakdown);
+        if (step === 1) {
+          const distanceOnly: PriceBreakdown = {
+            baseFee: 0,
+            distanceFee: breakdown.distanceFee,
+            distanceKm: breakdown.distanceKm,
+            perKmRate: breakdown.perKmRate,
+            loadFee: 0,
+            loadSizeFee: 0,
+            apartmentPremium: 0,
+            moverTravelFee: 0,
+            pickupDifficultyFee: 0,
+            dropoffDifficultyFee: 0,
+            heavyItemFee: 0,
+            subtotal: breakdown.distanceFee,
+            numberOfMoversMultiplier: 1,
+            totalCost: breakdown.distanceFee,
+            vehicleClass: breakdown.vehicleClass,
+            loadSize: breakdown.loadSize,
+            volumeCuft: breakdown.volumeCuft,
+          };
+          setPriceBreakdown(distanceOnly);
+        } else {
+          setPriceBreakdown(breakdown);
+        }
         setPricingError(null);
       } catch (error) {
         console.error('Pricing calculation error:', error);
@@ -436,7 +459,7 @@ export default function RequestMove() {
         totalCost: 0,
       });
     }
-  }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
+  }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {
