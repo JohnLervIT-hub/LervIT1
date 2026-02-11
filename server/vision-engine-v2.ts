@@ -417,11 +417,31 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
 Analyze this image and identify the item with maximum detail.
 
 IDENTIFY:
-1. Item type (be specific: "L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
+1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
 4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
 5. Material if visible (leather, fabric, wood, metal, glass)
+
+SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine size tier):
+For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
+• Count the number of seat cushions visible
+• Check seat depth (standard ~55cm vs deep-seat ~70cm+)
+• Look for a chaise or ottoman section
+• Compare to nearby objects (doors are ~200cm tall, standard doorways ~80cm wide)
+• Count how many separable pieces/sections you can identify
+
+L-SHAPED SECTIONAL TIERS:
+• SMALL (2-piece, apartment-size): 2-3 seat cushions, compact chaise, fits against one wall. ~230×150×85cm, 70kg
+• MEDIUM (3-piece, standard): 4-5 seat cushions, standard chaise, fills a corner. ~300×180×85cm, 120kg
+• LARGE (4-5 piece, oversized/deep-seat): 6+ seat cushions, wide/deep seats, oversized chaise or ottoman. ~370×220×90cm, 170kg
+
+U-SHAPED SECTIONAL TIERS:
+• SMALL (compact, 3-piece): 5-6 seat cushions, narrow arms. ~280×200×85cm, 130kg
+• MEDIUM (standard, 4-5 piece): 7-8 seat cushions, standard depth. ~350×250×85cm, 180kg
+• LARGE (oversized, 6+ piece): 9+ seat cushions, theater/pit style, deep seats. ~420×300×90cm, 240kg
+
+Include the size tier in the item name (e.g., "Small L-shaped sectional sofa", "Large U-shaped sectional sofa").
 
 PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
 - Use standard furniture dimensions for the identified type
@@ -433,8 +453,12 @@ REFERENCE DIMENSIONS (use these):
 • King bed frame: ~203×193×40cm, 70kg
 • 2-seater loveseat: ~150×85×85cm, 45kg
 • 3-seater sofa: ~210×90×85cm, 70kg
-• L-shaped sectional: ~300×180×85cm, 120kg
-• U-shaped sectional: ~350×250×85cm, 180kg
+• Small L-shaped sectional (2-piece): ~230×150×85cm, 70kg
+• Medium L-shaped sectional (3-piece): ~300×180×85cm, 120kg
+• Large L-shaped sectional (4-5 piece): ~370×220×90cm, 170kg
+• Small U-shaped sectional (3-piece): ~280×200×85cm, 130kg
+• Medium U-shaped sectional (4-5 piece): ~350×250×85cm, 180kg
+• Large U-shaped sectional (6+ piece): ~420×300×90cm, 240kg
 • 4-person dining table: ~120×75×75cm, 35kg
 • 6-person dining table: ~180×90×75cm, 50kg
 • Coffee table: ~120×60×45cm, 25kg
