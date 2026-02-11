@@ -385,28 +385,23 @@ export default function RequestMove() {
   
   // Calculate live pricing whenever form fields change
   useEffect(() => {
-    if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
-      try {
-        console.log('[Pricing] Calculating with loadSize:', loadSize);
-        const breakdown = calculatePrice(
-          estimateDistance,
-          loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
-          pickupDifficulty as PickupDifficultyType,
-          dropoffDifficulty as DropoffDifficultyType,
-          heavyItem,
-          numberOfMovers as 1 | 2,
-          undefined, // moverToPickupDistance - will be calculated after mover assignment
-          aiDetectedVolume // Pass AI-detected volume for volume-based load fee
-        );
-        console.log('[Pricing] New breakdown:', breakdown);
-        setPriceBreakdown(breakdown);
-        setPricingError(null);
-      } catch (error) {
-        console.error('Pricing calculation error:', error);
-        setPricingError("Error calculating price");
-      }
-    } else {
-      setPriceBreakdown(null);
+    try {
+      const distance = (estimateDistance > 0 && pickupAddress && dropoffAddress) ? estimateDistance : 0;
+      const breakdown = calculatePrice(
+        distance,
+        loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
+        pickupDifficulty as PickupDifficultyType,
+        dropoffDifficulty as DropoffDifficultyType,
+        heavyItem,
+        numberOfMovers as 1 | 2,
+        undefined,
+        aiDetectedVolume
+      );
+      setPriceBreakdown(breakdown);
+      setPricingError(null);
+    } catch (error) {
+      console.error('Pricing calculation error:', error);
+      setPricingError("Error calculating price");
     }
   }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
 
