@@ -385,23 +385,41 @@ export default function RequestMove() {
   
   // Calculate live pricing whenever form fields change
   useEffect(() => {
-    try {
-      const distance = (estimateDistance > 0 && pickupAddress && dropoffAddress) ? estimateDistance : 0;
-      const breakdown = calculatePrice(
-        distance,
-        loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
-        pickupDifficulty as PickupDifficultyType,
-        dropoffDifficulty as DropoffDifficultyType,
-        heavyItem,
-        numberOfMovers as 1 | 2,
-        undefined,
-        aiDetectedVolume
-      );
-      setPriceBreakdown(breakdown);
-      setPricingError(null);
-    } catch (error) {
-      console.error('Pricing calculation error:', error);
-      setPricingError("Error calculating price");
+    if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
+      try {
+        const breakdown = calculatePrice(
+          estimateDistance,
+          loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
+          pickupDifficulty as PickupDifficultyType,
+          dropoffDifficulty as DropoffDifficultyType,
+          heavyItem,
+          numberOfMovers as 1 | 2,
+          undefined,
+          aiDetectedVolume
+        );
+        setPriceBreakdown(breakdown);
+        setPricingError(null);
+      } catch (error) {
+        console.error('Pricing calculation error:', error);
+        setPricingError("Error calculating price");
+      }
+    } else {
+      setPriceBreakdown({
+        baseFee: 0,
+        distanceFee: 0,
+        distanceKm: 0,
+        perKmRate: 0,
+        loadFee: 0,
+        loadSizeFee: 0,
+        apartmentPremium: 0,
+        moverTravelFee: 0,
+        pickupDifficultyFee: 0,
+        dropoffDifficultyFee: 0,
+        heavyItemFee: 0,
+        subtotal: 0,
+        numberOfMoversMultiplier: 1,
+        totalCost: 0,
+      });
     }
   }, [estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
 
