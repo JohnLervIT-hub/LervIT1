@@ -182,7 +182,7 @@ const PRICING_CONFIG = {
     large: 30.00,    // Pickup Truck loads
     apartment: 45.00, // Moving Truck loads - minimum for 300+ ft³
   } as Record<string, number>,
-  ADDITIONAL_ITEM_MULTIPLIER: 0.60,  // Additional items pay 60% of their tier fee
+  ADDITIONAL_ITEM_DISCOUNT: 0.20,  // Additional items (medium-apartment) get 20% discount on their tier fee
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   
@@ -256,19 +256,18 @@ export function calculatePrice(
   let itemLoadFees: ItemLoadFeeDetail[] | undefined;
   
   if (itemVolumes && itemVolumes.length > 0) {
-    // MULTI-ITEM PRICING: Each item gets its own tier fee
-    // Sort descending so largest item is first (pays full rate)
     const sorted = [...itemVolumes].sort((a, b) => b - a);
     itemLoadFees = sorted.map((vol, index) => {
       const tier = getTierFeeForVolume(vol);
       const isAdditional = index > 0;
-      const multiplier = isAdditional ? PRICING_CONFIG.ADDITIONAL_ITEM_MULTIPLIER : 1.0;
-      const fee = Math.round(tier.fee * multiplier * 100) / 100;
+      const discountApplies = isAdditional && tier.tierName !== 'boxes';
+      const discount = discountApplies ? PRICING_CONFIG.ADDITIONAL_ITEM_DISCOUNT : 0;
+      const fee = Math.round(tier.fee * (1 - discount) * 100) / 100;
       return {
         volumeCuft: vol,
-        rate: multiplier,
+        rate: 1 - discount,
         fee,
-        isAdditional,
+        isAdditional: discountApplies,
         tierName: tier.tierName,
         tierFee: tier.fee,
       };

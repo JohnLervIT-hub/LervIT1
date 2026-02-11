@@ -164,7 +164,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
                       <span>
                         Item {idx + 1} ({detail.volumeCuft.toFixed(0)} ft³)
                         {detail.isAdditional && (
-                          <span className="ml-1 text-primary/70">60%</span>
+                          <span className="ml-1 text-primary/70">-20%</span>
                         )}
                       </span>
                       <span className="tabular-nums">${detail.fee.toFixed(2)}</span>
