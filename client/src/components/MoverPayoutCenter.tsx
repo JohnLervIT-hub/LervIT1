@@ -71,6 +71,9 @@ interface Earning {
     loadSize: string;
   };
   customerName: string;
+  promoCode: string | null;
+  moverBalanceOwed: string | null;
+  moverBalancePaid: boolean | null;
 }
 
 export function MoverPayoutCenter() {
@@ -489,6 +492,11 @@ export function MoverPayoutCenter() {
                     <p className="text-xs text-muted-foreground">
                       ${earning.grossAmount} - ${earning.platformFeeAmount} ({earning.platformFeePercent}% fee)
                     </p>
+                    {earning.promoCode && earning.moverBalanceOwed && parseFloat(earning.moverBalanceOwed) > 0 && (
+                      <p className={`text-xs font-medium mt-1 ${earning.moverBalancePaid ? 'text-green-600' : 'text-amber-600'}`} data-testid={`promo-payout-${earning.id}`}>
+                        + ${parseFloat(earning.moverBalanceOwed).toFixed(2)} additional payout {earning.moverBalancePaid ? '(paid)' : '(pending)'}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}

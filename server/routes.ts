@@ -7050,6 +7050,9 @@ Respond with VALID JSON only:
               loadSize: booking.loadSize,
             } : null,
             customerName: customer?.name || 'Unknown',
+            promoCode: booking?.promoCode || null,
+            moverBalanceOwed: booking?.moverBalanceOwed || null,
+            moverBalancePaid: booking?.moverBalancePaid || null,
           };
         })
       );
