@@ -4,9 +4,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Car, Info } from "lucide-react";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift } from "lucide-react";
 import type { PriceBreakdown } from "@shared/pricing";
-import { VEHICLE_CLASSES, type VehicleClass } from "@shared/pricing";
 
 interface PricingSummaryProps {
   breakdown: PriceBreakdown | null;
@@ -238,58 +237,6 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
         <p className="text-[11px] text-center text-muted-foreground leading-relaxed">
           Final price confirmed at checkout. Travel fee calculated based on mover distance to pickup.
         </p>
-
-        <Separator />
-
-        {/* Vehicle Class Pricing Reference */}
-        <div data-testid="vehicle-class-pricing">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 rounded-md bg-muted/50 flex items-center justify-center">
-              <Info className="w-3 h-3 text-muted-foreground" />
-            </div>
-            <span className="text-xs font-medium text-muted-foreground">Vehicle Class Rates</span>
-          </div>
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="text-left py-2 px-3 font-medium text-muted-foreground">Vehicle</th>
-                  <th className="text-right py-2 px-3 font-medium text-muted-foreground">Base Fee</th>
-                  <th className="text-right py-2 px-3 font-medium text-muted-foreground">Per km</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(['A', 'B', 'C', 'E'] as VehicleClass[]).map((cls, idx) => {
-                  const vc = VEHICLE_CLASSES[cls];
-                  const isActive = breakdown.vehicleClass === cls;
-                  return (
-                    <tr
-                      key={cls}
-                      className={`${isActive ? 'bg-primary/10 font-medium' : ''} ${idx < 3 ? 'border-b' : ''}`}
-                      data-testid={`vehicle-class-row-${cls}`}
-                    >
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1.5">
-                          {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
-                          <span className={isActive ? 'text-primary' : 'text-foreground'}>{vc.name}</span>
-                        </div>
-                      </td>
-                      <td className={`text-right py-2 px-3 tabular-nums ${isActive ? 'text-primary' : ''}`}>
-                        ${vc.baseFee.toFixed(2)}
-                      </td>
-                      <td className={`text-right py-2 px-3 tabular-nums ${isActive ? 'text-primary' : ''}`}>
-                        ${vc.perKmRate.toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
-            Vehicle class is determined by your load size
-          </p>
-        </div>
       </CardContent>
     </Card>
   );
