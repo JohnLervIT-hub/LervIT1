@@ -5,8 +5,10 @@ import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Camera, Users, Navigation, MapPin, X } from "lucide-react";
+import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, CreditCard, ShieldCheck } from "lucide-react";
+import { SiFacebook, SiInstagram, SiLinkedin } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
+import { Separator } from "@/components/ui/separator";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
@@ -177,6 +179,85 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="bg-muted/30 border-t" data-testid="footer">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-12">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Truck className="w-6 h-6 text-primary" />
+                <span className="text-xl font-bold">LervIT</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Calgary's smartest moving platform.
+              </p>
+              <div className="flex items-center gap-4">
+                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Facebook" data-testid="link-facebook">
+                  <SiFacebook className="w-5 h-5" />
+                </a>
+                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Instagram" data-testid="link-instagram">
+                  <SiInstagram className="w-5 h-5" />
+                </a>
+                <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="LinkedIn" data-testid="link-linkedin">
+                  <SiLinkedin className="w-5 h-5" />
+                </a>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-semibold">Company</h4>
+              <ul className="space-y-3 text-sm">
+                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">About Us</a></li>
+                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">Careers</a></li>
+                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">Press</a></li>
+              </ul>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-semibold">Support</h4>
+              <ul className="space-y-3 text-sm">
+                <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">Help Center</a></li>
+                <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">Report an Issue</a></li>
+                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">Terms</a></li>
+                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">Privacy</a></li>
+              </ul>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-semibold">Contact</h4>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <Mail className="w-4 h-4 flex-shrink-0" />
+                  <a href="mailto:support@lervit.com" className="hover:text-foreground transition-colors" data-testid="link-email">support@lervit.com</a>
+                </li>
+                <li className="flex items-center gap-2 text-muted-foreground">
+                  <MapPinIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>Calgary, AB</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <Separator className="my-8" />
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground" data-testid="text-copyright">
+              &copy; {new Date().getFullYear()} LervIT Inc. All rights reserved.
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium text-muted-foreground">
+                <CreditCard className="w-3.5 h-3.5" />
+                Stripe
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium text-muted-foreground">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Verified
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
