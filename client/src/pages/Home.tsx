@@ -16,7 +16,7 @@ import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_backgro
 
 const FOOTER_LINKS = {
   social: {
-    facebook: "https://facebook.com",
+    facebook: "https://www.facebook.com/profile.php?id=61585380446312",
     instagram: "https://instagram.com",
     linkedin: "https://www.linkedin.com/company/lervit/?viewAsMember=true",
   },
