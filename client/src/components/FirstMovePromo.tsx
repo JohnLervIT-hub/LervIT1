@@ -26,8 +26,8 @@ export function FirstMovePromo({ userName }: FirstMovePromoProps) {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="font-bold text-lg">Welcome, {firstName}!</h3>
-              <Badge className="bg-green-500 text-white">
-                <Sparkles className="w-3 h-3 mr-1" />
+              <Badge className="bg-green-500 text-white px-4 py-2 text-sm">
+                <Sparkles className="w-4 h-4 mr-1" />
                 20% OFF
               </Badge>
             </div>

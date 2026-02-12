@@ -130,7 +130,7 @@ export function WelcomeTutorial({ isOpen, onComplete, userName }: WelcomeTutoria
           <p className="text-muted-foreground mb-4">{step.description}</p>
           
           {step.highlight && (
-            <Badge className={`${step.highlightColor} text-white px-4 py-2 text-sm`}>
+            <Badge className={`${step.highlightColor} text-white px-6 py-3 text-base`}>
               <Gift className="w-4 h-4 mr-2" />
               {step.highlight}
             </Badge>
