@@ -200,7 +200,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="bg-muted border-t" data-testid="footer">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_auto_1fr] gap-10 lg:gap-16">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Truck className="w-6 h-6 text-primary" />
@@ -222,58 +222,60 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <h4 className="font-semibold">Company</h4>
-              <ul className="space-y-3 text-sm">
-                <li>
-                  <a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">
-                    <Users className="w-4 h-4 flex-shrink-0" />
-                    <span>About Us</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">
-                    <Briefcase className="w-4 h-4 flex-shrink-0" />
-                    <span>Careers</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">
-                    <Newspaper className="w-4 h-4 flex-shrink-0" />
-                    <span>Press</span>
-                  </a>
-                </li>
-              </ul>
-            </div>
+            <div className="flex flex-col sm:flex-row gap-10 lg:gap-16">
+              <div className="space-y-4">
+                <h4 className="font-semibold">Company</h4>
+                <ul className="space-y-3 text-sm">
+                  <li>
+                    <a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">
+                      <Users className="w-4 h-4 flex-shrink-0" />
+                      <span>About Us</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">
+                      <Briefcase className="w-4 h-4 flex-shrink-0" />
+                      <span>Careers</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">
+                      <Newspaper className="w-4 h-4 flex-shrink-0" />
+                      <span>Press</span>
+                    </a>
+                  </li>
+                </ul>
+              </div>
 
-            <div className="space-y-4">
-              <h4 className="font-semibold">Support</h4>
-              <ul className="space-y-3 text-sm">
-                <li>
-                  <a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">
-                    <HelpCircle className="w-4 h-4 flex-shrink-0" />
-                    <span>Help Center</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="/support" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                    <span>Report an Issue</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                    <span>Terms of Service</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">
-                    <Lock className="w-4 h-4 flex-shrink-0" />
-                    <span>Privacy Policy</span>
-                  </a>
-                </li>
-              </ul>
+              <div className="space-y-4">
+                <h4 className="font-semibold">Support</h4>
+                <ul className="space-y-3 text-sm">
+                  <li>
+                    <a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">
+                      <HelpCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>Help Center</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/support" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>Report an Issue</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span>Terms of Service</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">
+                      <Lock className="w-4 h-4 flex-shrink-0" />
+                      <span>Privacy Policy</span>
+                    </a>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <div className="space-y-4">
