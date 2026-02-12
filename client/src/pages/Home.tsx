@@ -198,7 +198,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-muted border-t" data-testid="footer">
+      <footer className="bg-black/90 text-white border-t border-white/10" data-testid="footer">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16">
             <div className="space-y-4 lg:max-w-[220px]">
@@ -206,17 +206,17 @@ export default function Home() {
                 <Truck className="w-6 h-6 text-primary" />
                 <span className="text-xl font-bold">LervIT</span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-white/60">
                 Calgary's smartest moving platform.
               </p>
               <div className="flex items-center gap-4">
-                <a href={FOOTER_LINKS.social.facebook} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Facebook" data-testid="link-facebook">
+                <a href={FOOTER_LINKS.social.facebook} target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white transition-colors" aria-label="Facebook" data-testid="link-facebook">
                   <SiFacebook className="w-5 h-5" />
                 </a>
-                <a href={FOOTER_LINKS.social.instagram} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Instagram" data-testid="link-instagram">
+                <a href={FOOTER_LINKS.social.instagram} target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white transition-colors" aria-label="Instagram" data-testid="link-instagram">
                   <SiInstagram className="w-5 h-5" />
                 </a>
-                <a href={FOOTER_LINKS.social.linkedin} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="LinkedIn" data-testid="link-linkedin">
+                <a href={FOOTER_LINKS.social.linkedin} target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white transition-colors" aria-label="LinkedIn" data-testid="link-linkedin">
                   <SiLinkedin className="w-5 h-5" />
                 </a>
               </div>
@@ -227,19 +227,19 @@ export default function Home() {
                 <h4 className="font-semibold">Company</h4>
                 <ul className="space-y-3 text-sm">
                   <li>
-                    <a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">
+                    <a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-about">
                       <Users className="w-4 h-4 flex-shrink-0" />
                       <span>About Us</span>
                     </a>
                   </li>
                   <li>
-                    <a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">
+                    <a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-careers">
                       <Briefcase className="w-4 h-4 flex-shrink-0" />
                       <span>Careers</span>
                     </a>
                   </li>
                   <li>
-                    <a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">
+                    <a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-press">
                       <Newspaper className="w-4 h-4 flex-shrink-0" />
                       <span>Press</span>
                     </a>
@@ -251,18 +251,18 @@ export default function Home() {
                 <h4 className="font-semibold">Contact</h4>
                 <ul className="space-y-3 text-sm">
                   <li>
-                    <a href="mailto:support@lervit.com" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-email">
+                    <a href="mailto:support@lervit.com" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-email">
                       <Mail className="w-4 h-4 flex-shrink-0" />
                       <span>support@lervit.com</span>
                     </a>
                   </li>
                   <li>
-                    <a href="tel:+18889820885" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-phone">
+                    <a href="tel:+18889820885" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-phone">
                       <Phone className="w-4 h-4 flex-shrink-0" />
                       <span>(888) 982-0885</span>
                     </a>
                   </li>
-                  <li className="flex items-center gap-2 text-muted-foreground">
+                  <li className="flex items-center gap-2 text-white/60">
                     <MapPinIcon className="w-4 h-4 flex-shrink-0" />
                     <span>Calgary, AB, Canada</span>
                   </li>
@@ -273,25 +273,25 @@ export default function Home() {
                 <h4 className="font-semibold">Support</h4>
                 <ul className="space-y-3 text-sm">
                   <li>
-                    <a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">
+                    <a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-help-center">
                       <HelpCircle className="w-4 h-4 flex-shrink-0" />
                       <span>Help Center</span>
                     </a>
                   </li>
                   <li>
-                    <a href="/support" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">
+                    <a href="/support" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-report-issue">
                       <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                       <span>Report an Issue</span>
                     </a>
                   </li>
                   <li>
-                    <a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">
+                    <a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-terms">
                       <FileText className="w-4 h-4 flex-shrink-0" />
                       <span>Terms of Service</span>
                     </a>
                   </li>
                   <li>
-                    <a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">
+                    <a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-privacy">
                       <Lock className="w-4 h-4 flex-shrink-0" />
                       <span>Privacy Policy</span>
                     </a>
@@ -301,13 +301,13 @@ export default function Home() {
             </div>
           </div>
 
-          <Separator className="my-8" />
+          <div className="border-t border-white/10 my-8" />
 
           <div className="flex flex-wrap items-center justify-center sm:justify-between gap-4">
-            <p className="text-sm text-muted-foreground" data-testid="text-copyright">
+            <p className="text-sm text-white/50" data-testid="text-copyright">
               &copy; 2026 LervIT Tech Corporation. All rights reserved.
             </p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-white/50">
               <SiStripe className="w-8 h-4 text-[#635BFF]" />
               <span>Powered by Stripe</span>
               <span className="mx-1">|</span>
