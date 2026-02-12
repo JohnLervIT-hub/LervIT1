@@ -14,6 +14,23 @@ import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_backgrou
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
 import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_background.png";
 
+const FOOTER_LINKS = {
+  social: {
+    facebook: "https://facebook.com",
+    instagram: "https://instagram.com",
+    linkedin: "https://linkedin.com",
+  },
+  company: {
+    aboutUs: "https://lervit.com",
+    careers: "https://lervit.com",
+    press: "https://lervit.com",
+  },
+  support: {
+    terms: "https://lervit.com",
+    privacy: "https://lervit.com",
+  },
+};
+
 export default function Home() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -193,13 +210,13 @@ export default function Home() {
                 Calgary's smartest moving platform.
               </p>
               <div className="flex items-center gap-4">
-                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Facebook" data-testid="link-facebook">
+                <a href={FOOTER_LINKS.social.facebook} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Facebook" data-testid="link-facebook">
                   <SiFacebook className="w-5 h-5" />
                 </a>
-                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Instagram" data-testid="link-instagram">
+                <a href={FOOTER_LINKS.social.instagram} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Instagram" data-testid="link-instagram">
                   <SiInstagram className="w-5 h-5" />
                 </a>
-                <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="LinkedIn" data-testid="link-linkedin">
+                <a href={FOOTER_LINKS.social.linkedin} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" aria-label="LinkedIn" data-testid="link-linkedin">
                   <SiLinkedin className="w-5 h-5" />
                 </a>
               </div>
@@ -208,9 +225,9 @@ export default function Home() {
             <div className="space-y-4">
               <h4 className="font-semibold">Company</h4>
               <ul className="space-y-3 text-sm">
-                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">About Us</a></li>
-                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">Careers</a></li>
-                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">Press</a></li>
+                <li><a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">About Us</a></li>
+                <li><a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">Careers</a></li>
+                <li><a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">Press</a></li>
               </ul>
             </div>
 
@@ -219,8 +236,8 @@ export default function Home() {
               <ul className="space-y-3 text-sm">
                 <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">Help Center</a></li>
                 <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">Report an Issue</a></li>
-                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">Terms</a></li>
-                <li><a href="https://lervit.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">Privacy</a></li>
+                <li><a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">Terms</a></li>
+                <li><a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">Privacy</a></li>
               </ul>
             </div>
 
