@@ -301,19 +301,16 @@ export default function Home() {
 
           <Separator className="my-8" />
 
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-center sm:justify-between gap-4">
             <p className="text-sm text-muted-foreground" data-testid="text-copyright">
               &copy; 2026 LervIT Tech Corporation. All rights reserved.
             </p>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium text-muted-foreground">
-                <SiStripe className="w-8 h-4 text-[#635BFF]" />
-                <span>Powered by Stripe</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium text-muted-foreground">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Verified
-              </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <SiStripe className="w-8 h-4 text-[#635BFF]" />
+              <span>Powered by Stripe</span>
+              <span className="mx-1">|</span>
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Verified</span>
             </div>
           </div>
         </div>
