@@ -222,7 +222,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-8 lg:gap-12 flex-1">
+            <div className="grid grid-cols-2 gap-x-8 lg:gap-x-12 gap-y-8 flex-1">
               <div className="space-y-4">
                 <h4 className="font-semibold">Company</h4>
                 <ul className="space-y-3 text-sm">
@@ -243,6 +243,28 @@ export default function Home() {
                       <Newspaper className="w-4 h-4 flex-shrink-0" />
                       <span>Press</span>
                     </a>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold">Contact</h4>
+                <ul className="space-y-3 text-sm">
+                  <li>
+                    <a href="mailto:support@lervit.com" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-email">
+                      <Mail className="w-4 h-4 flex-shrink-0" />
+                      <span>support@lervit.com</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="tel:+18889820885" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-phone">
+                      <Phone className="w-4 h-4 flex-shrink-0" />
+                      <span>(888) 982-0885</span>
+                    </a>
+                  </li>
+                  <li className="flex items-center gap-2 text-muted-foreground">
+                    <MapPinIcon className="w-4 h-4 flex-shrink-0" />
+                    <span>Calgary, AB, Canada</span>
                   </li>
                 </ul>
               </div>
@@ -273,28 +295,6 @@ export default function Home() {
                       <Lock className="w-4 h-4 flex-shrink-0" />
                       <span>Privacy Policy</span>
                     </a>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="font-semibold">Contact</h4>
-                <ul className="space-y-3 text-sm">
-                  <li>
-                    <a href="mailto:support@lervit.com" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-email">
-                      <Mail className="w-4 h-4 flex-shrink-0" />
-                      <span>support@lervit.com</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a href="tel:+18889820885" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-phone">
-                      <Phone className="w-4 h-4 flex-shrink-0" />
-                      <span>(888) 982-0885</span>
-                    </a>
-                  </li>
-                  <li className="flex items-center gap-2 text-muted-foreground">
-                    <MapPinIcon className="w-4 h-4 flex-shrink-0" />
-                    <span>Calgary, AB, Canada</span>
                   </li>
                 </ul>
               </div>
