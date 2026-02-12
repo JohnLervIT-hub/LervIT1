@@ -5,7 +5,7 @@ import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, CreditCard, ShieldCheck } from "lucide-react";
+import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Separator } from "@/components/ui/separator";
@@ -225,32 +225,75 @@ export default function Home() {
             <div className="space-y-4">
               <h4 className="font-semibold">Company</h4>
               <ul className="space-y-3 text-sm">
-                <li><a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">About Us</a></li>
-                <li><a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">Careers</a></li>
-                <li><a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">Press</a></li>
+                <li>
+                  <a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-about">
+                    <Users className="w-4 h-4 flex-shrink-0" />
+                    <span>About Us</span>
+                  </a>
+                </li>
+                <li>
+                  <a href={FOOTER_LINKS.company.careers} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-careers">
+                    <Briefcase className="w-4 h-4 flex-shrink-0" />
+                    <span>Careers</span>
+                  </a>
+                </li>
+                <li>
+                  <a href={FOOTER_LINKS.company.press} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-press">
+                    <Newspaper className="w-4 h-4 flex-shrink-0" />
+                    <span>Press</span>
+                  </a>
+                </li>
               </ul>
             </div>
 
             <div className="space-y-4">
               <h4 className="font-semibold">Support</h4>
               <ul className="space-y-3 text-sm">
-                <li><a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">Help Center</a></li>
-                <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">Report an Issue</a></li>
-                <li><a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">Terms</a></li>
-                <li><a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">Privacy</a></li>
+                <li>
+                  <a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">
+                    <HelpCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>Help Center</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/support" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>Report an Issue</span>
+                  </a>
+                </li>
+                <li>
+                  <a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    <span>Terms of Service</span>
+                  </a>
+                </li>
+                <li>
+                  <a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">
+                    <Lock className="w-4 h-4 flex-shrink-0" />
+                    <span>Privacy Policy</span>
+                  </a>
+                </li>
               </ul>
             </div>
 
             <div className="space-y-4">
               <h4 className="font-semibold">Contact</h4>
               <ul className="space-y-3 text-sm">
-                <li className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="w-4 h-4 flex-shrink-0" />
-                  <a href="mailto:support@lervit.com" className="hover:text-foreground transition-colors" data-testid="link-email">support@lervit.com</a>
+                <li>
+                  <a href="mailto:support@lervit.com" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-email">
+                    <Mail className="w-4 h-4 flex-shrink-0" />
+                    <span>support@lervit.com</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="tel:+14034001234" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-phone">
+                    <Phone className="w-4 h-4 flex-shrink-0" />
+                    <span>(403) 400-1234</span>
+                  </a>
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
                   <MapPinIcon className="w-4 h-4 flex-shrink-0" />
-                  <span>Calgary, AB</span>
+                  <span>Calgary, AB, Canada</span>
                 </li>
               </ul>
             </div>
