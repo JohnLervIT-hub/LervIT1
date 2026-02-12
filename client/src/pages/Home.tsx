@@ -6,7 +6,7 @@ import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, CreditCard, ShieldCheck } from "lucide-react";
-import { SiFacebook, SiInstagram, SiLinkedin } from "react-icons/si";
+import { SiFacebook, SiInstagram, SiLinkedin, SiStripe } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Separator } from "@/components/ui/separator";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
@@ -263,9 +263,9 @@ export default function Home() {
               &copy; {new Date().getFullYear()} LervIT Inc. All rights reserved.
             </p>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium text-muted-foreground">
-                <CreditCard className="w-3.5 h-3.5" />
-                Stripe
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium text-muted-foreground">
+                <SiStripe className="w-8 h-4 text-[#635BFF]" />
+                <span>Powered by Stripe</span>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium text-muted-foreground">
                 <ShieldCheck className="w-3.5 h-3.5" />
