@@ -338,7 +338,13 @@ export default function Signup() {
     try {
       await signup(name, email, password, role, verifiedPhone, verifiedToken);
       setIsLoading(false);
-      // Show success screen with email verification instructions
+      if (typeof window.fbq === 'function') {
+        window.fbq('track', 'CompleteRegistration', {
+          content_name: role === 'mover' ? 'Mover Signup' : 'Customer Signup',
+          status: true,
+          currency: 'CAD',
+        });
+      }
       setStep("success");
     } catch (error) {
       toast({
