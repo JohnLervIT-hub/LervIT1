@@ -234,7 +234,7 @@ export default function Home() {
             <div className="space-y-4">
               <h4 className="font-semibold">Support</h4>
               <ul className="space-y-3 text-sm">
-                <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">Help Center</a></li>
+                <li><a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-help-center">Help Center</a></li>
                 <li><a href="/support" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-report-issue">Report an Issue</a></li>
                 <li><a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-terms">Terms</a></li>
                 <li><a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-privacy">Privacy</a></li>
