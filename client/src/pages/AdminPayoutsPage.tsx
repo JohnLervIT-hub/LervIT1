@@ -529,7 +529,7 @@ export default function AdminPayoutsPage() {
 
         {/* Tabs for different views */}
         <Tabs defaultValue="pending" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="pending" data-testid="tab-pending">
               Pending ({pendingPayouts.length})
             </TabsTrigger>
