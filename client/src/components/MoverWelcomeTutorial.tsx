@@ -133,7 +133,7 @@ export function MoverWelcomeTutorial({ isOpen, onComplete, userName }: MoverWelc
           <p className="text-muted-foreground mb-4">{step.description}</p>
           
           {step.highlight && (
-            <Badge className={`${step.highlightColor} text-white px-6 py-3 text-base`}>
+            <Badge className={`${step.highlightColor} text-white px-4 py-2 text-sm`}>
               <Truck className="w-4 h-4 mr-2" />
               {step.highlight}
             </Badge>
