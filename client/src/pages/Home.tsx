@@ -303,7 +303,7 @@ export default function Home() {
 
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground" data-testid="text-copyright">
-              &copy; {new Date().getFullYear()} LervIT Inc. All rights reserved.
+              &copy; 2026 LervIT Tech Corporation. All rights reserved.
             </p>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium text-muted-foreground">
