@@ -18,16 +18,16 @@ const FOOTER_LINKS = {
   social: {
     facebook: "https://facebook.com",
     instagram: "https://instagram.com",
-    linkedin: "https://linkedin.com",
+    linkedin: "https://www.linkedin.com/company/lervit/?viewAsMember=true",
   },
   company: {
-    aboutUs: "https://lervit.com",
-    careers: "https://lervit.com",
+    aboutUs: "https://lervit.com/about",
+    careers: "https://lervit.com/careers",
     press: "https://lervit.com",
   },
   support: {
-    terms: "https://lervit.com",
-    privacy: "https://lervit.com",
+    terms: "https://lervit.com/terms",
+    privacy: "https://lervit.com/privacy",
   },
 };
 
