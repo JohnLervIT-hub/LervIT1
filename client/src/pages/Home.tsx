@@ -222,7 +222,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 lg:gap-12 flex-1">
+            <div className="grid grid-cols-3 gap-8 lg:gap-12 flex-1">
               <div className="space-y-4">
                 <h4 className="font-semibold">Company</h4>
                 <ul className="space-y-3 text-sm">
