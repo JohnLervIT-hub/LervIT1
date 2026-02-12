@@ -286,9 +286,9 @@ export default function Home() {
                   </a>
                 </li>
                 <li>
-                  <a href="tel:+14034001234" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-phone">
+                  <a href="tel:+18889820885" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="link-phone">
                     <Phone className="w-4 h-4 flex-shrink-0" />
-                    <span>(403) 400-1234</span>
+                    <span>(888) 982-0885</span>
                   </a>
                 </li>
                 <li className="flex items-center gap-2 text-muted-foreground">
