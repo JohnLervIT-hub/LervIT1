@@ -107,6 +107,22 @@ type GrowthMetrics = {
     pending: number;
     recoveryRate: string;
   };
+  fulfilment: {
+    totalTrackedMoves: number;
+    avgMoveMinutes: number;
+    avgMoveHours: number;
+    fastestMoveMinutes: number;
+    slowestMoveMinutes: number;
+    driverPerformance: {
+      name: string;
+      moverId: string;
+      totalMoves: number;
+      avgMinutes: number;
+      fastestMinutes: number;
+      slowestMinutes: number;
+      totalHours: number;
+    }[];
+  };
   trends: {
     dailyBookings: { date: string; count: number }[];
   };
@@ -299,6 +315,104 @@ function GrowthDashboard() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            Fulfilment Hours
+          </CardTitle>
+          <CardDescription>
+            Time tracking for completed moves by driver
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {metrics.fulfilment.totalTrackedMoves === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No completed moves tracked yet</p>
+              <p className="text-xs mt-1">Fulfilment data will appear once moves are completed</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold" data-testid="text-total-tracked-moves">{metrics.fulfilment.totalTrackedMoves}</p>
+                  <p className="text-xs text-muted-foreground">Tracked Moves</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold" data-testid="text-avg-move-time">
+                    {metrics.fulfilment.avgMoveHours >= 1
+                      ? `${metrics.fulfilment.avgMoveHours}h`
+                      : `${metrics.fulfilment.avgMoveMinutes}m`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Avg Move Time</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold text-green-500" data-testid="text-fastest-move">
+                    {metrics.fulfilment.fastestMoveMinutes >= 60
+                      ? `${(metrics.fulfilment.fastestMoveMinutes / 60).toFixed(1)}h`
+                      : `${metrics.fulfilment.fastestMoveMinutes}m`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Fastest Move</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold text-amber-500" data-testid="text-slowest-move">
+                    {metrics.fulfilment.slowestMoveMinutes >= 60
+                      ? `${(metrics.fulfilment.slowestMoveMinutes / 60).toFixed(1)}h`
+                      : `${metrics.fulfilment.slowestMoveMinutes}m`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Slowest Move</p>
+                </div>
+              </div>
+
+              {metrics.fulfilment.driverPerformance.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Driver Breakdown</h4>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="text-left p-3 font-medium">Driver</th>
+                          <th className="text-center p-3 font-medium">Moves</th>
+                          <th className="text-center p-3 font-medium">Avg Time</th>
+                          <th className="text-center p-3 font-medium hidden sm:table-cell">Fastest</th>
+                          <th className="text-center p-3 font-medium hidden sm:table-cell">Slowest</th>
+                          <th className="text-right p-3 font-medium">Total Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {metrics.fulfilment.driverPerformance.map((driver) => (
+                          <tr key={driver.moverId} className="border-t" data-testid={`row-driver-${driver.moverId}`}>
+                            <td className="p-3 font-medium">{driver.name}</td>
+                            <td className="p-3 text-center">{driver.totalMoves}</td>
+                            <td className="p-3 text-center">
+                              {driver.avgMinutes >= 60
+                                ? `${(driver.avgMinutes / 60).toFixed(1)}h`
+                                : `${driver.avgMinutes}m`}
+                            </td>
+                            <td className="p-3 text-center text-green-500 hidden sm:table-cell">
+                              {driver.fastestMinutes >= 60
+                                ? `${(driver.fastestMinutes / 60).toFixed(1)}h`
+                                : `${driver.fastestMinutes}m`}
+                            </td>
+                            <td className="p-3 text-center text-amber-500 hidden sm:table-cell">
+                              {driver.slowestMinutes >= 60
+                                ? `${(driver.slowestMinutes / 60).toFixed(1)}h`
+                                : `${driver.slowestMinutes}m`}
+                            </td>
+                            <td className="p-3 text-right font-medium">{driver.totalHours}h</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

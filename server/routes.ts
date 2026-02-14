@@ -9853,6 +9853,73 @@ Respond with VALID JSON only:
         cancelled: allBookings.filter(b => b.status === 'cancelled').length,
       };
       
+      // Fulfilment hours - mover performance data
+      const allPerformanceData = await db.select({
+        id: moverPerformanceTable.id,
+        moverId: moverPerformanceTable.moverId,
+        bookingId: moverPerformanceTable.bookingId,
+        totalMoveMinutes: moverPerformanceTable.totalMoveMinutes,
+        acceptedAt: moverPerformanceTable.acceptedAt,
+        arrivedAtPickupAt: moverPerformanceTable.arrivedAtPickupAt,
+        loadingStartedAt: moverPerformanceTable.loadingStartedAt,
+        loadingCompletedAt: moverPerformanceTable.loadingCompletedAt,
+        arrivedAtDropoffAt: moverPerformanceTable.arrivedAtDropoffAt,
+        unloadingCompletedAt: moverPerformanceTable.unloadingCompletedAt,
+        distanceKm: moverPerformanceTable.distanceKm,
+        createdAt: moverPerformanceTable.createdAt,
+        moverName: usersTable.name,
+      })
+        .from(moverPerformanceTable)
+        .leftJoin(moversTable, eq(moverPerformanceTable.moverId, moversTable.id))
+        .leftJoin(usersTable, eq(moversTable.userId, usersTable.id));
+
+      const completedPerf = allPerformanceData.filter(p => p.totalMoveMinutes && p.totalMoveMinutes > 0);
+      const totalMoves = completedPerf.length;
+      const avgMoveMinutes = totalMoves > 0
+        ? Math.round(completedPerf.reduce((sum, p) => sum + (p.totalMoveMinutes || 0), 0) / totalMoves)
+        : 0;
+      const fastestMove = totalMoves > 0
+        ? Math.min(...completedPerf.map(p => p.totalMoveMinutes || Infinity))
+        : 0;
+      const slowestMove = totalMoves > 0
+        ? Math.max(...completedPerf.map(p => p.totalMoveMinutes || 0))
+        : 0;
+
+      // Per-driver breakdown
+      const driverMap = new Map<string, { name: string; moverId: string; moves: number; totalMinutes: number; fastest: number; slowest: number }>();
+      for (const p of completedPerf) {
+        const key = p.moverId;
+        const existing = driverMap.get(key);
+        const mins = p.totalMoveMinutes || 0;
+        if (existing) {
+          existing.moves++;
+          existing.totalMinutes += mins;
+          existing.fastest = Math.min(existing.fastest, mins);
+          existing.slowest = Math.max(existing.slowest, mins);
+        } else {
+          driverMap.set(key, {
+            name: p.moverName || 'Unknown',
+            moverId: key,
+            moves: 1,
+            totalMinutes: mins,
+            fastest: mins,
+            slowest: mins,
+          });
+        }
+      }
+
+      const driverPerformance = Array.from(driverMap.values())
+        .map(d => ({
+          name: d.name,
+          moverId: d.moverId,
+          totalMoves: d.moves,
+          avgMinutes: Math.round(d.totalMinutes / d.moves),
+          fastestMinutes: d.fastest,
+          slowestMinutes: d.slowest,
+          totalHours: parseFloat((d.totalMinutes / 60).toFixed(1)),
+        }))
+        .sort((a, b) => b.totalMoves - a.totalMoves);
+
       // Daily bookings for last 7 days
       const dailyBookings = [];
       for (let i = 6; i >= 0; i--) {
@@ -9902,6 +9969,14 @@ Respond with VALID JSON only:
           recovered: recoveredAbandoned,
           pending: pendingAbandoned,
           recoveryRate,
+        },
+        fulfilment: {
+          totalTrackedMoves: totalMoves,
+          avgMoveMinutes,
+          avgMoveHours: parseFloat((avgMoveMinutes / 60).toFixed(1)),
+          fastestMoveMinutes: fastestMove,
+          slowestMoveMinutes: slowestMove,
+          driverPerformance,
         },
         trends: {
           dailyBookings,
