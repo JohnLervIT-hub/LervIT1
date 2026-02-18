@@ -31,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-type TicketWithUser = SupportTicket & { userName?: string; userEmail?: string };
+type TicketWithUser = SupportTicket & { userName?: string; userEmail?: string; userPhone?: string };
 type ReplyWithUser = SupportTicketReply & { userName?: string };
 
 type AiInsightWithCached = AiSupportInsight & { cached?: boolean };
@@ -146,7 +146,9 @@ export default function AdminSupportDashboard() {
     const matchesPriority = filterPriority === "all" || ticket.priority === filterPriority;
     const matchesSearch = searchQuery === "" || 
       ticket.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.message.toLowerCase().includes(searchQuery.toLowerCase());
+      ticket.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (ticket as TicketWithUser).userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (ticket as TicketWithUser).userPhone?.includes(searchQuery);
     
     return matchesStatus && matchesPriority && matchesSearch;
   });
@@ -311,6 +313,14 @@ export default function AdminSupportDashboard() {
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <CardTitle className="text-lg mb-1">{ticket.subject}</CardTitle>
+                            {((ticket as TicketWithUser).userName || (ticket as TicketWithUser).userPhone) && (
+                              <p className="text-sm text-muted-foreground" data-testid={`text-ticket-customer-${ticket.id}`}>
+                                {(ticket as TicketWithUser).userName || "Unknown"}
+                                {(ticket as TicketWithUser).userPhone && (
+                                  <span className="ml-2">{(ticket as TicketWithUser).userPhone}</span>
+                                )}
+                              </p>
+                            )}
                             <CardDescription className="flex flex-wrap items-center gap-2">
                               <Badge variant="outline" className="capitalize">
                                 {ticket.category}
@@ -345,7 +355,15 @@ export default function AdminSupportDashboard() {
                     </DialogHeader>
 
                     <div className="space-y-4">
-                      {/* Ticket Details */}
+                      {((ticket as TicketWithUser).userName || (ticket as TicketWithUser).userPhone) && (
+                        <div className="bg-muted/50 p-3 rounded-md" data-testid={`text-ticket-detail-customer-${ticket.id}`}>
+                          <p className="text-xs text-muted-foreground mb-1">Customer</p>
+                          <p className="text-sm font-medium">{(ticket as TicketWithUser).userName || "Unknown"}</p>
+                          {(ticket as TicketWithUser).userPhone && (
+                            <p className="text-sm text-muted-foreground">{(ticket as TicketWithUser).userPhone}</p>
+                          )}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         <Badge className={`capitalize ${getStatusColor(ticket.status)}`}>
                           {ticket.status.replace('_', ' ')}
