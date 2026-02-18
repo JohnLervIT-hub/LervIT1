@@ -263,16 +263,23 @@ export default function RequestMove() {
       if (moverId) setPreSelectedMoverId(moverId);
       
       // Merge saved draft data for fields not in URL (heavyItem, numberOfMovers, description, images)
+      // Check both sessionStorage draft and localStorage backup
       const savedDraft = loadDraft(moverId);
-      if (savedDraft?.formData) {
-        const d = savedDraft.formData;
-        if (d.heavyItem) setHeavyItem(d.heavyItem);
-        if (d.numberOfMovers) setNumberOfMovers(d.numberOfMovers);
-        if (d.description) setDescription(d.description);
-        if (d.images && d.images.length > 0) setImages(d.images);
-        if (d.date) setDate(d.date);
+      let backupDraft: BookingDraftData | null = null;
+      try {
+        const backupJson = localStorage.getItem('lervit_booking_auth_gate_backup');
+        if (backupJson) backupDraft = JSON.parse(backupJson);
+      } catch(e) { /* ignore */ }
+      
+      const draftData = savedDraft?.formData || backupDraft;
+      if (draftData) {
+        console.log('[RequestMove] Merging draft data into restoration');
+        if (draftData.heavyItem !== undefined) setHeavyItem(draftData.heavyItem);
+        if (draftData.numberOfMovers !== undefined) setNumberOfMovers(draftData.numberOfMovers);
+        if (draftData.description) setDescription(draftData.description);
+        if (draftData.images && draftData.images.length > 0) setImages(draftData.images);
+        if (draftData.date) setDate(draftData.date);
       }
-      clearDraft(moverId);
       
       const resumeStep = parseInt(resumeStepParam) || 2;
       setStep(resumeStep);
@@ -282,8 +289,12 @@ export default function RequestMove() {
         description: "Your booking details have been restored. You can now complete your request.",
       });
       
-      // Clean up URL params after restoration (keep only moverId)
-      window.history.replaceState({}, '', '/request-move' + (moverId ? `?moverId=${moverId}` : ''));
+      // Defer cleanup so state survives React strict mode re-renders
+      setTimeout(() => {
+        clearDraft(moverId);
+        try { localStorage.removeItem('lervit_booking_auth_gate_backup'); } catch(e) { /* ignore */ }
+        window.history.replaceState({}, '', '/request-move' + (moverId ? `?moverId=${moverId}` : ''));
+      }, 500);
       return;
     }
 
@@ -314,14 +325,14 @@ export default function RequestMove() {
       const resumeStep = data.images && data.images.length > 0 && data.date ? 3 : 2;
       setStep(resumeStep);
       
-      // Clear the draft after restoration
-      clearDraft(draft.moverId);
-      
+      // Defer cleanup so state survives React strict mode re-renders
+      const draftMoverId = draft.moverId;
       setTimeout(() => {
+        clearDraft(draftMoverId);
         hasPendingBooking.current = false;
         isRestoringRef.current = false;
         window.scrollTo({ top: 0, behavior: "smooth" });
-      }, 100);
+      }, 500);
       
       toast({
         title: "Welcome Back!",
@@ -914,6 +925,10 @@ export default function RequestMove() {
         date: ""
       };
       saveDraft(preSelectedMoverId, draftData);
+      // Also save to localStorage as a reliable backup (survives React strict mode re-renders)
+      try {
+        localStorage.setItem('lervit_booking_auth_gate_backup', JSON.stringify(draftData));
+      } catch(e) { /* ignore */ }
       setShowAuthGateDialog(true);
       return;
     }
