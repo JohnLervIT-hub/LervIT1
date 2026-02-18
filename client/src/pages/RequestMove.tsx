@@ -279,6 +279,7 @@ export default function RequestMove() {
         if (draftData.description) setDescription(draftData.description);
         if (draftData.images && draftData.images.length > 0) setImages(draftData.images);
         if (draftData.date) setDate(draftData.date);
+        if (draftData.aiDetectedVolume !== undefined) setAiDetectedVolume(draftData.aiDetectedVolume);
       }
       
       const resumeStep = parseInt(resumeStepParam) || 2;
@@ -316,6 +317,7 @@ export default function RequestMove() {
       setDescription(data.description || "");
       setImages(data.images || []);
       setDate(data.date || "");
+      if (data.aiDetectedVolume !== undefined) setAiDetectedVolume(data.aiDetectedVolume);
       
       if (draft.moverId) {
         setPreSelectedMoverId(draft.moverId);
@@ -922,7 +924,8 @@ export default function RequestMove() {
         numberOfMovers,
         description,
         images,
-        date: ""
+        date: "",
+        aiDetectedVolume,
       };
       saveDraft(preSelectedMoverId, draftData);
       // Also save to localStorage as a reliable backup (survives React strict mode re-renders)
@@ -974,7 +977,8 @@ export default function RequestMove() {
           description,
           images,
           date,
-          preSelectedMoverId: preSelectedMoverId || null
+          preSelectedMoverId: preSelectedMoverId || null,
+          aiDetectedVolume: aiDetectedVolume || undefined,
         };
         console.log('[RequestMove] Saving pending booking:', pendingData);
         localStorage.setItem('pendingBooking', JSON.stringify(pendingData));
