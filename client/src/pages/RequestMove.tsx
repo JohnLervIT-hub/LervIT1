@@ -262,11 +262,20 @@ export default function RequestMove() {
       if (urlLoadSize) setLoadSize(urlLoadSize);
       if (moverId) setPreSelectedMoverId(moverId);
       
+      // Merge saved draft data for fields not in URL (heavyItem, numberOfMovers, description, images)
+      const savedDraft = loadDraft(moverId);
+      if (savedDraft?.formData) {
+        const d = savedDraft.formData;
+        if (d.heavyItem) setHeavyItem(d.heavyItem);
+        if (d.numberOfMovers) setNumberOfMovers(d.numberOfMovers);
+        if (d.description) setDescription(d.description);
+        if (d.images && d.images.length > 0) setImages(d.images);
+        if (d.date) setDate(d.date);
+      }
+      clearDraft(moverId);
+      
       const resumeStep = parseInt(resumeStepParam) || 2;
       setStep(resumeStep);
-      
-      // Also clear any drafts from storage to avoid confusion
-      clearDraft(moverId);
       
       toast({
         title: "Welcome Back!",
