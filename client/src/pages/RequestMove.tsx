@@ -19,7 +19,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, LogIn, UserPlus } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -126,6 +126,9 @@ export default function RequestMove() {
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
   const [dropoffAccessError, setDropoffAccessError] = useState(false);
+  
+  // Auth gate dialog for unauthenticated users trying to proceed past Step 2
+  const [showAuthGateDialog, setShowAuthGateDialog] = useState(false);
   
   // Pre-selected mover from Browse Movers page
   const [preSelectedMoverId, setPreSelectedMoverId] = useState<string | null>(null);
@@ -868,55 +871,15 @@ export default function RequestMove() {
       }
     }
 
-    // Step 2: Validate photos (MANDATORY)
-    if (step === 2) {
+    // Step 2: Validate photos (MANDATORY for authenticated users only)
+    // Unauthenticated users can view the price estimate without photos - auth gate handles them below
+    if (step === 2 && user) {
       console.log('[RequestMove] Step 2 validation - checking photos:', {
         images,
         imageCount: images?.length || 0,
-        user: !!user
       });
       
       if (!images || images.length === 0) {
-        // For unauthenticated users, save data and redirect to login
-        // They can upload photos after logging in
-        if (!user) {
-          console.log('[RequestMove] No user detected - saving data and redirecting to login');
-          toast({
-            title: "Login Required",
-            description: "Please log in to upload photos and complete your booking.",
-            variant: "destructive",
-          });
-          
-          // Save current progress using bookingDraft module
-          const draftData: BookingDraftData = {
-            pickupAddress,
-            dropoffAddress,
-            pickupDifficulty,
-            dropoffDifficulty,
-            loadSize,
-            heavyItem,
-            numberOfMovers,
-            description,
-            images: [],
-            date: ""
-          };
-          saveDraft(preSelectedMoverId, draftData);
-          
-          // Build redirect URL with essential data encoded (survives storage clearing)
-          const params = new URLSearchParams();
-          if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
-          params.set('pickup', pickupAddress);
-          params.set('dropoff', dropoffAddress);
-          params.set('pickupAccess', pickupDifficulty || '');
-          params.set('dropoffAccess', dropoffDifficulty || '');
-          params.set('loadSize', loadSize);
-          params.set('resumeStep', '2');
-          const returnPath = `/request-move?${params.toString()}`;
-          console.log('[RequestMove] Redirecting to login with return path:', returnPath);
-          setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
-          return;
-        }
-        
         toast({
           title: "Photos required",
           description: "Please upload at least one photo of your items to continue.",
@@ -924,6 +887,26 @@ export default function RequestMove() {
         });
         return;
       }
+    }
+
+    // Auth gate: block unauthenticated users from advancing past Step 2
+    if (step === 2 && !user) {
+      // Save current progress so user can resume after sign in
+      const draftData: BookingDraftData = {
+        pickupAddress,
+        dropoffAddress,
+        pickupDifficulty,
+        dropoffDifficulty,
+        loadSize,
+        heavyItem,
+        numberOfMovers,
+        description,
+        images,
+        date: ""
+      };
+      saveDraft(preSelectedMoverId, draftData);
+      setShowAuthGateDialog(true);
+      return;
     }
 
     if (step < 3) {
@@ -2062,7 +2045,7 @@ export default function RequestMove() {
                     onClick={handleNext}
                     data-testid="button-next"
                   >
-                    {step === 3 ? "Find Movers" : "Next"}
+                    {step === 3 ? "Find Movers" : step === 2 && !user ? "Sign In to Book" : "Next"}
                   </Button>
                 </div>
               </CardContent>
@@ -2136,6 +2119,85 @@ export default function RequestMove() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* Auth Gate Dialog - Prompts unauthenticated users to sign in/sign up to continue booking */}
+    <Dialog open={showAuthGateDialog} onOpenChange={setShowAuthGateDialog}>
+      <DialogContent data-testid="dialog-auth-gate" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <LogIn className="w-5 h-5 text-primary" />
+            Sign In to Continue
+          </DialogTitle>
+          <DialogDescription className="text-base pt-2">
+            Your price estimate is ready! Create an account or sign in to complete your booking and connect with movers.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-medium">Your progress is saved:</p>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                Pickup & dropoff locations
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                Load details & photos
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                Price estimate
+              </li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => {
+                setShowAuthGateDialog(false);
+                const params = new URLSearchParams();
+                if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
+                params.set('pickup', pickupAddress);
+                params.set('dropoff', dropoffAddress);
+                params.set('pickupAccess', pickupDifficulty || '');
+                params.set('dropoffAccess', dropoffDifficulty || '');
+                params.set('loadSize', loadSize);
+                params.set('resumeStep', '3');
+                const returnPath = `/request-move?${params.toString()}`;
+                setLocation(`/signup?redirect=${encodeURIComponent(returnPath)}`);
+              }}
+              data-testid="button-auth-gate-signup"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Create Account
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              size="lg"
+              onClick={() => {
+                setShowAuthGateDialog(false);
+                const params = new URLSearchParams();
+                if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
+                params.set('pickup', pickupAddress);
+                params.set('dropoff', dropoffAddress);
+                params.set('pickupAccess', pickupDifficulty || '');
+                params.set('dropoffAccess', dropoffDifficulty || '');
+                params.set('loadSize', loadSize);
+                params.set('resumeStep', '3');
+                const returnPath = `/request-move?${params.toString()}`;
+                setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
+              }}
+              data-testid="button-auth-gate-login"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              I Already Have an Account
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
