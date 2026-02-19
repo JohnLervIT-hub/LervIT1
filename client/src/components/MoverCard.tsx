@@ -141,7 +141,7 @@ const MoverCard = memo(function MoverCard({
         </div>
 
         {/* Details - Rating and Location */}
-        <div className="px-5 space-y-2 text-sm mb-4">
+        <div className="bg-muted/50 dark:bg-muted/30 mx-5 mb-4 px-4 py-3 rounded-lg space-y-2 text-sm">
           <div className="flex items-center gap-2">
             <Star className="w-4 h-4 fill-amber-500 text-amber-500 shrink-0" />
             <span className="font-semibold" data-testid={`text-rating-${id}`}>
