@@ -5,7 +5,7 @@ import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone } from "lucide-react";
+import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Separator } from "@/components/ui/separator";
@@ -76,6 +76,16 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      {/* Promo discount banner */}
+      <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af] text-white px-4 py-2.5">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-sm font-medium">
+          <Tag className="w-4 h-4 flex-shrink-0" />
+          <span>20% Off Your First 2 Moves — Use code</span>
+          <code className="bg-white/20 text-white px-2 py-0.5 rounded text-xs font-bold tracking-wider" data-testid="text-promo-code">LERVIT20</code>
+          <span className="hidden sm:inline">· Limited time. Terms apply.</span>
+        </div>
+      </div>
+
       {/* Location banner - only shows once if permission not granted */}
       {showLocationBanner && (
         <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-3">
