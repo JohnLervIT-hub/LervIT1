@@ -6250,7 +6250,7 @@ Respond with VALID JSON only:
         resolvedAt: supportTickets.resolvedAt,
         lastStaffReplyAt: supportTickets.lastStaffReplyAt,
         customerLastReadAt: supportTickets.customerLastReadAt,
-        userName: usersTable.fullName,
+        userName: usersTable.name,
         userEmail: usersTable.email,
         userPhone: usersTable.phone,
         userRole: usersTable.role,
