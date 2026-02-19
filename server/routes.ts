@@ -6237,25 +6237,8 @@ Respond with VALID JSON only:
     try {
       if (!requireAdmin(req, res)) return;
       
-      const tickets = await db.select({
-        id: supportTickets.id,
-        userId: supportTickets.userId,
-        subject: supportTickets.subject,
-        category: supportTickets.category,
-        message: supportTickets.message,
-        status: supportTickets.status,
-        priority: supportTickets.priority,
-        assignedTo: supportTickets.assignedTo,
-        resolvedAt: supportTickets.resolvedAt,
-        customerLastReadAt: supportTickets.customerLastReadAt,
-        lastStaffReplyAt: supportTickets.lastStaffReplyAt,
-        createdAt: supportTickets.createdAt,
-        updatedAt: supportTickets.updatedAt,
-        userName: usersTable.name,
-        userPhone: usersTable.phone,
-      })
+      const tickets = await db.select()
         .from(supportTickets)
-        .leftJoin(usersTable, eq(supportTickets.userId, usersTable.id))
         .orderBy(supportTickets.createdAt);
       
       res.json(tickets);

@@ -13,7 +13,6 @@ export interface BookingDraftData {
   description: string;
   images: string[];
   date: string;
-  aiDetectedVolume?: number;
 }
 
 export interface BookingDraft {
