@@ -1,10 +1,10 @@
-import { useState, useEffect, lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { useState, useEffect, lazy, Suspense, type ReactNode } from "react";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { GoogleMapsProvider } from "@/contexts/GoogleMapsContext";
 import { LocationProvider } from "@/contexts/LocationContext";
@@ -205,6 +205,17 @@ function Router() {
   );
 }
 
+function AppContent({ children }: { children: ReactNode }) {
+  const [loc] = useLocation();
+  const { user } = useAuth();
+  const showPromoBanner = !user && loc === "/";
+  return (
+    <div className={`${showPromoBanner ? "pt-[100px]" : "pt-16"} pb-16 md:pb-0`}>
+      {children}
+    </div>
+  );
+}
+
 function App() {
   // Skip splash for returning users (visited within last 24 hours)
   const hasVisitedRecently = () => {
@@ -253,11 +264,11 @@ function App() {
                 <ErrorBoundary>
                 <ScrollToTop />
                 <Header />
-                <div className="pt-16 pb-16 md:pb-0">
+                <AppContent>
                   <PageTransition>
                     <Router />
                   </PageTransition>
-                </div>
+                </AppContent>
                 <MobileBottomNav />
                 <JobNotificationSound />
                 <InstallPrompt />

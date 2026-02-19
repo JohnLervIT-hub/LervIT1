@@ -76,16 +76,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      {/* Promo discount banner */}
-      <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af] text-white px-4 py-2.5">
-        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-sm font-medium">
-          <Tag className="w-4 h-4 flex-shrink-0" />
-          <span>20% Off Your First 2 Moves — Use code</span>
-          <code className="bg-white/20 text-white px-2 py-0.5 rounded text-xs font-bold tracking-wider" data-testid="text-promo-code">LERVIT20</code>
-          <span className="hidden sm:inline">· Limited time. Terms apply.</span>
-        </div>
-      </div>
-
       {/* Location banner - only shows once if permission not granted */}
       {showLocationBanner && (
         <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-3">
