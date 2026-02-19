@@ -49,40 +49,47 @@ const MoverCard = memo(function MoverCard({
   const [vehicleImageError, setVehicleImageError] = useState(false);
   
   return (
-    <Card className="hover-elevate p-6 shadow-sm" data-testid={`card-mover-${id}`}>
+    <Card className="overflow-hidden shadow-sm border" data-testid={`card-mover-${id}`}>
       <div className="flex flex-col h-full">
-        {/* Header with Avatar, Name, and Price */}
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <Avatar className="w-12 h-12 shrink-0">
-              <AvatarImage src={photo} alt={name} />
-              <AvatarFallback>{name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
+        {/* Header with Avatar, Name - grey background for definition */}
+        <div className="bg-muted/50 dark:bg-muted/30 px-5 py-4 border-b">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <Avatar className="w-12 h-12 shrink-0 ring-2 ring-background shadow-sm">
+                <AvatarImage src={photo} alt={name} />
+                <AvatarFallback className="bg-primary/10 text-primary font-bold">{name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-base truncate" data-testid={`text-mover-name-${id}`}>
                   {name}
                 </h3>
-                {pilotApproved && (
-                  <Badge variant="secondary" className="text-xs gap-1 shrink-0 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-early-access-${id}`}>
-                    <Rocket className="w-3 h-3" />
-                    Early Access
-                  </Badge>
-                )}
-                {isLiveLocation && (
-                  <Badge variant="outline" className="text-xs gap-1 shrink-0 bg-blue-500/10 text-blue-600 border-blue-500/30" data-testid={`badge-live-location-${id}`}>
-                    <MapPin className="w-3 h-3" />
-                    Live
-                  </Badge>
-                )}
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  {verified && (
+                    <Badge variant="outline" className="text-xs gap-1 shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800" data-testid={`badge-verified-${id}`}>
+                      <ShieldCheck className="w-3 h-3" />
+                      Verified
+                    </Badge>
+                  )}
+                  {pilotApproved && (
+                    <Badge variant="secondary" className="text-xs gap-1 shrink-0 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid={`badge-early-access-${id}`}>
+                      <Rocket className="w-3 h-3" />
+                      Early Access
+                    </Badge>
+                  )}
+                  {isLiveLocation && (
+                    <Badge variant="outline" className="text-xs gap-1 shrink-0 bg-blue-500/10 text-blue-600 border-blue-500/30" data-testid={`badge-live-location-${id}`}>
+                      <MapPin className="w-3 h-3" />
+                      Live
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-          
         </div>
 
         {/* Vehicle Section - Full image display without cropping */}
-        <div className="mb-4 rounded-lg overflow-hidden border bg-muted/30" data-testid={`vehicle-photo-container-${id}`}>
+        <div className="mx-5 mt-4 mb-4 rounded-lg overflow-hidden border bg-muted/30" data-testid={`vehicle-photo-container-${id}`}>
           {/* Vehicle Image Container - 16:9 aspect ratio for full visibility */}
           <div className="relative aspect-video bg-gradient-to-br from-muted to-muted/70">
             {vehiclePhoto && !vehicleImageError ? (
@@ -134,10 +141,10 @@ const MoverCard = memo(function MoverCard({
         </div>
 
         {/* Details - Rating and Location */}
-        <div className="space-y-2 text-sm mb-6">
+        <div className="px-5 space-y-2 text-sm mb-4">
           <div className="flex items-center gap-2">
             <Star className="w-4 h-4 fill-amber-500 text-amber-500 shrink-0" />
-            <span className="font-medium" data-testid={`text-rating-${id}`}>
+            <span className="font-semibold" data-testid={`text-rating-${id}`}>
               {rating.toFixed(1)}
             </span>
             <span className="text-muted-foreground">
@@ -154,7 +161,7 @@ const MoverCard = memo(function MoverCard({
         </div>
 
         {/* Select Button */}
-        <div className="mt-auto">
+        <div className="mt-auto px-5 pb-5">
           <Button
             onClick={() => onSelect(id)}
             data-testid={`button-select-${id}`}
