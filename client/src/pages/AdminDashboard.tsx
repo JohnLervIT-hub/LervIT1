@@ -130,9 +130,31 @@ type GrowthMetrics = {
 };
 
 function GrowthDashboard() {
+  const { toast } = useToast();
   const { data: metrics, isLoading, error } = useQuery<GrowthMetrics>({
     queryKey: ["/api/admin/growth-metrics"],
     refetchInterval: 60000,
+  });
+  
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/backfill-performance");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/growth-metrics"] });
+      toast({
+        title: "Performance Data Updated",
+        description: `${data.newlyCreated} new records created from ${data.total} completed bookings.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to backfill performance data.",
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -320,13 +342,31 @@ function GrowthDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            Fulfilment Hours
-          </CardTitle>
-          <CardDescription>
-            Time tracking for completed moves by driver
-          </CardDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Fulfilment Hours
+              </CardTitle>
+              <CardDescription>
+                Time tracking for completed moves by driver
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => backfillMutation.mutate()}
+              disabled={backfillMutation.isPending}
+              data-testid="button-backfill-performance"
+            >
+              {backfillMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Activity className="w-4 h-4 mr-1" />
+              )}
+              Sync Past Moves
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {metrics.fulfilment.totalTrackedMoves === 0 ? (

@@ -43,7 +43,7 @@ import { moverWebSocket, generateWebSocketToken } from "./websocket";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -3203,6 +3203,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Failed to accept booking" });
       }
       
+      // Create mover performance tracking record
+      try {
+        await db.insert(moverPerformanceTable).values({
+          moverId,
+          bookingId,
+          acceptedAt: new Date(),
+          distanceKm: booking.distance || '0',
+        });
+        console.log(`[Performance] Created tracking record for booking ${bookingId}, mover ${moverId}`);
+      } catch (perfErr) {
+        console.error('[Performance] Failed to create tracking record:', perfErr);
+      }
+      
       // 1b. CRITICAL: Update Stripe PaymentIntent metadata with mover details
       // This ensures Stripe can match payments to movers for settlements
       if (booking.stripePaymentIntentId) {
@@ -3646,6 +3659,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
+      
+      // Track performance timestamps on status transitions
+      if (updates.status && booking.moverId) {
+        try {
+          const statusToFields: Record<string, Record<string, Date>> = {
+            [BOOKING_STATUSES.LOADING]: { arrivedAtPickupAt: new Date(), loadingStartedAt: new Date() },
+            [BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF]: { loadingCompletedAt: new Date() },
+            [BOOKING_STATUSES.UNLOADING]: { arrivedAtDropoffAt: new Date() },
+          };
+          
+          const fieldsToUpdate = statusToFields[updates.status];
+          if (fieldsToUpdate) {
+            const existingPerf = await db.select().from(moverPerformanceTable)
+              .where(and(
+                eq(moverPerformanceTable.bookingId, req.params.id),
+                eq(moverPerformanceTable.moverId, booking.moverId)
+              ))
+              .limit(1);
+            
+            if (existingPerf.length > 0) {
+              await db.update(moverPerformanceTable)
+                .set(fieldsToUpdate)
+                .where(eq(moverPerformanceTable.id, existingPerf[0].id));
+              console.log(`[Performance] Updated ${Object.keys(fieldsToUpdate).join(', ')} for booking ${req.params.id}`);
+            } else {
+              await db.insert(moverPerformanceTable).values({
+                moverId: booking.moverId,
+                bookingId: req.params.id,
+                acceptedAt: booking.acceptedAt || new Date(),
+                ...fieldsToUpdate,
+                distanceKm: booking.distance || '0',
+              });
+              console.log(`[Performance] Created tracking record with ${Object.keys(fieldsToUpdate).join(', ')} for booking ${req.params.id}`);
+            }
+          }
+        } catch (perfErr) {
+          console.error('[Performance] Status tracking error:', perfErr);
+        }
+      }
+      
       res.json(booking);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -7344,6 +7397,44 @@ Respond with VALID JSON only:
       `);
       console.log(`[Complete] Incremented trip count for mover ${mover.id}`);
       
+      // Update mover performance record with completion data
+      try {
+        const existingPerf = await db.select().from(moverPerformanceTable)
+          .where(and(
+            eq(moverPerformanceTable.bookingId, bookingId),
+            eq(moverPerformanceTable.moverId, mover.id)
+          ))
+          .limit(1);
+        
+        const completionTime = new Date();
+        const acceptedTime = existingPerf[0]?.acceptedAt || booking.acceptedAt;
+        const totalMoveMinutes = acceptedTime 
+          ? Math.round((completionTime.getTime() - new Date(acceptedTime).getTime()) / 60000)
+          : null;
+        
+        if (existingPerf.length > 0) {
+          await db.update(moverPerformanceTable)
+            .set({ 
+              unloadingCompletedAt: completionTime,
+              totalMoveMinutes,
+            })
+            .where(eq(moverPerformanceTable.id, existingPerf[0].id));
+          console.log(`[Performance] Completed: booking ${bookingId}, totalMoveMinutes: ${totalMoveMinutes}`);
+        } else {
+          await db.insert(moverPerformanceTable).values({
+            moverId: mover.id,
+            bookingId,
+            acceptedAt: booking.acceptedAt || completionTime,
+            unloadingCompletedAt: completionTime,
+            totalMoveMinutes,
+            distanceKm: booking.distance || '0',
+          });
+          console.log(`[Performance] Created completed record: booking ${bookingId}, totalMoveMinutes: ${totalMoveMinutes}`);
+        }
+      } catch (perfErr) {
+        console.error('[Performance] Completion tracking error:', perfErr);
+      }
+      
       res.json({
         success: true,
         message: "Job completed! Earnings recorded.",
@@ -9799,6 +9890,63 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ADMIN: BACKFILL PERFORMANCE DATA =====
+  app.post("/api/admin/backfill-performance", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      // Get all completed bookings that don't have performance records
+      const completedBookings = await db.select()
+        .from(bookings)
+        .where(and(
+          eq(bookings.status, 'completed'),
+          isNotNull(bookings.moverId)
+        ));
+      
+      const existingPerf = await db.select({
+        bookingId: moverPerformanceTable.bookingId
+      }).from(moverPerformanceTable);
+      
+      const existingBookingIds = new Set(existingPerf.map(p => p.bookingId));
+      const missingBookings = completedBookings.filter(b => !existingBookingIds.has(b.id));
+      
+      let created = 0;
+      for (const b of missingBookings) {
+        try {
+          const acceptedTime = b.acceptedAt || b.createdAt;
+          const completedTime = b.updatedAt || new Date();
+          const totalMoveMinutes = Math.round(
+            (new Date(completedTime).getTime() - new Date(acceptedTime).getTime()) / 60000
+          );
+          
+          await db.insert(moverPerformanceTable).values({
+            moverId: b.moverId!,
+            bookingId: b.id,
+            acceptedAt: acceptedTime ? new Date(acceptedTime) : null,
+            unloadingCompletedAt: completedTime ? new Date(completedTime) : null,
+            totalMoveMinutes: totalMoveMinutes > 0 ? totalMoveMinutes : null,
+            distanceKm: b.distance || '0',
+          });
+          created++;
+        } catch (err) {
+          console.error(`[Backfill] Failed for booking ${b.id}:`, err);
+        }
+      }
+      
+      console.log(`[Backfill] Created ${created} performance records from ${missingBookings.length} completed bookings`);
+      res.json({ 
+        success: true, 
+        message: `Backfilled ${created} performance records`,
+        total: completedBookings.length,
+        alreadyTracked: existingBookingIds.size,
+        newlyCreated: created,
+      });
+    } catch (error) {
+      console.error('[Backfill] Error:', error);
+      res.status(500).json({ error: "Failed to backfill performance data" });
+    }
+  });
+  
   // ===== ADMIN: GROWTH METRICS DASHBOARD =====
   
   app.get("/api/admin/growth-metrics", async (req: Request, res: Response) => {
