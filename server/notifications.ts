@@ -1474,6 +1474,72 @@ class NotificationService {
 
     console.log(`[ROLE UPGRADE] Notification sent to ${user.email} for ${newRole} role`);
   }
+
+  async sendAdminNewBookingAlert(adminEmail: string, customer: User, booking: Partial<Booking>): Promise<void> {
+    const subject = `New Booking - Move #${booking.id?.slice(0, 8)}`;
+    const formattedDate = booking.preferredDate 
+      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
+          weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+        })
+      : 'TBD';
+    const price = booking.price ? `$${parseFloat(booking.price).toFixed(2)}` : 'TBD';
+    const promoInfo = booking.promoCode 
+      ? `<li><strong>Promo Code:</strong> ${booking.promoCode} (-${booking.discountPercent || 20}%)</li>` 
+      : '';
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#2563eb;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Admin</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 20px 0;font-size:22px;">New Booking Created</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 30px 0;">A new move has been booked on the platform.</p>
+              
+              <h3 style="color:#333333;font-size:18px;margin:0 0 15px 0;">Booking Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Customer:</strong> ${customer.name} (${customer.email})</li>
+                <li><strong>Pickup:</strong> ${booking.pickupAddress || 'N/A'}</li>
+                <li><strong>Dropoff:</strong> ${booking.dropoffAddress || 'N/A'}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Load Size:</strong> ${booking.loadSize || 'N/A'}</li>
+                <li><strong>Price:</strong> ${price}</li>
+                ${promoInfo}
+              </ul>
+              
+              <p style="color:#555555;font-size:14px;line-height:24px;margin:0;">Movers have been notified. You can track this booking in the Admin Dashboard.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Admin Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    await this.sendEmail({
+      to: adminEmail,
+      subject,
+      body,
+      type: 'booking_confirmation',
+    });
+  }
 }
 
 export const notificationService = new NotificationService();

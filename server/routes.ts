@@ -4360,6 +4360,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (emailErr) {
           console.error("[Payment] Failed to send emails:", emailErr);
         }
+        
+        // Send admin notification for new booking
+        try {
+          const adminUsers = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
+          for (const admin of adminUsers) {
+            await notificationService.sendAdminNewBookingAlert(admin.email, customer, booking);
+          }
+          console.log(`[Payment] Sent admin notification for booking ${bookingId}`);
+        } catch (adminErr) {
+          console.error("[Payment] Failed to send admin notification:", adminErr);
+        }
       }
       
       // Find and notify nearby movers
@@ -4734,6 +4745,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } catch (emailErr) {
             console.error("Failed to send emails:", emailErr);
           }
+          
+          // Send admin notification for new booking
+          try {
+            const adminUsers = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
+            for (const admin of adminUsers) {
+              await notificationService.sendAdminNewBookingAlert(admin.email, customer, booking);
+            }
+          } catch (adminErr) {
+            console.error("[Payment] Failed to send admin notification:", adminErr);
+          }
         }
         
         // Notify movers
@@ -4988,6 +5009,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   });
                 } catch (notifErr) {
                   logEvent.error('payment_notification_failed', notifErr, { bookingId: booking.id, userId: customer.id });
+                }
+                
+                // Send admin notification for new booking
+                try {
+                  const adminUsers = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
+                  for (const admin of adminUsers) {
+                    await notificationService.sendAdminNewBookingAlert(admin.email, customer, booking);
+                  }
+                } catch (adminErr) {
+                  logEvent.error('webhook_admin_notification', adminErr, { bookingId: booking.id });
                 }
               }
             } catch (emailErr) {
@@ -6326,6 +6357,23 @@ Respond with VALID JSON only:
     }
   });
   
+  // Get open/in-progress ticket count for admin notification badge
+  app.get("/api/admin/support/open-count", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      
+      const openTickets = await db.select({ id: supportTickets.id })
+        .from(supportTickets)
+        .where(
+          sql`${supportTickets.status} IN ('open', 'in_progress')`
+        );
+      
+      res.json({ count: openTickets.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ticket count" });
+    }
+  });
+
   // Get all support tickets (admin only)
   app.get("/api/support/tickets/all", async (req: Request, res: Response) => {
     try {

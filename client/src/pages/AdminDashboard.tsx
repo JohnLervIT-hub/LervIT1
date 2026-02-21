@@ -511,6 +511,11 @@ export default function AdminDashboard() {
   });
   const bookings = Array.isArray(bookingsData) ? bookingsData : [];
 
+  const { data: openTicketCount } = useQuery<{ count: number }>({
+    queryKey: ['/api/admin/support/open-count'],
+    refetchInterval: 30000,
+  });
+
   const isLoading = usersLoading || moversLoading || bookingsLoading;
   const hasError = usersError || moversError || bookingsError;
 
@@ -779,15 +784,20 @@ export default function AdminDashboard() {
           <h2 className="text-lg font-semibold mb-4">Admin Tools</h2>
           <div className="grid gap-4 md:grid-cols-3">
             <Link href="/admin/support" data-testid="link-admin-support">
-              <Card className="hover-elevate cursor-pointer h-full">
+              <Card className="hover-elevate cursor-pointer h-full relative">
                 <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
                   <div className="p-2 rounded-lg bg-rose-500/10">
                     <MessageSquare className="w-5 h-5 text-rose-500" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <CardTitle className="text-base">Support Tickets</CardTitle>
                     <CardDescription className="text-xs">Manage customer support</CardDescription>
                   </div>
+                  {openTicketCount && openTicketCount.count > 0 && (
+                    <Badge variant="destructive" className="text-xs" data-testid="badge-open-tickets">
+                      {openTicketCount.count} open
+                    </Badge>
+                  )}
                 </CardHeader>
               </Card>
             </Link>
