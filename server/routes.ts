@@ -3750,11 +3750,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allBookingsResult = await storage.getAllBookings({ limit: 1000 });
       const promoBookings = allBookingsResult.data.filter(
         (b: any) => b.promoCode && parseFloat(b.moverBalanceOwed || '0') > 0
+          && b.moverId
+          && b.paymentStatus === 'succeeded'
       );
       
       const results = await Promise.all(promoBookings.map(async (b: any) => {
         const customer = b.customerId ? await storage.getUser(b.customerId) : null;
-        const mover = b.moverId ? await storage.getUser(b.moverId) : null;
+        const moverProfile = b.moverId ? await storage.getMover(b.moverId) : null;
+        const moverUser = moverProfile ? await storage.getUser(moverProfile.userId) : null;
         return {
           id: b.id,
           promoCode: b.promoCode,
@@ -3766,7 +3769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subtotal: b.subtotal,
           status: b.status,
           moverId: b.moverId,
-          moverName: mover?.name || 'Unassigned',
+          moverName: moverUser?.name || 'Unassigned',
           customerName: customer?.name || 'Unknown',
           createdAt: b.createdAt,
         };
