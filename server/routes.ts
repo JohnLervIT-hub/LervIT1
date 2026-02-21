@@ -3080,12 +3080,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Determine distanceToPickup: prefer live GPS calculation, fallback to job notification
           let distanceToPickup: string | null = null;
-          if (currentMoverForProximity &&
-              currentMoverForProximity.currentLatitude && currentMoverForProximity.currentLongitude &&
-              booking.pickupLatitude && booking.pickupLongitude) {
+          const moverLat = currentMoverForProximity?.latitude;
+          const moverLng = currentMoverForProximity?.longitude;
+          if (moverLat && moverLng && booking.pickupLatitude && booking.pickupLongitude) {
             const dist = calculateDistance(
-              currentMoverForProximity.currentLatitude,
-              currentMoverForProximity.currentLongitude,
+              moverLat,
+              moverLng,
               booking.pickupLatitude,
               booking.pickupLongitude
             );
