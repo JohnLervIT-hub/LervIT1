@@ -3050,6 +3050,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviewedBookingIds = new Set(customerReviews.map(r => r.bookingId));
       }
       
+      // For movers, look up distanceToPickup from job notifications
+      let moverDistanceToPickupMap = new Map<string, string>();
+      let currentMoverForProximity: any = null;
+      if (user.role === "mover") {
+        const mover = await storage.getMoverByUserId(user.id);
+        if (mover) {
+          currentMoverForProximity = mover;
+          const notifications = await db.select({
+            bookingId: jobNotifications.bookingId,
+            distanceToPickup: jobNotifications.distanceToPickup,
+          })
+            .from(jobNotifications)
+            .where(eq(jobNotifications.moverId, mover.id));
+          notifications.forEach(n => {
+            if (n.distanceToPickup) {
+              moverDistanceToPickupMap.set(n.bookingId, n.distanceToPickup);
+            }
+          });
+        }
+      }
+
       // Enrich with customer and mover data
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
@@ -3057,8 +3078,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const mover = booking.moverId ? await storage.getMover(booking.moverId) : null;
           const moverUser = mover ? await storage.getUser(mover.userId) : null;
           
+          // Determine distanceToPickup: prefer job notification, fallback to live calculation
+          let distanceToPickup = moverDistanceToPickupMap.get(booking.id) || null;
+          if (!distanceToPickup && currentMoverForProximity &&
+              currentMoverForProximity.currentLatitude && currentMoverForProximity.currentLongitude &&
+              booking.pickupLatitude && booking.pickupLongitude) {
+            const dist = calculateDistance(
+              currentMoverForProximity.currentLatitude,
+              currentMoverForProximity.currentLongitude,
+              booking.pickupLatitude,
+              booking.pickupLongitude
+            );
+            distanceToPickup = dist.toFixed(1);
+          }
+
           return {
             ...booking,
+            distanceToPickup,
             hasReview: reviewedBookingIds.has(booking.id),
             customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
             mover: mover && moverUser ? {

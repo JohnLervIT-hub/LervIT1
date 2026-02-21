@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone, Route } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -45,6 +45,7 @@ type Booking = {
   preferredDate: string;
   status: string;
   distance: string | null;
+  distanceToPickup: string | null;
   price: string | null;
   paymentStatus: string | null;
   createdAt: string;
@@ -1091,11 +1092,20 @@ export default function MoverDashboard() {
                 <p className="text-xs text-muted-foreground">{booking.numberOfMovers} mover{booking.numberOfMovers > 1 ? 's' : ''}</p>
               )}
             </div>
+            {booking.distanceToPickup && (
+              <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
+                <div className="flex items-center gap-2 mb-1">
+                  <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <p className="text-xs text-blue-600 dark:text-blue-400">Distance to Pickup</p>
+                </div>
+                <p className="font-medium text-sm text-blue-700 dark:text-blue-300" data-testid={`text-distance-to-pickup-${booking.id}`}>{parseFloat(booking.distanceToPickup).toFixed(1)} km</p>
+              </div>
+            )}
             {booking.distance && (
               <div className="bg-muted/30 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <MapPin className="w-4 h-4 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground">Distance</p>
+                  <Route className="w-4 h-4 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Move Distance</p>
                 </div>
                 <p className="font-medium text-sm" data-testid={`text-distance-${booking.id}`}>{parseFloat(booking.distance).toFixed(1)} km</p>
               </div>
