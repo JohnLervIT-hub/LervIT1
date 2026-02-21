@@ -3078,9 +3078,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const mover = booking.moverId ? await storage.getMover(booking.moverId) : null;
           const moverUser = mover ? await storage.getUser(mover.userId) : null;
           
-          // Determine distanceToPickup: prefer job notification, fallback to live calculation
-          let distanceToPickup = moverDistanceToPickupMap.get(booking.id) || null;
-          if (!distanceToPickup && currentMoverForProximity &&
+          // Determine distanceToPickup: prefer live GPS calculation, fallback to job notification
+          let distanceToPickup: string | null = null;
+          if (currentMoverForProximity &&
               currentMoverForProximity.currentLatitude && currentMoverForProximity.currentLongitude &&
               booking.pickupLatitude && booking.pickupLongitude) {
             const dist = calculateDistance(
@@ -3090,6 +3090,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               booking.pickupLongitude
             );
             distanceToPickup = dist.toFixed(1);
+          } else {
+            distanceToPickup = moverDistanceToPickupMap.get(booking.id) || null;
           }
 
           return {
