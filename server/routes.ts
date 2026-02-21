@@ -3747,8 +3747,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/promo-balances", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const allBookings = await storage.getAllBookings();
-      const promoBookings = allBookings.filter(
+      const allBookingsResult = await storage.getAllBookings({ limit: 1000 });
+      const promoBookings = allBookingsResult.data.filter(
         (b: any) => b.promoCode && parseFloat(b.moverBalanceOwed || '0') > 0
       );
       
