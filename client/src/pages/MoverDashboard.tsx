@@ -346,6 +346,7 @@ export default function MoverDashboard() {
   const { data: allBookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
+    refetchInterval: 30000,
   });
 
   // Client-side filtering: separate assigned from available bookings
