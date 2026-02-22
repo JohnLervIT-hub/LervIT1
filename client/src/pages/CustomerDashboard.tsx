@@ -670,13 +670,20 @@ export default function CustomerDashboard() {
                         <p className="font-medium">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
                         <p className="text-sm text-muted-foreground">{booking.loadSize} load</p>
                       </div>
-                      <Badge className={getStatusColor(booking.status)}>
-                        {booking.status === "completed" ? (
-                          <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
-                        ) : (
-                          <><XCircle className="w-3 h-3 mr-1" /> Cancelled</>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className={getStatusColor(booking.status)}>
+                          {booking.status === "completed" ? (
+                            <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
+                          ) : (
+                            <><XCircle className="w-3 h-3 mr-1" /> Cancelled</>
+                          )}
+                        </Badge>
+                        {booking.price && (
+                          <span className="text-sm font-semibold" data-testid={`text-price-${booking.id}`}>
+                            ${parseFloat(booking.price).toFixed(2)}
+                          </span>
                         )}
-                      </Badge>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">

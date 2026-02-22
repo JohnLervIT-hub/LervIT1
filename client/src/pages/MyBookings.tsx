@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil, RotateCcw } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { format } from "date-fns";
@@ -767,6 +767,22 @@ export default function MyBookings() {
                         <CheckCircle2 className="w-4 h-4 text-green-500" />
                         Review submitted
                       </div>
+                    )}
+                    {booking.status === "completed" && (
+                      <Button
+                        onClick={() => {
+                          const params = new URLSearchParams();
+                          params.set('pickup', booking.pickupAddress);
+                          params.set('dropoff', booking.dropoffAddress);
+                          if (booking.loadSize) params.set('loadSize', booking.loadSize);
+                          params.set('resumeStep', '2');
+                          setLocation(`/request-move?${params.toString()}`);
+                        }}
+                        data-testid={`button-rebook-${booking.id}`}
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Rebook
+                      </Button>
                     )}
                   </div>
                 </CardContent>
