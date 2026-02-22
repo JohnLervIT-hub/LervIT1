@@ -579,6 +579,37 @@ export default function RequestMove() {
     };
   }, [step, pickupAddress, dropoffAddress, loadSize, date, preSelectedMoverId, user, createdBooking]);
   
+  // Save AI-identified items to the database once the booking is created (runs once)
+  const hasSavedItemsRef = useRef(false);
+  useEffect(() => {
+    if (createdBooking && identifiedItems.length > 0 && !hasSavedItemsRef.current) {
+      const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed' && item.itemName);
+      if (completedItems.length > 0) {
+        hasSavedItemsRef.current = true;
+        apiRequest("POST", `/api/ai/items/${createdBooking.id}/save`, {
+          items: completedItems.map(item => ({
+            photoUrl: item.photoUrl,
+            itemName: item.itemName,
+            category: item.category,
+            weightKg: item.weightKg,
+            dimensionsLcm: item.dimensionsLcm,
+            dimensionsWcm: item.dimensionsWcm,
+            dimensionsHcm: item.dimensionsHcm,
+            volumeCuft: item.volumeCuft,
+            handlingComplexity: item.handlingComplexity,
+            vehicleType: item.vehicleType,
+            recommendedMovers: item.recommendedMovers,
+            insuranceLevel: item.insuranceLevel,
+            confidence: item.confidence,
+            sourceMetadata: item.sourceMetadata,
+          })),
+        }).catch((err) => {
+          console.log('[RequestMove] Failed to save AI items to booking:', err);
+        });
+      }
+    }
+  }, [createdBooking, identifiedItems]);
+
   // Mark abandoned booking as recovered when booking is created
   useEffect(() => {
     if (createdBooking && abandonedBookingRef.current) {

@@ -8449,6 +8449,68 @@ Respond with VALID JSON only:
     }
   });
   
+  // POST /api/ai/items/:bookingId/save - Save pre-analyzed items to a booking (idempotent)
+  app.post("/api/ai/items/:bookingId/save", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      
+      const { bookingId } = req.params;
+      const { items } = req.body;
+      
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "items array required" });
+      }
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const user = (req as any).user;
+      if (booking.customerId !== user.id && user.role !== 'admin') {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      // Idempotency: skip if items already exist for this booking
+      const existingItems = await storage.getIdentifiedItemsByBooking(bookingId);
+      if (existingItems.length > 0) {
+        return res.json({ saved: 0, items: existingItems, message: "Items already saved" });
+      }
+      
+      const savedItems = [];
+      for (const item of items) {
+        if (!item.photoUrl || typeof item.photoUrl !== 'string') continue;
+        if (!item.itemName || typeof item.itemName !== 'string') continue;
+        
+        const saved = await storage.createIdentifiedItem({
+          bookingId,
+          photoUrl: item.photoUrl,
+          processingStatus: 'completed',
+          itemName: item.itemName,
+          category: typeof item.category === 'string' ? item.category : null,
+          weightKg: item.weightKg != null ? String(item.weightKg) : null,
+          dimensionsLcm: item.dimensionsLcm != null ? String(item.dimensionsLcm) : null,
+          dimensionsWcm: item.dimensionsWcm != null ? String(item.dimensionsWcm) : null,
+          dimensionsHcm: item.dimensionsHcm != null ? String(item.dimensionsHcm) : null,
+          volumeCuft: item.volumeCuft != null ? String(item.volumeCuft) : null,
+          handlingComplexity: typeof item.handlingComplexity === 'string' ? item.handlingComplexity : null,
+          vehicleType: typeof item.vehicleType === 'string' ? item.vehicleType : null,
+          recommendedMovers: typeof item.recommendedMovers === 'number' ? item.recommendedMovers : 1,
+          insuranceLevel: typeof item.insuranceLevel === 'string' ? item.insuranceLevel : null,
+          confidence: item.confidence != null ? String(item.confidence) : null,
+          sourceMetadata: typeof item.sourceMetadata === 'string' ? item.sourceMetadata : null,
+        } as any);
+        savedItems.push(saved);
+      }
+      
+      console.log(`[AI Items] Saved ${savedItems.length} pre-analyzed items for booking ${bookingId}`);
+      res.json({ saved: savedItems.length, items: savedItems });
+    } catch (error) {
+      console.error('[AI Items] Save error:', error);
+      res.status(500).json({ error: "Failed to save items" });
+    }
+  });
+  
   // PATCH /api/ai/items/:itemId - Manual override for identified item
   app.patch("/api/ai/items/:itemId", async (req: Request, res: Response) => {
     try {
