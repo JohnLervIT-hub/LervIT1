@@ -22,7 +22,8 @@ import {
   Phone,
   ChevronRight,
   Truck,
-  Star
+  Star,
+  RotateCcw
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { format, isToday, isTomorrow, formatDistanceToNow } from "date-fns";
@@ -84,6 +85,10 @@ const LOAD_SIZE_OPTIONS = [
   { value: 'large', label: 'Large (120-250 ft³)', class: 'D' },
   { value: 'apartment', label: 'Full Move (250+ ft³)', class: 'E' },
 ];
+
+function getMoverName(mover: any): string {
+  return mover?.name || mover?.user?.name || 'Mover';
+}
 
 export default function CustomerDashboard() {
   const { user, refreshUser } = useAuth();
@@ -147,15 +152,15 @@ export default function CustomerDashboard() {
   const reportMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       const booking = bookings?.find(b => b.id === bookingId);
-      if (!booking || !booking.mover || !booking.mover.user) {
+      if (!booking || !booking.mover) {
         throw new Error("Booking or mover details not found");
       }
 
       return await apiRequest("POST", "/api/support-tickets", {
-        subject: `Report: Mover ${booking.mover.user.name} (Booking #${bookingId.slice(0, 8)})`,
+        subject: `Report: Mover ${getMoverName(booking.mover)} (Booking #${bookingId.slice(0, 8)})`,
         category: "mover_concern",
         priority: "high",
-        description: `Customer ${user?.name} is reporting a concern about mover ${booking.mover.user.name} for booking #${bookingId}. Please investigate.`,
+        description: `Customer ${user?.name} is reporting a concern about mover ${getMoverName(booking.mover)} for booking #${bookingId}. Please investigate.`,
       });
     },
     onSuccess: () => {
@@ -350,7 +355,7 @@ export default function CustomerDashboard() {
   };
 
   const handleReportMover = (booking: Booking) => {
-    if (!booking.mover || !booking.mover.user) {
+    if (!booking.mover) {
       toast({
         title: "Cannot Report Mover",
         description: "Mover details are not available for this booking.",
@@ -603,13 +608,13 @@ export default function CustomerDashboard() {
                       <span className="line-clamp-1 flex-1">{booking.dropoffAddress}</span>
                     </div>
 
-                    {booking.mover && booking.mover.user && (
+                    {booking.mover && (
                       <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg mb-4">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                           <Truck className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-sm">{booking.mover.user.name}</p>
+                          <p className="font-medium text-sm">{getMoverName(booking.mover)}</p>
                           <p className="text-xs text-muted-foreground">Your mover</p>
                         </div>
                         <Button 
@@ -675,36 +680,69 @@ export default function CustomerDashboard() {
                     </div>
 
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="w-4 h-4 flex-shrink-0 text-green-600" />
                       <span className="line-clamp-1">{booking.pickupAddress}</span>
-                      <ArrowRight className="w-4 h-4 flex-shrink-0" />
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                      <MapPin className="w-4 h-4 flex-shrink-0 text-primary" />
                       <span className="line-clamp-1">{booking.dropoffAddress}</span>
                     </div>
 
-                    {booking.mover && booking.mover.user && (
+                    {booking.mover && (
                       <p className="text-sm text-muted-foreground mt-2">
-                        Moved by {booking.mover.user.name}
+                        Moved by {getMoverName(booking.mover)}
                       </p>
                     )}
 
-                    {booking.status === "completed" && !booking.hasReview && (
-                      <div className="flex items-center justify-end mt-3 pt-3 border-t">
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        {booking.status === "completed" && !booking.hasReview && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleLeaveFeedback(booking)}
+                            data-testid={`button-feedback-${booking.id}`}
+                          >
+                            <Star className="w-4 h-4 mr-1" />
+                            Leave Feedback
+                          </Button>
+                        )}
+                        {booking.status === "completed" && booking.hasReview && (
+                          <span className="flex items-center text-sm text-muted-foreground">
+                            <CheckCircle2 className="w-4 h-4 mr-1 text-green-500" />
+                            Reviewed
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleLeaveFeedback(booking)}
-                          data-testid={`button-feedback-${booking.id}`}
+                          onClick={() => handleViewDetails(booking.id)}
+                          data-testid={`button-view-past-${booking.id}`}
                         >
-                          <Star className="w-4 h-4 mr-1" />
-                          Leave Feedback
+                          Details
+                          <ChevronRight className="w-4 h-4 ml-1" />
                         </Button>
+                        {booking.status === "completed" && (
+                          <Button 
+                            size="sm"
+                            onClick={() => {
+                              const params = new URLSearchParams();
+                              params.set('pickup', booking.pickupAddress);
+                              params.set('dropoff', booking.dropoffAddress);
+                              if (booking.loadSize) params.set('loadSize', booking.loadSize);
+                              params.set('resumeStep', '2');
+                              setLocation(`/request-move?${params.toString()}`);
+                            }}
+                            data-testid={`button-rebook-${booking.id}`}
+                          >
+                            <RotateCcw className="w-4 h-4 mr-1" />
+                            Rebook
+                          </Button>
+                        )}
                       </div>
-                    )}
-                    {booking.status === "completed" && booking.hasReview && (
-                      <div className="flex items-center justify-end mt-3 pt-3 border-t text-sm text-muted-foreground">
-                        <CheckCircle2 className="w-4 h-4 mr-1 text-green-500" />
-                        Review submitted
-                      </div>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
               ))
@@ -746,9 +784,9 @@ export default function CustomerDashboard() {
                 Report a Concern
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {selectedBooking && selectedBooking.mover && selectedBooking.mover.user && (
+                {selectedBooking && selectedBooking.mover && (
                   <>
-                    You're reporting an issue with <strong>{selectedBooking.mover.user.name}</strong>.
+                    You're reporting an issue with <strong>{getMoverName(selectedBooking.mover)}</strong>.
                     <br /><br />
                     Our team will review this right away and reach out to you by email. 
                     If you're in immediate danger, please call 911.
@@ -802,7 +840,7 @@ export default function CustomerDashboard() {
                     {feedbackBooking.mover.moverImage ? (
                       <img 
                         src={feedbackBooking.mover.moverImage} 
-                        alt={feedbackBooking.mover.user?.name || "Mover"} 
+                        alt={getMoverName(feedbackBooking.mover)} 
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -811,7 +849,7 @@ export default function CustomerDashboard() {
                       </div>
                     )}
                   </div>
-                  <p className="text-lg font-semibold">{feedbackBooking.mover.user?.name || "Your Mover"}</p>
+                  <p className="text-lg font-semibold">{getMoverName(feedbackBooking.mover)}</p>
                 </div>
               )}
               <DialogTitle className="flex items-center justify-center gap-2">
