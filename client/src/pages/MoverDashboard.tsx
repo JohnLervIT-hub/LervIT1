@@ -25,7 +25,6 @@ import MoverVerification from "./MoverVerification";
 import { MoverDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { EarlyAccessTermsModal } from "@/components/EarlyAccessTermsModal";
 import { ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import { BOOKING_STATUSES, ACTIVE_STATUSES, BOOKING_STATUS_INFO, getNextValidStatuses, type BookingStatus } from "@shared/schema";
 import MoveProgressIndicator from "@/components/MoveProgressIndicator";
@@ -310,21 +309,13 @@ export default function MoverDashboard() {
     enabled: !!mover?.id,
   });
 
-  // Get Early Access terms acceptance status
   const { data: termsStatus } = useQuery<any>({
     queryKey: ["/api/movers/terms/status"],
     enabled: !!mover?.id,
   });
 
-  const [showTermsModal, setShowTermsModal] = useState(false);
   const [showWelcomeTutorial, setShowWelcomeTutorial] = useState(false);
   const [tutorialDismissed, setTutorialDismissed] = useState(false);
-
-  useEffect(() => {
-    if (termsStatus?.requiresTermsAcceptance) {
-      setShowTermsModal(true);
-    }
-  }, [termsStatus]);
 
   // Show welcome tutorial for new movers (only once, persisted to database)
   useEffect(() => {
@@ -1607,10 +1598,6 @@ export default function MoverDashboard() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
 
-        <EarlyAccessTermsModal 
-          open={showTermsModal} 
-          onAccept={() => setShowTermsModal(false)} 
-        />
 
         {/* Mover Welcome Tutorial */}
         <MoverWelcomeTutorial

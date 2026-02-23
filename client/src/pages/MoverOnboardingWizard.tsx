@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
@@ -26,10 +26,119 @@ import {
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  Shield
 } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const EARLY_ACCESS_TERMS = `LERVIT – EARLY ACCESS MOVER TERMS (PILOT)
+
+Effective Date: Upon Acceptance
+Program: Early Access (Pilot)
+
+By clicking "I Agree", you ("Mover") agree to the following terms to participate in LervIT's Early Access pilot.
+
+1. Early Access Status
+
+You are approved to participate in LervIT's Early Access (Pilot).
+Early Access does not mean "verified". Full verification requirements may be introduced later as the platform scales.
+
+2. Independent Contractor Relationship
+
+You are an independent contractor, not an employee, partner, or agent of LervIT.
+
+You choose when, where, and whether to accept jobs.
+
+You may work for other platforms or clients at any time.
+
+LervIT does not provide wages, benefits, insurance, or equipment.
+
+3. Vehicle, Insurance, and Responsibility
+
+You confirm that:
+
+You own or have lawful access to the vehicle you use.
+
+You are responsible for maintaining valid auto insurance and any coverage required for your operations.
+
+You are responsible for safe loading, transport, and delivery of items.
+
+LervIT does not provide cargo, vehicle, or liability insurance for movers during the Early Access pilot.
+
+4. Payments and Fees
+
+You will be paid for completed jobs according to the app's pricing and payout rules.
+
+LervIT may apply a platform service fee.
+During Early Access, this fee may be reduced or refunded at LervIT's discretion.
+
+You are responsible for your own taxes, including GST/HST if applicable.
+
+5. Job Acceptance and Conduct
+
+You may freely accept or decline any job.
+
+If you accept a job, you agree to:
+
+Contact the customer promptly
+
+Arrive on time
+
+Perform the job professionally and safely
+
+Unsafe behavior, fraud, or misuse of the platform may result in suspension or removal.
+
+6. Communications
+
+You agree to receive transactional communications (SMS, calls, in-app notifications) related to:
+
+Job offers
+
+Job updates
+
+Payouts
+
+Account status
+
+You may opt out of non-essential messages where applicable.
+
+7. Suspension or Removal
+
+LervIT may suspend or remove your Early Access status at any time, with or without notice, including for:
+
+Safety concerns
+
+Repeated no-shows
+
+Customer complaints
+
+Misrepresentation of vehicle or services
+
+8. Limitation of Liability
+
+To the maximum extent permitted by law:
+
+LervIT is not responsible for loss, damage, or disputes arising from jobs accepted through the platform.
+
+You agree to indemnify LervIT against claims arising from your actions as a mover.
+
+9. Future Verification
+
+You acknowledge that:
+
+Additional verification (ID, insurance, background checks) may be required later
+
+Continued access to the platform may depend on completing those steps
+
+10. Acceptance
+
+By clicking "I Agree", you confirm that:
+
+You have read and understood these terms
+
+You agree to participate as an independent contractor in the Early Access pilot`;
 
 const VEHICLE_TYPES = [
   { value: "car", label: "SUV / Small Vehicle", description: "Small moves, single items" },
@@ -43,7 +152,10 @@ const STEPS = [
   { id: 2, title: "Vehicle Info", icon: Truck, description: "Tell us about your vehicle" },
   { id: 3, title: "Vehicle Photo", icon: Camera, description: "Show customers your vehicle" },
   { id: 4, title: "Bio", icon: FileText, description: "Introduce yourself" },
+  { id: 5, title: "Terms", icon: Shield, description: "Accept platform terms" },
 ];
+
+const TOTAL_STEPS = 5;
 
 export default function MoverOnboardingWizard() {
   const { user } = useAuth();
@@ -59,6 +171,9 @@ export default function MoverOnboardingWizard() {
   const [vehiclePhotoFile, setVehiclePhotoFile] = useState<File | null>(null);
   const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(null);
   const [bio, setBio] = useState("");
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+  const termsScrollRef = useRef<HTMLDivElement | null>(null);
 
   const { data: mover, isLoading } = useQuery<any>({
     queryKey: [`/api/movers?userId=${user?.id}`],
@@ -101,16 +216,25 @@ export default function MoverOnboardingWizard() {
     },
   });
 
+  const acceptTermsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/movers/terms/accept");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers/terms/status"] });
+    },
+  });
+
   const completeOnboardingMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("PATCH", `/api/movers/${mover?.id}`, { onboardingCompleted: true });
     },
     onSuccess: async () => {
-      // Wait for the query to actually refetch with new data before redirecting
       await queryClient.refetchQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
       toast({
-        title: "Profile Complete!",
-        description: "You're all set to start receiving job requests.",
+        title: "Welcome to LervIT!",
+        description: "Your profile is complete and terms accepted. You're ready to start earning.",
       });
       setLocation("/mover-dashboard");
     },
@@ -185,23 +309,44 @@ export default function MoverOnboardingWizard() {
         if (bio) {
           await updateProfileMutation.mutateAsync({ bio });
         }
-        await completeOnboardingMutation.mutateAsync();
       } catch (error) {
         toast({ title: "Save failed", description: "Please try again", variant: "destructive" });
+        return;
+      }
+    }
+
+    if (currentStep === 5) {
+      if (!termsAgreed) {
+        toast({ title: "Terms required", description: "Please read and accept the terms to continue", variant: "destructive" });
+        return;
+      }
+      try {
+        await acceptTermsMutation.mutateAsync();
+        await completeOnboardingMutation.mutateAsync();
+      } catch (error) {
+        toast({ title: "Failed to complete", description: "Please try again", variant: "destructive" });
         return;
       }
       return;
     }
     
-    setCurrentStep((prev) => Math.min(prev + 1, 4));
+    setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
   };
 
   const handleBack = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const isLoading_ = uploadImageMutation.isPending || updateProfileMutation.isPending || completeOnboardingMutation.isPending;
-  const progress = (currentStep / 4) * 100;
+  const handleTermsScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 50;
+    if (isAtBottom && !hasScrolledToBottom) {
+      setHasScrolledToBottom(true);
+    }
+  };
+
+  const isLoading_ = uploadImageMutation.isPending || updateProfileMutation.isPending || completeOnboardingMutation.isPending || acceptTermsMutation.isPending;
+  const progress = (currentStep / TOTAL_STEPS) * 100;
 
   if (isLoading) {
     return (
@@ -425,12 +570,58 @@ export default function MoverOnboardingWizard() {
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
                   <div>
-                    <p className="font-medium text-sm">Almost there!</p>
+                    <p className="font-medium text-sm">One more step!</p>
                     <p className="text-sm text-muted-foreground">
-                      Complete your profile to start receiving job requests from customers.
+                      After this, you'll review and accept the platform terms.
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {currentStep === 5 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-xl font-semibold mb-2">Early Access Terms</h2>
+                <p className="text-muted-foreground text-sm">
+                  Please read and accept the following terms to start receiving job offers
+                </p>
+              </div>
+
+              <div 
+                className="border rounded-md p-4 max-h-[40vh] overflow-y-auto"
+                onScroll={handleTermsScroll}
+                ref={termsScrollRef}
+                data-testid="terms-scroll-container"
+              >
+                <div className="whitespace-pre-wrap text-sm text-muted-foreground font-mono leading-relaxed">
+                  {EARLY_ACCESS_TERMS}
+                </div>
+              </div>
+
+              {!hasScrolledToBottom && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Please scroll to the bottom to enable the checkbox
+                </p>
+              )}
+
+              <div className="flex items-start gap-3 py-2">
+                <Checkbox
+                  id="terms-agreement"
+                  checked={termsAgreed}
+                  onCheckedChange={(checked) => setTermsAgreed(checked === true)}
+                  disabled={!hasScrolledToBottom}
+                  data-testid="checkbox-terms-agreement"
+                />
+                <label
+                  htmlFor="terms-agreement"
+                  className={`text-sm leading-tight cursor-pointer ${
+                    !hasScrolledToBottom ? "text-muted-foreground" : ""
+                  }`}
+                >
+                  I have read and agree to the Early Access Mover Terms. I understand that I am participating as an independent contractor.
+                </label>
               </div>
             </div>
           )}
@@ -446,13 +637,13 @@ export default function MoverOnboardingWizard() {
             )}
 
             <div className="flex gap-2">
-              <Button onClick={handleNext} disabled={isLoading_} data-testid="button-next-step">
+              <Button onClick={handleNext} disabled={isLoading_ || (currentStep === 5 && !termsAgreed)} data-testid="button-next-step">
                 {isLoading_ ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
-                {currentStep === 4 ? (
+                {currentStep === 5 ? (
                   <>
-                    Complete Setup
+                    I Agree - Start Earning
                     <CheckCircle2 className="h-4 w-4 ml-2" />
                   </>
                 ) : (
