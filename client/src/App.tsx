@@ -59,6 +59,9 @@ const CustomerProfile = lazy(() => import("@/pages/CustomerProfile"));
 const MoverProfile = lazy(() => import("@/pages/MoverProfile"));
 const MoverVerification = lazy(() => import("@/pages/MoverVerification"));
 const Inbox = lazy(() => import("@/pages/Inbox"));
+const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
+const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
+const MoverAgreement = lazy(() => import("@/pages/MoverAgreement"));
 
 function Router() {
   return (
@@ -71,6 +74,9 @@ function Router() {
         
         {/* Public Routes - Lazy loaded */}
         <Route path="/website" component={LandingPage} />
+        <Route path="/terms" component={TermsOfService} />
+        <Route path="/privacy" component={PrivacyPolicy} />
+        <Route path="/mover-agreement" component={MoverAgreement} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route path="/verify-email" component={VerifyEmail} />

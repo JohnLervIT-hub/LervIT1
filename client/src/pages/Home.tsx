@@ -26,8 +26,9 @@ const FOOTER_LINKS = {
     press: "https://lervit.com",
   },
   support: {
-    terms: "https://lervit.com/terms",
-    privacy: "https://lervit.com/privacy",
+    terms: "/terms",
+    privacy: "/privacy",
+    moverAgreement: "/mover-agreement",
   },
 };
 
@@ -285,15 +286,21 @@ export default function Home() {
                     </a>
                   </li>
                   <li>
-                    <a href={FOOTER_LINKS.support.terms} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-terms">
+                    <a href={FOOTER_LINKS.support.terms} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-terms">
                       <FileText className="w-4 h-4 flex-shrink-0" />
                       <span>Terms of Service</span>
                     </a>
                   </li>
                   <li>
-                    <a href={FOOTER_LINKS.support.privacy} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-privacy">
+                    <a href={FOOTER_LINKS.support.privacy} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-privacy">
                       <Lock className="w-4 h-4 flex-shrink-0" />
                       <span>Privacy Policy</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href={FOOTER_LINKS.support.moverAgreement} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-mover-agreement">
+                      <Briefcase className="w-4 h-4 flex-shrink-0" />
+                      <span>Mover Agreement</span>
                     </a>
                   </li>
                 </ul>
