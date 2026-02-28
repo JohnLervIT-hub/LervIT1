@@ -388,6 +388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {
       const signupSchema = insertUserSchema.extend({
+        email: z.string().email("Please enter a valid email address (e.g. you@example.com)"),
         password: z.string().min(6, "Password must be at least 6 characters"),
         phoneVerificationToken: z.string().min(1, "Phone verification required"),
       });

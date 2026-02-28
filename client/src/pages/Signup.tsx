@@ -333,6 +333,24 @@ export default function Signup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Mark all fields as touched so errors show
+    setTouched({ name: true, email: true, password: true });
+
+    // Validate before submitting
+    if (name.trim().length < 2) {
+      toast({ variant: "destructive", title: "Invalid name", description: "Name must be at least 2 characters." });
+      return;
+    }
+    if (!validateEmail(email)) {
+      toast({ variant: "destructive", title: "Invalid email", description: "Please enter a valid email address (e.g. you@example.com)." });
+      return;
+    }
+    if (password.length < 6) {
+      toast({ variant: "destructive", title: "Password too short", description: "Password must be at least 6 characters." });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
