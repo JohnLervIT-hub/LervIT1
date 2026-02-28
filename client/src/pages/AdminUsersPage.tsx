@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package, Pencil, Trash2, Save, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, ArrowLeft, Search, Shield, Truck, User, Eye, MapPin, Calendar, DollarSign, MessageCircle, CheckCircle, Clock, Package, Pencil, Trash2, Save, X, ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +65,7 @@ type UserType = {
   createdAt: string;
   lastLoginAt?: string;
   lastLogoutAt?: string;
+  emailVerified?: boolean;
 };
 
 type Booking = {
@@ -192,6 +193,22 @@ export default function AdminUsersPage() {
       </Badge>
     );
   };
+
+  const resendVerificationMutation = useMutation({
+    mutationFn: async (email: string) => {
+      return apiRequest("POST", "/api/auth/resend-verification", { email });
+    },
+    onSuccess: () => {
+      toast({ title: "Verification email sent", description: "The verification email has been resent to the user." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to resend",
+        description: error.message || "Could not send verification email.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleEditClick = (u: UserType) => {
     setEditingUser(u);
@@ -689,6 +706,23 @@ export default function AdminUsersPage() {
             </div>
           </div>
 
+          {editingUser && !editingUser.emailVerified && (
+            <div className="px-1 pb-2">
+              <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                <Mail className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-700 dark:text-amber-400 flex-1">Email not verified</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => resendVerificationMutation.mutate(editForm.email)}
+                  disabled={resendVerificationMutation.isPending}
+                  data-testid="button-resend-verification"
+                >
+                  {resendVerificationMutation.isPending ? "Sending..." : "Resend Email"}
+                </Button>
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingUser(null)} data-testid="button-cancel-edit">
               <X className="w-4 h-4 mr-2" />
