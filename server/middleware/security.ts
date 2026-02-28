@@ -75,17 +75,20 @@ export const corsMiddleware = cors({
  * Different limits for different endpoint types
  */
 
-// General API rate limit (100 requests per 15 minutes)
+// General API rate limit - high enough to support background polling
+// The app polls /api/messages/notifications every 5s = 180 req/15min per user
+// Plus auth/me, bookings, location updates etc. 1000 req/15min is safe
 export const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 100 : 1000, // More lenient in development
+  max: isProduction ? 1000 : 5000,
   message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false }, // Behind Replit proxy
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health';
+    // Skip rate limiting for health checks and session check (called on every page load/navigation)
+    // Note: when mounted at /api, req.path is /auth/me (prefix stripped by Express)
+    return req.path === '/health' || req.path === '/auth/me';
   },
   handler: (req, res) => {
     logger.warn({ 
@@ -98,10 +101,11 @@ export const generalApiLimiter = rateLimit({
   },
 });
 
-// Stricter limit for authentication endpoints (10 per 15 minutes)
+// Stricter limit for actual login/register/OTP endpoints (50 per 15 minutes)
+// /api/auth/me is a session check and must NOT use this limiter
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 10 : 100,
+  max: isProduction ? 50 : 500,
   message: { error: 'Too many login attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
