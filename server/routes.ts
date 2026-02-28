@@ -1860,7 +1860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           acceptedAt: latestAcceptance.acceptedAt,
         } : null,
         pilotStatus: mover.pilotStatus,
-        requiresTermsAcceptance: mover.pilotStatus === 'approved' && !hasAccepted,
+        requiresTermsAcceptance: !hasAccepted,
       });
     } catch (error) {
       console.error('Terms status error:', error);
@@ -1878,11 +1878,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mover = await storage.getMoverByUserId(user.id);
       if (!mover) {
         return res.status(404).json({ error: "Mover profile not found" });
-      }
-      
-      // Only pilot-approved movers can accept early access terms
-      if (mover.pilotStatus !== 'approved') {
-        return res.status(403).json({ error: "Only pilot-approved movers can accept Early Access terms" });
       }
       
       const CURRENT_TERMS_VERSION = 'EA-1.0';
