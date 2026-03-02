@@ -2442,14 +2442,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
         changes: Object.keys(updateData),
         roleChange: role !== undefined && role !== previousRole ? `${previousRole} -> ${role}` : null
       });
-      
+
+      // --- Post-update contact change flows ---
+      const emailChanged = email !== undefined && email !== existingUser[0].email;
+      const phoneChanged = phone !== undefined && phone !== existingUser[0].phone;
+      const isMover = updatedUser.role === 'mover';
+
+      // Invalidate all sessions for this user if email or phone changed (force re-login)
+      if (emailChanged || phoneChanged) {
+        try {
+          await pool.query(
+            `DELETE FROM user_sessions WHERE sess->>'userId' = $1`,
+            [userId]
+          );
+          logger.info({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, emailChanged, phoneChanged, action: 'sessions_invalidated' });
+        } catch (sessionErr) {
+          logger.error({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'session_invalidation_failed' });
+        }
+      }
+
+      // Email change flow
+      if (emailChanged && email) {
+        try {
+          const { randomBytes } = await import("crypto");
+          const verificationToken = randomBytes(32).toString("hex");
+          const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+          // Reset email verification status and set new token
+          await db.update(usersTable)
+            .set({ emailVerified: false, verificationToken, verificationTokenExpiry })
+            .where(eq(usersTable.id, userId));
+
+          // Send verification email to the new address
+          await notificationService.sendVerificationEmail(email, updatedUser.name || 'User', verificationToken);
+
+          // Send security alert to old address
+          await notificationService.sendEmail({
+            to: existingUser[0].email,
+            subject: 'Your LervIT Account Email Was Changed',
+            html: `
+              <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+                <h2 style="color:#1a1a1a;">Email Address Updated</h2>
+                <p>Hi ${updatedUser.name || 'there'},</p>
+                <p>Your LervIT account email address was updated by an administrator to:</p>
+                <p style="font-size:16px;font-weight:bold;color:#2563eb;">${email}</p>
+                <p>A verification link has been sent to your new address. You'll need to verify it before you can log back in.</p>
+                <p style="color:#dc2626;">If you did not request this change, contact support immediately at <a href="mailto:support@lervit.ca">support@lervit.ca</a>.</p>
+              </div>`,
+          });
+
+          // Sync new email to Stripe Connect account if mover has one
+          if (isMover) {
+            const moverProfile = await db.select().from(moversTable).where(eq(moversTable.userId, userId)).limit(1);
+            if (moverProfile.length > 0) {
+              const stripeAccount = await db.select().from(moverStripeAccounts)
+                .where(eq(moverStripeAccounts.moverId, moverProfile[0].id))
+                .limit(1);
+              if (stripeAccount.length > 0 && stripeAccount[0].stripeAccountId) {
+                try {
+                  await stripe.accounts.update(stripeAccount[0].stripeAccountId, { email });
+                  logger.info({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'stripe_email_synced', stripeAccountId: stripeAccount[0].stripeAccountId });
+                } catch (stripeErr) {
+                  logger.error({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'stripe_email_sync_failed', error: stripeErr instanceof Error ? stripeErr.message : 'Unknown' });
+                }
+              }
+            }
+          }
+
+          logger.info({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'email_change_complete', newEmail: email });
+        } catch (emailErr) {
+          logger.error({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'email_change_flow_failed', error: emailErr instanceof Error ? emailErr.message : 'Unknown' });
+        }
+      }
+
+      // Phone change flow — SMS alert to new number
+      if (phoneChanged && phone) {
+        try {
+          await notificationService.sendSMS({
+            to: phone,
+            message: `LervIT: Your account phone number has been updated by an administrator. If you did not request this, contact support at support@lervit.ca`,
+          });
+          logger.info({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'phone_change_sms_sent' });
+        } catch (smsErr) {
+          logger.error({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'phone_change_sms_failed', error: smsErr instanceof Error ? smsErr.message : 'Unknown' });
+        }
+      }
+
       const { password: _, ...userWithoutPassword } = updatedUser;
       res.json({ 
         message: isUpgradeToMover 
           ? "User upgraded to mover successfully. Mover profile created and notification sent." 
           : "User updated", 
         user: userWithoutPassword,
-        moverProfileCreated: isUpgradeToMover
+        moverProfileCreated: isUpgradeToMover,
+        emailChanged,
+        phoneChanged,
+        sessionsInvalidated: emailChanged || phoneChanged,
+        emailVerificationSent: emailChanged,
       });
     } catch (error) {
       console.error('Admin update user error:', error);

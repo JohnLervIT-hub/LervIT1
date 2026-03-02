@@ -111,16 +111,38 @@ export default function AdminUsersPage() {
 
   const updateUserMutation = useMutation({
     mutationFn: async (data: { id: string; name: string; email: string; phone: string; role: string }) => {
-      return apiRequest("PATCH", `/api/admin/users/${data.id}`, {
+      const res = await apiRequest("PATCH", `/api/admin/users/${data.id}`, {
         name: data.name,
         email: data.email,
         phone: data.phone,
         role: data.role,
       });
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Primary success toast
       toast({ title: "User updated successfully" });
-      // Invalidate all user queries using predicate to match any key starting with /api/users
+
+      // Secondary toasts for contact change side-effects
+      if (data.emailChanged) {
+        toast({
+          title: "Email changed — action required",
+          description: "A verification link was sent to the new address. A security alert was sent to the old address. The mover has been logged out and must verify before logging back in.",
+        });
+      }
+      if (data.emailChanged && data.stripeSynced !== false) {
+        toast({
+          title: "Stripe account synced",
+          description: "The new email has been pushed to their Stripe Connect account.",
+        });
+      }
+      if (data.phoneChanged) {
+        toast({
+          title: "Phone changed",
+          description: "An SMS alert was sent to the new phone number. The mover has been logged out.",
+        });
+      }
+
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey[0];
