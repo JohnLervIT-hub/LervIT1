@@ -2444,9 +2444,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // --- Post-update contact change flows ---
-      const emailChanged = email !== undefined && email !== existingUser[0].email;
-      const phoneChanged = phone !== undefined && phone !== existingUser[0].phone;
+      const normalizedNewEmail = email?.trim().toLowerCase();
+      const normalizedOldEmail = existingUser[0].email?.trim().toLowerCase();
+      const normalizedNewPhone = phone?.trim();
+      const normalizedOldPhone = existingUser[0].phone?.trim();
+      const emailChanged = normalizedNewEmail !== undefined && normalizedNewEmail !== normalizedOldEmail;
+      const phoneChanged = normalizedNewPhone !== undefined && normalizedNewPhone !== normalizedOldPhone;
       const isMover = updatedUser.role === 'mover';
+
+      logger.info({
+        env: process.env.NODE_ENV,
+        event: "admin_contact_change_eval",
+        userId,
+        emailProvided: email !== undefined,
+        emailChanged,
+        phoneProvided: phone !== undefined,
+        phoneChanged,
+        oldEmail: normalizedOldEmail,
+        newEmail: normalizedNewEmail,
+      });
 
       // Invalidate all sessions for this user if email or phone changed (force re-login)
       if (emailChanged || phoneChanged) {
