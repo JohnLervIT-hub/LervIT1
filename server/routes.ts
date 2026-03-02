@@ -10111,6 +10111,12 @@ Respond with VALID JSON only:
       if (fulfilmentPeriod === '7') fulfilmentCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       else if (fulfilmentPeriod === '30') fulfilmentCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       else if (fulfilmentPeriod === '90') fulfilmentCutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+      // Revenue period filter (7, 30 days or 'all')
+      const revenuePeriod = req.query.revenuePeriod as string || 'all';
+      let revenueCutoff: Date | null = null;
+      if (revenuePeriod === '7') revenueCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      else if (revenuePeriod === '30') revenueCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       
       // Get all bookings
       const allBookings = await db.select().from(bookings);
@@ -10161,8 +10167,16 @@ Respond with VALID JSON only:
       const pendingAbandoned = allAbandoned.filter(a => !a.recovered).length;
       const recoveryRate = totalAbandoned > 0 ? (recoveredAbandoned / totalAbandoned * 100).toFixed(1) : '0';
       
-      // Average booking value
+      // Average booking value (all-time)
       const avgBookingValue = completedCount > 0 ? (totalRevenue / completedCount).toFixed(2) : '0';
+
+      // Revenue period-filtered calculations (use updatedAt as proxy for completion date)
+      const revenueFilteredCompleted = revenueCutoff
+        ? completedBookings.filter(b => b.updatedAt && new Date(b.updatedAt) >= revenueCutoff!)
+        : completedBookings;
+      const revenueFilteredCount = revenueFilteredCompleted.length;
+      const revenueFilteredTotal = revenueFilteredCompleted.reduce((sum, b) => sum + parseFloat(b.price || '0'), 0);
+      const revenueFilteredAvg = revenueFilteredCount > 0 ? (revenueFilteredTotal / revenueFilteredCount).toFixed(2) : '0';
       
       // Booking status breakdown
       const statusBreakdown = {
@@ -10288,6 +10302,12 @@ Respond with VALID JSON only:
           totalRevenue: totalRevenue.toFixed(2),
           avgBookingValue,
           conversionRate,
+        },
+        revenue: {
+          totalRevenue: revenueFilteredTotal.toFixed(2),
+          avgBookingValue: revenueFilteredAvg,
+          completedCount: revenueFilteredCount,
+          period: revenuePeriod,
         },
         bookings: {
           paid: paidBookings,

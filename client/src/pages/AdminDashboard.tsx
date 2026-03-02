@@ -102,6 +102,12 @@ type GrowthMetrics = {
     verifiedMovers: number;
     liveGpsMovers: number;
   };
+  revenue: {
+    totalRevenue: string;
+    avgBookingValue: string;
+    completedCount: number;
+    period: string;
+  };
   abandoned: {
     total: number;
     recovered: number;
@@ -136,10 +142,15 @@ type GrowthMetrics = {
 function GrowthDashboard() {
   const { toast } = useToast();
   const [fulfilmentPeriod, setFulfilmentPeriod] = useState<string>('all');
+  const [revenuePeriod, setRevenuePeriod] = useState<string>('all');
 
-  const metricsUrl = fulfilmentPeriod !== 'all'
-    ? `/api/admin/growth-metrics?fulfilmentPeriod=${fulfilmentPeriod}`
-    : `/api/admin/growth-metrics`;
+  const metricsUrl = (() => {
+    const params = new URLSearchParams();
+    if (fulfilmentPeriod !== 'all') params.set('fulfilmentPeriod', fulfilmentPeriod);
+    if (revenuePeriod !== 'all') params.set('revenuePeriod', revenuePeriod);
+    const qs = params.toString();
+    return qs ? `/api/admin/growth-metrics?${qs}` : `/api/admin/growth-metrics`;
+  })();
 
   const { data: metrics, isLoading, error } = useQuery<GrowthMetrics>({
     queryKey: [metricsUrl],
@@ -207,13 +218,28 @@ function GrowthDashboard() {
         
         <Card>
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <DollarSign className="w-4 h-4" />
-              <span className="text-xs uppercase tracking-wide">Revenue</span>
+            <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <DollarSign className="w-4 h-4" />
+                <span className="text-xs uppercase tracking-wide">Revenue</span>
+              </div>
+              <Select value={revenuePeriod} onValueChange={setRevenuePeriod}>
+                <SelectTrigger className="h-6 text-xs w-24 px-2" data-testid="select-revenue-period">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="7">7 Days</SelectItem>
+                  <SelectItem value="30">30 Days</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-2xl font-bold">${metrics.overview.totalRevenue}</p>
+            <p className="text-2xl font-bold" data-testid="text-revenue-total">${metrics.revenue.totalRevenue}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Avg: ${metrics.overview.avgBookingValue}
+              Avg: ${metrics.revenue.avgBookingValue}
+              {metrics.revenue.completedCount > 0 && (
+                <span className="ml-1">({metrics.revenue.completedCount} jobs)</span>
+              )}
             </p>
           </CardContent>
         </Card>
