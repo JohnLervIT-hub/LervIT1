@@ -218,20 +218,10 @@ function GrowthDashboard() {
         
         <Card>
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <DollarSign className="w-4 h-4" />
               <span className="text-xs uppercase tracking-wide">Revenue</span>
             </div>
-            <Select value={revenuePeriod} onValueChange={setRevenuePeriod}>
-              <SelectTrigger className="h-8 text-xs w-full mb-2" data-testid="select-revenue-period">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="7">Last 7 Days</SelectItem>
-                <SelectItem value="30">Last 30 Days</SelectItem>
-              </SelectContent>
-            </Select>
             <p className="text-2xl font-bold" data-testid="text-revenue-total">${metrics.revenue?.totalRevenue ?? '—'}</p>
             <p className="text-xs text-muted-foreground mt-1">
               Avg: ${metrics.revenue?.avgBookingValue ?? '—'}
