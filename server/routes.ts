@@ -10104,6 +10104,13 @@ Respond with VALID JSON only:
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // Fulfilment period filter (7, 30, 90 days or 'all')
+      const fulfilmentPeriod = req.query.fulfilmentPeriod as string || 'all';
+      let fulfilmentCutoff: Date | null = null;
+      if (fulfilmentPeriod === '7') fulfilmentCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      else if (fulfilmentPeriod === '30') fulfilmentCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      else if (fulfilmentPeriod === '90') fulfilmentCutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
       
       // Get all bookings
       const allBookings = await db.select().from(bookings);
@@ -10186,7 +10193,12 @@ Respond with VALID JSON only:
         .leftJoin(moversTable, eq(moverPerformanceTable.moverId, moversTable.id))
         .leftJoin(usersTable, eq(moversTable.userId, usersTable.id));
 
-      const completedPerf = allPerformanceData.filter(p => p.totalMoveMinutes && p.totalMoveMinutes > 0);
+      // Apply period filter
+      const filteredPerf = fulfilmentCutoff
+        ? allPerformanceData.filter(p => p.createdAt && new Date(p.createdAt) >= fulfilmentCutoff!)
+        : allPerformanceData;
+
+      const completedPerf = filteredPerf.filter(p => p.totalMoveMinutes && p.totalMoveMinutes > 0);
       const totalMoves = completedPerf.length;
       const avgMoveMinutes = totalMoves > 0
         ? Math.round(completedPerf.reduce((sum, p) => sum + (p.totalMoveMinutes || 0), 0) / totalMoves)
@@ -10198,17 +10210,25 @@ Respond with VALID JSON only:
         ? Math.max(...completedPerf.map(p => p.totalMoveMinutes || 0))
         : 0;
 
+      // Average completed job distance from mover performance table
+      const perfWithDistance = completedPerf.filter(p => p.distanceKm && parseFloat(p.distanceKm) > 0);
+      const avgCompletedDistanceKm = perfWithDistance.length > 0
+        ? parseFloat((perfWithDistance.reduce((sum, p) => sum + parseFloat(p.distanceKm || '0'), 0) / perfWithDistance.length).toFixed(1))
+        : null;
+
       // Per-driver breakdown
-      const driverMap = new Map<string, { name: string; moverId: string; moves: number; totalMinutes: number; fastest: number; slowest: number }>();
+      const driverMap = new Map<string, { name: string; moverId: string; moves: number; totalMinutes: number; fastest: number; slowest: number; totalDistanceKm: number; distanceMoves: number }>();
       for (const p of completedPerf) {
         const key = p.moverId;
         const existing = driverMap.get(key);
         const mins = p.totalMoveMinutes || 0;
+        const dist = p.distanceKm ? parseFloat(p.distanceKm) : 0;
         if (existing) {
           existing.moves++;
           existing.totalMinutes += mins;
           existing.fastest = Math.min(existing.fastest, mins);
           existing.slowest = Math.max(existing.slowest, mins);
+          if (dist > 0) { existing.totalDistanceKm += dist; existing.distanceMoves++; }
         } else {
           driverMap.set(key, {
             name: p.moverName || 'Unknown',
@@ -10217,6 +10237,8 @@ Respond with VALID JSON only:
             totalMinutes: mins,
             fastest: mins,
             slowest: mins,
+            totalDistanceKm: dist > 0 ? dist : 0,
+            distanceMoves: dist > 0 ? 1 : 0,
           });
         }
       }
@@ -10230,6 +10252,7 @@ Respond with VALID JSON only:
           fastestMinutes: d.fastest,
           slowestMinutes: d.slowest,
           totalHours: parseFloat((d.totalMinutes / 60).toFixed(1)),
+          avgDistanceKm: d.distanceMoves > 0 ? parseFloat((d.totalDistanceKm / d.distanceMoves).toFixed(1)) : null,
         }))
         .sort((a, b) => b.totalMoves - a.totalMoves);
 
@@ -10289,7 +10312,9 @@ Respond with VALID JSON only:
           avgMoveHours: parseFloat((avgMoveMinutes / 60).toFixed(1)),
           fastestMoveMinutes: fastestMove,
           slowestMoveMinutes: slowestMove,
+          avgCompletedDistanceKm,
           driverPerformance,
+          period: fulfilmentPeriod,
         },
         trends: {
           dailyBookings,

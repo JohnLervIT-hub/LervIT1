@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -113,12 +114,15 @@ type GrowthMetrics = {
     avgMoveHours: number;
     fastestMoveMinutes: number;
     slowestMoveMinutes: number;
+    avgCompletedDistanceKm: number | null;
+    period: string;
     driverPerformance: {
       name: string;
       moverId: string;
       totalMoves: number;
       avgMinutes: number;
       fastestMinutes: number;
+      avgDistanceKm: number | null;
       slowestMinutes: number;
       totalHours: number;
     }[];
@@ -131,8 +135,18 @@ type GrowthMetrics = {
 
 function GrowthDashboard() {
   const { toast } = useToast();
+  const [fulfilmentPeriod, setFulfilmentPeriod] = useState<string>('all');
+
   const { data: metrics, isLoading, error } = useQuery<GrowthMetrics>({
-    queryKey: ["/api/admin/growth-metrics"],
+    queryKey: ["/api/admin/growth-metrics", fulfilmentPeriod],
+    queryFn: async () => {
+      const url = fulfilmentPeriod !== 'all'
+        ? `/api/admin/growth-metrics?fulfilmentPeriod=${fulfilmentPeriod}`
+        : `/api/admin/growth-metrics`;
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
     refetchInterval: 60000,
   });
   
@@ -143,6 +157,7 @@ function GrowthDashboard() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/growth-metrics"] });
+      queryClient.invalidateQueries({ predicate: q => q.queryKey[0] === "/api/admin/growth-metrics" });
       toast({
         title: "Performance Data Updated",
         description: `${data.newlyCreated} new records created from ${data.total} completed bookings.`,
@@ -181,7 +196,7 @@ function GrowthDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -231,6 +246,21 @@ function GrowthDashboard() {
             <p className="text-xs text-muted-foreground mt-1">
               {metrics.abandoned.recovered}/{metrics.abandoned.total} recovered
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Route className="w-4 h-4" />
+              <span className="text-xs uppercase tracking-wide">Avg Distance</span>
+            </div>
+            <p className="text-2xl font-bold" data-testid="text-avg-distance">
+              {metrics.fulfilment.avgCompletedDistanceKm !== null
+                ? `${metrics.fulfilment.avgCompletedDistanceKm} km`
+                : '—'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">per completed job</p>
           </CardContent>
         </Card>
       </div>
@@ -342,7 +372,7 @@ function GrowthDashboard() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
                 <Clock className="w-4 h-4" />
@@ -352,20 +382,36 @@ function GrowthDashboard() {
                 Time tracking for completed moves by driver
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => backfillMutation.mutate()}
-              disabled={backfillMutation.isPending}
-              data-testid="button-backfill-performance"
-            >
-              {backfillMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-              ) : (
-                <Activity className="w-4 h-4 mr-1" />
-              )}
-              Sync Past Moves
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                <Select value={fulfilmentPeriod} onValueChange={setFulfilmentPeriod}>
+                  <SelectTrigger className="h-8 text-xs w-32" data-testid="select-fulfilment-period">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="7">Last 7 Days</SelectItem>
+                    <SelectItem value="30">Last 30 Days</SelectItem>
+                    <SelectItem value="90">Last 90 Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => backfillMutation.mutate()}
+                disabled={backfillMutation.isPending}
+                data-testid="button-backfill-performance"
+              >
+                {backfillMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Activity className="w-4 h-4 mr-1" />
+                )}
+                Sync Past Moves
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -420,6 +466,7 @@ function GrowthDashboard() {
                           <th className="text-center p-3 font-medium">Avg Time</th>
                           <th className="text-center p-3 font-medium hidden sm:table-cell">Fastest</th>
                           <th className="text-center p-3 font-medium hidden sm:table-cell">Slowest</th>
+                          <th className="text-center p-3 font-medium hidden md:table-cell">Avg Distance</th>
                           <th className="text-right p-3 font-medium">Total Hours</th>
                         </tr>
                       </thead>
@@ -442,6 +489,9 @@ function GrowthDashboard() {
                               {driver.slowestMinutes >= 60
                                 ? `${(driver.slowestMinutes / 60).toFixed(1)}h`
                                 : `${driver.slowestMinutes}m`}
+                            </td>
+                            <td className="p-3 text-center text-blue-500 hidden md:table-cell">
+                              {driver.avgDistanceKm !== null ? `${driver.avgDistanceKm} km` : '—'}
                             </td>
                             <td className="p-3 text-right font-medium">{driver.totalHours}h</td>
                           </tr>
