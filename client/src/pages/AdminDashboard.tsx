@@ -232,11 +232,11 @@ function GrowthDashboard() {
                 <SelectItem value="30">Last 30 Days</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-2xl font-bold" data-testid="text-revenue-total">${metrics.revenue.totalRevenue}</p>
+            <p className="text-2xl font-bold" data-testid="text-revenue-total">${metrics.revenue?.totalRevenue ?? '—'}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Avg: ${metrics.revenue.avgBookingValue}
-              {metrics.revenue.completedCount > 0 && (
-                <span className="ml-1">({metrics.revenue.completedCount} jobs)</span>
+              Avg: ${metrics.revenue?.avgBookingValue ?? '—'}
+              {(metrics.revenue?.completedCount ?? 0) > 0 && (
+                <span className="ml-1">({metrics.revenue!.completedCount} jobs)</span>
               )}
             </p>
           </CardContent>
