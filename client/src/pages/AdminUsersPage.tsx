@@ -232,6 +232,32 @@ export default function AdminUsersPage() {
     },
   });
 
+  const forceVerifyEmailMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/force-verify-email`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Verification email sent",
+        description: data.message || "A verification link was sent. The user has been logged out and must verify before logging in.",
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/users');
+        },
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to send verification email",
+        description: error.message || "An error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleEditClick = (u: UserType) => {
     setEditingUser(u);
     setEditForm({
@@ -728,19 +754,27 @@ export default function AdminUsersPage() {
             </div>
           </div>
 
-          {editingUser && !editingUser.emailVerified && (
-            <div className="px-1 pb-2">
-              <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
-                <Mail className="w-4 h-4 text-amber-600 shrink-0" />
-                <p className="text-sm text-amber-700 dark:text-amber-400 flex-1">Email not verified</p>
+          {editingUser && (
+            <div className="px-1 pb-2 space-y-2">
+              {!editingUser.emailVerified && (
+                <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                  <Mail className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-400 flex-1">Email not verified</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2">
+                <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                <p className="text-sm text-muted-foreground flex-1">
+                  {editingUser.emailVerified ? "Email verified" : "Force-send a new verification link"}
+                </p>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => resendVerificationMutation.mutate(editForm.email)}
-                  disabled={resendVerificationMutation.isPending}
-                  data-testid="button-resend-verification"
+                  onClick={() => forceVerifyEmailMutation.mutate(editingUser.id)}
+                  disabled={forceVerifyEmailMutation.isPending}
+                  data-testid="button-force-verify-email"
                 >
-                  {resendVerificationMutation.isPending ? "Sending..." : "Resend Email"}
+                  {forceVerifyEmailMutation.isPending ? "Sending..." : "Send Verification"}
                 </Button>
               </div>
             </div>

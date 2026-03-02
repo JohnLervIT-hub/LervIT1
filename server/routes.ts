@@ -2562,6 +2562,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/admin/users/:id/force-verify-email - Reset emailVerified, send verification email, invalidate sessions
+  app.post("/api/admin/users/:id/force-verify-email", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const userId = req.params.id;
+
+      const user = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (user.length === 0) return res.status(404).json({ error: "User not found" });
+
+      const { randomBytes } = await import("crypto");
+      const verificationToken = randomBytes(32).toString("hex");
+      const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db.update(usersTable)
+        .set({ emailVerified: false, verificationToken, verificationTokenExpiry })
+        .where(eq(usersTable.id, userId));
+
+      // Invalidate all sessions so they must re-verify before logging in
+      await pool.query(`DELETE FROM user_sessions WHERE sess->>'userId' = $1`, [userId]);
+
+      // Send verification email to current address
+      await notificationService.sendVerificationEmail(user[0].email, user[0].name || 'User', verificationToken);
+
+      logger.info({
+        env: process.env.NODE_ENV,
+        event: "admin_force_verify_email",
+        userId,
+        email: user[0].email,
+        adminId: (req as any).user?.id,
+      });
+
+      res.json({ message: "Verification email sent. User has been logged out and must verify before logging in." });
+    } catch (error) {
+      console.error("Admin force-verify-email error:", error);
+      res.status(500).json({ error: "Failed to send verification email" });
+    }
+  });
+
   // DELETE /api/admin/users/:id - Admin delete user (for abandoned accounts)
   app.delete("/api/admin/users/:id", async (req: Request, res: Response) => {
     try {
