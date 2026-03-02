@@ -137,16 +137,12 @@ function GrowthDashboard() {
   const { toast } = useToast();
   const [fulfilmentPeriod, setFulfilmentPeriod] = useState<string>('all');
 
+  const metricsUrl = fulfilmentPeriod !== 'all'
+    ? `/api/admin/growth-metrics?fulfilmentPeriod=${fulfilmentPeriod}`
+    : `/api/admin/growth-metrics`;
+
   const { data: metrics, isLoading, error } = useQuery<GrowthMetrics>({
-    queryKey: ["/api/admin/growth-metrics", fulfilmentPeriod],
-    queryFn: async () => {
-      const url = fulfilmentPeriod !== 'all'
-        ? `/api/admin/growth-metrics?fulfilmentPeriod=${fulfilmentPeriod}`
-        : `/api/admin/growth-metrics`;
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch');
-      return res.json();
-    },
+    queryKey: [metricsUrl],
     refetchInterval: 60000,
   });
   
@@ -156,8 +152,7 @@ function GrowthDashboard() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/growth-metrics"] });
-      queryClient.invalidateQueries({ predicate: q => q.queryKey[0] === "/api/admin/growth-metrics" });
+      queryClient.invalidateQueries({ predicate: q => typeof q.queryKey[0] === 'string' && (q.queryKey[0] as string).startsWith("/api/admin/growth-metrics") });
       toast({
         title: "Performance Data Updated",
         description: `${data.newlyCreated} new records created from ${data.total} completed bookings.`,
