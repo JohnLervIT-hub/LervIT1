@@ -10193,9 +10193,13 @@ Respond with VALID JSON only:
         .leftJoin(moversTable, eq(moverPerformanceTable.moverId, moversTable.id))
         .leftJoin(usersTable, eq(moversTable.userId, usersTable.id));
 
-      // Apply period filter
+      // Apply period filter using actual completion date (unloadingCompletedAt),
+      // not createdAt which reflects when the DB row was inserted (misleading for backfilled records)
       const filteredPerf = fulfilmentCutoff
-        ? allPerformanceData.filter(p => p.createdAt && new Date(p.createdAt) >= fulfilmentCutoff!)
+        ? allPerformanceData.filter(p => {
+            const completionDate = p.unloadingCompletedAt || p.createdAt;
+            return completionDate && new Date(completionDate) >= fulfilmentCutoff!;
+          })
         : allPerformanceData;
 
       const completedPerf = filteredPerf.filter(p => p.totalMoveMinutes && p.totalMoveMinutes > 0);
