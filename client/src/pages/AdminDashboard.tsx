@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -218,9 +219,32 @@ function GrowthDashboard() {
         
         <Card>
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+            <div className="flex items-center gap-1 text-muted-foreground mb-1">
               <DollarSign className="w-4 h-4" />
               <span className="text-xs uppercase tracking-wide">Revenue</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-5 w-5 ml-0.5" data-testid="button-revenue-period">
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => setRevenuePeriod('all')} data-testid="option-revenue-all" className="flex items-center justify-between gap-4">
+                    All Time {revenuePeriod === 'all' && <Check className="w-3 h-3" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setRevenuePeriod('7')} data-testid="option-revenue-7" className="flex items-center justify-between gap-4">
+                    Last 7 Days {revenuePeriod === '7' && <Check className="w-3 h-3" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setRevenuePeriod('30')} data-testid="option-revenue-30" className="flex items-center justify-between gap-4">
+                    Last 30 Days {revenuePeriod === '30' && <Check className="w-3 h-3" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {revenuePeriod !== 'all' && (
+                <span className="text-xs ml-1">
+                  ({revenuePeriod === '7' ? '7d' : '30d'})
+                </span>
+              )}
             </div>
             <p className="text-2xl font-bold" data-testid="text-revenue-total">${metrics.revenue?.totalRevenue ?? '—'}</p>
             <p className="text-xs text-muted-foreground mt-1">
