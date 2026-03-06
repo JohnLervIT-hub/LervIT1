@@ -362,8 +362,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         url.searchParams.append('sessiontoken', sessiontoken);
       }
       
+      // Forward the browser's Referer/Origin so the request passes HTTP Referrer restrictions on the key
+      const forwardedReferer = req.headers['referer'] || req.headers['origin'] || '';
+      const fetchHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 LervIT-Server/1.0',
+      };
+      if (forwardedReferer) {
+        fetchHeaders['Referer'] = forwardedReferer;
+      }
+
       // Make request to Google Places API
-      const response = await fetch(url.toString());
+      const response = await fetch(url.toString(), { headers: fetchHeaders });
       
       if (!response.ok) {
         console.error('[PLACES API] Google API error:', response.status);
@@ -373,6 +382,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = await response.json();
       
       // Return predictions to client (without exposing API key)
+      if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+        console.error(`[PLACES API] Google returned status: ${data.status} — error_message: ${data.error_message || 'none'} — forwarded referer: ${forwardedReferer || 'none'}`);
+      }
+
       res.json({
         predictions: data.predictions || [],
         status: data.status

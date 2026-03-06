@@ -5,6 +5,26 @@ const GOOGLE_MAPS_API_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 const client = new Client({});
 
+// Server-side calls to Google Maps must include a Referer header that matches
+// the HTTP Referrer restrictions configured on the API key in Google Cloud Console.
+// We derive the app URL from Replit environment variables.
+function getAppReferer(): string {
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}/`;
+  }
+  if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
+    return `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/`;
+  }
+  return "https://lervit.replit.app/";
+}
+
+const AXIOS_CONFIG = {
+  headers: {
+    Referer: getAppReferer(),
+    "User-Agent": "Mozilla/5.0 LervIT-Server/1.0",
+  },
+};
+
 export interface DrivingDistance {
   distanceKm: number;
   durationMinutes: number;
@@ -43,6 +63,7 @@ export async function getDrivingDistance(
         key: GOOGLE_MAPS_API_KEY,
       },
       timeout: 5000,
+      ...AXIOS_CONFIG,
     });
 
     if (response.data.status !== "OK") {
@@ -154,6 +175,7 @@ export async function getBatchDrivingDistances(
         key: GOOGLE_MAPS_API_KEY,
       },
       timeout: 10000, // Longer timeout for batch requests
+      ...AXIOS_CONFIG,
     });
 
     if (response.data.status !== "OK") {
@@ -219,6 +241,7 @@ export async function geocodeAddress(address: string): Promise<GeocodingResult> 
         key: GOOGLE_MAPS_API_KEY,
       },
       timeout: 5000,
+      ...AXIOS_CONFIG,
     });
 
     if (response.data.status !== "OK" || !response.data.results[0]) {
@@ -273,6 +296,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
         key: GOOGLE_MAPS_API_KEY,
       },
       timeout: 5000,
+      ...AXIOS_CONFIG,
     });
 
     if (response.data.status !== "OK" || !response.data.results[0]) {
