@@ -1,22 +1,5 @@
-// LervIT final hardening: Location Provider abstraction for Google Places
-// This abstraction layer future-proofs against Google Places API deprecation
-// All Google Places calls should go through this module for easy migration
-
-/**
- * GOOGLE PLACES API DEPRECATION NOTES:
- * 
- * As of March 1st, 2025:
- * - google.maps.places.PlacesService is deprecated for new customers
- * - Existing customers can continue using until 12+ months notice
- * - Recommended migration: Use google.maps.places.Place (new API)
- * 
- * TODO (Post-MVP):
- * 1. Migrate from PlacesService to Places API (New)
- * 2. Update autocomplete to use PlaceAutocomplete widget
- * 3. Update geocoding to use Places API v2
- * 
- * Migration guide: https://developers.google.com/maps/documentation/javascript/places-migration-overview
- */
+// Location Provider abstraction for Google Places
+// Uses google.maps.places.Place (new API) — migrated from deprecated PlacesService
 
 export interface AddressPrediction {
   placeId: string;
@@ -98,65 +81,52 @@ export async function autocompleteAddress(
 
 /**
  * Get place details from a place ID
- * Uses Google Maps PlacesService (deprecated but still functional)
- * 
- * TODO: Migrate to Places API v2 Place.fetchFields()
+ * Uses the new google.maps.places.Place API (replaces deprecated PlacesService)
  */
 export async function getPlaceDetails(
   placeId: string,
-  placesService: google.maps.places.PlacesService
 ): Promise<PlaceDetails> {
-  return new Promise((resolve, reject) => {
-    if (!placesService) {
-      reject(createLocationError('API_ERROR', 'PlacesService not initialized'));
-      return;
+  if (!window.google?.maps?.places) {
+    throw createLocationError('API_ERROR', 'Google Maps Places library not loaded');
+  }
+
+  const PlaceClass = (window.google.maps.places as any).Place;
+  if (!PlaceClass) {
+    throw createLocationError('API_ERROR', 'google.maps.places.Place not available');
+  }
+
+  try {
+    const place = new PlaceClass({ id: placeId });
+    await place.fetchFields({
+      fields: ['formattedAddress', 'location', 'addressComponents', 'id', 'displayName'],
+    });
+
+    if (!place.location) {
+      throw createLocationError('NO_RESULTS', 'No location found for place');
     }
 
-    placesService.getDetails(
-      {
-        placeId,
-        fields: [
-          'formatted_address',
-          'geometry',
-          'name',
-          'address_components',
-          'place_id',
-        ],
-      },
-      (result, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && result) {
-          const location = result.geometry?.location;
-          
-          if (!location) {
-            reject(createLocationError('NO_RESULTS', 'No location found for place'));
-            return;
-          }
+    const components: any[] = place.addressComponents || [];
+    const getComponent = (type: string): string | undefined => {
+      return components.find((c: any) => c.types?.includes(type))?.longText;
+    };
 
-          // Extract address components
-          const components = result.address_components || [];
-          const getComponent = (type: string): string | undefined => {
-            return components.find(c => c.types.includes(type))?.long_name;
-          };
-
-          resolve({
-            placeId: result.place_id || placeId,
-            formattedAddress: result.formatted_address || '',
-            latitude: location.lat(),
-            longitude: location.lng(),
-            name: result.name,
-            streetNumber: getComponent('street_number'),
-            route: getComponent('route'),
-            city: getComponent('locality') || getComponent('sublocality'),
-            province: getComponent('administrative_area_level_1'),
-            postalCode: getComponent('postal_code'),
-            country: getComponent('country'),
-          });
-        } else {
-          reject(createLocationError('API_ERROR', `PlacesService error: ${status}`));
-        }
-      }
-    );
-  });
+    return {
+      placeId: place.id || placeId,
+      formattedAddress: place.formattedAddress || '',
+      latitude: place.location.lat(),
+      longitude: place.location.lng(),
+      name: place.displayName,
+      streetNumber: getComponent('street_number'),
+      route: getComponent('route'),
+      city: getComponent('locality') || getComponent('sublocality'),
+      province: getComponent('administrative_area_level_1'),
+      postalCode: getComponent('postal_code'),
+      country: getComponent('country'),
+    };
+  } catch (error) {
+    if (isLocationProviderError(error)) throw error;
+    throw createLocationError('API_ERROR', 'Failed to fetch place details', error);
+  }
 }
 
 /**
@@ -165,9 +135,8 @@ export async function getPlaceDetails(
  */
 export async function geocodePlaceId(
   placeId: string,
-  placesService: google.maps.places.PlacesService
 ): Promise<GeocodedLocation> {
-  const details = await getPlaceDetails(placeId, placesService);
+  const details = await getPlaceDetails(placeId);
   return {
     latitude: details.latitude,
     longitude: details.longitude,

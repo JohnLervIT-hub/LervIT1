@@ -22,7 +22,6 @@ interface CustomAddressInputProps {
   "data-testid"?: string;
 }
 
-// Generate session token for billing optimization
 function generateSessionToken(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
@@ -47,41 +46,26 @@ export function CustomAddressInput({
   const sessionTokenRef = useRef<string>(generateSessionToken());
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const { isLoaded: mapsLoaded, loadMaps } = useGoogleMaps();
 
-  // Trigger Google Maps loading when component mounts
   useEffect(() => {
     loadMaps();
   }, [loadMaps]);
 
-  // Initialize Places Service for getting place details
-  useEffect(() => {
-    if (!mapsLoaded || !window.google?.maps?.places?.PlacesService) return;
-    
-    // Create a hidden div element for PlacesService
-    const div = document.createElement('div');
-    placesServiceRef.current = new window.google.maps.places.PlacesService(div);
-  }, [mapsLoaded]);
-
-  // Sync with parent value
   useEffect(() => {
     setInputValue(value);
   }, [value]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch predictions from Google Places API
   const fetchPredictions = useCallback(async (input: string) => {
     if (!input.trim() || input.length < 3) {
       setPredictions([]);
@@ -92,30 +76,13 @@ export function CustomAddressInput({
     setIsLoading(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-      const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
-      
-      url.searchParams.append('input', input);
-      url.searchParams.append('key', apiKey);
-      url.searchParams.append('types', 'address');
-      url.searchParams.append('components', 'country:ca');
-      url.searchParams.append('sessiontoken', sessionTokenRef.current);
-      
-      // Bias to Calgary
-      url.searchParams.append('location', '51.0447,-114.0719');
-      url.searchParams.append('radius', '50000');
-
-      // Note: Direct API calls from browser will fail due to CORS
-      // We need to proxy through our backend
       const response = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&sessiontoken=${sessionTokenRef.current}`);
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch predictions');
-      }
+      if (!response.ok) throw new Error('Failed to fetch predictions');
 
       const data = await response.json();
       
-      if (data.predictions) {
+      if (data.predictions && data.predictions.length > 0) {
         setPredictions(data.predictions);
         setIsOpen(true);
       } else {
@@ -131,64 +98,66 @@ export function CustomAddressInput({
     }
   }, []);
 
-  // Debounced input handler
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInputValue(newValue);
     setSelectedIndex(-1);
-    onChange(newValue); // Update parent for manual entry
+    onChange(newValue);
 
-    // Clear existing timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Set new timer for API call
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
       fetchPredictions(newValue);
-    }, 300); // 300ms debounce
+    }, 300);
   };
 
-  // Get place details when prediction is selected
   const handleSelectPrediction = async (prediction: Prediction) => {
     setInputValue(prediction.description);
     setIsOpen(false);
     setPredictions([]);
 
-    // Get detailed place information
-    if (placesServiceRef.current) {
-      placesServiceRef.current.getDetails(
-        {
-          placeId: prediction.place_id,
-          fields: ['formatted_address', 'geometry', 'address_components', 'place_id'],
-        },
-        (place, status) => {
-          if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-            onChange(prediction.description, place);
-            
-            // Generate new session token after successful selection
-            sessionTokenRef.current = generateSessionToken();
-          } else {
-            // Fallback if details fetch fails
-            onChange(prediction.description);
-          }
-        }
-      );
-    } else {
+    try {
+      const PlaceClass = mapsLoaded && window.google?.maps?.places
+        ? (window.google.maps.places as any).Place
+        : null;
+
+      if (PlaceClass) {
+        const place = new PlaceClass({ id: prediction.place_id });
+        await place.fetchFields({
+          fields: ['formattedAddress', 'location', 'addressComponents', 'id'],
+        });
+
+        const placeResult: google.maps.places.PlaceResult = {
+          formatted_address: place.formattedAddress || prediction.description,
+          place_id: place.id || prediction.place_id,
+          geometry: place.location
+            ? ({ location: place.location } as google.maps.places.PlaceGeometry)
+            : undefined,
+          address_components: place.addressComponents?.map((c: any) => ({
+            long_name: c.longText || '',
+            short_name: c.shortText || '',
+            types: c.types || [],
+          })),
+        };
+
+        onChange(prediction.description, placeResult);
+      } else {
+        onChange(prediction.description);
+      }
+
+      sessionTokenRef.current = generateSessionToken();
+    } catch (error) {
+      console.error('Error fetching place details:', error);
       onChange(prediction.description);
     }
   };
 
-  // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen || predictions.length === 0) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => 
-          prev < predictions.length - 1 ? prev + 1 : prev
-        );
+        setSelectedIndex(prev => prev < predictions.length - 1 ? prev + 1 : prev);
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -207,7 +176,6 @@ export function CustomAddressInput({
     }
   };
 
-  // Clear input
   const handleClear = () => {
     setInputValue('');
     setPredictions([]);
@@ -217,7 +185,6 @@ export function CustomAddressInput({
 
   return (
     <div ref={wrapperRef} className="relative">
-      {/* Input Field */}
       <div className="relative">
         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10 pointer-events-none" />
         <Input
@@ -228,9 +195,7 @@ export function CustomAddressInput({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={() => {
-            if (predictions.length > 0) {
-              setIsOpen(true);
-            }
+            if (predictions.length > 0) setIsOpen(true);
           }}
           data-testid={dataTestId}
           autoComplete="off"
@@ -250,9 +215,8 @@ export function CustomAddressInput({
         </div>
       </div>
 
-      {/* Custom Dropdown - Uber Style */}
       {isOpen && predictions.length > 0 && (
-        <div 
+        <div
           className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg overflow-hidden"
           data-testid={`${dataTestId}-dropdown`}
         >
