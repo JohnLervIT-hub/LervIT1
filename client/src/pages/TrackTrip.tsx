@@ -99,6 +99,22 @@ function interpolatePosition(
   };
 }
 
+// Haversine distance in km between two lat/lng points
+function haversineKm(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) *
+      Math.cos((b.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(h));
+}
+
 export default function TrackTrip() {
   const [, params] = useRoute("/track-trip/:bookingId");
   const bookingId = params?.bookingId;
@@ -136,6 +152,8 @@ export default function TrackTrip() {
   const isFirstPositionRef = useRef(true);
   const markerRef = useRef<google.maps.Marker | null>(null);
   const hasFittedBoundsRef = useRef(false);
+  const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
+  const lastDirectionsCalcRef = useRef<{ lat: number; lng: number; status: string } | null>(null);
 
   // Resilient polling - 3 second intervals for smoother tracking
   const { data: locationData, isLoading, pollingState } = useResilientPolling<LocationData>(
@@ -175,7 +193,10 @@ export default function TrackTrip() {
     }
   }, [locationData?.status]);
 
-  // Smooth animation of vehicle position - uses direct marker manipulation for reliability
+  // Smooth animation of vehicle position
+  // React state (animatedPosition) is only updated at poll time — NOT inside the RAF loop.
+  // The marker moves smoothly via direct markerRef.setPosition() calls at 60fps.
+  // This prevents ~60 React re-renders per second during animation.
   useEffect(() => {
     if (!locationData?.currentLocation) {
       setAnimatedPosition(null);
@@ -199,51 +220,45 @@ export default function TrackTrip() {
       return;
     }
 
-    // First position - set immediately
+    // Update React state once (at poll time) so marker mounts/ETA badge positions correctly
+    setAnimatedPosition(newPosition);
+    targetPositionRef.current = newPosition;
+
+    // First position — snap immediately, no animation needed
     if (isFirstPositionRef.current || !currentAnimatedRef.current) {
-      setAnimatedPosition(newPosition);
       currentAnimatedRef.current = newPosition;
-      targetPositionRef.current = newPosition;
       isFirstPositionRef.current = false;
-      // Also update marker directly if it exists
       if (markerRef.current) {
         markerRef.current.setPosition(newPosition);
       }
       return;
     }
 
-    // Cancel any existing animation
+    // Cancel any in-progress animation
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
 
     const startPosition = { ...currentAnimatedRef.current };
-    targetPositionRef.current = newPosition;
     const startTime = performance.now();
-    const duration = 2500; // Slightly longer for smoother animation
+    const duration = 2500;
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // Smooth ease-out cubic
       const easeProgress = 1 - Math.pow(1 - progress, 3);
-      
       const interpolated = interpolatePosition(startPosition, newPosition, easeProgress);
-      
-      // Update marker directly for smoother animation
+
+      // Direct DOM update only — zero React renders during animation
       if (markerRef.current) {
         markerRef.current.setPosition(interpolated);
       }
-      
-      // Also update state for React components that depend on it
-      setAnimatedPosition(interpolated);
       currentAnimatedRef.current = interpolated;
 
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
         currentAnimatedRef.current = newPosition;
-        setAnimatedPosition(newPosition);
       }
     };
 
@@ -256,82 +271,57 @@ export default function TrackTrip() {
     };
   }, [locationData?.currentLocation?.latitude, locationData?.currentLocation?.longitude]);
 
-  // Calculate directions
+  // Calculate directions — throttled to avoid firing on every 3-second poll.
+  // A new route is only requested when:
+  //   (a) the booking status changes (en_route_to_pickup → en_route_to_dropoff, etc.), OR
+  //   (b) the mover has moved more than 300 m from the last calculation origin.
+  // DirectionsService is created once and stored in a ref.
   useEffect(() => {
     if (!locationData || !isLoaded) return;
 
-    const directionsService = new google.maps.DirectionsService();
+    // Create service once
+    if (!directionsServiceRef.current) {
+      directionsServiceRef.current = new google.maps.DirectionsService();
+    }
 
-    const origin = locationData.currentLocation 
-      ? { lat: locationData.currentLocation.latitude, lng: locationData.currentLocation.longitude }
+    const currentStatus = locationData.status;
+    const currentLoc = locationData.currentLocation;
+    const origin = currentLoc
+      ? { lat: currentLoc.latitude, lng: currentLoc.longitude }
       : { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude };
 
-    const destination = { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude };
-
-    if (locationData.currentLocation && locationData.status === "en_route_to_pickup") {
-      // Mover going to pickup
-      directionsService.route(
-        {
-          origin: origin,
-          destination: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude },
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === google.maps.DirectionsStatus.OK && result) {
-            setDirections(result);
-            const leg = result.routes[0].legs[0];
-            const durationMinutes = Math.ceil((leg.duration?.value || 0) / 60);
-            setRouteInfo({
-              distance: leg.distance?.text || '',
-              duration: leg.duration?.text || '',
-              durationMinutes,
-            });
-          }
-        }
+    // Throttle check — skip if status unchanged and mover moved < 300 m
+    if (lastDirectionsCalcRef.current) {
+      const sameStatus = lastDirectionsCalcRef.current.status === currentStatus;
+      const moved = haversineKm(
+        { lat: lastDirectionsCalcRef.current.lat, lng: lastDirectionsCalcRef.current.lng },
+        origin
       );
-    } else if (locationData.currentLocation) {
-      // Mover going to dropoff
-      directionsService.route(
-        {
-          origin: origin,
-          destination: destination,
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === google.maps.DirectionsStatus.OK && result) {
-            setDirections(result);
-            const leg = result.routes[0].legs[0];
-            const durationMinutes = Math.ceil((leg.duration?.value || 0) / 60);
-            setRouteInfo({
-              distance: leg.distance?.text || '',
-              duration: leg.duration?.text || '',
-              durationMinutes,
-            });
-          }
-        }
-      );
-    } else {
-      // No live location - show pickup to dropoff
-      directionsService.route(
-        {
-          origin: { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude },
-          destination: destination,
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === google.maps.DirectionsStatus.OK && result) {
-            setDirections(result);
-            const leg = result.routes[0].legs[0];
-            const durationMinutes = Math.ceil((leg.duration?.value || 0) / 60);
-            setRouteInfo({
-              distance: leg.distance?.text || '',
-              duration: leg.duration?.text || '',
-              durationMinutes,
-            });
-          }
-        }
-      );
+      if (sameStatus && moved < 0.3) return;
     }
+
+    lastDirectionsCalcRef.current = { lat: origin.lat, lng: origin.lng, status: currentStatus };
+
+    const destination = { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude };
+    const routeDest =
+      currentLoc && currentStatus === "en_route_to_pickup"
+        ? { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude }
+        : destination;
+
+    directionsServiceRef.current.route(
+      { origin, destination: routeDest, travelMode: google.maps.TravelMode.DRIVING },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          setDirections(result);
+          const leg = result.routes[0].legs[0];
+          setRouteInfo({
+            distance: leg.distance?.text || "",
+            duration: leg.duration?.text || "",
+            durationMinutes: Math.ceil((leg.duration?.value || 0) / 60),
+          });
+        }
+      }
+    );
   }, [locationData, isLoaded]);
 
   // Fit map bounds once when both map and data are ready (on mount/remount)
@@ -497,10 +487,10 @@ export default function TrackTrip() {
           />
         )}
 
-        {/* ETA bubble on map */}
+        {/* ETA bubble on map — positioned at raw server location (updates every poll, not every frame) */}
         {routeInfo && currentLocation && (
           <OverlayView
-            position={animatedPosition || { lat: currentLocation.latitude, lng: currentLocation.longitude }}
+            position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
             mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
           >
             <div className="relative -translate-x-1/2 -translate-y-16">
