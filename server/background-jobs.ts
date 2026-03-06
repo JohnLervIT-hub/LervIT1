@@ -13,59 +13,75 @@ const PAYMENT_REMINDER_MINUTES = 15; // Send reminder 15 mins before expiry
 // Track sent reminders in memory (simple approach for MVP)
 const sentReminders = new Set<string>();
 
+// Per-process mutex: prevents the same job from running twice within one process instance.
+// Combined with atomic DB updates in each job, this also protects against duplicate
+// emails when Replit briefly runs two instances during a rolling deploy.
+const runningJobs = new Set<string>();
+
+async function withJobLock<T>(jobName: string, fn: () => Promise<T>): Promise<T | null> {
+  if (runningJobs.has(jobName)) {
+    logger.warn({ event: 'job_skipped', jobName }, `Job ${jobName} already running, skipping tick`);
+    return null;
+  }
+  runningJobs.add(jobName);
+  try {
+    return await fn();
+  } finally {
+    runningJobs.delete(jobName);
+  }
+}
+
 export function initBackgroundJobs() {
   logger.info({ event: 'background_jobs', action: 'init' }, 'Initializing background jobs');
 
+  // Merged into a single tick (was two separate */5 schedules competing for the DB)
   cron.schedule('*/5 * * * *', async () => {
-    await expireOldNotifications();
+    await withJobLock('expire_notifications', expireOldNotifications);
+    await withJobLock('expire_stale_bookings', expireStaleBookings);
   });
 
-  cron.schedule('*/5 * * * *', async () => {
-    await expireStaleBookings();
+  // Offset by 1 min so it never fires at the same second as the */5 job above
+  cron.schedule('1-59/2 * * * *', async () => {
+    await withJobLock('payment_reminders', sendPaymentReminders);
   });
-  
-  // Send payment reminders every 2 minutes
-  cron.schedule('*/2 * * * *', async () => {
-    await sendPaymentReminders();
-  });
-  
-  // Detect and recover orphaned payments every 10 minutes
-  cron.schedule('*/10 * * * *', async () => {
-    await recoverOrphanedPayments();
+
+  // Offset to minute :03 so it doesn't collide with the :00 batch
+  cron.schedule('3,13,23,33,43,53 * * * *', async () => {
+    await withJobLock('orphaned_payments', recoverOrphanedPayments);
   });
 
   cron.schedule('0 3 * * *', async () => {
-    await dailyCleanup();
+    await withJobLock('daily_cleanup', dailyCleanup);
   });
-  
-  // Expire past scheduled job notifications every 15 minutes
-  cron.schedule('*/15 * * * *', async () => {
-    await expirePastScheduledJobs();
+
+  // Offset to minute :07 to spread load
+  cron.schedule('7,22,37,52 * * * *', async () => {
+    await withJobLock('expire_past_jobs', expirePastScheduledJobs);
   });
-  
-  // Auto-complete past-dated paid bookings every hour (enables reviews)
-  cron.schedule('0 * * * *', async () => {
-    await autoCompletePastPaidBookings();
+
+  // Offset to minute :02 (not :00) to avoid colliding with other hourly jobs
+  cron.schedule('2 * * * *', async () => {
+    await withJobLock('auto_complete_bookings', autoCompletePastPaidBookings);
   });
-  
-  // Auto-cancel unpaid past-dated bookings every hour (clears mover dashboards)
-  cron.schedule('5 * * * *', async () => {
-    await cancelPastDatedBookings();
+
+  // Offset to minute :06 (not :05) for same reason
+  cron.schedule('6 * * * *', async () => {
+    await withJobLock('cancel_past_bookings', cancelPastDatedBookings);
   });
-  
-  // Send abandoned booking reminders every 30 minutes
-  cron.schedule('*/30 * * * *', async () => {
-    await sendAbandonedBookingReminders();
+
+  // Offset to minute :15 and :45 instead of :00 and :30
+  cron.schedule('15,45 * * * *', async () => {
+    await withJobLock('abandoned_reminders', sendAbandonedBookingReminders);
   });
-  
-  // Send Stripe onboarding reminders every 6 hours
-  cron.schedule('0 */6 * * *', async () => {
-    await sendStripeOnboardingReminders();
+
+  // Offset to minute :10 of the 6-hour interval
+  cron.schedule('10 */6 * * *', async () => {
+    await withJobLock('stripe_onboarding_reminders', sendStripeOnboardingReminders);
   });
-  
-  // Send profile completion reminders every 6 hours (offset by 3 hours from Stripe reminders)
-  cron.schedule('0 3,9,15,21 * * *', async () => {
-    await sendProfileCompletionReminders();
+
+  // Offset to minute :20 of the 6-hour interval
+  cron.schedule('20 3,9,15,21 * * *', async () => {
+    await withJobLock('profile_reminders', sendProfileCompletionReminders);
   });
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
@@ -525,8 +541,6 @@ async function cancelPastDatedBookings() {
 }
 
 // Track abandoned booking reminders to avoid duplicates
-const sentAbandonedReminders = new Set<string>();
-
 async function sendAbandonedBookingReminders() {
   try {
     const now = new Date();
@@ -550,10 +564,25 @@ async function sendAbandonedBookingReminders() {
     let smsSent = 0;
     
     for (const abandoned of abandonedToRemind) {
-      const reminderKey = `${abandoned.id}-${abandoned.reminderCount}`;
-      
-      // Skip if we already sent this reminder in this session
-      if (sentAbandonedReminders.has(reminderKey)) {
+      // Atomic claim: only increment if reminderCount still matches what we read.
+      // If two processes run simultaneously, only one wins the race — the other
+      // gets no rows back and skips safely, preventing duplicate emails.
+      const [claimed] = await db.update(abandonedBookings)
+        .set({
+          reminderCount: abandoned.reminderCount + 1,
+          reminderSentAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(abandonedBookings.id, abandoned.id),
+            eq(abandonedBookings.reminderCount, abandoned.reminderCount) // Optimistic lock
+          )
+        )
+        .returning({ id: abandonedBookings.id });
+
+      if (!claimed) {
+        // Another process already handled this reminder — skip
         continue;
       }
       
@@ -702,16 +731,6 @@ async function sendAbandonedBookingReminders() {
         }
       }
       
-      // Update reminder count and timestamp
-      await db.update(abandonedBookings)
-        .set({
-          reminderCount: abandoned.reminderCount + 1,
-          reminderSentAt: now,
-          updatedAt: now,
-        })
-        .where(eq(abandonedBookings.id, abandoned.id));
-      
-      sentAbandonedReminders.add(reminderKey);
     }
     
     if (emailsSent > 0 || smsSent > 0) {
