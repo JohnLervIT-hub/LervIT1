@@ -719,7 +719,7 @@ export default function AdminVerificationDashboard() {
 
         {/* Verification Item Review Dialog */}
         <Dialog open={!!selectedItem} onOpenChange={(open) => { if (!open) { setSelectedItem(null); setReviewStatus(""); setRejectionReason(""); } }}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Review Verification Item</DialogTitle>
               <DialogDescription>
@@ -743,7 +743,7 @@ export default function AdminVerificationDashboard() {
                           <img
                             src={url}
                             alt={`Verification document ${idx + 1}`}
-                            className="w-full rounded-lg border cursor-pointer hover:opacity-90"
+                            className="w-full h-36 object-cover rounded-lg border cursor-pointer hover:opacity-90"
                             onClick={() => window.open(url, '_blank')}
                           />
                         </div>
