@@ -1,0 +1,134 @@
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How does LervIT work?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Download the app, snap photos of your items, receive an instant AI-powered quote based on volume and distance, book a verified local mover, track the job in real-time, and pay securely after completion."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What types of moves does LervIT handle?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "LervIT is designed for micro-moves and small loads such as Marketplace pickups, single items, or a few boxes. It does not handle full-house relocations."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I get same-day service?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, in many cases service can be available within minutes depending on mover availability in your area."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How is pricing calculated?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pricing is determined using AI analysis of item volume from photos, along with distance, access factors like stairs or elevators, and estimated time required. Pricing is transparent with no hidden fees."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Are movers background-checked and insured?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, all movers are verified with background checks, vehicle inspections, and platform-provided liability coverage up to policy limits."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if there is damage or the mover is late?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Users can track jobs in real-time and report issues through the app. The platform provides support for resolution, including refunds or re-service if needed."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do payments and refunds work?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Payments are made in-app after successful delivery. Cancellations within a specified window are free, while late cancellations may incur a small fee."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What areas do you serve?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "LervIT currently operates in Calgary and surrounding areas, with plans to expand to other Canadian cities."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to be present for pickup or delivery?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, but flexible instructions can be provided for access, such as leaving keys with verification."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I sign up as a mover?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Visit app.lervit.com, submit your vehicle details, identification, and background information. Onboarding typically takes 24 to 48 hours."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How much can movers earn?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Movers can earn between $25 and $150 per hour depending on job size, with additional tips and performance bonuses."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How are jobs assigned to movers?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Movers receive notifications for nearby jobs and can choose to accept jobs that fit their schedule. There is no bidding system."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is your cancellation policy?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Customers can cancel for free within a set time window, while late cancellations may incur a fee. Movers are expected to notify early to avoid penalties."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does LervIT handle fragile or special items?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, but items must be securely packed. Special handling requirements should be declared in advance."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there customer support available?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, LervIT offers 24/7 in-app support, email assistance, and social media support channels."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How is LervIT different from TaskRabbit or Dolly?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "LervIT offers AI-powered instant pricing, no negotiation, a mover-focused experience, and a localized approach optimized for micro-logistics."
+      }
+    }
+  ]
+}
