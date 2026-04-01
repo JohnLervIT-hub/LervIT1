@@ -539,9 +539,6 @@ export default function AdminPayoutsPage() {
             <TabsTrigger value="all" data-testid="tab-all">
               All Earnings ({allEarnings?.length || 0})
             </TabsTrigger>
-            <TabsTrigger value="promo" data-testid="tab-promo">
-              Promo Balances {promoBalances?.filter(b => !b.moverBalancePaid).length ? `(${promoBalances.filter(b => !b.moverBalancePaid).length})` : ''}
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending">

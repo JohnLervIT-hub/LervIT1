@@ -57,8 +57,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     vehicleType: 'car',
     volumeRangeMin: 0,
     volumeRangeMax: 20,
-    baseFee: 10.00,
-    perKmRate: 0.90,
+    baseFee: 12.00,
+    perKmRate: 1.08,
     loadType: 'Small items, single chairs',
     examples: '1-4 boxes, single chair, small items',
   },
@@ -68,8 +68,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     vehicleType: 'pickup',
     volumeRangeMin: 21,
     volumeRangeMax: 165,
-    baseFee: 20.00,
-    perKmRate: 1.60,
+    baseFee: 24.00,
+    perKmRate: 1.92,
     loadType: 'Medium furniture, moderate loads',
     examples: 'Sofa, mattress, bedroom furniture, multiple boxes',
   },
@@ -79,8 +79,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     vehicleType: 'van',
     volumeRangeMin: 166,
     volumeRangeMax: 300,
-    baseFee: 15.00,
-    perKmRate: 1.25,
+    baseFee: 18.00,
+    perKmRate: 1.50,
     loadType: 'Large furniture loads, multiple rooms',
     examples: 'Full bedroom + living room, sectional sofas, large sets',
   },
@@ -90,8 +90,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     vehicleType: 'van',
     volumeRangeMin: 166,
     volumeRangeMax: 300,
-    baseFee: 15.00,
-    perKmRate: 1.25,
+    baseFee: 18.00,
+    perKmRate: 1.50,
     loadType: 'Deprecated - use Class C',
     examples: 'Deprecated - merged into Class C',
   },
@@ -101,8 +101,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     vehicleType: 'truck',
     volumeRangeMin: 301,
     volumeRangeMax: 600,
-    baseFee: 40.00,
-    perKmRate: 2.00,
+    baseFee: 48.00,
+    perKmRate: 2.40,
     loadType: 'Full apartment / home moves',
     examples: 'Full apartment, appliances, heavy loads',
   },
@@ -150,35 +150,35 @@ export function getAllVehicleClasses(): VehicleClassConfig[] {
 // ===== ADDITIONAL PRICING CONFIGURATION =====
 
 const PRICING_CONFIG = {
-  MOVER_TRAVEL_RATE_PER_KM: 0.75,
+  MOVER_TRAVEL_RATE_PER_KM: 0.90,
   MOVER_TRAVEL_FREE_RADIUS_KM: 5,
   
   PICKUP_DIFFICULTY_FEES: {
     ground: 0.00,
-    basement: 10.00,
-    stairs: 5.00,
-    elevator: 8.00,
+    basement: 12.00,
+    stairs: 6.00,
+    elevator: 9.60,
   },
   DROPOFF_DIFFICULTY_FEES: {
     ground: 0.00,
-    basement: 10.00,
-    stairs: 5.00,
-    elevator: 8.00,
+    basement: 12.00,
+    stairs: 6.00,
+    elevator: 9.60,
   },
   // Load Size Fees (flat tier fees - used when no AI volume data)
   LOAD_SIZE_FEES: {
-    boxes: 5.00,     // Class A (SUV) - $5 mandatory load fee for 0-20 ft³
-    small: 5.00,     // Alias for boxes - $5 mandatory load fee
-    medium: 15.00,   // Pickup Truck loads (21-80 ft³)
-    large: 30.00,    // Cargo Van loads (81-300 ft³)
-    apartment: 45.00, // Moving Truck loads - minimum for 300+ ft³
+    boxes: 6.00,     // Class A (SUV) - $6 mandatory load fee for 0-20 ft³
+    small: 6.00,     // Alias for boxes - $6 mandatory load fee
+    medium: 18.00,   // Pickup Truck loads (21-80 ft³)
+    large: 36.00,    // Cargo Van loads (81-300 ft³)
+    apartment: 54.00, // Moving Truck loads - minimum for 300+ ft³
   } as Record<string, number>,
   // Volume-based load fee rate (used when AI provides exact volume)
-  // $0.15/ft³ naturally matches tier minimums: 100ft³=$15, 200ft³=$30, 300ft³=$45
-  // Scales proportionally for larger loads: 335ft³=$50, 500ft³=$75, 600ft³=$90
-  VOLUME_LOAD_FEE_PER_CUFT: 0.15,
-  VOLUME_LOAD_FEE_MINIMUM: 5.00,  // Minimum load fee regardless of volume
-  APARTMENT_MOVE_PREMIUM: 50.00, // $50 premium for 300+ ft³ loads (apartment moves)
+  // $0.18/ft³ naturally matches tier minimums: 100ft³=$18, 200ft³=$36, 300ft³=$54
+  // Scales proportionally for larger loads: 335ft³=$60, 500ft³=$90, 600ft³=$108
+  VOLUME_LOAD_FEE_PER_CUFT: 0.18,
+  VOLUME_LOAD_FEE_MINIMUM: 6.00,  // Minimum load fee regardless of volume
+  APARTMENT_MOVE_PREMIUM: 60.00, // $60 premium for 300+ ft³ loads (apartment moves)
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
   TWO_MOVERS_MULTIPLIER: 1.30,
   

@@ -2105,7 +2105,7 @@ export default function RequestMove() {
             breakdown={priceBreakdown}
             isCalculating={isCalculatingPrice}
             error={pricingError}
-            showPromoInput={!!user}
+            showPromoInput={!!user && (user.promoUsesCount ?? 0) < 2}
             appliedPromo={appliedPromo}
             onPromoApplied={setAppliedPromo}
           />

@@ -961,29 +961,6 @@ export default function MoverDashboard() {
           </div>
         </div>
 
-        {/* Additional Payout Notice for Promo Bookings */}
-        {booking.promoCode && booking.moverBalanceOwed && parseFloat(booking.moverBalanceOwed) > 0 && (
-          <div className={`flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg mb-6 ${booking.moverBalancePaid ? 'bg-green-500/10 border border-green-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`} data-testid={`promo-balance-${booking.id}`}>
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-full ${booking.moverBalancePaid ? 'bg-green-500/20' : 'bg-amber-500/20'}`}>
-                <Wallet className={`w-4 h-4 ${booking.moverBalancePaid ? 'text-green-600' : 'text-amber-600'}`} />
-              </div>
-              <div>
-                <p className={`font-semibold text-sm ${booking.moverBalancePaid ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'}`}>
-                  Additional Payout of ${parseFloat(booking.moverBalanceOwed).toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {booking.moverBalancePaid 
-                    ? 'This bonus has been paid to you by the platform.' 
-                    : 'A promo code was used on this booking. This extra amount will be paid to you separately by LervIT.'}
-                </p>
-              </div>
-            </div>
-            <Badge variant="outline" className={booking.moverBalancePaid ? 'border-green-500/40 text-green-600' : 'border-amber-500/40 text-amber-600'} data-testid={`badge-promo-status-${booking.id}`}>
-              {booking.moverBalancePaid ? 'Paid' : 'Pending'}
-            </Badge>
-          </div>
-        )}
 
         {/* Customer Card - Premium Uber Style */}
         {booking.customer && (
