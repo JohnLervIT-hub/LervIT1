@@ -390,3 +390,30 @@ export function getPricingConfig() {
     platformFeePercent: PRICING_CONFIG.PLATFORM_FEE_PERCENT,
   };
 }
+
+// ===== STANDARD PRICING HELPER =====
+// The current price config is 20% higher than original to fund the promo window.
+// Customers who have used both promo credits (promoUsesCount >= 2) revert to
+// the original (standard) price — effectively dividing the inflated total by 1.2.
+
+export const PROMO_MULTIPLIER = 1.2;
+
+export function applyStandardPricing(breakdown: PriceBreakdown): PriceBreakdown {
+  const m = PROMO_MULTIPLIER;
+  const scale = (v: number) => Math.round((v / m) * 100) / 100;
+  return {
+    ...breakdown,
+    baseFee: scale(breakdown.baseFee),
+    distanceFee: scale(breakdown.distanceFee),
+    perKmRate: scale(breakdown.perKmRate),
+    loadFee: scale(breakdown.loadFee),
+    loadSizeFee: scale(breakdown.loadSizeFee),
+    apartmentPremium: scale(breakdown.apartmentPremium),
+    moverTravelFee: scale(breakdown.moverTravelFee),
+    pickupDifficultyFee: scale(breakdown.pickupDifficultyFee),
+    dropoffDifficultyFee: scale(breakdown.dropoffDifficultyFee),
+    heavyItemFee: scale(breakdown.heavyItemFee),
+    subtotal: scale(breakdown.subtotal),
+    totalCost: scale(breakdown.totalCost),
+  };
+}

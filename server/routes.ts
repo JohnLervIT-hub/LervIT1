@@ -3002,7 +3002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Geocode addresses using Google Maps API for accurate coordinates
       const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
-      const { calculatePrice } = await import("@shared/pricing");
+      const { calculatePrice, applyStandardPricing } = await import("@shared/pricing");
       const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
       const { toDecimalString } = await import("@shared/utils");
       
@@ -3042,7 +3042,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Calculate promo code discount
       const latestUser = await storage.getUser(user.id);
-      let finalPrice = priceBreakdown.totalCost;
+      // Returning customers (2+ promo uses) revert to standard (original) pricing
+      const isReturningCustomer = latestUser && (latestUser.promoUsesCount || 0) >= 2;
+      const adjustedBreakdown = isReturningCustomer ? applyStandardPricing(priceBreakdown) : priceBreakdown;
+      let finalPrice = adjustedBreakdown.totalCost;
       let discountPercent = 0;
       let discountAmount = 0;
       let discountReason: string | null = null;
@@ -3055,8 +3058,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (submittedPromo === "LERVIT20" && latestUser && (latestUser.promoUsesCount || 0) < 2) {
         promoCode = "LERVIT20";
         discountPercent = 20;
-        discountAmount = Math.round(priceBreakdown.totalCost * 0.20 * 100) / 100;
-        finalPrice = priceBreakdown.totalCost - discountAmount;
+        discountAmount = Math.round(adjustedBreakdown.totalCost * 0.20 * 100) / 100;
+        finalPrice = adjustedBreakdown.totalCost - discountAmount;
         const usesRemaining = 2 - (latestUser.promoUsesCount || 0) - 1;
         discountReason = `LERVIT20 promo - 20% off (${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining)`;
         // Platform absorbs discount: mover gets 85% of ORIGINAL price
@@ -3090,14 +3093,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffLongitude: dropoffGeo.coordinates.lng,
         distance: toDecimalString(distance),
         price: toDecimalString(finalPrice),
-        baseFee: toDecimalString(priceBreakdown.baseFee),
-        distanceFee: toDecimalString(priceBreakdown.distanceFee),
-        loadFee: toDecimalString(priceBreakdown.loadSizeFee),
-        moverTravelFee: toDecimalString(priceBreakdown.moverTravelFee),
-        pickupDifficultyFee: toDecimalString(priceBreakdown.pickupDifficultyFee),
-        dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
-        heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
-        subtotal: toDecimalString(priceBreakdown.subtotal),
+        baseFee: toDecimalString(adjustedBreakdown.baseFee),
+        distanceFee: toDecimalString(adjustedBreakdown.distanceFee),
+        loadFee: toDecimalString(adjustedBreakdown.loadSizeFee),
+        moverTravelFee: toDecimalString(adjustedBreakdown.moverTravelFee),
+        pickupDifficultyFee: toDecimalString(adjustedBreakdown.pickupDifficultyFee),
+        dropoffDifficultyFee: toDecimalString(adjustedBreakdown.dropoffDifficultyFee),
+        heavyItemFee: toDecimalString(adjustedBreakdown.heavyItemFee),
+        subtotal: toDecimalString(adjustedBreakdown.subtotal),
         promoCode: promoCode,
         discountPercent: toDecimalString(discountPercent),
         discountAmount: toDecimalString(discountAmount),
@@ -3119,8 +3122,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId: user.id,
         loadSize: bookingData.loadSize,
         distanceKm: distance,
-        totalPrice: priceBreakdown.totalCost,
-        vehicleClass: priceBreakdown.vehicleClass,
+        totalPrice: adjustedBreakdown.totalCost,
+        vehicleClass: adjustedBreakdown.vehicleClass,
         status: BOOKING_STATUSES.PENDING_PAYMENT,
       });
       
@@ -4118,7 +4121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If addresses changed, re-geocode and recalculate distance
       const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
-      const { calculatePrice, calculateMoverEarnings } = await import("@shared/pricing");
+      const { calculatePrice, calculateMoverEarnings, applyStandardPricing } = await import("@shared/pricing");
       
       let pickupLat = existingBooking.pickupLatitude;
       let pickupLng = existingBooking.pickupLongitude;
@@ -4174,32 +4177,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         finalNumberOfMovers as 1 | 2
       );
       
+      // Returning customers (2+ promo uses) revert to standard (original) pricing
+      const isReturningCustomerEdit = (user.promoUsesCount || 0) >= 2;
+      const adjustedBreakdown = isReturningCustomerEdit ? applyStandardPricing(priceBreakdown) : priceBreakdown;
+
       // Apply promo code discount if booking has one
       let discountPercent = 0;
       let discountAmount = 0;
       let discountReason = null;
-      let finalPrice = priceBreakdown.totalCost;
+      let finalPrice = adjustedBreakdown.totalCost;
       let moverBalanceOwed = 0;
       
       if (booking.promoCode === "LERVIT20") {
         discountPercent = 20;
-        discountAmount = priceBreakdown.totalCost * 0.20;
+        discountAmount = adjustedBreakdown.totalCost * 0.20;
         discountReason = booking.discountReason;
-        finalPrice = priceBreakdown.totalCost - discountAmount;
+        finalPrice = adjustedBreakdown.totalCost - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       }
       
       // Calculate platform fees for mover payouts
-      const earnings = calculateMoverEarnings(priceBreakdown);
+      const earnings = calculateMoverEarnings(adjustedBreakdown);
       
       // Update all pricing-related fields
-      updateData.baseFee = priceBreakdown.baseFee.toFixed(2);
-      updateData.distanceFee = priceBreakdown.distanceFee.toFixed(2);
-      updateData.loadFee = priceBreakdown.loadSizeFee.toFixed(2);
-      updateData.pickupDifficultyFee = priceBreakdown.pickupDifficultyFee.toFixed(2);
-      updateData.dropoffDifficultyFee = priceBreakdown.dropoffDifficultyFee.toFixed(2);
-      updateData.heavyItemFee = priceBreakdown.heavyItemFee.toFixed(2);
-      updateData.subtotal = priceBreakdown.subtotal.toFixed(2);
+      updateData.baseFee = adjustedBreakdown.baseFee.toFixed(2);
+      updateData.distanceFee = adjustedBreakdown.distanceFee.toFixed(2);
+      updateData.loadFee = adjustedBreakdown.loadSizeFee.toFixed(2);
+      updateData.pickupDifficultyFee = adjustedBreakdown.pickupDifficultyFee.toFixed(2);
+      updateData.dropoffDifficultyFee = adjustedBreakdown.dropoffDifficultyFee.toFixed(2);
+      updateData.heavyItemFee = adjustedBreakdown.heavyItemFee.toFixed(2);
+      updateData.subtotal = adjustedBreakdown.subtotal.toFixed(2);
       updateData.price = finalPrice.toFixed(2);
       updateData.discountPercent = discountPercent.toFixed(2);
       updateData.discountAmount = discountAmount.toFixed(2);

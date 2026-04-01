@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
-import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { calculatePrice, applyStandardPricing, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
@@ -411,7 +411,7 @@ export default function RequestMove() {
   useEffect(() => {
     if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
       try {
-        const breakdown = calculatePrice(
+        const rawBreakdown = calculatePrice(
           estimateDistance,
           loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
           pickupDifficulty as PickupDifficultyType,
@@ -421,6 +421,8 @@ export default function RequestMove() {
           undefined,
           aiDetectedVolume
         );
+        const isReturningCustomer = !!user && (user.promoUsesCount ?? 0) >= 2;
+        const breakdown = isReturningCustomer ? applyStandardPricing(rawBreakdown) : rawBreakdown;
         if (step === 1) {
           const step1Preview: PriceBreakdown = {
             baseFee: 0,
