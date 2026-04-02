@@ -218,9 +218,9 @@ export default function EditBookingForm({ booking, onSuccess, onCancel, customer
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="ground">Ground Floor</SelectItem>
-                    <SelectItem value="basement">Basement (+$10)</SelectItem>
-                    <SelectItem value="stairs">Stairs (+$5)</SelectItem>
-                    <SelectItem value="elevator">Elevator (+$8)</SelectItem>
+                    <SelectItem value="basement">Basement (+$12)</SelectItem>
+                    <SelectItem value="stairs">Stairs (+$6)</SelectItem>
+                    <SelectItem value="elevator">Elevator (+$9.60)</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -242,9 +242,9 @@ export default function EditBookingForm({ booking, onSuccess, onCancel, customer
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="ground">Ground Floor</SelectItem>
-                    <SelectItem value="basement">Basement (+$10)</SelectItem>
-                    <SelectItem value="stairs">Stairs (+$5)</SelectItem>
-                    <SelectItem value="elevator">Elevator (+$8)</SelectItem>
+                    <SelectItem value="basement">Basement (+$12)</SelectItem>
+                    <SelectItem value="stairs">Stairs (+$6)</SelectItem>
+                    <SelectItem value="elevator">Elevator (+$9.60)</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />

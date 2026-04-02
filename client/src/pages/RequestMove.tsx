@@ -1503,19 +1503,19 @@ export default function RequestMove() {
                                   <SelectItem value="basement">
                                     <div className="flex items-center gap-2">
                                       <span>Basement</span>
-                                      <span className="text-xs text-muted-foreground">+$10</span>
+                                      <span className="text-xs text-muted-foreground">+$12</span>
                                     </div>
                                   </SelectItem>
                                   <SelectItem value="stairs">
                                     <div className="flex items-center gap-2">
                                       <span>Stairs</span>
-                                      <span className="text-xs text-muted-foreground">+$5</span>
+                                      <span className="text-xs text-muted-foreground">+$6</span>
                                     </div>
                                   </SelectItem>
                                   <SelectItem value="elevator">
                                     <div className="flex items-center gap-2">
                                       <span>Elevator Available</span>
-                                      <span className="text-xs text-muted-foreground">+$8</span>
+                                      <span className="text-xs text-muted-foreground">+$9.60</span>
                                     </div>
                                   </SelectItem>
                                 </SelectContent>
@@ -1598,19 +1598,19 @@ export default function RequestMove() {
                                   <SelectItem value="basement">
                                     <div className="flex items-center gap-2">
                                       <span>Basement</span>
-                                      <span className="text-xs text-muted-foreground">+$10</span>
+                                      <span className="text-xs text-muted-foreground">+$12</span>
                                     </div>
                                   </SelectItem>
                                   <SelectItem value="stairs">
                                     <div className="flex items-center gap-2">
                                       <span>Stairs</span>
-                                      <span className="text-xs text-muted-foreground">+$5</span>
+                                      <span className="text-xs text-muted-foreground">+$6</span>
                                     </div>
                                   </SelectItem>
                                   <SelectItem value="elevator">
                                     <div className="flex items-center gap-2">
                                       <span>Elevator Available</span>
-                                      <span className="text-xs text-muted-foreground">+$8</span>
+                                      <span className="text-xs text-muted-foreground">+$9.60</span>
                                     </div>
                                   </SelectItem>
                                 </SelectContent>

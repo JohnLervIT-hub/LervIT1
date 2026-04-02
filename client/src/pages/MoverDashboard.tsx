@@ -1193,13 +1193,13 @@ export default function MoverDashboard() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        // Infer difficulty and heavy item from fees
-                        const pickupDifficulty = parseFloat(booking.pickupDifficultyFee || "0") === 10 ? "basement" :
-                          parseFloat(booking.pickupDifficultyFee || "0") === 5 ? "stairs" :
-                          parseFloat(booking.pickupDifficultyFee || "0") === 8 ? "elevator" : "ground";
-                        const dropoffDifficulty = parseFloat(booking.dropoffDifficultyFee || "0") === 10 ? "basement" :
-                          parseFloat(booking.dropoffDifficultyFee || "0") === 5 ? "stairs" :
-                          parseFloat(booking.dropoffDifficultyFee || "0") === 8 ? "elevator" : "ground";
+                        // Infer difficulty from fees (supports both old and new pricing)
+                        const inferDifficulty = (fee: number) =>
+                          (fee === 12 || fee === 10) ? "basement" :
+                          (fee === 6 || fee === 5) ? "stairs" :
+                          (fee === 9.60 || fee === 8) ? "elevator" : "ground";
+                        const pickupDifficulty = inferDifficulty(parseFloat(booking.pickupDifficultyFee || "0"));
+                        const dropoffDifficulty = inferDifficulty(parseFloat(booking.dropoffDifficultyFee || "0"));
                         const heavyItem = parseFloat(booking.heavyItemFee || "0") > 0;
                         
                         const explanation = generatePriceExplanation({
