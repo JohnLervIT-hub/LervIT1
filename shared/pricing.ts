@@ -186,14 +186,16 @@ const PRICING_CONFIG = {
   PLATFORM_FEE_PERCENT: 15.00,
 };
 
+export const VOLUME_LOAD_FEE_PER_CUFT = PRICING_CONFIG.VOLUME_LOAD_FEE_PER_CUFT;
+
 export type PickupDifficultyType = keyof typeof PRICING_CONFIG.PICKUP_DIFFICULTY_FEES;
 export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES;
 
 /**
  * Calculate the total price using vehicle class-based pricing
  * New formula: total = baseFee + distanceFee + loadSizeFee + accessFees
- * Load Size Fees: Boxes: $5 (Class A), Medium: $15, Large: $30, Apartment: $45
- * Class A Distance Rate: $0.90/km
+ * Load Size Fees: Boxes: $6 (Class A), Medium: $18, Large: $36, Apartment: $54
+ * Class A Distance Rate: $1.08/km
  */
 export function calculatePrice(
   pickupToDropoffDistance: number,

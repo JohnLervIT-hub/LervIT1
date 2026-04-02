@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { PriceBreakdown } from "@shared/pricing";
+import { VOLUME_LOAD_FEE_PER_CUFT } from "@shared/pricing";
 
 interface PromoState {
   code: string;
@@ -107,7 +108,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
   }
 
   const loadSizeLabel = breakdown.volumeCuft
-    ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $0.15)`
+    ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $${VOLUME_LOAD_FEE_PER_CUFT.toFixed(2)})`
     : "Load Size";
 
   const distanceLabel = breakdown.distanceKm 
