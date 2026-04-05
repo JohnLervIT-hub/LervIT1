@@ -11,7 +11,9 @@ import {
   corsMiddleware, 
   generalApiLimiter, 
   securityHeaders,
-  phoneVerificationLimiter
+  phoneVerificationLimiter,
+  authLimiter,
+  paymentLimiter
 } from "./middleware/security";
 
 // Verify required environment variables early
@@ -125,13 +127,26 @@ app.use(securityHeaders);
 // Rate limiting - prevents abuse (applied to /api routes)
 app.use('/api', generalApiLimiter);
 
-// Stricter rate limiting for phone verification (prevents brute-force)
+// Stricter rate limiting for auth endpoints (50 req / 15 min — prevents credential stuffing)
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/signup', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+
+// Stricter rate limiting for phone verification (5 req / 15 min — prevents brute-force OTP)
 app.use('/api/auth/send-phone-verification', phoneVerificationLimiter);
 app.use('/api/auth/verify-phone', phoneVerificationLimiter);
 
 // Pre-signup phone verification rate limiting (Uber-style OTP flow)
 app.use('/api/auth/pre-signup/send-code', phoneVerificationLimiter);
 app.use('/api/auth/pre-signup/verify-code', phoneVerificationLimiter);
+
+// Stricter rate limiting for payment endpoints (20 req / 15 min — prevents payment abuse)
+app.use('/api/bookings/:id/create-payment-intent', paymentLimiter);
+app.use('/api/bookings/:id/confirm-payment', paymentLimiter);
+app.use('/api/bookings/:id/pay-with-saved-card', paymentLimiter);
+app.use('/api/payment-methods/setup-intent', paymentLimiter);
+app.use('/api/payment-methods/:id/set-default', paymentLimiter);
 
 app.use((req, res, next) => {
   const start = Date.now();
