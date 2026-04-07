@@ -195,8 +195,11 @@ export default function HeroSection() {
                 onClick={handleGetPrice}
                 data-testid="button-get-price"
               >
-                Get Instant Quote
+                Check Price Now
               </Button>
+              <p className="text-center text-xs text-muted-foreground mt-2">
+                No signup required · Takes 30 seconds
+              </p>
             </div>
           </div>
         </div>
