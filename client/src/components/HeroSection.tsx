@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar, MapPin, ShieldCheck, CreditCard, Navigation } from "lucide-react";
+import { Calendar, MapPin, ShieldCheck, CreditCard, Navigation, Tag } from "lucide-react";
 import { useState, Component, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -187,6 +187,15 @@ export default function HeroSection() {
                     data-testid="input-date"
                   />
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-2.5" data-testid="promo-banner">
+                <Tag className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                <p className="text-sm text-green-700 dark:text-green-400">
+                  <span className="font-bold">20% off your first 2 moves</span>
+                  <span className="text-green-600/80 dark:text-green-400/80"> · Use code </span>
+                  <span className="font-mono font-bold tracking-wide">LERVIT20</span>
+                </p>
               </div>
 
               <Button
