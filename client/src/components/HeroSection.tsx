@@ -99,7 +99,7 @@ export default function HeroSection() {
               Book Small Moves Instantly — No Calls, No Negotiations
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
-              Connect with trusted freelance movers in minutes. Get instant quotes, book on-demand, and track your move in real-time.
+              Get upfront pricing, book instantly, and track your move live — no back-and-forth.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-white/90 mb-8">
               <div className="flex items-center gap-1.5">
