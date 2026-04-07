@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar, MapPin } from "lucide-react";
+import { Calendar, MapPin, ShieldCheck, CreditCard, Navigation } from "lucide-react";
 import { useState, Component, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -101,15 +101,21 @@ export default function HeroSection() {
             <p className="text-lg md:text-xl mb-8 text-white/90">
               Connect with trusted freelance movers in minutes. Get instant quotes, book on-demand, and track your move in real-time.
             </p>
-            <div className="flex items-center gap-2 text-white/80 mb-8">
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <svg key={star} className="w-5 h-5 fill-accent text-accent" viewBox="0 0 20 20">
-                    <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
-                  </svg>
-                ))}
+            <div className="flex flex-wrap items-center gap-4 text-white/90 mb-8">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-accent" />
+                <span className="text-sm font-semibold">Verified Movers</span>
               </div>
-              <span className="font-semibold">500+ Movers in Calgary</span>
+              <span className="text-white/40">·</span>
+              <div className="flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-accent" />
+                <span className="text-sm font-semibold">Secure Payments</span>
+              </div>
+              <span className="text-white/40">·</span>
+              <div className="flex items-center gap-1.5">
+                <Navigation className="w-4 h-4 text-accent" />
+                <span className="text-sm font-semibold">Live Tracking</span>
+              </div>
             </div>
           </div>
 
