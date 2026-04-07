@@ -96,7 +96,7 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="text-white">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-              Calgary's Smartest Way to Move
+              Book Small Moves Instantly — No Calls, No Negotiations
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
               Connect with trusted freelance movers in minutes. Get instant quotes, book on-demand, and track your move in real-time.
