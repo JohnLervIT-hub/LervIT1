@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import pgSession from "connect-pg-simple";
+import memorystore from "memorystore";
 import compression from "compression";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -16,6 +17,14 @@ import {
   paymentLimiter
 } from "./middleware/security";
 
+const app = express();
+
+// Health check endpoint - registered FIRST, before ANY middleware or env checks
+// Cloud Run hits this to verify the container is alive during startup
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: Date.now() });
+});
+
 // Verify required environment variables early
 if (!process.env.DATABASE_URL) {
   console.error("FATAL: DATABASE_URL environment variable is not set");
@@ -26,16 +35,8 @@ if (!process.env.SESSION_SECRET) {
   console.warn("WARNING: SESSION_SECRET not set, using default (not recommended for production)");
 }
 
-const app = express();
-
 // Trust the first proxy (Replit's proxy) - required for secure cookies behind a proxy
 app.set('trust proxy', 1);
-
-// Health check endpoint - MUST be first, before any middleware
-// This ensures Cloud Run's health checks respond immediately without session/db overhead
-app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: Date.now() });
-});
 
 // ===== PERFORMANCE: Gzip/Brotli compression for all responses =====
 // Reduces response sizes by 60-80%, significantly improving load times
@@ -58,26 +59,24 @@ const PgStore = pgSession(session);
 // Determine if we're in production
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Create session store with error handling
-let sessionStore: InstanceType<typeof PgStore>;
+// Create session store with error handling - falls back to memory store so startup never blocks
+let sessionStore: any;
 try {
   console.log("Initializing PostgreSQL session store...");
   sessionStore = new PgStore({
     pool: pool,
     tableName: 'user_sessions',
     createTableIfMissing: true,
-    errorLog: (error) => {
+    errorLog: (error: any) => {
       console.error("Session store error:", error);
     },
   });
   console.log("Session store initialized successfully");
 } catch (error) {
-  console.error("FATAL: Failed to create session store:", error);
-  console.error("Session store initialization details:", {
-    hasPool: !!pool,
-    tableName: 'user_sessions',
-  });
-  process.exit(1);
+  console.error("WARNING: Failed to create PostgreSQL session store, falling back to memory store:", error);
+  // Memory store fallback keeps the server alive for health checks even if DB is slow to connect
+  const MemoryStore = memorystore(session);
+  sessionStore = new MemoryStore({ checkPeriod: 86400000 });
 }
 
 // Session configuration
