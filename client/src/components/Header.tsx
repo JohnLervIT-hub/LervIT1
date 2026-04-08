@@ -129,7 +129,7 @@ export default function Header() {
                 data-testid="button-mobile-menu"
                 aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-8 h-8" />
               </Button>
             )}
           </div>
