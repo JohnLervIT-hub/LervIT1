@@ -1,4 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Capacitor } from "@capacitor/core";
+import { openUrl } from "@/lib/native";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -735,16 +737,39 @@ export default function MoverDashboard() {
       }
     };
 
-    if ("geolocation" in navigator) {
-      // Use watchPosition for continuous tracking - more reliable in background
+    if (Capacitor.isNativePlatform()) {
+      import("@capacitor/geolocation").then(({ Geolocation }) => {
+        Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 30000 },
+          (position, err) => {
+            if (err || !position) {
+              console.error("Geolocation watch error:", err);
+              if (!permissionDeniedShown) {
+                permissionDeniedShown = true;
+                toast({
+                  title: "Location permission denied",
+                  description: "Please allow location access in Settings, then try starting the trip again.",
+                  variant: "destructive",
+                });
+                setLocationSharing(null);
+              }
+              return;
+            }
+            sendLocationUpdate(position.coords.latitude, position.coords.longitude);
+          }
+        ).then((id) => {
+          watchId = id as unknown as number;
+          console.log("[GPS] Started native watchPosition, watchId:", watchId);
+        });
+      });
+    } else if ("geolocation" in navigator) {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
           sendLocationUpdate(position.coords.latitude, position.coords.longitude);
         },
         (error) => {
           console.error("Geolocation watch error:", error.code, error.message);
-          
-          if (error.code === 1 && !permissionDeniedShown) { // PERMISSION_DENIED
+          if (error.code === 1 && !permissionDeniedShown) {
             permissionDeniedShown = true;
             toast({
               title: "Location permission denied",
@@ -754,18 +779,13 @@ export default function MoverDashboard() {
             setLocationSharing(null);
           }
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 30000, // Longer timeout for watchPosition
-          maximumAge: 3000, // Accept positions up to 3 seconds old
-        }
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 3000 }
       );
-      
       console.log("[GPS] Started watchPosition for trip tracking, watchId:", watchId);
     } else {
       toast({
         title: "Geolocation not supported",
-        description: "Your browser doesn't support location services.",
+        description: "Your device doesn't support location services.",
         variant: "destructive",
       });
       setLocationSharing(null);
@@ -773,8 +793,15 @@ export default function MoverDashboard() {
 
     return () => {
       if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        console.log("[GPS] Stopped watchPosition, watchId:", watchId);
+        if (Capacitor.isNativePlatform()) {
+          import("@capacitor/geolocation").then(({ Geolocation }) => {
+            Geolocation.clearWatch({ id: String(watchId) });
+            console.log("[GPS] Stopped native watchPosition");
+          });
+        } else {
+          navigator.geolocation.clearWatch(watchId);
+          console.log("[GPS] Stopped watchPosition, watchId:", watchId);
+        }
       }
     };
   }, [locationSharing, toast]);
@@ -818,31 +845,30 @@ export default function MoverDashboard() {
       }
       
       // Fallback to direct geolocation if shared context doesn't have coords yet
-      if ("geolocation" in navigator) {
+      const sendDirectLocation = async (lat: number, lng: number) => {
+        try {
+          await apiRequest("PATCH", "/api/movers/me/location", { latitude: lat, longitude: lng });
+          console.log("[GPS] Live location updated from direct call");
+          setIsLiveGpsActive(true);
+        } catch (error) {
+          console.error("[GPS] Failed to update live location:", error);
+        }
+      };
+
+      if (Capacitor.isNativePlatform()) {
+        import("@capacitor/geolocation").then(({ Geolocation }) => {
+          Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 15000 })
+            .then(pos => sendDirectLocation(pos.coords.latitude, pos.coords.longitude))
+            .catch(err => { console.error("[GPS] Native geolocation error:", err); setIsLiveGpsActive(false); });
+        });
+      } else if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            try {
-              await apiRequest("PATCH", "/api/movers/me/location", {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              });
-              console.log("[GPS] Live location updated from direct call");
-              setIsLiveGpsActive(true);
-            } catch (error) {
-              console.error("[GPS] Failed to update live location:", error);
-            }
-          },
+          async (position) => sendDirectLocation(position.coords.latitude, position.coords.longitude),
           (error) => {
             console.error("[GPS] Geolocation error:", error.code);
-            if (error.code === 1) {
-              setIsLiveGpsActive(false);
-            }
+            if (error.code === 1) setIsLiveGpsActive(false);
           },
-          {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 30000
-          }
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
         );
       }
     };
@@ -1015,7 +1041,7 @@ export default function MoverDashboard() {
                   variant="outline" 
                   size="sm" 
                   className="shrink-0 gap-1.5"
-                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(booking.pickupAddress)}`, '_blank')}
+                  onClick={() => openUrl(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(booking.pickupAddress)}`)}
                   data-testid={`button-navigate-pickup-${booking.id}`}
                 >
                   <Navigation className="w-3.5 h-3.5" />
@@ -1031,7 +1057,7 @@ export default function MoverDashboard() {
                   variant="outline" 
                   size="sm" 
                   className="shrink-0 gap-1.5"
-                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(booking.dropoffAddress)}`, '_blank')}
+                  onClick={() => openUrl(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(booking.dropoffAddress)}`)}
                   data-testid={`button-navigate-dropoff-${booking.id}`}
                 >
                   <Navigation className="w-3.5 h-3.5" />

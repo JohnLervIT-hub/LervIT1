@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { openTel } from "@/lib/native";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -514,7 +515,7 @@ export default function MyBookings() {
                             variant="outline" 
                             size="sm" 
                             className="w-full"
-                            onClick={() => window.open(`tel:${booking.mover?.phone}`, '_self')}
+                            onClick={() => openTel(booking.mover?.phone ?? '')}
                             data-testid={`button-call-mover-${booking.id}`}
                           >
                             <Phone className="w-4 h-4 mr-2" />

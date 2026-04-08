@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { openTel } from "@/lib/native";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -558,7 +559,7 @@ export default function MoverVerification() {
                   size="sm" 
                   className="w-full justify-start" 
                   data-testid="button-call-support"
-                  onClick={() => window.open("tel:+18889820885", "_self")}
+                  onClick={() => openTel('+18889820885')}
                 >
                   <Phone className="w-4 h-4 mr-2" />
                   Call 1-888-982-0885

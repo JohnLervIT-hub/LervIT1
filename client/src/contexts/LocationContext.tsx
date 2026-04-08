@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { Capacitor } from "@capacitor/core";
 
 interface LocationState {
   coords: { lat: number; lng: number } | null;
@@ -14,7 +15,7 @@ interface LocationContextValue extends LocationState {
 }
 
 const STORAGE_KEY = "lervit:lastLocation";
-const LOCATION_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
+const LOCATION_EXPIRY_MS = 15 * 60 * 1000;
 
 const LocationContext = createContext<LocationContextValue | null>(null);
 
@@ -26,7 +27,6 @@ export function useLocation() {
   return context;
 }
 
-// Safe hook that doesn't throw - for components that may render outside provider
 export function useLocationSafe() {
   return useContext(LocationContext);
 }
@@ -41,9 +41,7 @@ function getStoredLocation(): StoredLocation | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return null;
-    
     const parsed = JSON.parse(stored) as StoredLocation;
-    // Check if expired
     if (Date.now() - parsed.timestamp > LOCATION_EXPIRY_MS) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
@@ -63,6 +61,27 @@ function storeLocation(lat: number, lng: number): void {
   }
 }
 
+async function getCapacitorPosition(): Promise<{ lat: number; lng: number }> {
+  const { Geolocation } = await import("@capacitor/geolocation");
+  const pos = await Geolocation.getCurrentPosition({
+    enableHighAccuracy: true,
+    timeout: 10000,
+  });
+  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+}
+
+async function checkCapacitorPermission(): Promise<"granted" | "denied" | "prompt"> {
+  const { Geolocation } = await import("@capacitor/geolocation");
+  const status = await Geolocation.checkPermissions();
+  return status.location as "granted" | "denied" | "prompt";
+}
+
+async function requestCapacitorPermission(): Promise<"granted" | "denied" | "prompt"> {
+  const { Geolocation } = await import("@capacitor/geolocation");
+  const status = await Geolocation.requestPermissions();
+  return status.location as "granted" | "denied" | "prompt";
+}
+
 export function LocationProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LocationState>({
     coords: null,
@@ -71,18 +90,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     isRequesting: false,
   });
 
-  // Check permission and auto-request if previously granted
   useEffect(() => {
     initializeLocation();
   }, []);
 
   const initializeLocation = async () => {
-    if (!navigator.geolocation) {
-      setState(prev => ({ ...prev, permissionState: "unavailable" }));
-      return;
-    }
-
-    // First, try to load from storage for immediate use
     const stored = getStoredLocation();
     if (stored) {
       setState(prev => ({
@@ -92,28 +104,34 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       }));
     }
 
-    // Check permission status
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const permission = await checkCapacitorPermission();
+        setState(prev => ({ ...prev, permissionState: permission }));
+        if (permission === "granted") {
+          silentRefresh();
+        }
+      } catch {
+        setState(prev => ({ ...prev, permissionState: "prompt" }));
+      }
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setState(prev => ({ ...prev, permissionState: "unavailable" }));
+      return;
+    }
+
     try {
       if (navigator.permissions) {
         const result = await navigator.permissions.query({ name: "geolocation" });
-        
         setState(prev => ({ ...prev, permissionState: result.state as LocationState["permissionState"] }));
-        
-        // Listen for permission changes
         result.onchange = () => {
           setState(prev => ({ ...prev, permissionState: result.state as LocationState["permissionState"] }));
-          // Auto-request if permission just changed to granted
-          if (result.state === "granted") {
-            silentRefresh();
-          }
+          if (result.state === "granted") silentRefresh();
         };
-
-        // If permission was previously granted, silently refresh location
-        if (result.state === "granted") {
-          silentRefresh();
-        }
+        if (result.state === "granted") silentRefresh();
       } else {
-        // Permissions API not available - try to get location directly
         setState(prev => ({ ...prev, permissionState: "prompt" }));
       }
     } catch {
@@ -122,12 +140,27 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   };
 
   const silentRefresh = useCallback(() => {
+    if (Capacitor.isNativePlatform()) {
+      getCapacitorPosition()
+        .then(coords => {
+          storeLocation(coords.lat, coords.lng);
+          setState(prev => ({
+            ...prev,
+            coords,
+            permissionState: "granted",
+            lastUpdated: Date.now(),
+            isRequesting: false,
+          }));
+        })
+        .catch(() => {
+          setState(prev => ({ ...prev, isRequesting: false }));
+        });
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const coords = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
+        const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
         storeLocation(coords.lat, coords.lng);
         setState(prev => ({
           ...prev,
@@ -138,22 +171,40 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         }));
       },
       () => {
-        // Silent failure - don't update permission state on error
         setState(prev => ({ ...prev, isRequesting: false }));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, []);
 
-  const requestLocation = useCallback(() => {
+  const requestLocation = useCallback(async () => {
     setState(prev => ({ ...prev, isRequesting: true }));
-    
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const permission = await requestCapacitorPermission();
+        if (permission !== "granted") {
+          setState(prev => ({ ...prev, isRequesting: false, permissionState: "denied" }));
+          return;
+        }
+        const coords = await getCapacitorPosition();
+        storeLocation(coords.lat, coords.lng);
+        setState(prev => ({
+          ...prev,
+          coords,
+          permissionState: "granted",
+          lastUpdated: Date.now(),
+          isRequesting: false,
+        }));
+      } catch {
+        setState(prev => ({ ...prev, isRequesting: false, permissionState: "denied" }));
+      }
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const coords = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
+        const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
         storeLocation(coords.lat, coords.lng);
         setState(prev => ({
           ...prev,
@@ -184,22 +235,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 
   const clearLocation = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    setState(prev => ({
-      ...prev,
-      coords: null,
-      lastUpdated: null,
-    }));
+    setState(prev => ({ ...prev, coords: null, lastUpdated: null }));
   }, []);
 
   return (
-    <LocationContext.Provider
-      value={{
-        ...state,
-        requestLocation,
-        refreshLocation,
-        clearLocation,
-      }}
-    >
+    <LocationContext.Provider value={{ ...state, requestLocation, refreshLocation, clearLocation }}>
       {children}
     </LocationContext.Provider>
   );

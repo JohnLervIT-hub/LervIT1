@@ -1,8 +1,10 @@
 import { useState, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Image as ImageIcon, Loader2, CheckCircle2 } from "lucide-react";
+import { Upload, X, Image as ImageIcon, Loader2, CheckCircle2, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE_URL } from "@/lib/native";
 
 interface ImageUploadProps {
   onImagesChange: (urls: string[]) => void;
@@ -54,6 +56,12 @@ async function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, qual
   });
 }
 
+async function dataUriToFile(dataUri: string, fileName: string): Promise<File> {
+  const res = await fetch(dataUri);
+  const blob = await res.blob();
+  return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+}
+
 export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 }: ImageUploadProps) {
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -63,8 +71,6 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
   const uploadFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
-    
-    // Start upload process
     
     if (images.length + fileArray.length > maxImages) {
       toast({
@@ -76,17 +82,11 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     }
 
     const validFiles = fileArray.filter(file => {
-      if (file.type && file.type.startsWith('image/')) {
-        return true;
-      }
+      if (file.type && file.type.startsWith('image/')) return true;
       const ext = file.name.toLowerCase().split('.').pop();
       const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'tiff', 'tif'];
-      if (ext && allowedExtensions.includes(ext)) {
-        return true;
-      }
-      if (!file.type && file.size > 0 && file.size < 20 * 1024 * 1024) {
-        return true;
-      }
+      if (ext && allowedExtensions.includes(ext)) return true;
+      if (!file.type && file.size > 0 && file.size < 20 * 1024 * 1024) return true;
       return false;
     });
 
@@ -115,7 +115,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
         
         try {
           if (isCompressibleFormat && file.size > 500 * 1024) {
-              const compressed = await compressImage(file);
+            const compressed = await compressImage(file);
             processedFiles.push({ 
               blob: compressed, 
               name: file.name.replace(/\.[^/.]+$/, '') + '.jpg',
@@ -136,11 +136,10 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
         formData.append('images', blob, name);
       });
 
-      // Upload to server
-      
-      const response = await fetch('/api/upload/images', {
+      const response = await fetch(`${API_BASE_URL}/api/upload/images`, {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       });
 
       setUploadProgress(90);
@@ -176,6 +175,26 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     }
   }, [images, maxImages, onImagesChange, onAnalyze, toast]);
 
+  const handleCameraCapture = async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const photo = await Camera.getPhoto({
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+        quality: 85,
+        allowEditing: false,
+      });
+      if (!photo.dataUrl) return;
+      const file = await dataUriToFile(photo.dataUrl, `capture-${Date.now()}.jpg`);
+      await uploadFiles([file]);
+    } catch (err: any) {
+      if (err?.message !== 'User cancelled photos app') {
+        toast({ title: "Camera error", description: "Could not capture photo. Please try again.", variant: "destructive" });
+      }
+    }
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -202,9 +221,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
     if (uploading || images.length >= maxImages) return;
-
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       await uploadFiles(files);
@@ -219,22 +236,19 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
   const triggerFileInput = () => {
     const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-    if (fileInput) {
-      fileInput.click();
-    }
+    if (fileInput) fileInput.click();
   };
+
+  const isNative = Capacitor.isNativePlatform();
 
   return (
     <div className="space-y-4">
       <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDragOver={!isNative ? handleDragOver : undefined}
+        onDragLeave={!isNative ? handleDragLeave : undefined}
+        onDrop={!isNative ? handleDrop : undefined}
       >
-        <div
-          onClick={!uploading ? triggerFileInput : undefined}
-          className={uploading ? '' : 'cursor-pointer'}
-        >
+        <div onClick={!uploading && !isNative ? triggerFileInput : undefined} className={!uploading && !isNative ? 'cursor-pointer' : ''}>
           <Card className={`relative border-2 border-dashed p-6 sm:p-8 text-center transition-all duration-200 ${
             uploading 
               ? 'border-primary bg-primary/5' 
@@ -242,7 +256,6 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
                 ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' 
                 : 'border-primary/30 hover:border-primary hover:bg-primary/5'
           }`}>
-            {/* Upload Progress Overlay */}
             {uploading && (
               <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
                 <Loader2 className="w-10 h-10 animate-spin text-primary mb-3" />
@@ -268,7 +281,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
                   {isDragging ? 'Drop images here' : 'Upload Photos'}
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {isDragging ? 'Release to upload' : 'Drag & drop or click to select'}
+                  {isDragging ? 'Release to upload' : isNative ? 'Take a photo or choose from your library' : 'Drag & drop or click to select'}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 mt-3">
                   <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
@@ -280,33 +293,45 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
                 </div>
               </div>
               {!isDragging && !uploading && (
-                <Button
-                  type="button"
-                  className="mt-2"
-                  disabled={images.length >= maxImages}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    triggerFileInput();
-                  }}
-                  data-testid="button-select-images"
-                >
-                  <ImageIcon className="w-4 h-4 mr-2" />
-                  Select Images
-                </Button>
+                <div className="flex gap-2 mt-2 flex-wrap justify-center">
+                  {isNative ? (
+                    <Button
+                      type="button"
+                      disabled={images.length >= maxImages}
+                      onClick={(e) => { e.stopPropagation(); handleCameraCapture(); }}
+                      data-testid="button-capture-image"
+                    >
+                      <Camera className="w-4 h-4 mr-2" />
+                      Take / Choose Photo
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      disabled={images.length >= maxImages}
+                      onClick={(e) => { e.stopPropagation(); triggerFileInput(); }}
+                      data-testid="button-select-images"
+                    >
+                      <ImageIcon className="w-4 h-4 mr-2" />
+                      Select Images
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </Card>
         </div>
-        <input
-          id="image-upload"
-          type="file"
-          accept="image/*,.heic,.heif"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-          disabled={uploading || images.length >= maxImages}
-          data-testid="input-image-upload"
-        />
+        {!isNative && (
+          <input
+            id="image-upload"
+            type="file"
+            accept="image/*,.heic,.heif"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+            disabled={uploading || images.length >= maxImages}
+            data-testid="input-image-upload"
+          />
+        )}
       </div>
 
       {images.length > 0 && (

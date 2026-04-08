@@ -2,14 +2,42 @@ import * as React from "react";
 import * as ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { Capacitor } from "@capacitor/core";
 
-// Ensure React is globally available for Safari/iOS compatibility
 if (typeof window !== 'undefined') {
   (window as any).React = React;
   (window as any).ReactDOM = ReactDOM;
 }
 
-// Wrap in a function to ensure proper module loading order
+async function setupNative() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  const { SplashScreen } = await import("@capacitor/splash-screen");
+  const { StatusBar, Style } = await import("@capacitor/status-bar");
+  const { App: CapApp } = await import("@capacitor/app");
+  const { Keyboard } = await import("@capacitor/keyboard");
+
+  await StatusBar.setStyle({ style: Style.Dark });
+  await StatusBar.setBackgroundColor({ color: "#0f172a" });
+
+  Keyboard.addListener("keyboardWillShow", () => {
+    document.body.classList.add("keyboard-open");
+  });
+  Keyboard.addListener("keyboardWillHide", () => {
+    document.body.classList.remove("keyboard-open");
+  });
+
+  CapApp.addListener("backButton", ({ canGoBack }) => {
+    if (canGoBack) {
+      window.history.back();
+    } else {
+      CapApp.exitApp();
+    }
+  });
+
+  await SplashScreen.hide({ fadeOutDuration: 300 });
+}
+
 function renderApp() {
   const root = document.getElementById("root");
   if (root) {
@@ -17,9 +45,12 @@ function renderApp() {
   }
 }
 
-// Use requestAnimationFrame to ensure DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', renderApp);
+  document.addEventListener('DOMContentLoaded', async () => {
+    renderApp();
+    await setupNative();
+  });
 } else {
   renderApp();
+  setupNative();
 }

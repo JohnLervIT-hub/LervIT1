@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { openUrl } from "@/lib/native";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,7 +109,7 @@ export function MoverPayoutCenter() {
     onSuccess: (data) => {
       if (data.url) {
         // Use window.location for more reliable navigation (avoids popup blockers)
-        window.location.href = data.url;
+        openUrl(data.url);
       } else {
         toast({
           title: "Error",
