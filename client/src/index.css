@@ -346,10 +346,34 @@
     pointer-events: none;
     position: absolute;
     inset: 0px;
-    /*border-radius: inherit;   match rounded corners */
     border-radius: inherit;
     z-index: 999;
     /* sits in front of content */
+  }
+
+  /* iOS/Android fix: WebKit non-standardly applies the * selector to ::after pseudo-elements.
+   * pointer-events:none on ::after at z-index:999 creates touch dead zones in WKWebView
+   * (Capacitor) instead of passing events through as intended.
+   * On touch devices hover effects are irrelevant anyway, so we disable the ::after
+   * overlay entirely and use a direct :active background-image for press feedback.
+   * background-image renders below element content so it never intercepts child clicks. */
+  @media (hover: none) and (pointer: coarse) {
+    .hover-elevate:not(.no-default-hover-elevate)::after,
+    .active-elevate:not(.no-default-active-elevate)::after,
+    .hover-elevate-2:not(.no-default-hover-elevate)::after,
+    .active-elevate-2:not(.no-default-active-elevate)::after {
+      display: none;
+    }
+
+    .active-elevate:active:not(.no-default-active-elevate),
+    .hover-elevate:active:not(.no-default-hover-elevate) {
+      background-image: linear-gradient(var(--elevate-1), var(--elevate-1));
+    }
+
+    .active-elevate-2:active:not(.no-default-active-elevate),
+    .hover-elevate-2:active:not(.no-default-hover-elevate) {
+      background-image: linear-gradient(var(--elevate-2), var(--elevate-2));
+    }
   }
 
   .hover-elevate:hover:not(.no-default-hover-elevate)::after,
