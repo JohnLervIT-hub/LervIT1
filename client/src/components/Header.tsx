@@ -20,27 +20,27 @@ export default function Header() {
   const handleLogout = async () => {
     closeMobileMenu();
     await logout();
-    setLocation('/');
+    setLocation("/");
   };
 
   const handleHowItWorks = (e: React.MouseEvent) => {
     e.preventDefault();
     closeMobileMenu();
-    
-    if (location === '/') {
+
+    if (location === "/") {
       // Already on home page, just scroll
-      const element = document.getElementById('how-it-works');
+      const element = document.getElementById("how-it-works");
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
+        element.scrollIntoView({ behavior: "smooth" });
       }
     } else {
       // Navigate to home page first
-      setLocation('/');
+      setLocation("/");
       // Wait for navigation, then scroll
       setTimeout(() => {
-        const element = document.getElementById('how-it-works');
+        const element = document.getElementById("how-it-works");
         if (element) {
-          element.scrollIntoView({ behavior: 'smooth' });
+          element.scrollIntoView({ behavior: "smooth" });
         }
       }, 100);
     }
@@ -48,191 +48,252 @@ export default function Header() {
 
   return (
     <>
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <Link href="/" data-testid="link-home">
-            <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md cursor-pointer">
-              <Truck className="w-6 h-6 text-primary" />
-              <span className="text-xl font-bold">LervIT</span>
-            </div>
-          </Link>
+      <header
+        className="fixed top-0 left-0 right-0 z-[5000] bg-background/95 backdrop-blur-sm border-b"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Link href="/" data-testid="link-home">
+              <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md cursor-pointer">
+                <Truck className="w-6 h-6 text-primary" />
+                <span className="text-xl font-bold">LervIT</span>
+              </div>
+            </Link>
 
-          <div className="hidden md:flex items-center gap-1">
-            {user ? (
-              <>
-                {user.role === "customer" && <CustomerNav />}
-                {user.role === "mover" && <MoverNav />}
-                {user.role === "admin" && <AdminNav />}
-              </>
-            ) : (
-              <nav className="flex items-center gap-1">
-                <Link href="/browse-movers" data-testid="link-browse-movers">
-                  <Button variant="ghost" size="sm">
-                    Find Movers
-                  </Button>
-                </Link>
-                <Button 
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleHowItWorks}
-                  data-testid="link-how-it-works"
-                >
-                  How It Works
-                </Button>
-                <Link href="/signup" data-testid="link-become-mover">
-                  <Button variant="ghost" size="sm">
-                    Become a Mover
-                  </Button>
-                </Link>
-                <Link href="/support" data-testid="link-support">
-                  <Button variant="ghost" size="sm">
-                    Support
-                  </Button>
-                </Link>
-              </nav>
-            )}
-          </div>
-
-          <div className="hidden md:flex items-center gap-2">
-            {!user && <ThemeToggle />}
-            {user && <MessageNotification />}
-            {user ? (
-              <ProfileSheet />
-            ) : (
-              <>
-                <Link href="/login" data-testid="link-login">
-                  <Button variant="ghost" className="hover-elevate active-elevate-2">
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/request-move" data-testid="link-request-move">
-                  <Button data-testid="button-book-move">
-                    Book a Move
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1 md:hidden">
-            {!user && <ThemeToggle />}
-            {user && <MessageNotification />}
-            {user ? (
-              <ProfileSheet />
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hover-elevate active-elevate-2"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                data-testid="button-mobile-menu"
-                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-              >
-                <Menu className="w-8 h-8" />
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t bg-background">
-          <div className="px-4 py-4 space-y-2">
-            {user ? (
-              <>
-                {user.role === "customer" && (
-                  <>
-                    <Link href="/request-move" data-testid="link-mobile-request-move" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start">
-                        Request Move
-                      </Button>
-                    </Link>
-                    <Link href="/my-bookings" data-testid="link-mobile-my-bookings" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start">
-                        My Bookings
-                      </Button>
-                    </Link>
-                    <Link href="/dashboard" data-testid="link-mobile-dashboard" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start">
-                        Dashboard
-                      </Button>
-                    </Link>
-                  </>
-                )}
-                {user.role === "mover" && (
-                  <>
-                    <Link href="/mover-dashboard" data-testid="link-mobile-mover-dashboard" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start">
-                        Mover Dashboard
-                      </Button>
-                    </Link>
-                  </>
-                )}
-                {user.role === "admin" && (
-                  <>
-                    <Link href="/admin" data-testid="link-mobile-admin" onClick={closeMobileMenu}>
-                      <Button variant="ghost" className="w-full justify-start">
-                        Admin Dashboard
-                      </Button>
-                    </Link>
-                  </>
-                )}
-                <div className="pt-2 border-t">
-                  <Button 
-                    variant="outline" 
-                    className="w-full"
-                    onClick={handleLogout}
-                    data-testid="button-mobile-logout"
+            <div className="hidden md:flex items-center gap-1">
+              {user ? (
+                <>
+                  {user.role === "customer" && <CustomerNav />}
+                  {user.role === "mover" && <MoverNav />}
+                  {user.role === "admin" && <AdminNav />}
+                </>
+              ) : (
+                <nav className="flex items-center gap-1">
+                  <Link href="/browse-movers" data-testid="link-browse-movers">
+                    <Button variant="ghost" size="sm">
+                      Find Movers
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleHowItWorks}
+                    data-testid="link-how-it-works"
                   >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Log Out
+                    How It Works
                   </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <Link href="/browse-movers" data-testid="link-mobile-browse" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start">
-                    Find Movers
-                  </Button>
-                </Link>
-                <Button 
-                  variant="ghost" 
-                  className="w-full justify-start"
-                  onClick={handleHowItWorks}
-                  data-testid="link-mobile-how"
-                >
-                  How It Works
-                </Button>
-                <Link href="/signup" data-testid="link-mobile-become" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start">
-                    Become a Mover
-                  </Button>
-                </Link>
-                <Link href="/support" data-testid="link-mobile-support" onClick={closeMobileMenu}>
-                  <Button variant="ghost" className="w-full justify-start">
-                    Support
-                  </Button>
-                </Link>
-                <div className="pt-4 space-y-2 border-t">
-                  <Link href="/login" data-testid="link-mobile-login" onClick={closeMobileMenu}>
-                    <Button variant="outline" className="w-full">
+                  <Link href="/signup" data-testid="link-become-mover">
+                    <Button variant="ghost" size="sm">
+                      Become a Mover
+                    </Button>
+                  </Link>
+                  <Link href="/support" data-testid="link-support">
+                    <Button variant="ghost" size="sm">
+                      Support
+                    </Button>
+                  </Link>
+                </nav>
+              )}
+            </div>
+
+            <div className="hidden md:flex items-center gap-2">
+              {!user && <ThemeToggle />}
+              {user && <MessageNotification />}
+              {user ? (
+                <ProfileSheet />
+              ) : (
+                <>
+                  <Link href="/login" data-testid="link-login">
+                    <Button
+                      variant="ghost"
+                      className="hover-elevate active-elevate-2"
+                    >
                       Sign In
                     </Button>
                   </Link>
-                  <Link href="/signup" data-testid="link-mobile-signup" onClick={closeMobileMenu}>
-                    <Button className="w-full">
-                      Create an Account
-                    </Button>
+                  <Link href="/request-move" data-testid="link-request-move">
+                    <Button data-testid="button-book-move">Book a Move</Button>
                   </Link>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 md:hidden">
+              {!user && <ThemeToggle />}
+              {user && <MessageNotification />}
+              {user ? (
+                <ProfileSheet />
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11 p-0 relative z-[1001]"
+                  onClick={() => {
+                    console.log("mobile menu clicked", !mobileMenuOpen);
+                    setMobileMenuOpen(!mobileMenuOpen);
+                  }}
+                  data-testid="button-mobile-menu"
+                  aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                >
+                  <Menu className="w-6 h-6 pointer-events-none" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-      )}
-    </header>
+
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t bg-background relative z-[1000]">
+            <div className="px-4 py-4 space-y-2 relative z-[1000]">
+              {user ? (
+                <>
+                  {user.role === "customer" && (
+                    <>
+                      <Link
+                        href="/request-move"
+                        data-testid="link-mobile-request-move"
+                        onClick={closeMobileMenu}
+                      >
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                        >
+                          Request Move
+                        </Button>
+                      </Link>
+                      <Link
+                        href="/my-bookings"
+                        data-testid="link-mobile-my-bookings"
+                        onClick={closeMobileMenu}
+                      >
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                        >
+                          My Bookings
+                        </Button>
+                      </Link>
+                      <Link
+                        href="/dashboard"
+                        data-testid="link-mobile-dashboard"
+                        onClick={closeMobileMenu}
+                      >
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                        >
+                          Dashboard
+                        </Button>
+                      </Link>
+                    </>
+                  )}
+                  {user.role === "mover" && (
+                    <>
+                      <Link
+                        href="/mover-dashboard"
+                        data-testid="link-mobile-mover-dashboard"
+                        onClick={closeMobileMenu}
+                      >
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                        >
+                          Mover Dashboard
+                        </Button>
+                      </Link>
+                    </>
+                  )}
+                  {user.role === "admin" && (
+                    <>
+                      <Link
+                        href="/admin"
+                        data-testid="link-mobile-admin"
+                        onClick={closeMobileMenu}
+                      >
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                        >
+                          Admin Dashboard
+                        </Button>
+                      </Link>
+                    </>
+                  )}
+                  <div className="pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleLogout}
+                      data-testid="button-mobile-logout"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Log Out
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/browse-movers"
+                    data-testid="link-mobile-browse"
+                    onClick={closeMobileMenu}
+                  >
+                    <Button variant="ghost" className="w-full justify-start">
+                      Find Movers
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start"
+                    onClick={handleHowItWorks}
+                    data-testid="link-mobile-how"
+                  >
+                    How It Works
+                  </Button>
+                  <Link
+                    href="/signup"
+                    data-testid="link-mobile-become"
+                    onClick={closeMobileMenu}
+                  >
+                    <Button variant="ghost" className="w-full justify-start">
+                      Become a Mover
+                    </Button>
+                  </Link>
+                  <Link
+                    href="/support"
+                    data-testid="link-mobile-support"
+                    onClick={closeMobileMenu}
+                  >
+                    <Button variant="ghost" className="w-full justify-start">
+                      Support
+                    </Button>
+                  </Link>
+                  <div className="pt-4 space-y-2 border-t">
+                    <Link
+                      href="/login"
+                      data-testid="link-mobile-login"
+                      onClick={closeMobileMenu}
+                    >
+                      <Button variant="outline" className="w-full">
+                        Sign In
+                      </Button>
+                    </Link>
+                    <Link
+                      href="/signup"
+                      data-testid="link-mobile-signup"
+                      onClick={closeMobileMenu}
+                    >
+                      <Button className="w-full">Create an Account</Button>
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </header>
     </>
   );
 }

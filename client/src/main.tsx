@@ -17,8 +17,9 @@ async function setupNative() {
   const { App: CapApp } = await import("@capacitor/app");
   const { Keyboard } = await import("@capacitor/keyboard");
 
+  await StatusBar.setOverlaysWebView({ overlay: true });
   await StatusBar.setStyle({ style: Style.Dark });
-  await StatusBar.setBackgroundColor({ color: "#0f172a" });
+  await StatusBar.setBackgroundColor({ color: "transparent" });
 
   Keyboard.addListener("keyboardWillShow", () => {
     document.body.classList.add("keyboard-open");

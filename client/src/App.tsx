@@ -35,7 +35,9 @@ const CustomerDashboard = lazy(() => import("@/pages/CustomerDashboard"));
 const MyBookings = lazy(() => import("@/pages/MyBookings"));
 const MoverDashboard = lazy(() => import("@/pages/MoverDashboard"));
 const MoverProfileSetup = lazy(() => import("@/pages/MoverProfileSetup"));
-const MoverOnboardingWizard = lazy(() => import("@/pages/MoverOnboardingWizard"));
+const MoverOnboardingWizard = lazy(
+  () => import("@/pages/MoverOnboardingWizard"),
+);
 const Messages = lazy(() => import("@/pages/Messages"));
 const Review = lazy(() => import("@/pages/Review"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
@@ -49,8 +51,12 @@ const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
 const Support = lazy(() => import("@/pages/Support"));
-const AdminSupportDashboard = lazy(() => import("@/pages/AdminSupportDashboard"));
-const AdminVerificationDashboard = lazy(() => import("@/pages/AdminVerificationDashboard"));
+const AdminSupportDashboard = lazy(
+  () => import("@/pages/AdminSupportDashboard"),
+);
+const AdminVerificationDashboard = lazy(
+  () => import("@/pages/AdminVerificationDashboard"),
+);
 const AdminEmailCenter = lazy(() => import("@/pages/AdminEmailCenter"));
 const Payment = lazy(() => import("@/pages/Payment"));
 const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
@@ -71,7 +77,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/login" component={Login} />
         <Route path="/signup" component={Signup} />
-        
+
         {/* Public Routes - Lazy loaded */}
         <Route path="/website" component={LandingPage} />
         <Route path="/terms" component={TermsOfService} />
@@ -216,9 +222,16 @@ function AppContent({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const showPromoBanner = !user && loc === "/";
   return (
-    <div className={`${showPromoBanner ? "pt-[100px]" : "pt-16"} pb-16 md:pb-0`}>
+    <main
+      className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0"
+      style={{
+        paddingTop: showPromoBanner
+          ? "calc(100px + env(safe-area-inset-top))"
+          : "calc(64px + env(safe-area-inset-top))",
+      }}
+    >
       {children}
-    </div>
+    </main>
   );
 }
 
@@ -226,7 +239,7 @@ function App() {
   // Skip splash for returning users (visited within last 24 hours)
   const hasVisitedRecently = () => {
     try {
-      const lastVisit = sessionStorage.getItem('lervit_last_visit');
+      const lastVisit = sessionStorage.getItem("lervit_last_visit");
       if (lastVisit) {
         const elapsed = Date.now() - parseInt(lastVisit, 10);
         return elapsed < 24 * 60 * 60 * 1000; // 24 hours
@@ -242,7 +255,7 @@ function App() {
   // Mark visit for future splash skip
   useEffect(() => {
     try {
-      sessionStorage.setItem('lervit_last_visit', Date.now().toString());
+      sessionStorage.setItem("lervit_last_visit", Date.now().toString());
     } catch {
       // Ignore storage errors
     }
@@ -252,8 +265,8 @@ function App() {
   if (showSplash) {
     return (
       <Suspense fallback={<PageLoader />}>
-        <SplashScreen 
-          onComplete={() => setShowSplash(false)} 
+        <SplashScreen
+          onComplete={() => setShowSplash(false)}
           minDisplayTime={800}
         />
       </Suspense>
@@ -268,17 +281,17 @@ function App() {
             <LocationProvider>
               <TooltipProvider>
                 <ErrorBoundary>
-                <ScrollToTop />
-                <Header />
-                <AppContent>
-                  <PageTransition>
-                    <Router />
-                  </PageTransition>
-                </AppContent>
-                <MobileBottomNav />
-                <JobNotificationSound />
-                <InstallPrompt />
-              </ErrorBoundary>
+                  <ScrollToTop />
+                  <Header />
+                  <AppContent>
+                    <PageTransition>
+                      <Router />
+                    </PageTransition>
+                  </AppContent>
+                  <MobileBottomNav />
+                  <JobNotificationSound />
+                  <InstallPrompt />
+                </ErrorBoundary>
                 <Toaster />
               </TooltipProvider>
             </LocationProvider>

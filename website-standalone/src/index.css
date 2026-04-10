@@ -101,6 +101,37 @@
   }
 }
 
-* {
-  pointer-events: auto !important;
-}
+@media (hover: none) and (pointer: coarse) {
+
+  /* Disable problematic overlay on touch devices */
+  .hover-elevate::after,
+  .active-elevate::after {
+    display: none;
+  }
+
+  /* Replace with safe active feedback */
+  .active-elevate:active {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  header {
+    outline: 3px solid red !important;
+  }
+
+  section {
+    outline: 2px solid blue !important;
+  }
+
+  header button,
+  header [role="button"],
+  header a,
+  header svg {
+    outline: 2px solid lime !important;
+  }
+
+  header button,
+  header [role="button"],
+  header a {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
