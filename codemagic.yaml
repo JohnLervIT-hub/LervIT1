@@ -15,6 +15,10 @@ workflows:
         BUNDLE_ID: com.lervit.app
         XCODE_PROJECT: ios/App/App.xcodeproj
         XCODE_SCHEME: App
+        VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
+        
+        'VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
+
       node: 20.11.1
       xcode: latest
       cocoapods: default
@@ -25,10 +29,7 @@ workflows:
 
       - name: Build web assets
         script: npm run build
-        env:
-          # Pull any VITE_ vars from the group so the web build has them
-          VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
-          VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
+          # Pull any VITE_ vars from the group so the web build has th
 
       - name: Capacitor sync
         script: npx cap sync ios
@@ -102,7 +103,6 @@ workflows:
 
       - name: Build web assets
         script: npm run build
-        env:
           VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
           VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
 
@@ -156,10 +156,7 @@ workflows:
 
       - name: Build web assets
         script: npm run build
-        env:
-          VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
-          VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
-
+        
       - name: Capacitor sync
         script: npx cap sync android
 
