@@ -105,9 +105,7 @@ workflows:
 
       - name: Build web assets
         script: npm run build
-          VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
-          VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
-
+          
       - name: Capacitor sync
         script: npx cap sync ios
 
