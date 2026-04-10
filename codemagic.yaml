@@ -3,74 +3,76 @@ workflows:
   # ─────────────────────────────────────────────
   # iOS – TestFlight / App Store distribution
   # ─────────────────────────────────────────────
-  ios-release:
-    name: LervIT iOS Release
-    max_build_duration: 60
-    instance_type: mac_mini_m2
+          workflows:
+          ios-release:
+            name: LervIT iOS Release
+            max_build_duration: 60
+            instance_type: mac_mini_m2
 
-    environment:
-      groups:
-        - lervit_app_store   # Add this group in Codemagic → Teams → Global variables
-      vars:
-        BUNDLE_ID: com.lervit.app
-        XCODE_PROJECT: ios/App/App.xcodeproj
-        XCODE_SCHEME: App
-        VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
-        
-        VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
+            environment:
+              groups:
+                - lervit_app_store
+              vars:
+                BUNDLE_ID: com.lervit.app
+                XCODE_PROJECT: ios/App/App.xcodeproj
+                XCODE_SCHEME: App
+                VITE_STRIPE_PUBLIC_KEY: $VITE_STRIPE_PUBLIC_KEY
+                VITE_GOOGLE_MAPS_API_KEY: $VITE_GOOGLE_MAPS_API_KEY
+              node: 20.11.1
+              xcode: latest
+              cocoapods: default
 
-      node: 20.11.1
-      xcode: latest
-      cocoapods: default
+            triggering:
+              events:
+                - push
+              branch_patterns:
+                - pattern: main
+                  include: true
 
-    scripts:
-      - name: Install Node dependencies
-        script: npm ci
+            scripts:
+              - name: Install Node dependencies
+                script: npm ci
 
-      - name: Build web assets
-        script: npm run build
-          # Pull any VITE_ vars from the group so the web build has th
+              - name: Build web assets
+                script: npm run build
 
-      - name: Capacitor sync
-        script: npx cap sync ios
+              - name: Capacitor sync
+                script: npx cap sync ios
 
-      - name: Install CocoaPods
-        script: |
-          cd ios/App
-          pod install
+              - name: Install CocoaPods
+                script: |
+                  cd ios/App
+                  pod install
 
-      - name: Set build number from Codemagic run number
-        script: |
-          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
-          xcrun agvtool new-version -all "$BUILD_NUMBER"
-        ignore_failure: true   # First build or no existing build is fine
+              - name: Set build number
+                script: |
+                  BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" || echo 0) + 1))
+                  cd ios/App
+                  xcrun agvtool new-version -all "$BUILD_NUMBER"
 
-      - name: Code sign + build (App Store)
-        script: |
-          xcode-project use-profiles --project "$XCODE_PROJECT"
-          xcode-project build-ipa \
-            --project "$XCODE_PROJECT" \
-            --scheme  "$XCODE_SCHEME" \
-            --config  Release
+              - name: Code sign + build
+                script: |
+                  xcode-project use-profiles --project "$XCODE_PROJECT"
+                  xcode-project build-ipa \
+                    --project "$XCODE_PROJECT" \
+                    --scheme "$XCODE_SCHEME" \
+                    --config Release
 
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+            artifacts:
+              - build/ios/ipa/*.ipa
+              - /tmp/xcodebuild_logs/*.log
+              - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
-    publishing:
-      app_store_connect:
-        auth: integration          # Uses the App Store Connect API key from the Codemagic integration
-        submit_to_testflight: true
-        beta_groups:
-          - Internal Testers
-      email:
-        recipients:
-          - builds@lervit.com
-        notify:
-          success: true
-          failure: true
-
+            publishing:
+              app_store_connect:
+                auth: integration
+                submit_to_testflight: true
+              email:
+                recipients:
+                  - builds@lervit.com
+                notify:
+                  success: true
+                  failure: true
   # ─────────────────────────────────────────────
   # iOS – Ad-hoc build for device testing
   # ─────────────────────────────────────────────
