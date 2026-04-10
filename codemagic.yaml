@@ -60,17 +60,5 @@
 
             artifacts:
               - build/ios/ipa/*.ipa
-              - /tmp/xcodebuild_logs/*.log
-              - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-
-            publishing:
-              app_store_connect:
-                auth: integration
-                submit_to_testflight: true
-              email:
-                recipients:
-                  - builds@lervit.com
-                notify:
-                  success: true
-                  failure: true
-  
+              
+            
