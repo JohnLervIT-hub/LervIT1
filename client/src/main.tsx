@@ -1,10 +1,11 @@
+import { StatusBar } from "@capacitor/status-bar";
 import * as React from "react";
 import * as ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { Capacitor } from "@capacitor/core";
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   (window as any).React = React;
   (window as any).ReactDOM = ReactDOM;
 }
@@ -17,7 +18,6 @@ async function setupNative() {
   const { App: CapApp } = await import("@capacitor/app");
   const { Keyboard } = await import("@capacitor/keyboard");
 
-  await StatusBar.setOverlaysWebView({ overlay: true });
   await StatusBar.setStyle({ style: Style.Dark });
   await StatusBar.setBackgroundColor({ color: "transparent" });
 
@@ -46,8 +46,8 @@ function renderApp() {
   }
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', async () => {
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", async () => {
     renderApp();
     await setupNative();
   });

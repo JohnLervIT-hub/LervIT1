@@ -221,14 +221,10 @@ function AppContent({ children }: { children: ReactNode }) {
   const [loc] = useLocation();
   const { user } = useAuth();
   const showPromoBanner = !user && loc === "/";
+
   return (
     <main
-      className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0"
-      style={{
-        paddingTop: showPromoBanner
-          ? "calc(100px + env(safe-area-inset-top))"
-          : "calc(64px + env(safe-area-inset-top))",
-      }}
+      className={`${showPromoBanner ? "pt-[100px]" : "pt-16"} pb-16 md:pb-0`}
     >
       {children}
     </main>

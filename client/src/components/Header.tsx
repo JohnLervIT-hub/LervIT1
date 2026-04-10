@@ -48,12 +48,11 @@ export default function Header() {
 
   return (
     <>
-      <header
-        className="fixed top-0 left-0 right-0 z-[5000] bg-background/95 backdrop-blur-sm border-b"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
-      >
+        <header className="fixed top-0 left-0 right-0 z-[5000] bg-red-500 border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+
+            <div className="text-white text-xl font-bold">TEST HEADER</div>
             <Link href="/" data-testid="link-home">
               <div className="flex items-center gap-2 hover-elevate active-elevate-2 px-3 py-2 rounded-md cursor-pointer">
                 <Truck className="w-6 h-6 text-primary" />
