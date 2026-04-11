@@ -5,9 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone, Route } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone, Route, Camera, ImagePlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -281,6 +283,13 @@ export default function MoverDashboard() {
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [showImagePreview, setShowImagePreview] = useState(false);
+
+  // Vehicle photo nudge state
+  const [showVehiclePhotoDialog, setShowVehiclePhotoDialog] = useState(false);
+  const [showOnlineNudgeDialog, setShowOnlineNudgeDialog] = useState(false);
+  const [vehiclePhotoFile, setVehiclePhotoFile] = useState<File | null>(null);
+  const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(null);
+  const [vehiclePhotoUploading, setVehiclePhotoUploading] = useState(false);
 
   // First get the mover profile
   const { data: mover } = useQuery<any>({
@@ -642,6 +651,43 @@ export default function MoverDashboard() {
     },
   });
 
+  const uploadVehiclePhotoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("images", file);
+      const response = await fetch("/api/upload/images", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Upload failed");
+      const data = await response.json();
+      return { url: data.urls?.[0] || data.url };
+    },
+    onSuccess: async (data) => {
+      await apiRequest("PATCH", `/api/movers/${mover?.id}`, { vehiclePhoto: data.url });
+      await queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
+      setVehiclePhotoFile(null);
+      setShowVehiclePhotoDialog(false);
+      toast({ title: "Vehicle photo saved!", description: "Your profile is now more visible to customers." });
+    },
+    onError: () => {
+      toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+    },
+  });
+
+  const handleVehiclePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVehiclePhotoFile(file);
+      setVehiclePhotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleVehiclePhotoSave = () => {
+    if (vehiclePhotoFile) uploadVehiclePhotoMutation.mutate(vehiclePhotoFile);
+  };
+
   const handleAvailabilityToggle = (checked: boolean) => {
     if (isVerificationLoading) {
       toast({
@@ -660,6 +706,12 @@ export default function MoverDashboard() {
     //   });
     //   return;
     // }
+
+    // Soft nudge: going online without a vehicle photo reduces visibility
+    if (checked && !mover?.vehiclePhoto) {
+      setShowOnlineNudgeDialog(true);
+      return;
+    }
     
     // When going online, auto-request location permission (seamless UX)
     if (checked && geoPermissionState !== 'granted' && !geoCoords) {
@@ -1596,6 +1648,33 @@ export default function MoverDashboard() {
               </Button>
             </div>
           )}
+
+          {/* Vehicle photo nudge banner — shown when mover has no vehicle photo */}
+          {mover && !mover.vehiclePhoto && (
+            <div className="mt-4 bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between gap-4" data-testid="banner-vehicle-photo-nudge">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <ImagePlus className="w-5 h-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Add a vehicle photo</p>
+                  <p className="text-xs text-muted-foreground">Profiles with photos get significantly more bookings</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="rounded-full shrink-0"
+                onClick={() => {
+                  setVehiclePhotoPreview(null);
+                  setVehiclePhotoFile(null);
+                  setShowVehiclePhotoDialog(true);
+                }}
+                data-testid="button-add-vehicle-photo-banner"
+              >
+                Add Photo
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1619,6 +1698,121 @@ export default function MoverDashboard() {
             />
           </div>
         )}
+
+        {/* ── Inline vehicle photo upload dialog ───────────────────────── */}
+        <Dialog open={showVehiclePhotoDialog} onOpenChange={setShowVehiclePhotoDialog}>
+          <DialogContent className="max-w-sm" data-testid="dialog-vehicle-photo-upload">
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="w-5 h-5 text-primary" />
+              Add Vehicle Photo
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              A clear photo of your vehicle helps customers feel confident booking you.
+            </DialogDescription>
+            <div className="space-y-4 mt-2">
+              {/* Preview area */}
+              <div className="w-full aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+                {vehiclePhotoPreview ? (
+                  <img src={vehiclePhotoPreview} alt="Vehicle preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center text-muted-foreground py-6">
+                    <Truck className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No photo selected</p>
+                  </div>
+                )}
+              </div>
+
+              {/* File picker */}
+              <Label
+                htmlFor="dashboard-vehicle-photo"
+                className="cursor-pointer flex items-center justify-center gap-2 w-full px-4 py-2 border border-input rounded-md text-sm hover-elevate"
+                data-testid="label-pick-vehicle-photo"
+              >
+                <Camera className="w-4 h-4" />
+                {vehiclePhotoPreview ? "Choose a different photo" : "Choose photo"}
+              </Label>
+              <Input
+                id="dashboard-vehicle-photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleVehiclePhotoChange}
+                data-testid="input-dashboard-vehicle-photo"
+              />
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowVehiclePhotoDialog(false)}
+                  data-testid="button-cancel-vehicle-photo"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!vehiclePhotoFile || uploadVehiclePhotoMutation.isPending}
+                  onClick={handleVehiclePhotoSave}
+                  data-testid="button-save-vehicle-photo"
+                >
+                  {uploadVehiclePhotoMutation.isPending ? "Saving…" : "Save Photo"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Soft nudge: go online without vehicle photo ───────────────── */}
+        <AlertDialog open={showOnlineNudgeDialog} onOpenChange={setShowOnlineNudgeDialog}>
+          <AlertDialogContent data-testid="dialog-online-nudge">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <ImagePlus className="w-5 h-5 text-primary" />
+                You're missing a vehicle photo
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  Customers can see your vehicle photo before booking. Movers with photos receive more job requests.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You can still go online now, but adding a photo takes less than a minute.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel
+                onClick={() => {
+                  setShowOnlineNudgeDialog(false);
+                  // Let them go online anyway — no blocking
+                  if (geoPermissionState !== 'granted' && !geoCoords) {
+                    pendingOnlineToggle.current = true;
+                    requestGeoLocation();
+                  } else {
+                    toggleAvailabilityMutation.mutate(true);
+                  }
+                }}
+                data-testid="button-skip-vehicle-photo-nudge"
+                className="w-full sm:w-auto"
+              >
+                Go online anyway
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setShowOnlineNudgeDialog(false);
+                  setVehiclePhotoPreview(null);
+                  setVehiclePhotoFile(null);
+                  setShowVehiclePhotoDialog(true);
+                }}
+                data-testid="button-add-photo-from-nudge"
+                className="w-full sm:w-auto"
+              >
+                Add Photo Now
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog open={showVerificationAlert} onOpenChange={setShowVerificationAlert}>
           <AlertDialogContent>
