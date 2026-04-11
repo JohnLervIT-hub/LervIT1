@@ -289,7 +289,6 @@ export default function MoverDashboard() {
   const [showOnlineNudgeDialog, setShowOnlineNudgeDialog] = useState(false);
   const [vehiclePhotoFile, setVehiclePhotoFile] = useState<File | null>(null);
   const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(null);
-  const [vehiclePhotoUploading, setVehiclePhotoUploading] = useState(false);
 
   // First get the mover profile
   const { data: mover } = useQuery<any>({
@@ -653,26 +652,38 @@ export default function MoverDashboard() {
 
   const uploadVehiclePhotoMutation = useMutation({
     mutationFn: async (file: File) => {
+      if (!mover?.id) throw new Error("Mover profile not loaded");
+
+      // Step 1: Upload image to object storage
       const formData = new FormData();
       formData.append("images", file);
-      const response = await fetch("/api/upload/images", {
+      const uploadResponse = await fetch("/api/upload/images", {
         method: "POST",
         body: formData,
         credentials: "include",
       });
-      if (!response.ok) throw new Error("Upload failed");
-      const data = await response.json();
-      return { url: data.urls?.[0] || data.url };
+      if (!uploadResponse.ok) throw new Error("Image upload failed");
+      const uploadData = await uploadResponse.json();
+      const url: string = uploadData.urls?.[0] || uploadData.url;
+      if (!url) throw new Error("No URL returned from upload");
+
+      // Step 2: Persist URL to mover profile — in the same mutationFn so
+      // any PATCH failure correctly triggers onError instead of being swallowed
+      await apiRequest("PATCH", `/api/movers/${mover.id}`, { vehiclePhoto: url });
+      return url;
     },
-    onSuccess: async (data) => {
-      await apiRequest("PATCH", `/api/movers/${mover?.id}`, { vehiclePhoto: data.url });
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: [`/api/movers?userId=${user?.id}`] });
       setVehiclePhotoFile(null);
       setShowVehiclePhotoDialog(false);
       toast({ title: "Vehicle photo saved!", description: "Your profile is now more visible to customers." });
     },
-    onError: () => {
-      toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+    onError: (err: any) => {
+      toast({
+        title: "Upload failed",
+        description: err?.message || "Please try again",
+        variant: "destructive",
+      });
     },
   });
 
@@ -1735,7 +1746,6 @@ export default function MoverDashboard() {
                 id="dashboard-vehicle-photo"
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={handleVehiclePhotoChange}
                 data-testid="input-dashboard-vehicle-photo"
