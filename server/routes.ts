@@ -8378,6 +8378,22 @@ Respond with VALID JSON only:
         return res.status(403).json({ error: "You are not authorized to view this booking's location" });
       }
       
+      let moverData = null;
+      if (booking.moverId) {
+        const mover = await storage.getMover(booking.moverId);
+        if (mover) {
+          const moverUser = await storage.getUserById(mover.userId);
+          moverData = {
+            name: moverUser?.name || "Your mover",
+            phone: moverUser?.phone || "",
+            vehicleType: mover.vehicleType || "",
+            rating: mover.rating ?? 0,
+            vehiclePhoto: mover.vehiclePhoto || null,
+            profilePhoto: mover.vehiclePhoto || null,
+          };
+        }
+      }
+
       res.json({
         bookingId: booking.id,
         status: booking.status,
@@ -8395,7 +8411,8 @@ Respond with VALID JSON only:
           latitude: booking.currentLatitude,
           longitude: booking.currentLongitude,
           updatedAt: booking.locationUpdatedAt
-        } : null
+        } : null,
+        mover: moverData,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch location" });
