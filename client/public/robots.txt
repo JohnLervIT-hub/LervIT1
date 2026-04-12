@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /mover-dashboard
+Disallow: /admin
+Disallow: /my-bookings
+Disallow: /profile
+
+Sitemap: https://app.lervit.com/sitemap.xml
