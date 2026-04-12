@@ -1,0 +1,59 @@
+The current desktop Step 1 / route preview does not feel world-class. It looks like a raw Google Map embedded beside a form. Redesign it so it feels like a premium logistics booking experience.
+
+Goals:
+- Make the UI feel polished, app-like, and consumer-grade
+- Keep the booking form clear and prominent
+- Make the map feel intentional and branded, not generic
+- Improve visual hierarchy, spacing, route styling, and marker presentation
+
+Required changes:
+
+1. Desktop layout
+- Use a true two-column layout
+- Left side: fixed-width booking card (roughly 380–420px)
+- Right side: large premium map panel
+- Keep the full layout balanced, centered, and spacious
+- Avoid awkward cropping of the form panel
+
+2. Form panel
+- Add a cleaner title such as “Where is your move?”
+- Keep pickup and dropoff fields visually strong and easy to scan
+- Place access type selectors neatly under each address
+- Improve spacing rhythm and reduce visual clutter
+- Anchor the Next button cleanly at the bottom of the form card
+
+3. Map panel
+- The map should feel like a polished route preview, not a raw embed
+- Use a large rounded container with cleaner framing
+- Add generous internal padding when fitting the route
+- Ensure endpoints are not too close to edges
+- Visually center the route in a more intentional way
+
+4. Marker and label redesign
+- Remove long heavy address pills directly on the map if possible
+- Replace them with cleaner branded pickup/dropoff markers
+- Use short labels like Pickup and Dropoff, or show full addresses in the side panel instead
+- Keep the map uncluttered and premium
+
+5. Route styling
+- Improve the route line styling so it feels branded and elegant
+- Use Lervit’s visual language for the polyline
+- Make the route slightly more premium than default Google blue
+- Consider a cleaner stroke treatment that improves visibility without looking heavy
+
+6. Reduce generic map feel
+- Minimize nonessential map chrome where possible
+- Keep only controls that genuinely improve usability
+- Make the total map experience look productized, not like a default developer implementation
+
+7. Responsive behavior
+- Preserve mobile-first logic, but optimize desktop separately
+- Do not simply stretch the mobile experience onto desktop
+- Desktop should feel intentionally designed for larger screens
+
+Acceptance criteria:
+- The page feels like a premium logistics app, not a generic web form with a map
+- The form and map feel part of one coherent product experience
+- The route preview looks elegant and intentional
+- Marker styling is cleaner and less clunky
+- Overall layout looks polished enough for a world-class marketplace UX

@@ -38,65 +38,66 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // Calgary city center – default map position before addresses are entered
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
-// Clean, minimal map style for the booking flow
+// Premium minimal map style for the booking flow
 const BOOKING_MAP_STYLES = [
+  { featureType: "all", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
   { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#555555" }] },
+  { elementType: "geometry", stylers: [{ color: "#f8f9fa" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
   { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ebebeb" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c8dff7" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dff0df" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e5e7eb" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#f3f4f6" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e9ecef" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d1d5db" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#dbeafe" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#93c5fd" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dcfce7" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#86efac" }] },
+  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#374151" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
 ];
 
-// Build an Uber-style floating address box marker icon
-function makeAddressPillIcon(label: string, bg: string, fg: string): google.maps.Icon {
-  // Abbreviate common suffixes to keep the box compact
-  const short = label
-    .split(",")[0]
-    .replace(/\bNortheast\b/g, "NE").replace(/\bNorthwest\b/g, "NW")
-    .replace(/\bSoutheast\b/g, "SE").replace(/\bSouthwest\b/g, "SW")
-    .replace(/\bAvenue\b/g, "Ave").replace(/\bStreet\b/g, "St")
-    .replace(/\bDrive\b/g, "Dr").replace(/\bBoulevard\b/g, "Blvd")
-    .replace(/\bRoad\b/g, "Rd").replace(/\bPlace\b/g, "Pl")
-    .slice(0, 30);
-  const charW = 7;
-  const padX = 12;
-  const padY = 8;
-  const fontSize = 12;
-  const w = Math.round(short.length * charW + padX * 2);
-  const h = fontSize + padY * 2;           // 28px
-  const r = 6;                             // subtle rounded corners — Uber uses ~6px
-  const dotR = 5;                          // small anchor dot below the box
-  const gap = 4;                           // space between box and dot
-  const totalH = h + gap + dotR * 2 + 2;  // box + gap + dot
-  const dotCX = w / 2;
-  const dotCY = h + gap + dotR;
+// Branded map marker: clean dot + short label chip (Pickup / Dropoff)
+function makeRouteMarkerIcon(label: string, dotColor: string, labelBg: string, labelFg: string): google.maps.Icon {
+  const dotR = 7;
+  const fontSize = 10;
+  const padX = 8;
+  const padY = 5;
+  const chipH = fontSize + padY * 2;
+  const chipW = Math.round(label.length * 6.2 + padX * 2);
+  const chipR = chipH / 2;
+  const gap = 4;
+  // Total SVG: dot on bottom, chip floating above
+  const totalW = Math.max(dotR * 2, chipW);
+  const chipX = (totalW - chipW) / 2;
+  const dotCX = totalW / 2;
+  const totalH = chipH + gap + dotR * 2;
+  const chipY = 0;
+  const dotCY = chipH + gap + dotR;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${totalH}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}">
     <defs>
-      <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/>
+      <filter id="s${label}" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="rgba(0,0,0,0.25)"/>
       </filter>
     </defs>
-    <!-- Address box -->
-    <rect x="0" y="0" width="${w}" height="${h}" rx="${r}" ry="${r}"
-      fill="${bg}" filter="url(#sh)"/>
-    <text x="${w / 2}" y="${h / 2 + fontSize / 2 - 1}" text-anchor="middle"
-      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
-      font-size="${fontSize}" font-weight="700" fill="${fg}" letter-spacing="-0.2">${short}</text>
-    <!-- Small anchor dot pointing to the exact map location -->
-    <circle cx="${dotCX}" cy="${dotCY}" r="${dotR}" fill="${bg}" opacity="0.85"/>
+    <rect x="${chipX}" y="${chipY}" width="${chipW}" height="${chipH}"
+      rx="${chipR}" ry="${chipR}" fill="${labelBg}" filter="url(#s${label})"/>
+    <text x="${dotCX}" y="${chipY + chipH / 2 + fontSize / 2 - 1}" text-anchor="middle"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+      font-size="${fontSize}" font-weight="700" fill="${labelFg}" letter-spacing="0.3">${label.toUpperCase()}</text>
+    <circle cx="${dotCX}" cy="${dotCY}" r="${dotR}" fill="${dotColor}"
+      stroke="white" stroke-width="2" filter="url(#s${label})"/>
   </svg>`;
 
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    // Anchor at the center of the dot so the dot sits exactly on the route endpoint
-    anchor: new google.maps.Point(dotCX, dotCY + dotR) as google.maps.Point,
-    scaledSize: new google.maps.Size(w, totalH),
+    anchor: new google.maps.Point(dotCX, totalH) as google.maps.Point,
+    scaledSize: new google.maps.Size(totalW, totalH),
   };
 }
 
@@ -478,12 +479,13 @@ export default function RequestMove() {
       zoom: 11,
       disableDefaultUI: true,
       zoomControl: true,
+      gestureHandling: "cooperative",
       styles: BOOKING_MAP_STYLES,
     });
     step1MapInstanceRef.current = map;
     const renderer = new google.maps.DirectionsRenderer({
       suppressMarkers: true,
-      polylineOptions: { strokeColor: "#1a1a1a", strokeWeight: 5, strokeOpacity: 0.85 },
+      polylineOptions: { strokeColor: "#2563eb", strokeWeight: 4, strokeOpacity: 0.9 },
     });
     renderer.setMap(map);
     step1DirRendererRef.current = renderer;
@@ -517,7 +519,7 @@ export default function RequestMove() {
           if (map) {
             // Fit the map to show the full route
             const bounds = result.routes[0]?.bounds;
-            if (bounds) map.fitBounds(bounds, 48);
+            if (bounds) map.fitBounds(bounds, 80);
 
             const leg = result.routes[0]?.legs[0];
             if (leg) {
@@ -525,20 +527,20 @@ export default function RequestMove() {
               step1PickupMarkerRef.current?.setMap(null);
               step1DropoffMarkerRef.current?.setMap(null);
 
-              // Pickup — green pill showing street address
+              // Pickup — branded green marker chip
               step1PickupMarkerRef.current = new google.maps.Marker({
                 position: leg.start_location,
                 map,
-                icon: makeAddressPillIcon(pickupAddress, "#16a34a", "#ffffff"),
+                icon: makeRouteMarkerIcon("Pickup", "#16a34a", "#16a34a", "#ffffff"),
                 title: pickupAddress,
                 zIndex: 10,
               });
 
-              // Dropoff — dark pill showing street address
+              // Dropoff — branded dark marker chip
               step1DropoffMarkerRef.current = new google.maps.Marker({
                 position: leg.end_location,
                 map,
-                icon: makeAddressPillIcon(dropoffAddress, "#111827", "#ffffff"),
+                icon: makeRouteMarkerIcon("Dropoff", "#111827", "#111827", "#ffffff"),
                 title: dropoffAddress,
                 zIndex: 10,
               });
@@ -1514,72 +1516,56 @@ export default function RequestMove() {
       </div>
 
       <div className="min-h-screen pt-20 pb-12 bg-background">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <div className={step === 1 ? "w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8" : "max-w-4xl mx-auto px-4 sm:px-6"}>
         {/* Spacer for sticky progress on mobile */}
         <div className="h-16 md:hidden" />
 
-        {/* Page Header */}
-        <div className="py-6 mb-2">
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1">
-            Request a Move
-          </h1>
-          <p className="text-muted-foreground">
-            Tell us what you need moved
-          </p>
+        {/* Page Header — compact on step 1 desktop to save vertical space */}
+        <div className={step === 1 ? "py-4 mb-4 hidden md:block" : "py-6 mb-2"}>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1">Request a Move</h1>
+          <p className="text-muted-foreground text-sm">Tell us what you need moved</p>
         </div>
 
         {/* Desktop Step Indicator - hidden on mobile */}
-        <div className="mb-8 hidden md:block">
+        <div className="mb-6 hidden md:block">
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((stepNum) => (
               <div key={stepNum} className="flex items-center flex-1">
                 <div
-                  className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold ${
-                    step >= stepNum
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
+                  className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold ${
+                    step >= stepNum ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                   }`}
                   data-testid={`step-indicator-${stepNum}`}
                 >
                   {stepNum}
                 </div>
                 {stepNum < 3 && (
-                  <div
-                    className={`flex-1 h-1 mx-2 ${
-                      step > stepNum ? "bg-primary" : "bg-muted"
-                    }`}
-                  />
+                  <div className={`flex-1 h-0.5 mx-2 ${step > stepNum ? "bg-primary" : "bg-muted"}`} />
                 )}
               </div>
             ))}
           </div>
-          <div className="flex justify-between mt-2 text-sm">
-            <span className={step >= 1 ? "font-semibold" : "text-muted-foreground"}>
-              Locations
-            </span>
-            <span className={step >= 2 ? "font-semibold" : "text-muted-foreground"}>
-              Load Details
-            </span>
-            <span className={step >= 3 ? "font-semibold" : "text-muted-foreground"}>
-              Schedule
-            </span>
+          <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+            <span className={step >= 1 ? "font-semibold text-foreground" : ""}>Locations</span>
+            <span className={step >= 2 ? "font-semibold text-foreground" : ""}>Load Details</span>
+            <span className={step >= 3 ? "font-semibold text-foreground" : ""}>Schedule</span>
           </div>
         </div>
 
+        {/* ── STEP 1: Premium two-column layout ── */}
         <div className={step === 1
-          ? "flex flex-col lg:grid lg:grid-cols-[5fr_6fr] lg:gap-5 lg:items-start"
+          ? "flex flex-col lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 lg:items-start"
           : "grid gap-6"
         }>
-          {/* Step 1 Interactive Map — mobile: above form, desktop: right column */}
+          {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
-            <div className="relative order-first lg:order-last rounded-xl overflow-hidden h-[38vh] md:h-[42vh] lg:h-[580px] lg:sticky lg:top-20 bg-muted mb-4 lg:mb-0">
-              {/* absolute inset-0 ensures the map div always fills the container regardless of height mode */}
+            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[42vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
               <div ref={mapDivRefCallback} className="absolute inset-0" />
               {!mapsIsLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-sm">
                   <div className="text-center text-muted-foreground">
-                    <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Loading map…</p>
+                    <MapPin className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs tracking-wide uppercase font-medium">Loading map…</p>
                   </div>
                 </div>
               )}
@@ -1588,15 +1574,15 @@ export default function RequestMove() {
 
           {/* Main Form */}
           <div className={step === 1 ? "order-last lg:order-first" : ""}>
-            <Card>
-              <CardHeader className="pb-3">
-                <h2 className={step === 1 ? "text-lg font-bold" : "text-2xl font-bold"}>
-                  {step === 1 && "Where are you moving?"}
+            <Card className={step === 1 ? "shadow-sm" : ""}>
+              <CardHeader className="pb-4">
+                <h2 className={step === 1 ? "text-xl font-bold tracking-tight" : "text-2xl font-bold"}>
+                  {step === 1 && "Where is your move?"}
                   {step === 2 && "Step 2: Load Details"}
                   {step === 3 && "Step 3: Schedule & Details"}
                 </h2>
                 {step === 1 && (
-                  <p className="text-sm text-muted-foreground mt-0.5">Enter pickup and dropoff addresses</p>
+                  <p className="text-sm text-muted-foreground">Set pickup and dropoff locations</p>
                 )}
               </CardHeader>
               <CardContent className="space-y-6">
@@ -1647,106 +1633,97 @@ export default function RequestMove() {
                 
                 {step === 1 && (
                   <>
-                    {/* Route Location Selector */}
-                    <div className="relative flex gap-3">
-                      {/* Left rail: dot → line → square */}
-                      <div className="flex flex-col items-center pt-3 flex-shrink-0">
-                        <div className="w-3 h-3 rounded-full bg-green-500 ring-2 ring-green-500/20" />
-                        <div className="w-0.5 flex-1 my-1 bg-border" />
-                        <div className="w-3 h-3 rounded-sm bg-primary" />
+                    {/* Route location selector — clean stacked layout */}
+                    <div className="space-y-0">
+
+                      {/* ── Pickup ── */}
+                      <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-green-500/20 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pickup</span>
+                        </div>
+                        <CustomAddressInput
+                          id="pickup"
+                          placeholder="Enter pickup address in Calgary"
+                          value={pickupAddress}
+                          onChange={(address) => setPickupAddress(address)}
+                          data-testid="input-pickup-address"
+                        />
+                        <Select value={pickupDifficulty} onValueChange={(val) => { setPickupDifficulty(val); setPickupAccessError(false); }}>
+                          <SelectTrigger
+                            id="pickup-difficulty"
+                            className={`bg-background ${pickupAccessError ? 'border-destructive ring-1 ring-destructive' : ''}`}
+                            data-testid="select-pickup-difficulty"
+                          >
+                            <SelectValue placeholder="Access type (stairs, elevator…)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-2 text-xs">Free</span></SelectItem>
+                            <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+$12</span></SelectItem>
+                            <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+$6</span></SelectItem>
+                            <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+$9.60</span></SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {pickupAccessError && (
+                          <p className="text-xs text-destructive flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />Please select pickup access type
+                          </p>
+                        )}
                       </div>
 
-                      {/* Right: fields */}
-                      <div className="flex-1 space-y-4 min-w-0">
-                        {/* Pickup */}
-                        <div className="space-y-2">
-                          <Label htmlFor="pickup" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                            Pickup
-                          </Label>
-                          <CustomAddressInput
-                            id="pickup"
-                            placeholder="Enter pickup address in Calgary"
-                            value={pickupAddress}
-                            onChange={(address) => setPickupAddress(address)}
-                            data-testid="input-pickup-address"
-                          />
-                          <Select value={pickupDifficulty} onValueChange={(val) => {
-                            setPickupDifficulty(val);
-                            setPickupAccessError(false);
-                          }}>
-                            <SelectTrigger 
-                              id="pickup-difficulty" 
-                              className={pickupAccessError ? 'border-destructive ring-1 ring-destructive' : ''} 
-                              data-testid="select-pickup-difficulty"
-                            >
-                              <SelectValue placeholder="Access type (stairs, elevator…)" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-1 text-xs">Free</span></SelectItem>
-                              <SelectItem value="basement">Basement <span className="text-muted-foreground ml-1 text-xs">+$12</span></SelectItem>
-                              <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-1 text-xs">+$6</span></SelectItem>
-                              <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-1 text-xs">+$9.60</span></SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {pickupAccessError && (
-                            <p className="text-xs text-destructive flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Please select pickup access type
-                            </p>
-                          )}
-                        </div>
+                      {/* Connector line */}
+                      <div className="flex justify-center py-0.5">
+                        <div className="w-px h-5 bg-border" />
+                      </div>
 
-                        {/* Divider */}
-                        <div className="border-t border-dashed" />
-
-                        {/* Dropoff */}
-                        <div className="space-y-2">
-                          <Label htmlFor="dropoff" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                            Dropoff
-                          </Label>
-                          <CustomAddressInput
-                            id="dropoff"
-                            placeholder="Enter dropoff address in Calgary"
-                            value={dropoffAddress}
-                            onChange={(address) => setDropoffAddress(address)}
-                            data-testid="input-dropoff-address"
-                          />
-                          <Select value={dropoffDifficulty} onValueChange={(val) => {
-                              setDropoffDifficulty(val);
-                              setDropoffAccessError(false);
-                            }}>
-                            <SelectTrigger 
-                              id="dropoff-difficulty" 
-                              className={dropoffAccessError ? 'border-destructive ring-1 ring-destructive' : ''} 
-                              data-testid="select-dropoff-difficulty"
-                            >
-                              <SelectValue placeholder="Access type (stairs, elevator…)" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-1 text-xs">Free</span></SelectItem>
-                              <SelectItem value="basement">Basement <span className="text-muted-foreground ml-1 text-xs">+$12</span></SelectItem>
-                              <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-1 text-xs">+$6</span></SelectItem>
-                              <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-1 text-xs">+$9.60</span></SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {dropoffAccessError && (
-                            <p className="text-xs text-destructive flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Please select dropoff access type
-                            </p>
-                          )}
+                      {/* ── Dropoff ── */}
+                      <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-sm bg-primary flex-shrink-0" />
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dropoff</span>
                         </div>
+                        <CustomAddressInput
+                          id="dropoff"
+                          placeholder="Enter dropoff address in Calgary"
+                          value={dropoffAddress}
+                          onChange={(address) => setDropoffAddress(address)}
+                          data-testid="input-dropoff-address"
+                        />
+                        <Select value={dropoffDifficulty} onValueChange={(val) => { setDropoffDifficulty(val); setDropoffAccessError(false); }}>
+                          <SelectTrigger
+                            id="dropoff-difficulty"
+                            className={`bg-background ${dropoffAccessError ? 'border-destructive ring-1 ring-destructive' : ''}`}
+                            data-testid="select-dropoff-difficulty"
+                          >
+                            <SelectValue placeholder="Access type (stairs, elevator…)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-2 text-xs">Free</span></SelectItem>
+                            <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+$12</span></SelectItem>
+                            <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+$6</span></SelectItem>
+                            <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+$9.60</span></SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {dropoffAccessError && (
+                          <p className="text-xs text-destructive flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />Please select dropoff access type
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    {/* Route distance — shown only when map has drawn the route */}
+                    {/* Route summary strip — appears once route is calculated */}
                     {estimateDistance > 0 && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground pt-1">
-                        <Truck className="w-4 h-4 flex-shrink-0" />
-                        <span>{estimateDistance.toFixed(1)} km estimated drive</span>
+                      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/15">
+                        <Truck className="w-4 h-4 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground">{estimateDistance.toFixed(1)} km route</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {pickupAddress.split(",")[0]} → {dropoffAddress.split(",")[0]}
+                          </p>
+                        </div>
                       </div>
                     )}
-
                   </>
                 )}
 
