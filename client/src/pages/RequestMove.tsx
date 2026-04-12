@@ -1671,7 +1671,7 @@ export default function RequestMove() {
           {/* Main Form */}
           <div className={step === 1 ? "order-last lg:order-first lg:flex lg:flex-col" : ""}>
             <Card className={step === 1 ? "shadow-sm lg:flex lg:flex-col lg:h-full" : ""}>
-              <CardHeader className="pb-4">
+              <CardHeader className={step === 1 ? "pt-4 pb-3 md:pt-6 md:pb-4" : "pb-4"}>
                 <h2 className={step === 1 ? "text-xl font-bold tracking-tight" : "text-2xl font-bold"}>
                   {step === 1 && "Where is your move?"}
                   {step === 2 && "Step 2: Load Details"}
