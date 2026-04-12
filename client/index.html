@@ -9,8 +9,10 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     
-    <title>LervIT – Smart Moving Platform | Calgary's #1 Freelance Movers</title>
-    <meta name="description" content="Connect with trusted freelance movers in Calgary. Get instant quotes, book moves, and track your items in real-time. Join 500+ movers serving Calgary." />
+    <title>LervIT | Calgary's Smart Moving Platform – Small Moves & Furniture Delivery</title>
+    <meta name="description" content="LervIT is Calgary's smart moving platform for small moves, furniture delivery, and local moving help. Get matched with the right mover, book fast, and pay securely." />
+    <meta name="keywords" content="Calgary movers, small moves Calgary, furniture delivery Calgary, local movers Calgary, moving help Calgary, freelance movers Calgary" />
+    <link rel="canonical" href="https://app.lervit.com" />
     
     <meta name="theme-color" content="#3b82f6" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -23,10 +25,16 @@
     <meta name="msapplication-tap-highlight" content="no" />
     
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="LervIT – Smart Moving Platform" />
-    <meta property="og:description" content="Connect with trusted freelance movers in Calgary. Get instant quotes, book moves, and track your items in real-time." />
+    <meta property="og:title" content="LervIT | Calgary's Smart Moving Platform" />
+    <meta property="og:description" content="LervIT is Calgary's smart moving platform for small moves, furniture delivery, and local moving help. Get matched with the right mover, book fast, and pay securely." />
     <meta property="og:url" content="https://app.lervit.com" />
-    <meta property="og:image" content="/icon-512.png" />
+    <meta property="og:image" content="https://app.lervit.com/icon-512.png" />
+    <meta property="og:site_name" content="LervIT" />
+    <meta property="og:locale" content="en_CA" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LervIT | Calgary's Smart Moving Platform" />
+    <meta name="twitter:description" content="LervIT is Calgary's smart moving platform for small moves, furniture delivery, and local moving help. Get matched with the right mover, book fast." />
+    <meta name="twitter:image" content="https://app.lervit.com/icon-512.png" />
     
     <!-- Preconnect to critical external domains for faster loading -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,6 +45,89 @@
     <link rel="dns-prefetch" href="https://api.stripe.com">
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Open+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- LocalBusiness Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": ["LocalBusiness", "MovingCompany"],
+      "@id": "https://app.lervit.com",
+      "name": "LervIT",
+      "alternateName": "LervIT Moving Platform",
+      "description": "LervIT is Calgary's smart moving platform for small moves, furniture delivery, and local moving help. Get matched with the right mover, book fast, and pay securely.",
+      "url": "https://app.lervit.com",
+      "logo": "https://app.lervit.com/icon-512.png",
+      "image": "https://app.lervit.com/icon-512.png",
+      "email": "support@lervit.com",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Calgary",
+        "addressRegion": "AB",
+        "addressCountry": "CA"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": "51.0447",
+        "longitude": "-114.0719"
+      },
+      "areaServed": {
+        "@type": "City",
+        "name": "Calgary",
+        "sameAs": "https://en.wikipedia.org/wiki/Calgary"
+      },
+      "serviceArea": {
+        "@type": "GeoCircle",
+        "geoMidpoint": {
+          "@type": "GeoCoordinates",
+          "latitude": "51.0447",
+          "longitude": "-114.0719"
+        },
+        "geoRadius": "50000"
+      },
+      "openingHoursSpecification": {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+        "opens": "00:00",
+        "closes": "23:59"
+      },
+      "priceRange": "$$",
+      "currenciesAccepted": "CAD",
+      "paymentAccepted": "Credit Card",
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Moving Services",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Small Moves in Calgary",
+              "description": "Move a few items or boxes across Calgary with a verified local mover."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Furniture Delivery Calgary",
+              "description": "Get large furniture or Marketplace purchases delivered to your door."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Local Moving Help Calgary",
+              "description": "Book on-demand moving help for apartments and small loads in Calgary."
+            }
+          }
+        ]
+      },
+      "sameAs": [
+        "https://lervit.com"
+      ]
+    }
+    </script>
 
     <!-- FAQ Structured Data -->
     <script type="application/ld+json">
