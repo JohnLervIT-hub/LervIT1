@@ -614,14 +614,16 @@ export default function RequestMove() {
               map.setZoom(14);
             }
 
-            // After the camera settles, enforce a minimum zoom for very short routes
+            // For very short routes fitBounds can land at too low a zoom
+            // (whole city visible for a 0.5 km move). Nudge up only when the
+            // route is genuinely short so we never fight fitBounds for long routes.
             google.maps.event.addListenerOnce(map, "idle", () => {
               const distM = leg.distance?.value ?? 0;
+              if (distM > 10000) return; // trust fitBounds for routes > 10 km
               const minZoom =
                 distM < 1500 ? 15 :
                 distM < 4000 ? 14 :
-                distM < 9000 ? 13 :
-                12;
+                13; // 4 – 10 km → suburb zoom
               const current = map.getZoom() ?? 0;
               if (current < minZoom) map.setZoom(minZoom);
             });
