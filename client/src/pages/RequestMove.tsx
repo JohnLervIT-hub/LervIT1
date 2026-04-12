@@ -599,9 +599,6 @@ export default function RequestMove() {
             // Add 0.5 before rounding to bias toward a slightly tighter frame
             const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW) + 0.15)));
 
-            console.log("[MapFrame] vW=%d vH=%d routeKmH=%.1f routeKmW=%.1f zoomH=%.2f zoomW=%.2f → zoom %d",
-              vW, vH, routeKmH, routeKmW, zoomH, zoomW, finalZoom);
-
             map.setCenter({ lat: centerLat, lng: centerLng });
             map.setZoom(finalZoom);
             // ─────────────────────────────────────────────────────────────
