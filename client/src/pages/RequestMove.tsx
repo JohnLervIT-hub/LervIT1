@@ -431,13 +431,33 @@ export default function RequestMove() {
     loadMaps();
   }, [loadMaps]);
 
-  // Stable ref that always holds the latest mapsIsLoaded value (no stale closure)
-  const mapsIsLoadedRef = useRef(mapsIsLoaded);
-  mapsIsLoadedRef.current = mapsIsLoaded;
+  // Tracks whether the map div is currently in the DOM (drives the init effect)
+  const [step1DivReady, setStep1DivReady] = useState(false);
 
-  // Extract map creation so both the ref callback and useEffect can call it
-  const initMapInNode = useRef((node: HTMLDivElement) => {
-    if (step1MapInstanceRef.current) return; // already created
+  // Stable ref callback — sets the div ref and flips the ready flag
+  const mapDivRefCallback = useCallback((node: HTMLDivElement | null) => {
+    step1MapDivRef.current = node;
+    if (!node) {
+      // Cleanup markers and reset all refs so map is created fresh on next mount
+      step1PickupMarkerRef.current?.setMap(null);
+      step1DropoffMarkerRef.current?.setMap(null);
+      step1PickupMarkerRef.current = null;
+      step1DropoffMarkerRef.current = null;
+      step1MapInstanceRef.current = null;
+      step1DirRendererRef.current = null;
+      step1DirServiceRef.current = null;
+      step1LastAddressesRef.current = "";
+      setStep1DivReady(false);
+    } else {
+      setStep1DivReady(true);
+    }
+  }, []);
+
+  // Create the map once both the API and the div are ready.
+  // This effect uses a fresh closure every render so it always sees the latest code.
+  useEffect(() => {
+    if (!mapsIsLoaded || !step1DivReady || !step1MapDivRef.current || step1MapInstanceRef.current) return;
+    const node = step1MapDivRef.current;
     const map = new google.maps.Map(node, {
       center: CALGARY_CENTER,
       zoom: 11,
@@ -447,37 +467,13 @@ export default function RequestMove() {
     });
     step1MapInstanceRef.current = map;
     const renderer = new google.maps.DirectionsRenderer({
-      suppressMarkers: true, // we render custom address-pill markers instead
+      suppressMarkers: true,
       polylineOptions: { strokeColor: "#276EF1", strokeWeight: 4, strokeOpacity: 1 },
     });
     renderer.setMap(map);
     step1DirRendererRef.current = renderer;
     step1DirServiceRef.current = new google.maps.DirectionsService();
-  });
-
-  // Ref callback: fires whenever the div mounts/unmounts.
-  // If maps is already loaded at mount time this creates the map immediately.
-  const mapDivRefCallback = useRef((node: HTMLDivElement | null) => {
-    step1MapDivRef.current = node;
-    if (node && mapsIsLoadedRef.current) {
-      initMapInNode.current(node);
-    } else if (!node) {
-      // Div unmounted (step changed) — clear so map is recreated on next mount
-      step1PickupMarkerRef.current?.setMap(null);
-      step1DropoffMarkerRef.current?.setMap(null);
-      step1PickupMarkerRef.current = null;
-      step1DropoffMarkerRef.current = null;
-      step1MapInstanceRef.current = null;
-      step1DirRendererRef.current = null;
-      step1DirServiceRef.current = null;
-      step1LastAddressesRef.current = "";
-    }
-  });
-
-  // Effect: fires when mapsIsLoaded transitions to true (div already in DOM).
-  useEffect(() => {
-    if (mapsIsLoaded && step1MapDivRef.current) initMapInNode.current(step1MapDivRef.current);
-  }, [mapsIsLoaded]);
+  }, [mapsIsLoaded, step1DivReady]);
 
   // Calculate route and push to the imperative renderer whenever addresses change
   useEffect(() => {
@@ -1563,7 +1559,7 @@ export default function RequestMove() {
           {step === 1 && (
             <div className="relative order-first lg:order-last rounded-xl overflow-hidden h-[38vh] md:h-[42vh] lg:h-[580px] lg:sticky lg:top-20 bg-muted mb-4 lg:mb-0">
               {/* absolute inset-0 ensures the map div always fills the container regardless of height mode */}
-              <div ref={mapDivRefCallback.current} className="absolute inset-0" />
+              <div ref={mapDivRefCallback} className="absolute inset-0" />
               {!mapsIsLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted">
                   <div className="text-center text-muted-foreground">
