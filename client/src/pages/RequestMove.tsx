@@ -604,9 +604,9 @@ export default function RequestMove() {
               finalKmH = finalKmW / TARGET_RATIO;
             }
 
-            // Add 25 % breathing margin all round
-            finalKmW *= 1.25;
-            finalKmH *= 1.25;
+            // Add 60 % breathing margin all round (~1 extra zoom level of context)
+            finalKmW *= 1.60;
+            finalKmH *= 1.60;
 
             const halfLat = (finalKmH / KM_PER_LAT) / 2;
             const halfLng = (finalKmW / KM_PER_LNG) / 2;
