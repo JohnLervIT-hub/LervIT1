@@ -97,7 +97,7 @@ export function MobileBottomNav() {
       role="navigation"
       aria-label="Mobile navigation"
     >
-      <div className="bg-card border border-border/60 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] flex items-center justify-around h-16 px-1 max-w-md mx-auto">
+      <div className="bg-card border border-border rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.18)] flex items-center justify-around h-16 px-1 max-w-md mx-auto">
         {navItems.map((item) => {
           const active = isActive(item.href);
           const isAccent = item.accent;
