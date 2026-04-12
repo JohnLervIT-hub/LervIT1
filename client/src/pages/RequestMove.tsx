@@ -519,7 +519,7 @@ export default function RequestMove() {
           if (map) {
             // Fit the map to show the full route
             const bounds = result.routes[0]?.bounds;
-            if (bounds) map.fitBounds(bounds, 80);
+            if (bounds) map.fitBounds(bounds, { top: 80, right: 80, bottom: 110, left: 80 });
 
             const leg = result.routes[0]?.legs[0];
             if (leg) {
@@ -1554,7 +1554,7 @@ export default function RequestMove() {
 
         {/* ── STEP 1: Premium two-column layout ── */}
         <div className={step === 1
-          ? "flex flex-col lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 lg:items-start"
+          ? "flex flex-col lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 lg:items-stretch"
           : "grid gap-6"
         }>
           {/* Map panel — mobile: stacked above form · desktop: fills right column */}
@@ -1573,8 +1573,8 @@ export default function RequestMove() {
           )}
 
           {/* Main Form */}
-          <div className={step === 1 ? "order-last lg:order-first" : ""}>
-            <Card className={step === 1 ? "shadow-sm" : ""}>
+          <div className={step === 1 ? "order-last lg:order-first lg:flex lg:flex-col" : ""}>
+            <Card className={step === 1 ? "shadow-sm lg:flex lg:flex-col lg:h-full" : ""}>
               <CardHeader className="pb-4">
                 <h2 className={step === 1 ? "text-xl font-bold tracking-tight" : "text-2xl font-bold"}>
                   {step === 1 && "Where is your move?"}
@@ -1585,7 +1585,7 @@ export default function RequestMove() {
                   <p className="text-sm text-muted-foreground">Set pickup and dropoff locations</p>
                 )}
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className={step === 1 ? "flex flex-col flex-1 gap-5" : "space-y-6"}>
                 {/* Selected Mover Display */}
                 {selectedMover && (
                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4" data-testid="selected-mover-card">
@@ -2163,7 +2163,7 @@ export default function RequestMove() {
                   </>
                 )}
 
-                <div className="flex justify-between pt-6 border-t gap-4">
+                <div className="flex justify-between pt-5 border-t gap-4 mt-auto">
                   <Button
                     variant="outline"
                     onClick={handleBack}
