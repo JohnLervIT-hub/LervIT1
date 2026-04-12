@@ -543,9 +543,18 @@ export default function RequestMove() {
     const service = step1DirServiceRef.current;
     if (!service) return;
 
+    // Capture the key now so the async callback can detect stale responses.
+    // If addresses change while the request is in-flight, the old callback
+    // must not apply its directions or fitBounds — doing so causes the
+    // "zoom in then immediately zoom out" race condition.
+    const requestKey = key;
+
     service.route(
       { origin: pickupAddress, destination: dropoffAddress, travelMode: google.maps.TravelMode.DRIVING, region: "CA" },
       (result, status) => {
+        // Stale-response guard: discard if addresses changed since this request was sent
+        if (step1LastAddressesRef.current !== requestKey) return;
+
         if (status === google.maps.DirectionsStatus.OK && result && step1DirRendererRef.current) {
           step1DirRendererRef.current.setDirections(result);
 
