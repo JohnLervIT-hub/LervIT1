@@ -40,8 +40,6 @@ const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
 // Premium minimal map style for the booking flow
 const BOOKING_MAP_STYLES = [
-  { featureType: "all", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
   { elementType: "geometry", stylers: [{ color: "#f8f9fa" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
