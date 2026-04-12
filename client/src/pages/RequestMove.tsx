@@ -18,7 +18,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -186,6 +186,35 @@ export default function RequestMove() {
     usesRemaining: number;
     message: string;
   } | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
+  const handleApplyPromo = useCallback(async () => {
+    if (!promoInput.trim()) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const res = await apiRequest("POST", "/api/promo/validate", { code: promoInput.trim() });
+      const data = await res.json();
+      if (data.valid) {
+        setAppliedPromo({
+          code: data.code,
+          valid: true,
+          discountPercent: data.discountPercent,
+          usesRemaining: data.usesRemaining,
+          message: data.message,
+        });
+        setPromoInput("");
+      } else {
+        setPromoError(data.message || "Invalid promo code");
+      }
+    } catch {
+      setPromoError("Failed to validate promo code");
+    } finally {
+      setPromoLoading(false);
+    }
+  }, [promoInput]);
 
   // Step 1 interactive map — fully imperative (no @react-google-maps/api component layer)
   const { isLoaded: mapsIsLoaded, loadMaps } = useGoogleMaps();
@@ -2272,6 +2301,89 @@ export default function RequestMove() {
                       </div>
                     </div>
 
+                    {/* Promo Code Section */}
+                    {!!user && (user.promoUsesCount ?? 0) < 2 && (
+                      <div className="relative bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-xl p-5">
+                        <div className="flex items-start gap-4 mb-4">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Tag className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">Promo Code</h3>
+                              <span className="text-[10px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">OPTIONAL</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {appliedPromo?.valid
+                                ? `${appliedPromo.discountPercent}% discount applied`
+                                : "Enter a promo code to save on your move"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {appliedPromo?.valid ? (
+                          <div className="flex items-center justify-between py-2.5 px-4 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="step3-promo-applied">
+                            <div className="flex items-center gap-2">
+                              <Gift className="w-4 h-4 text-green-600 dark:text-green-400" />
+                              <span className="text-sm font-semibold text-green-700 dark:text-green-400">
+                                {appliedPromo.code}
+                              </span>
+                              <span className="text-sm text-green-600 dark:text-green-400">
+                                — {appliedPromo.discountPercent}% off
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => { setAppliedPromo(null); setPromoError(null); }}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              data-testid="button-remove-promo-step3"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input
+                                  placeholder="Enter promo code (e.g. LERVIT20)"
+                                  value={promoInput}
+                                  onChange={(e) => {
+                                    setPromoInput(e.target.value.toUpperCase());
+                                    setPromoError(null);
+                                  }}
+                                  onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
+                                  className="pl-9 text-sm"
+                                  data-testid="input-promo-code-step3"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleApplyPromo}
+                                disabled={!promoInput.trim() || promoLoading}
+                                data-testid="button-apply-promo-step3"
+                              >
+                                {promoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+                              </Button>
+                            </div>
+                            {promoError && (
+                              <p className="text-xs text-destructive pl-1" data-testid="text-promo-error-step3">{promoError}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {appliedPromo?.valid && (
+                          <div className="flex items-center gap-1.5 mt-3">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                            <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                              You save {appliedPromo.discountPercent}% on this move with code {appliedPromo.code}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Ready to Submit Summary */}
                     <div className="relative overflow-hidden bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/20 rounded-xl p-5">
                       <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-green-500/10 rounded-full blur-2xl" />
@@ -2317,7 +2429,7 @@ export default function RequestMove() {
               breakdown={priceBreakdown}
               isCalculating={isCalculatingPrice}
               error={pricingError}
-              showPromoInput={!!user && (user.promoUsesCount ?? 0) < 2}
+              showPromoInput={false}
               appliedPromo={appliedPromo}
               onPromoApplied={setAppliedPromo}
             />

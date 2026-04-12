@@ -13,6 +13,7 @@ interface User {
   createdAt?: string | null;
   hasCompletedOnboarding?: boolean;
   hasUsedFirstMoveDiscount?: boolean;
+  promoUsesCount?: number;
   phoneVerified?: boolean;
   emailVerified?: boolean;
   // Notification preferences
