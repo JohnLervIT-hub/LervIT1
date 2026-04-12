@@ -552,8 +552,7 @@ export default function RequestMove() {
           const leg = result.routes[0]?.legs[0];
           if (map && leg) {
             // ── Smart camera framing ─────────────────────────────────────
-            // Build bounds from confirmed marker positions first, then extend
-            // with every route path point so the full polyline fits.
+            // Build bounds from confirmed marker positions + every route point.
             const tripBounds = new google.maps.LatLngBounds();
             tripBounds.extend(leg.start_location);
             tripBounds.extend(leg.end_location);
@@ -566,34 +565,50 @@ export default function RequestMove() {
             const centerLat = (ne.lat() + sw.lat()) / 2;
             const centerLng = (ne.lng() + sw.lng()) / 2;
 
-            // At Calgary's latitude (~51°) 1° lat ≈ 111 km, 1° lng ≈ 69 km,
-            // so divide lng by 0.62 to get the visual width in "lat-equivalent" units.
-            const LNG_SCALE = 0.62;
-            const visualH = Math.max(latSpan, 0.008);         // min ~900 m
-            const visualW = Math.max(lngSpan * LNG_SCALE, 0.008);
+            // km per degree at Calgary's latitude (51°)
+            const KM_PER_LAT = 111.0;
+            const KM_PER_LNG = 69.0;
 
-            // Expand the smaller visual dimension to ≥ 55 % of the larger one
-            // so the route is never a thin vertical/horizontal strip.
-            const MIN_RATIO = 0.55;
-            let finalLat = visualH;
-            let finalLng = visualW;
-            if (visualW < visualH * MIN_RATIO) finalLng = visualH * MIN_RATIO;
-            if (visualH < visualW * MIN_RATIO) finalLat = visualW * MIN_RATIO;
+            // Read the actual map container size so we match its aspect ratio.
+            // This prevents the "thin corridor" problem regardless of route direction.
+            const mapDiv = step1MapDivRef.current;
+            const containerW = mapDiv ? mapDiv.clientWidth : 375;
+            const containerH = mapDiv ? mapDiv.clientHeight : 439;
+            // Subtract symmetric fitBounds padding (60 px each side)
+            const usableW = Math.max(containerW - 120, 60);
+            const usableH = Math.max(containerH - 120, 60);
+            const TARGET_RATIO = usableW / usableH; // width / height to fill
 
-            // Convert back to actual degree spans and add 20 % margin
-            const MARGIN = 1.20;
-            const halfLat = (finalLat * MARGIN) / 2;
-            const halfLng = (finalLng / LNG_SCALE * MARGIN) / 2;
+            // Route span in km
+            const routeKmW = Math.max(lngSpan * KM_PER_LNG, 1);
+            const routeKmH = Math.max(latSpan * KM_PER_LAT, 1);
 
-            // Guard: reject degenerate bounds (both endpoints at same spot)
-            if (halfLat > 0.001 && halfLng > 0.001) {
+            // Expand the narrower dimension so the route fills the container ratio.
+            let finalKmW = routeKmW;
+            let finalKmH = routeKmH;
+            if (routeKmW / routeKmH < TARGET_RATIO) {
+              // Route is taller than container → widen
+              finalKmW = finalKmH * TARGET_RATIO;
+            } else {
+              // Route is wider than container → heighten
+              finalKmH = finalKmW / TARGET_RATIO;
+            }
+
+            // Add 25 % breathing margin all round
+            finalKmW *= 1.25;
+            finalKmH *= 1.25;
+
+            const halfLat = (finalKmH / KM_PER_LAT) / 2;
+            const halfLng = (finalKmW / KM_PER_LNG) / 2;
+
+            // Guard: reject degenerate bounds (same-address edge case)
+            if (halfLat > 0.0005 && halfLng > 0.0005) {
               const framedBounds = new google.maps.LatLngBounds(
                 { lat: centerLat - halfLat, lng: centerLng - halfLng },
                 { lat: centerLat + halfLat, lng: centerLng + halfLng },
               );
               map.fitBounds(framedBounds, { top: 60, right: 60, bottom: 60, left: 60 });
             } else {
-              // Fallback: zoom to centre between the two points
               map.setCenter({ lat: centerLat, lng: centerLng });
               map.setZoom(14);
             }
