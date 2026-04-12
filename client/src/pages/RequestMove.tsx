@@ -52,9 +52,9 @@ const BOOKING_MAP_STYLES = [
   { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dff0df" }] },
 ];
 
-// Build a custom SVG "address pill" marker icon — Uber style
+// Build an Uber-style floating address box marker icon
 function makeAddressPillIcon(label: string, bg: string, fg: string): google.maps.Icon {
-  // Abbreviate common suffixes so the pill stays compact
+  // Abbreviate common suffixes to keep the box compact
   const short = label
     .split(",")[0]
     .replace(/\bNortheast\b/g, "NE").replace(/\bNorthwest\b/g, "NW")
@@ -62,25 +62,40 @@ function makeAddressPillIcon(label: string, bg: string, fg: string): google.maps
     .replace(/\bAvenue\b/g, "Ave").replace(/\bStreet\b/g, "St")
     .replace(/\bDrive\b/g, "Dr").replace(/\bBoulevard\b/g, "Blvd")
     .replace(/\bRoad\b/g, "Rd").replace(/\bPlace\b/g, "Pl")
-    .slice(0, 28);
-  const charW = 6.5;
-  const pad = 12;
-  const w = Math.round(short.length * charW + pad * 2);
-  const h = 28;
-  const r = 14; // pill radius
-  // Caret / pointer at bottom-center
-  const caretW = 7, caretH = 7;
-  const totalH = h + caretH;
+    .slice(0, 30);
+  const charW = 7;
+  const padX = 12;
+  const padY = 8;
+  const fontSize = 12;
+  const w = Math.round(short.length * charW + padX * 2);
+  const h = fontSize + padY * 2;           // 28px
+  const r = 6;                             // subtle rounded corners — Uber uses ~6px
+  const dotR = 5;                          // small anchor dot below the box
+  const gap = 4;                           // space between box and dot
+  const totalH = h + gap + dotR * 2 + 2;  // box + gap + dot
+  const dotCX = w / 2;
+  const dotCY = h + gap + dotR;
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${totalH}">
-    <rect x="0" y="0" width="${w}" height="${h}" rx="${r}" ry="${r}" fill="${bg}"/>
-    <polygon points="${w/2 - caretW},${h} ${w/2 + caretW},${h} ${w/2},${totalH}" fill="${bg}"/>
-    <text x="${w/2}" y="${h/2 + 4}" text-anchor="middle"
-      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-      font-size="11" font-weight="700" fill="${fg}">${short}</text>
+    <defs>
+      <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/>
+      </filter>
+    </defs>
+    <!-- Address box -->
+    <rect x="0" y="0" width="${w}" height="${h}" rx="${r}" ry="${r}"
+      fill="${bg}" filter="url(#sh)"/>
+    <text x="${w / 2}" y="${h / 2 + fontSize / 2 - 1}" text-anchor="middle"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+      font-size="${fontSize}" font-weight="700" fill="${fg}" letter-spacing="-0.2">${short}</text>
+    <!-- Small anchor dot pointing to the exact map location -->
+    <circle cx="${dotCX}" cy="${dotCY}" r="${dotR}" fill="${bg}" opacity="0.85"/>
   </svg>`;
+
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    anchor: new google.maps.Point(w / 2, totalH) as google.maps.Point,
+    // Anchor at the center of the dot so the dot sits exactly on the route endpoint
+    anchor: new google.maps.Point(dotCX, dotCY + dotR) as google.maps.Point,
     scaledSize: new google.maps.Size(w, totalH),
   };
 }
@@ -468,7 +483,7 @@ export default function RequestMove() {
     step1MapInstanceRef.current = map;
     const renderer = new google.maps.DirectionsRenderer({
       suppressMarkers: true,
-      polylineOptions: { strokeColor: "#276EF1", strokeWeight: 4, strokeOpacity: 1 },
+      polylineOptions: { strokeColor: "#1a1a1a", strokeWeight: 5, strokeOpacity: 0.85 },
     });
     renderer.setMap(map);
     step1DirRendererRef.current = renderer;
