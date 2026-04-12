@@ -576,7 +576,7 @@ export default function RequestMove() {
                 const icons = animLine.get("icons");
                 icons[0].offset = (tick / 2) + "%";
                 animLine.set("icons", icons);
-              }, 25);
+              }, 60);
             }
             // ──────────────────────────────────────────────────────────────
 
