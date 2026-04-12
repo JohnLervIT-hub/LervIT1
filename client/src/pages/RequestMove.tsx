@@ -1,6 +1,5 @@
 // PERFORMANCE: Preload Payment page when step >= 2
 import { useState, useEffect, useRef, useMemo } from "react";
-import { GoogleMap, DirectionsRenderer } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -111,16 +110,13 @@ export default function RequestMove() {
     message: string;
   } | null>(null);
 
-  // Step 1 interactive map
+  // Step 1 interactive map — fully imperative (no @react-google-maps/api component layer)
   const { isLoaded: mapsIsLoaded, loadMaps } = useGoogleMaps();
-  const [step1Directions, setStep1Directions] = useState<google.maps.DirectionsResult | null>(null);
+  const step1MapDivRef = useRef<HTMLDivElement | null>(null);
+  const step1MapInstanceRef = useRef<google.maps.Map | null>(null);
+  const step1DirRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const step1DirServiceRef = useRef<google.maps.DirectionsService | null>(null);
   const step1LastAddressesRef = useRef<string>("");
-  const bookingMapOptions = useMemo(() => ({
-    disableDefaultUI: true,
-    zoomControl: true,
-    styles: BOOKING_MAP_STYLES,
-  }), []);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -400,24 +396,55 @@ export default function RequestMove() {
     loadMaps();
   }, [loadMaps]);
 
-  // Calculate route for Step 1 interactive map when both addresses are present
+  // Create the map imperatively once Google Maps is loaded and the div is ready
+  useEffect(() => {
+    if (!mapsIsLoaded || !step1MapDivRef.current || step1MapInstanceRef.current) return;
+    const map = new google.maps.Map(step1MapDivRef.current, {
+      center: CALGARY_CENTER,
+      zoom: 11,
+      disableDefaultUI: true,
+      zoomControl: true,
+      styles: BOOKING_MAP_STYLES,
+    });
+    step1MapInstanceRef.current = map;
+
+    const renderer = new google.maps.DirectionsRenderer({
+      suppressMarkers: false,
+      polylineOptions: { strokeColor: "#276EF1", strokeWeight: 4, strokeOpacity: 1 },
+    });
+    renderer.setMap(map);
+    step1DirRendererRef.current = renderer;
+
+    step1DirServiceRef.current = new google.maps.DirectionsService();
+  }, [mapsIsLoaded]);
+
+  // Calculate route and push to the imperative renderer whenever addresses change
   useEffect(() => {
     if (!mapsIsLoaded || !pickupAddress || !dropoffAddress) {
-      if (!pickupAddress || !dropoffAddress) setStep1Directions(null);
+      // Clear the renderer when addresses are incomplete
+      if (step1DirRendererRef.current && (!pickupAddress || !dropoffAddress)) {
+        step1DirRendererRef.current.setDirections({ routes: [] } as unknown as google.maps.DirectionsResult);
+      }
       return;
     }
     const key = `${pickupAddress}|||${dropoffAddress}`;
     if (step1LastAddressesRef.current === key) return;
     step1LastAddressesRef.current = key;
 
-    if (!step1DirServiceRef.current) {
-      step1DirServiceRef.current = new google.maps.DirectionsService();
-    }
-    step1DirServiceRef.current.route(
+    // Wait for service ref to be ready (map init effect might not have run yet)
+    const service = step1DirServiceRef.current;
+    if (!service) return;
+
+    service.route(
       { origin: pickupAddress, destination: dropoffAddress, travelMode: google.maps.TravelMode.DRIVING, region: "CA" },
       (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          setStep1Directions(result);
+        if (status === google.maps.DirectionsStatus.OK && result && step1DirRendererRef.current) {
+          step1DirRendererRef.current.setDirections(result);
+          // Fit the map to the route bounds
+          if (step1MapInstanceRef.current) {
+            const bounds = result.routes[0]?.bounds;
+            if (bounds) step1MapInstanceRef.current.fitBounds(bounds, 40);
+          }
         }
       }
     );
@@ -1446,30 +1473,11 @@ export default function RequestMove() {
         }>
           {/* Step 1 Interactive Map — mobile: above form, desktop: right column */}
           {step === 1 && (
-            <div className="order-first lg:order-last rounded-xl overflow-hidden h-[38vh] md:h-[42vh] lg:min-h-[560px] lg:h-auto lg:sticky lg:top-20 bg-muted mb-4 lg:mb-0">
-              {mapsIsLoaded ? (
-                <GoogleMap
-                  mapContainerStyle={{ width: "100%", height: "100%" }}
-                  center={CALGARY_CENTER}
-                  zoom={11}
-                  options={bookingMapOptions}
-                >
-                  {step1Directions && (
-                    <DirectionsRenderer
-                      directions={step1Directions}
-                      options={{
-                        suppressMarkers: false,
-                        polylineOptions: {
-                          strokeColor: "#276EF1",
-                          strokeWeight: 4,
-                          strokeOpacity: 1,
-                        },
-                      }}
-                    />
-                  )}
-                </GoogleMap>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-muted">
+            <div className="relative order-first lg:order-last rounded-xl overflow-hidden h-[38vh] md:h-[42vh] lg:min-h-[560px] lg:h-auto lg:sticky lg:top-20 bg-muted mb-4 lg:mb-0">
+              {/* The div is always in the DOM so the ref is stable; the map is created once mapsIsLoaded is true */}
+              <div ref={step1MapDivRef} className="w-full h-full" />
+              {!mapsIsLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted">
                   <div className="text-center text-muted-foreground">
                     <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">Loading map…</p>
