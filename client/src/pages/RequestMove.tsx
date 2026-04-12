@@ -517,7 +517,21 @@ export default function RequestMove() {
           if (map) {
             // Fit the map to show the full route
             const bounds = result.routes[0]?.bounds;
-            if (bounds) map.fitBounds(bounds, { top: 80, right: 80, bottom: 110, left: 80 });
+            if (bounds) {
+              map.fitBounds(bounds, { top: 80, right: 80, bottom: 110, left: 80 });
+              // After fitBounds settles, enforce a minimum zoom so short routes
+              // are zoomed in enough to read street names and POI labels.
+              google.maps.event.addListenerOnce(map, "idle", () => {
+                const distM = result.routes[0]?.legs[0]?.distance?.value ?? 0;
+                const minZoom =
+                  distM < 1500 ? 15 :   // < 1.5 km  → neighbourhood zoom
+                  distM < 4000 ? 14 :   // < 4 km    → suburb zoom
+                  distM < 9000 ? 13 :   // < 9 km    → city-district zoom
+                  12;                    // longer    → city-wide view
+                const current = map.getZoom() ?? 0;
+                if (current < minZoom) map.setZoom(minZoom);
+              });
+            }
 
             const leg = result.routes[0]?.legs[0];
             if (leg) {
