@@ -166,6 +166,8 @@ export default function RequestMove() {
   const step1LastAddressesRef = useRef<string>("");
   const step1PickupMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
+  const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
+  const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -457,6 +459,9 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current?.setMap(null);
       step1PickupMarkerRef.current = null;
       step1DropoffMarkerRef.current = null;
+      if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
+      step1AnimPolylineRef.current?.setMap(null);
+      step1AnimPolylineRef.current = null;
       step1MapInstanceRef.current = null;
       step1DirRendererRef.current = null;
       step1DirServiceRef.current = null;
@@ -532,6 +537,48 @@ export default function RequestMove() {
                 if (current < minZoom) map.setZoom(minZoom);
               });
             }
+
+            // ── Flowing dash animation over the route ──────────────────────
+            // Clear any previous animation before drawing a new one
+            if (step1AnimIntervalRef.current) {
+              clearInterval(step1AnimIntervalRef.current);
+              step1AnimIntervalRef.current = null;
+            }
+            step1AnimPolylineRef.current?.setMap(null);
+            step1AnimPolylineRef.current = null;
+
+            const routePath = result.routes[0]?.overview_path ?? [];
+            if (routePath.length > 0) {
+              // Invisible stroke so only the dashes show — white dashes over the blue base line
+              const animLine = new google.maps.Polyline({
+                path: routePath,
+                strokeOpacity: 0,
+                icons: [{
+                  icon: {
+                    path: "M 0,-1 0,1",
+                    strokeOpacity: 0.55,
+                    strokeColor: "#ffffff",
+                    strokeWeight: 2,
+                    scale: 3,
+                  },
+                  offset: "0%",
+                  repeat: "18px",
+                }],
+                map,
+                zIndex: 5,
+              });
+              step1AnimPolylineRef.current = animLine;
+
+              // Animate: increment the offset each tick → dashes flow forward
+              let tick = 0;
+              step1AnimIntervalRef.current = setInterval(() => {
+                tick = (tick + 1) % 200;
+                const icons = animLine.get("icons");
+                icons[0].offset = (tick / 2) + "%";
+                animLine.set("icons", icons);
+              }, 25);
+            }
+            // ──────────────────────────────────────────────────────────────
 
             const leg = result.routes[0]?.legs[0];
             if (leg) {
