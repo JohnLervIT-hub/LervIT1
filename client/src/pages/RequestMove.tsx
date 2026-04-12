@@ -52,6 +52,39 @@ const BOOKING_MAP_STYLES = [
   { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dff0df" }] },
 ];
 
+// Build a custom SVG "address pill" marker icon — Uber style
+function makeAddressPillIcon(label: string, bg: string, fg: string): google.maps.Icon {
+  // Abbreviate common suffixes so the pill stays compact
+  const short = label
+    .split(",")[0]
+    .replace(/\bNortheast\b/g, "NE").replace(/\bNorthwest\b/g, "NW")
+    .replace(/\bSoutheast\b/g, "SE").replace(/\bSouthwest\b/g, "SW")
+    .replace(/\bAvenue\b/g, "Ave").replace(/\bStreet\b/g, "St")
+    .replace(/\bDrive\b/g, "Dr").replace(/\bBoulevard\b/g, "Blvd")
+    .replace(/\bRoad\b/g, "Rd").replace(/\bPlace\b/g, "Pl")
+    .slice(0, 28);
+  const charW = 6.5;
+  const pad = 12;
+  const w = Math.round(short.length * charW + pad * 2);
+  const h = 28;
+  const r = 14; // pill radius
+  // Caret / pointer at bottom-center
+  const caretW = 7, caretH = 7;
+  const totalH = h + caretH;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${totalH}">
+    <rect x="0" y="0" width="${w}" height="${h}" rx="${r}" ry="${r}" fill="${bg}"/>
+    <polygon points="${w/2 - caretW},${h} ${w/2 + caretW},${h} ${w/2},${totalH}" fill="${bg}"/>
+    <text x="${w/2}" y="${h/2 + 4}" text-anchor="middle"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+      font-size="11" font-weight="700" fill="${fg}">${short}</text>
+  </svg>`;
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    anchor: new google.maps.Point(w / 2, totalH) as google.maps.Point,
+    scaledSize: new google.maps.Size(w, totalH),
+  };
+}
+
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
 
@@ -117,6 +150,8 @@ export default function RequestMove() {
   const step1DirRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const step1DirServiceRef = useRef<google.maps.DirectionsService | null>(null);
   const step1LastAddressesRef = useRef<string>("");
+  const step1PickupMarkerRef = useRef<google.maps.Marker | null>(null);
+  const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -412,7 +447,7 @@ export default function RequestMove() {
     });
     step1MapInstanceRef.current = map;
     const renderer = new google.maps.DirectionsRenderer({
-      suppressMarkers: false,
+      suppressMarkers: true, // we render custom address-pill markers instead
       polylineOptions: { strokeColor: "#276EF1", strokeWeight: 4, strokeOpacity: 1 },
     });
     renderer.setMap(map);
@@ -428,6 +463,10 @@ export default function RequestMove() {
       initMapInNode.current(node);
     } else if (!node) {
       // Div unmounted (step changed) — clear so map is recreated on next mount
+      step1PickupMarkerRef.current?.setMap(null);
+      step1DropoffMarkerRef.current?.setMap(null);
+      step1PickupMarkerRef.current = null;
+      step1DropoffMarkerRef.current = null;
       step1MapInstanceRef.current = null;
       step1DirRendererRef.current = null;
       step1DirServiceRef.current = null;
@@ -462,10 +501,37 @@ export default function RequestMove() {
       (result, status) => {
         if (status === google.maps.DirectionsStatus.OK && result && step1DirRendererRef.current) {
           step1DirRendererRef.current.setDirections(result);
-          // Fit the map to the route bounds
-          if (step1MapInstanceRef.current) {
+
+          const map = step1MapInstanceRef.current;
+          if (map) {
+            // Fit the map to show the full route
             const bounds = result.routes[0]?.bounds;
-            if (bounds) step1MapInstanceRef.current.fitBounds(bounds, 40);
+            if (bounds) map.fitBounds(bounds, 48);
+
+            const leg = result.routes[0]?.legs[0];
+            if (leg) {
+              // Remove old custom markers
+              step1PickupMarkerRef.current?.setMap(null);
+              step1DropoffMarkerRef.current?.setMap(null);
+
+              // Pickup — green pill showing street address
+              step1PickupMarkerRef.current = new google.maps.Marker({
+                position: leg.start_location,
+                map,
+                icon: makeAddressPillIcon(pickupAddress, "#16a34a", "#ffffff"),
+                title: pickupAddress,
+                zIndex: 10,
+              });
+
+              // Dropoff — dark pill showing street address
+              step1DropoffMarkerRef.current = new google.maps.Marker({
+                position: leg.end_location,
+                map,
+                icon: makeAddressPillIcon(dropoffAddress, "#111827", "#ffffff"),
+                title: dropoffAddress,
+                zIndex: 10,
+              });
+            }
           }
         }
       }
