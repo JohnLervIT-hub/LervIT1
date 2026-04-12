@@ -13,7 +13,6 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
@@ -1590,28 +1589,8 @@ export default function RequestMove() {
         </DialogContent>
       </Dialog>
 
-      {/* Sticky Progress Bar (Mobile) */}
-      <div className="fixed top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b md:hidden" data-testid="sticky-progress-bar">
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Step {step} of 3</span>
-            <span className="text-xs text-muted-foreground">
-              {step === 1 && "Locations"}
-              {step === 2 && "Load Details"}
-              {step === 3 && "Schedule"}
-            </span>
-          </div>
-          <Progress value={(step / 3) * 100} className="h-2" />
-        </div>
-      </div>
-
-      <div className={`min-h-screen pb-12 bg-background ${step === 1 ? "pt-16" : "pt-20"}`}>
+      <div className="min-h-screen pt-16 pb-12 bg-background">
         <div className={step === 1 ? "w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8" : "max-w-4xl mx-auto px-4 sm:px-6"}>
-        {/* Mobile spacer — clears the sticky progress bar on steps 2/3.
-            Step 1: no spacer; the map starts flush under the header and the
-                    progress bar floats over the map top (modern/Uber style).
-            Steps 2+: h-16 (64px) keeps content below the progress bar. */}
-        <div className={step === 1 ? "hidden" : "h-16 md:hidden"} />
 
         {/* Page Header — hidden on mobile step 1 (map is the hero element there) */}
         <div className={step === 1 ? "py-4 mb-4 hidden md:block" : "py-6 mb-2"}>

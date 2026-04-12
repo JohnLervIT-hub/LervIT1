@@ -1,0 +1,43 @@
+Update the mobile Step 1: Locations page so the map sits flush directly beneath the page header, and remove the step/progress bar entirely.
+
+Goals:
+- Remove the Step 1 of 3 progress/steps bar from the page
+- Eliminate the gap between the header and the map
+- Make the map start immediately below the header for a tighter, more immersive layout
+- Keep the booking experience clean, modern, and map-led
+
+Required changes:
+
+1. Remove the steps/progress section
+- Delete the entire progress/stepper block that shows:
+  - “Step 1 of 3”
+  - “Locations”
+  - the horizontal progress bar
+- Remove all related wrappers, spacing, padding, margins, and reserved height
+- Ensure no empty space remains where the progress bar used to be
+
+2. Make the map flush under the header
+- Position the Step 1 map directly under the page header with minimal intentional spacing
+- Remove any extra margin-top, padding-top, spacer div, or wrapper gap between header and map
+- If there is fixed/sticky header compensation, keep only the minimum required offset so the map is not hidden behind the header
+- Do not leave a blank band between header and map
+
+3. Preserve good mobile layout behavior
+- Keep the map full-width within the page content area
+- Maintain rounded corners only if they still fit the premium design direction; otherwise reduce excessive inset feel
+- Ensure the map remains visually dominant and clean
+- Keep the “Where is your move?” card directly below the map
+
+4. Clean up layout logic
+- Remove any top spacing that was previously tied to the progress/steps bar
+- Check for duplicated safe-area inset handling
+- Remove leftover wrappers or hidden elements affecting vertical spacing
+- Ensure scrolling starts with the header followed immediately by the map
+
+5. Acceptance criteria
+- No “Step 1 of 3” block is visible
+- No horizontal progress bar is visible
+- The map starts directly beneath the header
+- There is no large gap between header and map
+- The page feels tighter, more premium, and more immersive on mobile
+- Bottom navigation and form content still work correctly
