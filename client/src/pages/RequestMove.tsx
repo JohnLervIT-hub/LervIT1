@@ -11,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
@@ -19,7 +18,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, ChevronRight, Pencil, Navigation } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -236,16 +235,6 @@ export default function RequestMove() {
   
   // Pre-selected mover from Browse Movers page
   const [preSelectedMoverId, setPreSelectedMoverId] = useState<string | null>(null);
-
-  // ── Mobile Uber-style address sheet ────────────────────────────────────────
-  // Draft state lives in the sheet; only committed to main state on "Confirm"
-  const [showAddressSheet, setShowAddressSheet] = useState(false);
-  const [draftPickup, setDraftPickup] = useState("");
-  const [draftDropoff, setDraftDropoff] = useState("");
-  const [draftPickupDifficulty, setDraftPickupDifficulty] = useState("");
-  const [draftDropoffDifficulty, setDraftDropoffDifficulty] = useState("");
-  const [draftPickupAccessError, setDraftPickupAccessError] = useState(false);
-  const [draftDropoffAccessError, setDraftDropoffAccessError] = useState(false);
   
   // Fetch pre-selected mover details
   const { data: selectedMover } = useQuery({
@@ -1160,33 +1149,6 @@ export default function RequestMove() {
     });
   };
 
-  // ── Mobile address-sheet handlers ─────────────────────────────────────────
-  const openAddressSheet = useCallback(() => {
-    setDraftPickup(pickupAddress);
-    setDraftDropoff(dropoffAddress);
-    setDraftPickupDifficulty(pickupDifficulty);
-    setDraftDropoffDifficulty(dropoffDifficulty);
-    setDraftPickupAccessError(false);
-    setDraftDropoffAccessError(false);
-    setShowAddressSheet(true);
-  }, [pickupAddress, dropoffAddress, pickupDifficulty, dropoffDifficulty]);
-
-  const confirmAddresses = useCallback(() => {
-    let hasError = false;
-    if (!draftPickup) { setDraftPickupAccessError(true); hasError = true; }
-    if (!draftDropoff) { setDraftDropoffAccessError(true); hasError = true; }
-    if (!draftPickupDifficulty) { setDraftPickupAccessError(true); hasError = true; }
-    if (!draftDropoffDifficulty) { setDraftDropoffAccessError(true); hasError = true; }
-    if (hasError) return;
-    setPickupAddress(draftPickup);
-    setDropoffAddress(draftDropoff);
-    setPickupDifficulty(draftPickupDifficulty);
-    setDropoffDifficulty(draftDropoffDifficulty);
-    setPickupAccessError(false);
-    setDropoffAccessError(false);
-    setShowAddressSheet(false);
-  }, [draftPickup, draftDropoff, draftPickupDifficulty, draftDropoffDifficulty]);
-
   const handleNext = () => {
     // DEBUG: Show current state when Next is clicked
     console.log('[RequestMove] handleNext called:', {
@@ -1702,9 +1664,9 @@ export default function RequestMove() {
           ? "flex flex-col lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 lg:items-stretch"
           : "grid gap-6"
         }>
-          {/* Map panel — mobile: tall hero · desktop: fills right column */}
+          {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
-            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[62vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 lg:mb-0 shadow-sm">
+            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[52vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
               <div ref={mapDivRefCallback} className="absolute inset-0" />
               {!mapsIsLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-sm">
@@ -1717,113 +1679,8 @@ export default function RequestMove() {
             </div>
           )}
 
-          {/* ── Mobile-only: Uber-style compact location card ─────────────── */}
-          {step === 1 && (
-            <div className="lg:hidden order-last w-full space-y-3 pt-3 pb-2">
-              {/* Pre-selected mover chip */}
-              {selectedMover && (
-                <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3" data-testid="selected-mover-card-mobile">
-                  <Avatar className="w-9 h-9 flex-shrink-0">
-                    <AvatarImage src={selectedMover.moverImage} alt={selectedMover.user?.name} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                      {selectedMover.user?.name?.charAt(0)?.toUpperCase() || 'M'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{selectedMover.user?.name || 'Selected Mover'}</p>
-                    <p className="text-xs text-muted-foreground truncate capitalize">{selectedMover.vehicleType} • {selectedMover.totalMoves || 0} moves</p>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => setPreSelectedMoverId(null)} className="flex-shrink-0 text-muted-foreground hover:text-destructive" data-testid="button-remove-mover-mobile">
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-
-              {/* Compact location card — tapping opens the address sheet */}
-              <button
-                onClick={openAddressSheet}
-                className="w-full text-left rounded-2xl border bg-card shadow-sm overflow-hidden hover-elevate active-elevate-2"
-                data-testid="button-open-address-sheet"
-              >
-                {!pickupAddress && !dropoffAddress ? (
-                  /* ── Placeholder state ── */
-                  <div className="flex items-center gap-3 px-4 py-4">
-                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Navigation className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">Where is your move?</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Enter pickup &amp; dropoff locations</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  </div>
-                ) : (
-                  /* ── Confirmed state ── */
-                  <div className="px-4 py-3 space-y-0">
-                    {/* Pickup row */}
-                    <div className="flex items-center gap-3 py-2">
-                      <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-green-500/20 flex-shrink-0 ml-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Pickup</p>
-                        <p className="text-sm font-medium truncate">
-                          {pickupAddress ? pickupAddress.split(",")[0] : <span className="text-muted-foreground italic">Not set</span>}
-                        </p>
-                      </div>
-                    </div>
-                    {/* Connector */}
-                    <div className="flex items-center gap-3 py-0.5">
-                      <div className="w-px h-4 bg-border ml-[7px]" />
-                    </div>
-                    {/* Dropoff row */}
-                    <div className="flex items-center gap-3 py-2">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-primary flex-shrink-0 ml-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Dropoff</p>
-                        <p className="text-sm font-medium truncate">
-                          {dropoffAddress ? dropoffAddress.split(",")[0] : <span className="text-muted-foreground italic">Not set</span>}
-                        </p>
-                      </div>
-                      <Pencil className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                    </div>
-                    {/* Route summary if available */}
-                    {estimateDistance > 0 && (
-                      <div className="flex items-center gap-2 mt-1 pt-2 border-t border-border/50">
-                        <Truck className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                        <p className="text-xs text-muted-foreground">{estimateDistance.toFixed(1)} km route</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </button>
-
-              {/* Continue button — shown when both addresses + access types confirmed */}
-              {pickupAddress && dropoffAddress && pickupDifficulty && dropoffDifficulty && (
-                <Button
-                  onClick={handleNext}
-                  className="w-full"
-                  data-testid="button-continue-step1-mobile"
-                >
-                  Continue to Load Details
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
-              )}
-              {/* Nudge when addresses set but access types missing */}
-              {pickupAddress && dropoffAddress && (!pickupDifficulty || !dropoffDifficulty) && (
-                <Button
-                  onClick={openAddressSheet}
-                  variant="outline"
-                  className="w-full"
-                  data-testid="button-set-access-types"
-                >
-                  Set access types to continue
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Main Form — hidden on mobile step 1 (compact card used instead) */}
-          <div className={step === 1 ? "hidden lg:flex lg:flex-col order-last lg:order-first" : ""}>
+          {/* Main Form */}
+          <div className={step === 1 ? "order-last lg:order-first lg:flex lg:flex-col" : ""}>
             <Card className={step === 1 ? "shadow-sm lg:flex lg:flex-col lg:h-full" : ""}>
               <CardHeader className={step === 1 ? "pt-4 pb-3 md:pt-6 md:pb-4" : "pb-4"}>
                 <h2 className={step === 1 ? "text-xl font-bold tracking-tight" : "text-2xl font-bold"}>
@@ -2448,117 +2305,6 @@ export default function RequestMove() {
         </div>
       </div>
     </div>
-
-    {/* ── Mobile: Uber-style Address Entry Sheet ────────────────────────── */}
-    <Sheet open={showAddressSheet} onOpenChange={setShowAddressSheet}>
-      <SheetContent side="bottom" className="lg:hidden h-[90vh] flex flex-col p-0 rounded-t-2xl">
-        {/* Header */}
-        <SheetHeader className="px-5 pt-5 pb-3 border-b flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-lg font-bold">Pickup &amp; Dropoff</SheetTitle>
-            <Button variant="ghost" size="icon" onClick={() => setShowAddressSheet(false)} data-testid="button-close-address-sheet">
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-        </SheetHeader>
-
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
-          {/* ── Pickup ── */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-green-500/20 flex-shrink-0" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pickup</span>
-            </div>
-            <CustomAddressInput
-              id="sheet-pickup"
-              placeholder="Enter pickup address in Calgary"
-              value={draftPickup}
-              onChange={(address) => { setDraftPickup(address); setDraftPickupAccessError(false); }}
-              data-testid="input-sheet-pickup-address"
-            />
-            <Select
-              value={draftPickupDifficulty}
-              onValueChange={(val) => { setDraftPickupDifficulty(val); setDraftPickupAccessError(false); }}
-            >
-              <SelectTrigger
-                className={`bg-background ${draftPickupAccessError && !draftPickupDifficulty ? 'border-destructive ring-1 ring-destructive' : ''}`}
-                data-testid="select-sheet-pickup-difficulty"
-              >
-                <SelectValue placeholder="Access type (stairs, elevator…)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-2 text-xs">Free</span></SelectItem>
-                <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+$12</span></SelectItem>
-                <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+$6</span></SelectItem>
-                <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+$9.60</span></SelectItem>
-              </SelectContent>
-            </Select>
-            {draftPickupAccessError && !draftPickupDifficulty && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />Please select pickup access type
-              </p>
-            )}
-          </div>
-
-          {/* Connector */}
-          <div className="flex items-center gap-3 py-0.5 pl-1">
-            <div className="w-px h-5 bg-border ml-[4px]" />
-          </div>
-
-          {/* ── Dropoff ── */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-sm bg-primary flex-shrink-0" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dropoff</span>
-            </div>
-            <CustomAddressInput
-              id="sheet-dropoff"
-              placeholder="Enter dropoff address in Calgary"
-              value={draftDropoff}
-              onChange={(address) => { setDraftDropoff(address); setDraftDropoffAccessError(false); }}
-              data-testid="input-sheet-dropoff-address"
-            />
-            <Select
-              value={draftDropoffDifficulty}
-              onValueChange={(val) => { setDraftDropoffDifficulty(val); setDraftDropoffAccessError(false); }}
-            >
-              <SelectTrigger
-                className={`bg-background ${draftDropoffAccessError && !draftDropoffDifficulty ? 'border-destructive ring-1 ring-destructive' : ''}`}
-                data-testid="select-sheet-dropoff-difficulty"
-              >
-                <SelectValue placeholder="Access type (stairs, elevator…)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-2 text-xs">Free</span></SelectItem>
-                <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+$12</span></SelectItem>
-                <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+$6</span></SelectItem>
-                <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+$9.60</span></SelectItem>
-              </SelectContent>
-            </Select>
-            {draftDropoffAccessError && !draftDropoffDifficulty && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />Please select dropoff access type
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Sticky confirm footer */}
-        <div className="flex-shrink-0 px-5 pt-3 pb-6 border-t bg-background">
-          <Button
-            onClick={confirmAddresses}
-            className="w-full"
-            disabled={!draftPickup || !draftDropoff}
-            data-testid="button-confirm-addresses"
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Confirm Locations
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
 
     {/* Single Mover Warning Dialog - Cannot be dismissed without action */}
     <AlertDialog open={showSingleMoverWarning}>
