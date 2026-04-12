@@ -518,6 +518,7 @@ export default function RequestMove() {
     step1MapInstanceRef.current = map;
     const renderer = new google.maps.DirectionsRenderer({
       suppressMarkers: true,
+      preserveViewport: true,   // prevent renderer from overriding our custom fitBounds
       polylineOptions: { strokeColor: "#2563eb", strokeWeight: 4, strokeOpacity: 0.9 },
     });
     renderer.setMap(map);
