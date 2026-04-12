@@ -1,5 +1,5 @@
 // PERFORMANCE: Preload Payment page when step >= 2
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
