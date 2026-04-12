@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useCallback } from "react";
 import { 
   Home, 
-  Calendar, 
+  Calendar,
+  Clock,
   Truck, 
   Wallet,
   LayoutDashboard,
@@ -16,41 +17,26 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   label: string;
+  accent?: boolean;
 }
 
 export function MobileBottomNav() {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   
-  // Track full URL including query params for proper active state detection
   const [currentSearch, setCurrentSearch] = useState(window.location.search);
   
-  // Update search params when URL changes (handles both navigation and history.replaceState)
   useEffect(() => {
     const updateSearch = () => setCurrentSearch(window.location.search);
-    
-    // Listen for popstate (browser back/forward)
     window.addEventListener('popstate', updateSearch);
-    
-    // Also check on location change from wouter
     updateSearch();
-    
     return () => window.removeEventListener('popstate', updateSearch);
   }, [location]);
 
-  // Handle navigation - use programmatic navigation to ensure same-path query changes work
   const handleNavClick = useCallback((href: string) => {
-    // Always use setLocation to ensure navigation triggers properly
-    // This fixes the issue where clicking Jobs/Active on mover-dashboard
-    // wouldn't work because wouter's Link doesn't re-navigate to same path
     setLocation(href);
-    
-    // Also update the search state immediately for instant visual feedback
     const newSearch = href.includes('?') ? '?' + href.split('?')[1] : '';
     setCurrentSearch(newSearch);
-    
-    // Dispatch custom event to notify other components (like MoverDashboard) of URL change
-    // This is needed because wouter's setLocation doesn't trigger popstate for same-path changes
     window.dispatchEvent(new CustomEvent('lervit-navigation', { detail: { href, search: newSearch } }));
   }, [setLocation]);
 
@@ -60,21 +46,22 @@ export function MobileBottomNav() {
     switch (user.role) {
       case "customer":
         return [
-          { href: "/dashboard", icon: <Home className="w-5 h-5" />, label: "Home" },
-          { href: "/my-bookings", icon: <Calendar className="w-5 h-5" />, label: "Bookings" },
-          { href: "/request-move", icon: <Plus className="w-5 h-5" />, label: "New Move" },
+          { href: "/dashboard",             icon: <Home className="w-5 h-5" />,     label: "Home" },
+          { href: "/my-bookings",            icon: <Calendar className="w-5 h-5" />, label: "Bookings" },
+          { href: "/dashboard?tab=past",     icon: <Clock className="w-5 h-5" />,    label: "Activity" },
+          { href: "/request-move",           icon: <Plus className="w-5 h-5" />,     label: "New Move", accent: true },
         ];
       case "mover":
         return [
-          { href: "/mover-dashboard", icon: <Home className="w-5 h-5" />, label: "Jobs" },
-          { href: "/mover-dashboard?tab=active", icon: <Truck className="w-5 h-5" />, label: "Active" },
-          { href: "/mover-dashboard?tab=payouts", icon: <Wallet className="w-5 h-5" />, label: "Payouts" },
+          { href: "/mover-dashboard",               icon: <Home className="w-5 h-5" />,   label: "Jobs" },
+          { href: "/mover-dashboard?tab=active",     icon: <Truck className="w-5 h-5" />,  label: "Active" },
+          { href: "/mover-dashboard?tab=payouts",    icon: <Wallet className="w-5 h-5" />, label: "Payouts" },
         ];
       case "admin":
         return [
-          { href: "/admin", icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
-          { href: "/admin/users", icon: <Users className="w-5 h-5" />, label: "Users" },
-          { href: "/admin/support", icon: <Inbox className="w-5 h-5" />, label: "Tickets" },
+          { href: "/admin",         icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
+          { href: "/admin/users",   icon: <Users className="w-5 h-5" />,           label: "Users" },
+          { href: "/admin/support", icon: <Inbox className="w-5 h-5" />,           label: "Tickets" },
         ];
       default:
         return [];
@@ -82,20 +69,16 @@ export function MobileBottomNav() {
   };
 
   const navItems = getNavItems();
-  
   if (navItems.length === 0) return null;
 
   const isActive = (href: string) => {
     const [hrefPath, hrefQuery] = href.split("?");
     const currentPath = location.split("?")[0];
     
-    // For items with query params (e.g., ?tab=active, ?tab=payouts)
     if (hrefQuery) {
       return currentPath === hrefPath && currentSearch.includes(hrefQuery);
     }
     
-    // For items without query params (e.g., /mover-dashboard for "Jobs")
-    // Check if any other nav item with query params for the same path is currently active
     const otherTabsForThisPath = navItems
       .filter(item => item.href !== href && item.href.startsWith(hrefPath + "?"))
       .some(item => {
@@ -103,44 +86,59 @@ export function MobileBottomNav() {
         return currentSearch.includes(itemQuery);
       });
     
-    // If another tab is active, this base item should not be active
-    if (otherTabsForThisPath) {
-      return false;
-    }
-    
+    if (otherTabsForThisPath) return false;
     return currentPath === hrefPath || location.startsWith(hrefPath + "/");
   };
 
   return (
-    <nav 
-      className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t md:hidden"
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 md:hidden px-4"
+      style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
       role="navigation"
       aria-label="Mobile navigation"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="flex items-center justify-around h-16 px-2 max-w-lg mx-auto">
+      <div className="bg-card border border-border/60 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] flex items-center justify-around h-16 px-1 max-w-md mx-auto">
         {navItems.map((item) => {
           const active = isActive(item.href);
+          const isAccent = item.accent;
+
           return (
             <button
               key={item.href}
               onClick={() => handleNavClick(item.href)}
-              className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-lg min-w-[4rem] transition-colors active:scale-95 ${
-                active 
-                  ? "text-primary" 
-                  : "text-muted-foreground hover:text-foreground"
+              className={`relative flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl min-w-[3.5rem] flex-1 transition-colors active:scale-95 ${
+                active
+                  ? isAccent ? "text-primary" : "text-primary"
+                  : "text-muted-foreground"
               }`}
               data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
               aria-label={item.label}
               aria-current={active ? "page" : undefined}
             >
-              <div className={`transition-transform duration-150 ${active ? 'scale-110' : 'scale-100'}`}>
-                {item.icon}
-              </div>
-              <span className="text-[10px] font-medium leading-tight">{item.label}</span>
-              {active && (
-                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+              {/* Active background pill */}
+              {active && !isAccent && (
+                <div className="absolute inset-x-1 inset-y-0.5 rounded-xl bg-primary/8" />
               )}
+
+              {/* Icon — accent items get a filled circle */}
+              <div className={`relative transition-transform duration-150 ${active ? 'scale-110' : 'scale-100'}`}>
+                {isAccent ? (
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-colors ${
+                    active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+                  }`}>
+                    {item.icon}
+                  </div>
+                ) : (
+                  item.icon
+                )}
+              </div>
+
+              {/* Label — hidden for accent items when not active to keep it compact */}
+              <span className={`text-[10px] font-medium leading-tight transition-opacity ${
+                isAccent && !active ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
+              }`}>
+                {item.label}
+              </span>
             </button>
           );
         })}

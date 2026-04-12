@@ -94,6 +94,25 @@ export default function CustomerDashboard() {
   const { user, refreshUser } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  // Read ?tab= query param so the bottom nav Activity shortcut jumps to "past"
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const p = new URLSearchParams(window.location.search).get("tab");
+    return p === "past" ? "past" : "active";
+  });
+
+  useEffect(() => {
+    const sync = () => {
+      const p = new URLSearchParams(window.location.search).get("tab");
+      setActiveTab(p === "past" ? "past" : "active");
+    };
+    window.addEventListener("popstate", sync);
+    window.addEventListener("lervit-navigation", sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("lervit-navigation", sync);
+    };
+  }, []);
+
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -546,7 +565,7 @@ export default function CustomerDashboard() {
         </div>
 
         {/* All Bookings */}
-        <Tabs defaultValue="active" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full mb-4 bg-muted/50 p-1">
             <TabsTrigger value="active" className="flex-1 gap-2" data-testid="tab-active">
               <Clock className="w-4 h-4" />
