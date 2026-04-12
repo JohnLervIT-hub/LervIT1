@@ -562,80 +562,44 @@ export default function RequestMove() {
           const leg = result.routes[0]?.legs[0];
           if (map && leg) {
             // ── Smart camera framing ─────────────────────────────────────
-            // Build bounds from confirmed marker positions + every route point.
+            // Centre on the route midpoint.
+            const centerLat = (leg.start_location.lat() + leg.end_location.lat()) / 2;
+            const centerLng = (leg.start_location.lng() + leg.end_location.lng()) / 2;
+
+            // Measure the full route span (all path points, not just endpoints).
             const tripBounds = new google.maps.LatLngBounds();
             tripBounds.extend(leg.start_location);
             tripBounds.extend(leg.end_location);
             (result.routes[0]?.overview_path ?? []).forEach(pt => tripBounds.extend(pt));
-
             const ne = tripBounds.getNorthEast();
             const sw = tripBounds.getSouthWest();
             const latSpan = Math.max(ne.lat() - sw.lat(), 0);
             const lngSpan = Math.max(ne.lng() - sw.lng(), 0);
-            const centerLat = (ne.lat() + sw.lat()) / 2;
-            const centerLng = (ne.lng() + sw.lng()) / 2;
 
-            // km per degree at Calgary's latitude (51°)
-            const KM_PER_LAT = 111.0;
-            const KM_PER_LNG = 69.0;
+            // km per degree at Calgary's latitude (51°), cos(51°) ≈ 0.629
+            const COS_LAT = 0.629;
+            const routeKmH = Math.max(latSpan * 111.0, 2); // min 2 km guard
+            const routeKmW = Math.max(lngSpan *  69.0, 2);
 
-            // Read the actual map container size so we match its aspect ratio.
-            // This prevents the "thin corridor" problem regardless of route direction.
+            // Mercator viewport size in km at zoom-0 for this screen.
+            // formula: km_visible = pixels × 156.543 × cos(lat) / 2^Z
+            // → at Z=0: C = pixels × 156.543 × cos(lat)
             const mapDiv = step1MapDivRef.current;
-            const containerW = mapDiv ? mapDiv.clientWidth : 375;
-            const containerH = mapDiv ? mapDiv.clientHeight : 439;
-            // Subtract symmetric fitBounds padding (60 px each side)
-            const usableW = Math.max(containerW - 120, 60);
-            const usableH = Math.max(containerH - 120, 60);
-            const TARGET_RATIO = usableW / usableH; // width / height to fill
+            const vW = mapDiv?.clientWidth  || 375;
+            const vH = mapDiv?.clientHeight || 439;
+            const C_H = vH * 156.543 * COS_LAT; // km visible vertically   at Z=0
+            const C_W = vW * 156.543 * COS_LAT; // km visible horizontally at Z=0
 
-            // Route span in km
-            const routeKmW = Math.max(lngSpan * KM_PER_LNG, 1);
-            const routeKmH = Math.max(latSpan * KM_PER_LAT, 1);
+            // Pick the zoom where the route fills 62 % of the constraining
+            // viewport dimension.  Using the SMALLER of the two zoom values
+            // guarantees both endpoints are always visible.
+            const FILL = 0.62;
+            const zoomH = Math.log2((C_H * FILL) / routeKmH);
+            const zoomW = Math.log2((C_W * FILL) / routeKmW);
+            const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW))));
 
-            // Expand the narrower dimension so the route fills the container ratio.
-            let finalKmW = routeKmW;
-            let finalKmH = routeKmH;
-            if (routeKmW / routeKmH < TARGET_RATIO) {
-              // Route is taller than container → widen
-              finalKmW = finalKmH * TARGET_RATIO;
-            } else {
-              // Route is wider than container → heighten
-              finalKmH = finalKmW / TARGET_RATIO;
-            }
-
-            // Add 60 % breathing margin all round (~1 extra zoom level of context)
-            finalKmW *= 1.60;
-            finalKmH *= 1.60;
-
-            const halfLat = (finalKmH / KM_PER_LAT) / 2;
-            const halfLng = (finalKmW / KM_PER_LNG) / 2;
-
-            // Guard: reject degenerate bounds (same-address edge case)
-            if (halfLat > 0.0005 && halfLng > 0.0005) {
-              const framedBounds = new google.maps.LatLngBounds(
-                { lat: centerLat - halfLat, lng: centerLng - halfLng },
-                { lat: centerLat + halfLat, lng: centerLng + halfLng },
-              );
-              map.fitBounds(framedBounds, { top: 60, right: 60, bottom: 60, left: 60 });
-            } else {
-              map.setCenter({ lat: centerLat, lng: centerLng });
-              map.setZoom(14);
-            }
-
-            // For very short routes fitBounds can land at too low a zoom
-            // (whole city visible for a 0.5 km move). Nudge up only when the
-            // route is genuinely short so we never fight fitBounds for long routes.
-            google.maps.event.addListenerOnce(map, "idle", () => {
-              const distM = leg.distance?.value ?? 0;
-              if (distM > 10000) return; // trust fitBounds for routes > 10 km
-              const minZoom =
-                distM < 1500 ? 15 :
-                distM < 4000 ? 14 :
-                13; // 4 – 10 km → suburb zoom
-              const current = map.getZoom() ?? 0;
-              if (current < minZoom) map.setZoom(minZoom);
-            });
+            map.setCenter({ lat: centerLat, lng: centerLng });
+            map.setZoom(finalZoom);
             // ─────────────────────────────────────────────────────────────
 
             // ── Flowing dash animation over the route ──────────────────────
