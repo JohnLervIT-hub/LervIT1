@@ -549,24 +549,67 @@ export default function RequestMove() {
           step1DirRendererRef.current.setDirections(result);
 
           const map = step1MapInstanceRef.current;
-          if (map) {
-            // Fit the map to show the full route
-            const bounds = result.routes[0]?.bounds;
-            if (bounds) {
-              map.fitBounds(bounds, { top: 80, right: 80, bottom: 110, left: 80 });
-              // After fitBounds settles, enforce a minimum zoom so short routes
-              // are zoomed in enough to read street names and POI labels.
-              google.maps.event.addListenerOnce(map, "idle", () => {
-                const distM = result.routes[0]?.legs[0]?.distance?.value ?? 0;
-                const minZoom =
-                  distM < 1500 ? 15 :   // < 1.5 km  → neighbourhood zoom
-                  distM < 4000 ? 14 :   // < 4 km    → suburb zoom
-                  distM < 9000 ? 13 :   // < 9 km    → city-district zoom
-                  12;                    // longer    → city-wide view
-                const current = map.getZoom() ?? 0;
-                if (current < minZoom) map.setZoom(minZoom);
-              });
+          const leg = result.routes[0]?.legs[0];
+          if (map && leg) {
+            // ── Smart camera framing ─────────────────────────────────────
+            // Build bounds from confirmed marker positions first, then extend
+            // with every route path point so the full polyline fits.
+            const tripBounds = new google.maps.LatLngBounds();
+            tripBounds.extend(leg.start_location);
+            tripBounds.extend(leg.end_location);
+            (result.routes[0]?.overview_path ?? []).forEach(pt => tripBounds.extend(pt));
+
+            const ne = tripBounds.getNorthEast();
+            const sw = tripBounds.getSouthWest();
+            const latSpan = Math.max(ne.lat() - sw.lat(), 0);
+            const lngSpan = Math.max(ne.lng() - sw.lng(), 0);
+            const centerLat = (ne.lat() + sw.lat()) / 2;
+            const centerLng = (ne.lng() + sw.lng()) / 2;
+
+            // At Calgary's latitude (~51°) 1° lat ≈ 111 km, 1° lng ≈ 69 km,
+            // so divide lng by 0.62 to get the visual width in "lat-equivalent" units.
+            const LNG_SCALE = 0.62;
+            const visualH = Math.max(latSpan, 0.008);         // min ~900 m
+            const visualW = Math.max(lngSpan * LNG_SCALE, 0.008);
+
+            // Expand the smaller visual dimension to ≥ 55 % of the larger one
+            // so the route is never a thin vertical/horizontal strip.
+            const MIN_RATIO = 0.55;
+            let finalLat = visualH;
+            let finalLng = visualW;
+            if (visualW < visualH * MIN_RATIO) finalLng = visualH * MIN_RATIO;
+            if (visualH < visualW * MIN_RATIO) finalLat = visualW * MIN_RATIO;
+
+            // Convert back to actual degree spans and add 20 % margin
+            const MARGIN = 1.20;
+            const halfLat = (finalLat * MARGIN) / 2;
+            const halfLng = (finalLng / LNG_SCALE * MARGIN) / 2;
+
+            // Guard: reject degenerate bounds (both endpoints at same spot)
+            if (halfLat > 0.001 && halfLng > 0.001) {
+              const framedBounds = new google.maps.LatLngBounds(
+                { lat: centerLat - halfLat, lng: centerLng - halfLng },
+                { lat: centerLat + halfLat, lng: centerLng + halfLng },
+              );
+              map.fitBounds(framedBounds, { top: 60, right: 60, bottom: 60, left: 60 });
+            } else {
+              // Fallback: zoom to centre between the two points
+              map.setCenter({ lat: centerLat, lng: centerLng });
+              map.setZoom(14);
             }
+
+            // After the camera settles, enforce a minimum zoom for very short routes
+            google.maps.event.addListenerOnce(map, "idle", () => {
+              const distM = leg.distance?.value ?? 0;
+              const minZoom =
+                distM < 1500 ? 15 :
+                distM < 4000 ? 14 :
+                distM < 9000 ? 13 :
+                12;
+              const current = map.getZoom() ?? 0;
+              if (current < minZoom) map.setZoom(minZoom);
+            });
+            // ─────────────────────────────────────────────────────────────
 
             // ── Flowing dash animation over the route ──────────────────────
             // Clear any previous animation before drawing a new one
@@ -610,8 +653,8 @@ export default function RequestMove() {
             }
             // ──────────────────────────────────────────────────────────────
 
-            const leg = result.routes[0]?.legs[0];
-            if (leg) {
+            // Place branded marker chips at the confirmed geocoded endpoints
+            {
               // Remove old custom markers
               step1PickupMarkerRef.current?.setMap(null);
               step1DropoffMarkerRef.current?.setMap(null);
