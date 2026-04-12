@@ -38,25 +38,56 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // Calgary city center – default map position before addresses are entered
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
-// Premium minimal map style for the booking flow
+// Premium logistics map style — clear roads, reduced clutter, strong visual hierarchy
 const BOOKING_MAP_STYLES = [
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { elementType: "geometry", stylers: [{ color: "#f8f9fa" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e5e7eb" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#f3f4f6" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e9ecef" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d1d5db" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#dbeafe" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#93c5fd" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dcfce7" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#86efac" }] },
-  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#374151" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  // ── Base & Landscape ──────────────────────────────────────────────────────
+  { elementType: "geometry",                                  stylers: [{ color: "#edecea" }] },
+  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#e8e6e3" }] },
+  { featureType: "landscape.natural",  elementType: "geometry", stylers: [{ color: "#e4e8dc" }] },
+
+  // ── Roads — local ─────────────────────────────────────────────────────────
+  { featureType: "road.local",  elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.local",  elementType: "geometry.stroke",  stylers: [{ color: "#d6d3cf" }, { weight: 0.8 }] },
+  { featureType: "road.local",  elementType: "labels.text.fill", stylers: [{ color: "#888480" }] },
+
+  // ── Roads — arterial ─────────────────────────────────────────────────────
+  { featureType: "road.arterial", elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry.stroke",  stylers: [{ color: "#b8b4ae" }, { weight: 1.2 }] },
+  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#5a5652" }] },
+  { featureType: "road.arterial", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+
+  // ── Roads — highway ───────────────────────────────────────────────────────
+  { featureType: "road.highway", elementType: "geometry",          stylers: [{ color: "#f5d97a" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke",    stylers: [{ color: "#c9aa48" }, { weight: 1 }] },
+  { featureType: "road.highway", elementType: "labels.text.fill",   stylers: [{ color: "#3d3520" }] },
+  { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
+  { featureType: "road.highway.controlled_access", elementType: "geometry", stylers: [{ color: "#e8c84e" }] },
+
+  // ── Global label styles ───────────────────────────────────────────────────
+  { elementType: "labels.text.fill",   stylers: [{ color: "#4a4744" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 2.5 }] },
+
+  // ── Administrative ────────────────────────────────────────────────────────
+  { featureType: "administrative.locality",      elementType: "labels.text.fill",   stylers: [{ color: "#2a2725" }] },
+  { featureType: "administrative.neighborhood",  elementType: "labels.text.fill",   stylers: [{ color: "#6b6764" }] },
+
+  // ── Water ─────────────────────────────────────────────────────────────────
+  { featureType: "water", elementType: "geometry",           stylers: [{ color: "#b8d4e8" }] },
+  { featureType: "water", elementType: "labels.text.fill",   stylers: [{ color: "#5a8aaa" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#daeaf5" }] },
+
+  // ── Parks & green ─────────────────────────────────────────────────────────
+  { featureType: "poi.park", elementType: "geometry",           stylers: [{ color: "#c8dfc0" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill",   stylers: [{ color: "#4a7040" }] },
+  { featureType: "poi.park", elementType: "labels.text.stroke", stylers: [{ color: "#e8f4e0" }] },
+
+  // ── POI — hide distracting business icons, keep labels subtle ────────────
+  { featureType: "poi",          elementType: "labels.icon",       stylers: [{ visibility: "off" }] },
+  { featureType: "poi.business", elementType: "labels",            stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", elementType: "labels",          stylers: [{ visibility: "off" }] },
+
+  // ── Transit — hide ────────────────────────────────────────────────────────
+  { featureType: "transit",      stylers: [{ visibility: "off" }] },
 ];
 
 // Branded map marker: clean dot + short label chip (Pickup / Dropoff)
