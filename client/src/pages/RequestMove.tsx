@@ -1846,7 +1846,7 @@ export default function RequestMove() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-foreground">{estimateDistance.toFixed(1)} km route</p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {pickupAddress.split(",")[0]} → {dropoffAddress.split(",")[0]}
+                            {pickupAddress.split(",")[0].trim().replace(/\bSoutheast\b/g,"SE").replace(/\bNortheast\b/g,"NE").replace(/\bNorthwest\b/g,"NW").replace(/\bSouthwest\b/g,"SW")} → {dropoffAddress.split(",")[0].trim().replace(/\bSoutheast\b/g,"SE").replace(/\bNortheast\b/g,"NE").replace(/\bNorthwest\b/g,"NW").replace(/\bSouthwest\b/g,"SW")}
                           </p>
                         </div>
                       </div>

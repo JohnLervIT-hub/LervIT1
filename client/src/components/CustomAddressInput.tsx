@@ -22,6 +22,16 @@ interface CustomAddressInputProps {
   "data-testid"?: string;
 }
 
+/** Show only the street portion with compass directions abbreviated.
+ *  e.g. "45 Setonstone Manor Southeast, Calgary, AB, Canada" → "45 Setonstone Manor SE" */
+function abbrevAddr(full: string): string {
+  return full.split(",")[0].trim()
+    .replace(/\bSoutheast\b/g, "SE")
+    .replace(/\bNortheast\b/g, "NE")
+    .replace(/\bNorthwest\b/g, "NW")
+    .replace(/\bSouthwest\b/g, "SW");
+}
+
 function generateSessionToken(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
@@ -53,7 +63,9 @@ export function CustomAddressInput({
   }, [loadMaps]);
 
   useEffect(() => {
-    setInputValue(value);
+    // Show abbreviated form for confirmed addresses (contain a comma);
+    // leave partial user-typed text untouched.
+    setInputValue(value.includes(",") ? abbrevAddr(value) : value);
   }, [value]);
 
   useEffect(() => {
@@ -111,7 +123,7 @@ export function CustomAddressInput({
   };
 
   const handleSelectPrediction = async (prediction: Prediction) => {
-    setInputValue(prediction.description);
+    setInputValue(abbrevAddr(prediction.description));
     setIsOpen(false);
     setPredictions([]);
 
