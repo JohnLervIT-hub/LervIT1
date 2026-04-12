@@ -1607,10 +1607,16 @@ export default function RequestMove() {
 
       <div className="min-h-screen pt-20 pb-12 bg-background">
         <div className={step === 1 ? "w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8" : "max-w-4xl mx-auto px-4 sm:px-6"}>
-        {/* Spacer for sticky progress on mobile */}
-        <div className="h-16 md:hidden" />
+        {/* Mobile spacer — clears both the fixed header (64px via pt-20 on parent)
+            and the sticky progress bar (fixed at top-16, ~60px tall → ends ~124px).
+            pt-20 = 80px, so we need 44px more to reach 124px.
+            Step 1: map is first element → use tight 44px spacer so map sits
+                    flush below the progress bar with no extra blank band.
+            Steps 2+: page header content follows the spacer and fills the gap
+                      naturally, so the full h-16 (64px) is fine. */}
+        <div className={step === 1 ? "h-[44px] md:hidden" : "h-16 md:hidden"} />
 
-        {/* Page Header — compact on step 1 desktop to save vertical space */}
+        {/* Page Header — hidden on mobile step 1 (map is the hero element there) */}
         <div className={step === 1 ? "py-4 mb-4 hidden md:block" : "py-6 mb-2"}>
           <h1 className="text-2xl sm:text-3xl font-bold mb-1">Request a Move</h1>
           <p className="text-muted-foreground text-sm">Tell us what you need moved</p>
