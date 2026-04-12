@@ -1,5 +1,7 @@
 // PERFORMANCE: Preload Payment page when step >= 2
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { GoogleMap, DirectionsRenderer } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,7 +16,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
-import PriceCalculator from "@/components/PriceCalculator";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
@@ -34,6 +35,23 @@ import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
 import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
+
+// Calgary city center – default map position before addresses are entered
+const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
+
+// Clean, minimal map style for the booking flow
+const BOOKING_MAP_STYLES = [
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#555555" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ebebeb" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#e0e0e0" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c8dff7" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dff0df" }] },
+];
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -92,6 +110,17 @@ export default function RequestMove() {
     usesRemaining: number;
     message: string;
   } | null>(null);
+
+  // Step 1 interactive map
+  const { isLoaded: mapsIsLoaded, loadMaps } = useGoogleMaps();
+  const [step1Directions, setStep1Directions] = useState<google.maps.DirectionsResult | null>(null);
+  const step1DirServiceRef = useRef<google.maps.DirectionsService | null>(null);
+  const step1LastAddressesRef = useRef<string>("");
+  const bookingMapOptions = useMemo(() => ({
+    disableDefaultUI: true,
+    zoomControl: true,
+    styles: BOOKING_MAP_STYLES,
+  }), []);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -365,6 +394,34 @@ export default function RequestMove() {
     },
   });
 
+
+  // Load Google Maps API on mount (for Step 1 map)
+  useEffect(() => {
+    loadMaps();
+  }, [loadMaps]);
+
+  // Calculate route for Step 1 interactive map when both addresses are present
+  useEffect(() => {
+    if (!mapsIsLoaded || !pickupAddress || !dropoffAddress) {
+      if (!pickupAddress || !dropoffAddress) setStep1Directions(null);
+      return;
+    }
+    const key = `${pickupAddress}|||${dropoffAddress}`;
+    if (step1LastAddressesRef.current === key) return;
+    step1LastAddressesRef.current = key;
+
+    if (!step1DirServiceRef.current) {
+      step1DirServiceRef.current = new google.maps.DirectionsService();
+    }
+    step1DirServiceRef.current.route(
+      { origin: pickupAddress, destination: dropoffAddress, travelMode: google.maps.TravelMode.DRIVING, region: "CA" },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          setStep1Directions(result);
+        }
+      }
+    );
+  }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
 
   // Calculate real distance estimate when addresses change using geocoding
   useEffect(() => {
@@ -1383,16 +1440,57 @@ export default function RequestMove() {
           </div>
         </div>
 
-        <div className="grid gap-6">
+        <div className={step === 1
+          ? "flex flex-col lg:grid lg:grid-cols-[5fr_6fr] lg:gap-5 lg:items-start"
+          : "grid gap-6"
+        }>
+          {/* Step 1 Interactive Map — mobile: above form, desktop: right column */}
+          {step === 1 && (
+            <div className="order-first lg:order-last rounded-xl overflow-hidden h-[38vh] md:h-[42vh] lg:min-h-[560px] lg:h-auto lg:sticky lg:top-20 bg-muted mb-4 lg:mb-0">
+              {mapsIsLoaded ? (
+                <GoogleMap
+                  mapContainerStyle={{ width: "100%", height: "100%" }}
+                  center={CALGARY_CENTER}
+                  zoom={11}
+                  options={bookingMapOptions}
+                >
+                  {step1Directions && (
+                    <DirectionsRenderer
+                      directions={step1Directions}
+                      options={{
+                        suppressMarkers: false,
+                        polylineOptions: {
+                          strokeColor: "#276EF1",
+                          strokeWeight: 4,
+                          strokeOpacity: 1,
+                        },
+                      }}
+                    />
+                  )}
+                </GoogleMap>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-muted">
+                  <div className="text-center text-muted-foreground">
+                    <MapPin className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Loading map…</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Main Form */}
-          <div>
+          <div className={step === 1 ? "order-last lg:order-first" : ""}>
             <Card>
-              <CardHeader>
-                <h2 className="text-2xl font-bold">
-                  {step === 1 && "Step 1: Locations"}
+              <CardHeader className="pb-3">
+                <h2 className={step === 1 ? "text-lg font-bold" : "text-2xl font-bold"}>
+                  {step === 1 && "Where are you moving?"}
                   {step === 2 && "Step 2: Load Details"}
                   {step === 3 && "Step 3: Schedule & Details"}
                 </h2>
+                {step === 1 && (
+                  <p className="text-sm text-muted-foreground mt-0.5">Enter pickup and dropoff addresses</p>
+                )}
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Selected Mover Display */}
@@ -1442,201 +1540,103 @@ export default function RequestMove() {
                 
                 {step === 1 && (
                   <>
-                    {/* Grand Location Selector */}
-                    <div className="relative">
-                      {/* Visual Route Line */}
-                      <div className="absolute left-[23px] top-[72px] bottom-[72px] w-0.5 bg-gradient-to-b from-green-500 via-primary/30 to-primary hidden sm:block" />
-                      
-                      {/* Pickup Section */}
-                      <div className="relative bg-gradient-to-r from-green-500/5 to-transparent border border-green-500/20 rounded-xl p-5 mb-4">
-                        <div className="flex items-start gap-4">
-                          {/* Pickup Icon */}
-                          <div className="relative z-10 flex-shrink-0">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/20">
-                              <MapPin className="w-6 h-6 text-white" />
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-card border-2 border-green-500 flex items-center justify-center">
-                              <span className="text-[10px] font-bold text-green-600">A</span>
-                            </div>
-                          </div>
-                          
-                          {/* Pickup Fields */}
-                          <div className="flex-1 space-y-4">
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <Label htmlFor="pickup" className="text-base font-semibold">
-                                  Pickup Location
-                                </Label>
-                                <span className="text-[10px] font-medium bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">FROM</span>
-                              </div>
-                              <CustomAddressInput
-                                id="pickup"
-                                placeholder="Enter pickup address in Calgary"
-                                value={pickupAddress}
-                                onChange={(address) => setPickupAddress(address)}
-                                data-testid="input-pickup-address"
-                              />
-                            </div>
-                            
-                            <div>
-                              <Label htmlFor="pickup-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
-                                Access Type <span className="text-destructive">*</span>
-                              </Label>
-                              <Select value={pickupDifficulty} onValueChange={(val) => {
-                                setPickupDifficulty(val);
-                                setPickupAccessError(false);
-                              }}>
-                                <SelectTrigger 
-                                  id="pickup-difficulty" 
-                                  className={`h-11 bg-card ${pickupAccessError ? 'border-destructive ring-1 ring-destructive' : ''}`} 
-                                  data-testid="select-pickup-difficulty"
-                                >
-                                  <SelectValue placeholder="Select access type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ground">
-                                    <div className="flex items-center gap-2">
-                                      <span>Ground Floor</span>
-                                      <span className="text-xs text-green-600 font-medium">Free</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="basement">
-                                    <div className="flex items-center gap-2">
-                                      <span>Basement</span>
-                                      <span className="text-xs text-muted-foreground">+$12</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="stairs">
-                                    <div className="flex items-center gap-2">
-                                      <span>Stairs</span>
-                                      <span className="text-xs text-muted-foreground">+$6</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="elevator">
-                                    <div className="flex items-center gap-2">
-                                      <span>Elevator Available</span>
-                                      <span className="text-xs text-muted-foreground">+$9.60</span>
-                                    </div>
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {pickupAccessError && (
-                                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  Please select pickup access type
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                    {/* Route Location Selector */}
+                    <div className="relative flex gap-3">
+                      {/* Left rail: dot → line → square */}
+                      <div className="flex flex-col items-center pt-3 flex-shrink-0">
+                        <div className="w-3 h-3 rounded-full bg-green-500 ring-2 ring-green-500/20" />
+                        <div className="w-0.5 flex-1 my-1 bg-border" />
+                        <div className="w-3 h-3 rounded-sm bg-primary" />
                       </div>
 
-                      {/* Route Arrow Connector - Mobile */}
-                      <div className="flex justify-center py-2 sm:hidden">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-0.5 h-4 bg-gradient-to-b from-green-500 to-primary/50" />
-                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                            <TrendingUp className="w-4 h-4 text-muted-foreground rotate-90" />
-                          </div>
-                          <div className="w-0.5 h-4 bg-gradient-to-b from-primary/50 to-primary" />
+                      {/* Right: fields */}
+                      <div className="flex-1 space-y-4 min-w-0">
+                        {/* Pickup */}
+                        <div className="space-y-2">
+                          <Label htmlFor="pickup" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                            Pickup
+                          </Label>
+                          <CustomAddressInput
+                            id="pickup"
+                            placeholder="Enter pickup address in Calgary"
+                            value={pickupAddress}
+                            onChange={(address) => setPickupAddress(address)}
+                            data-testid="input-pickup-address"
+                          />
+                          <Select value={pickupDifficulty} onValueChange={(val) => {
+                            setPickupDifficulty(val);
+                            setPickupAccessError(false);
+                          }}>
+                            <SelectTrigger 
+                              id="pickup-difficulty" 
+                              className={pickupAccessError ? 'border-destructive ring-1 ring-destructive' : ''} 
+                              data-testid="select-pickup-difficulty"
+                            >
+                              <SelectValue placeholder="Access type (stairs, elevator…)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-1 text-xs">Free</span></SelectItem>
+                              <SelectItem value="basement">Basement <span className="text-muted-foreground ml-1 text-xs">+$12</span></SelectItem>
+                              <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-1 text-xs">+$6</span></SelectItem>
+                              <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-1 text-xs">+$9.60</span></SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {pickupAccessError && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Please select pickup access type
+                            </p>
+                          )}
                         </div>
-                      </div>
 
-                      {/* Dropoff Section */}
-                      <div className="relative bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-xl p-5">
-                        <div className="flex items-start gap-4">
-                          {/* Dropoff Icon */}
-                          <div className="relative z-10 flex-shrink-0">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-                              <MapPin className="w-6 h-6 text-primary-foreground" />
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-card border-2 border-primary flex items-center justify-center">
-                              <span className="text-[10px] font-bold text-primary">B</span>
-                            </div>
-                          </div>
-                          
-                          {/* Dropoff Fields */}
-                          <div className="flex-1 space-y-4">
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <Label htmlFor="dropoff" className="text-base font-semibold">
-                                  Dropoff Location
-                                </Label>
-                                <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">TO</span>
-                              </div>
-                              <CustomAddressInput
-                                id="dropoff"
-                                placeholder="Enter dropoff address in Calgary"
-                                value={dropoffAddress}
-                                onChange={(address) => setDropoffAddress(address)}
-                                data-testid="input-dropoff-address"
-                              />
-                            </div>
-                            
-                            <div>
-                              <Label htmlFor="dropoff-difficulty" className="text-sm font-medium text-muted-foreground mb-2 block">
-                                Access Type <span className="text-destructive">*</span>
-                              </Label>
-                              <Select value={dropoffDifficulty} onValueChange={(val) => {
-                                setDropoffDifficulty(val);
-                                setDropoffAccessError(false);
-                              }}>
-                                <SelectTrigger 
-                                  id="dropoff-difficulty" 
-                                  className={`h-11 bg-card ${dropoffAccessError ? 'border-destructive ring-1 ring-destructive' : ''}`} 
-                                  data-testid="select-dropoff-difficulty"
-                                >
-                                  <SelectValue placeholder="Select access type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ground">
-                                    <div className="flex items-center gap-2">
-                                      <span>Ground Floor</span>
-                                      <span className="text-xs text-green-600 font-medium">Free</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="basement">
-                                    <div className="flex items-center gap-2">
-                                      <span>Basement</span>
-                                      <span className="text-xs text-muted-foreground">+$12</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="stairs">
-                                    <div className="flex items-center gap-2">
-                                      <span>Stairs</span>
-                                      <span className="text-xs text-muted-foreground">+$6</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="elevator">
-                                    <div className="flex items-center gap-2">
-                                      <span>Elevator Available</span>
-                                      <span className="text-xs text-muted-foreground">+$9.60</span>
-                                    </div>
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {dropoffAccessError && (
-                                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  Please select dropoff access type
-                                </p>
-                              )}
-                            </div>
-                          </div>
+                        {/* Divider */}
+                        <div className="border-t border-dashed" />
+
+                        {/* Dropoff */}
+                        <div className="space-y-2">
+                          <Label htmlFor="dropoff" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                            Dropoff
+                          </Label>
+                          <CustomAddressInput
+                            id="dropoff"
+                            placeholder="Enter dropoff address in Calgary"
+                            value={dropoffAddress}
+                            onChange={(address) => setDropoffAddress(address)}
+                            data-testid="input-dropoff-address"
+                          />
+                          <Select value={dropoffDifficulty} onValueChange={(val) => {
+                              setDropoffDifficulty(val);
+                              setDropoffAccessError(false);
+                            }}>
+                            <SelectTrigger 
+                              id="dropoff-difficulty" 
+                              className={dropoffAccessError ? 'border-destructive ring-1 ring-destructive' : ''} 
+                              data-testid="select-dropoff-difficulty"
+                            >
+                              <SelectValue placeholder="Access type (stairs, elevator…)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-1 text-xs">Free</span></SelectItem>
+                              <SelectItem value="basement">Basement <span className="text-muted-foreground ml-1 text-xs">+$12</span></SelectItem>
+                              <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-1 text-xs">+$6</span></SelectItem>
+                              <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-1 text-xs">+$9.60</span></SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {dropoffAccessError && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Please select dropoff access type
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Distance Indicator */}
+                    {/* Route distance — shown only when map has drawn the route */}
                     {estimateDistance > 0 && (
-                      <div className="flex items-center justify-center gap-3 py-4">
-                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-                        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-full">
-                          <Truck className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">{estimateDistance.toFixed(1)} km</span>
-                          <span className="text-xs text-muted-foreground">estimated</span>
-                        </div>
-                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground pt-1">
+                        <Truck className="w-4 h-4 flex-shrink-0" />
+                        <span>{estimateDistance.toFixed(1)} km estimated drive</span>
                       </div>
                     )}
 
@@ -2100,15 +2100,17 @@ export default function RequestMove() {
             </Card>
           </div>
 
-          {/* Live Pricing Summary */}
-          <PricingSummary 
-            breakdown={priceBreakdown}
-            isCalculating={isCalculatingPrice}
-            error={pricingError}
-            showPromoInput={!!user && (user.promoUsesCount ?? 0) < 2}
-            appliedPromo={appliedPromo}
-            onPromoApplied={setAppliedPromo}
-          />
+          {/* Live Pricing Summary — hidden on Step 1 (no pricing until load details are set) */}
+          {step > 1 && (
+            <PricingSummary 
+              breakdown={priceBreakdown}
+              isCalculating={isCalculatingPrice}
+              error={pricingError}
+              showPromoInput={!!user && (user.promoUsesCount ?? 0) < 2}
+              appliedPromo={appliedPromo}
+              onPromoApplied={setAppliedPromo}
+            />
+          )}
         </div>
       </div>
     </div>

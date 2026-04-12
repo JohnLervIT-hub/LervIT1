@@ -1,0 +1,100 @@
+Redesign Step 1: Locations for the Lervit booking flow as a responsive PWA experience.
+
+Primary objective:
+- Remove the Live Price Estimate card entirely from Step 1
+- Make Step 1 map-first on mobile, inspired by modern logistics UX
+- Preserve strong web/PWA behavior across mobile, tablet, and desktop
+- Keep pricing logic deferred to later booking steps
+
+Step 1 should now contain only:
+1. page header
+2. top interactive map area
+3. pickup/dropoff locations card directly underneath the map
+4. pickup and dropoff access type fields
+5. Back and Next navigation
+
+Core implementation requirements:
+- Delete the full Live Price Estimate component from Step 1
+- Remove all related wrappers, spacing, subtotal, promo code field, estimated total UI, and any $0.00 display from Step 1
+- Ensure no blank space remains after removal
+- Keep any pricing/state logic that is still needed for later steps, but do not render it in Step 1
+- Clean up Step 1 props/state only if they are no longer needed and will not break downstream booking logic
+
+New layout requirements for Step 1:
+Mobile:
+- Show a map at the top of the screen
+- Place the locations card directly beneath the map, or slightly overlapping the bottom edge of the map if visually cleaner
+- The locations card must include:
+  - Pickup location input
+  - Pickup access type selector
+  - Dropoff location input
+  - Dropoff access type selector
+- Keep the flow clean, fast, and app-like
+- Do not overload the screen with unnecessary cards or duplicate labels
+
+Desktop / large tablet:
+- Convert Step 1 into a responsive two-column layout
+- Left side: locations form card
+- Right side: interactive map
+- Keep the form prominent and easy to scan
+- Avoid stretching the mobile stacked layout awkwardly across wide screens
+
+Responsive/PWA considerations:
+- This is still a PWA, so design for mobile-first but not mobile-only
+- Handle browser mode and installed PWA mode gracefully
+- Respect safe-area insets on iPhone
+- Ensure bottom navigation, sticky actions, and browser UI do not overlap important content
+- Add enough bottom padding so the Next button is never blocked by mobile browser chrome or device safe areas
+- Ensure the layout remains usable in Safari, Chrome, and installed PWA mode
+
+Map behavior requirements:
+- The map must be visible immediately in Step 1
+- Before addresses are entered, the map can show:
+  - current region / service area context
+  - user location if available
+  - neutral empty state if location permission is denied
+- Do not require geolocation permission for the page to work
+- Manual address entry must always work even if location permission is denied
+- Add a graceful fallback if the map loads slowly or geolocation fails
+- The form must remain usable even if map tiles or geolocation are delayed
+
+Mobile keyboard and autocomplete behavior:
+- When a location input is focused on mobile, prevent the keyboard from covering the active field
+- Prevent major layout jumps when keyboard opens
+- Ensure address autocomplete suggestions are visible, correctly layered, and not clipped
+- Fix z-index/overflow issues so autocomplete dropdowns render above cards/map when needed
+- Keep the active input visible while typing
+
+Visual/UX direction:
+- The page should feel interactive, modern, and logistics-native
+- Prioritize route setup, not pricing, in Step 1
+- Reduce the “form-only” feel and make the experience feel spatial and live
+- Keep spacing tighter and more premium than the current version
+- Maintain Lervit branding and product identity; do not blindly copy Lugg styling
+- Use a cleaner, lighter card structure so the location flow feels fast and intuitive
+
+Navigation and flow:
+- Keep Back and Next controls visible and properly spaced
+- Next should remain the primary CTA
+- Step 1 should focus only on setting route details
+- Pricing, subtotal, promo, and estimate UI should appear only in later relevant steps
+
+Technical cleanup:
+- Refactor the Step 1 render tree so it is simpler and state-driven
+- Remove dead UI branches related to Step 1 pricing display
+- Do not break existing booking flow, step navigation, or downstream calculations
+- Maintain clean responsive CSS and avoid hardcoded dimensions that break across devices
+- Use adaptive map heights by breakpoint:
+  - mobile: roughly 34–42vh
+  - tablet: roughly 30–36vh
+  - desktop: map fills its column cleanly
+- Avoid giant empty white space below the form or around the map
+
+Acceptance criteria:
+- No Live Price Estimate card is visible anywhere in Step 1
+- Step 1 feels map-led and interactive on mobile
+- Step 1 is responsive and polished on desktop/tablet
+- Address fields, access type selectors, and navigation work cleanly across device sizes
+- Mobile keyboard/autocomplete interactions are stable
+- The page feels like a premium app-like booking flow inside a PWA
+- Later booking steps still retain pricing functionality
