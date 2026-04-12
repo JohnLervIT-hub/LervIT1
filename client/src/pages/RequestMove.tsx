@@ -590,13 +590,17 @@ export default function RequestMove() {
             const C_H = vH * 156.543 * COS_LAT; // km visible vertically   at Z=0
             const C_W = vW * 156.543 * COS_LAT; // km visible horizontally at Z=0
 
-            // Pick the zoom where the route fills 62 % of the constraining
+            // Pick the zoom where the route fills 72 % of the constraining
             // viewport dimension.  Using the SMALLER of the two zoom values
             // guarantees both endpoints are always visible.
-            const FILL = 0.62;
+            const FILL = 0.72;
             const zoomH = Math.log2((C_H * FILL) / routeKmH);
             const zoomW = Math.log2((C_W * FILL) / routeKmW);
-            const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW))));
+            // Add 0.5 before rounding to bias toward a slightly tighter frame
+            const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW) + 0.15)));
+
+            console.log("[MapFrame] vW=%d vH=%d routeKmH=%.1f routeKmW=%.1f zoomH=%.2f zoomW=%.2f → zoom %d",
+              vW, vH, routeKmH, routeKmW, zoomH, zoomW, finalZoom);
 
             map.setCenter({ lat: centerLat, lng: centerLng });
             map.setZoom(finalZoom);
