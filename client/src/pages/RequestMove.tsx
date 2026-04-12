@@ -1682,14 +1682,34 @@ export default function RequestMove() {
           {/* Main Form */}
           <div className={step === 1 ? "order-last lg:order-first lg:flex lg:flex-col" : ""}>
             <Card className={step === 1 ? "shadow-sm lg:flex lg:flex-col lg:h-full" : ""}>
-              <CardHeader className={step === 1 ? "pt-4 pb-3 md:pt-6 md:pb-4" : "pb-4"}>
-                <h2 className={step === 1 ? "text-xl font-bold tracking-tight" : "text-2xl font-bold"}>
+              <CardHeader className={step === 1 ? "pt-4 pb-3 md:pt-6 md:pb-4" : "pb-3"}>
+                <h2 className={step === 1 ? "text-xl font-bold tracking-tight" : "text-xl font-bold"}>
                   {step === 1 && "Where is your move?"}
-                  {step === 2 && "Step 2: Load Details"}
-                  {step === 3 && "Step 3: Schedule & Details"}
+                  {step === 2 && "Load Details"}
+                  {step === 3 && "Schedule & Details"}
                 </h2>
                 {step === 1 && (
                   <p className="text-sm text-muted-foreground">Set pickup and dropoff locations</p>
+                )}
+                {(step === 2 || step === 3) && pickupAddress && dropoffAddress && (
+                  <div className="mt-1 space-y-0.5">
+                    {[
+                      { label: "Pickup", addr: pickupAddress, color: "bg-green-500" },
+                      { label: "Dropoff", addr: dropoffAddress, color: "bg-foreground" },
+                    ].map(({ label, addr, color }) => (
+                      <div key={label} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
+                        <span className="font-medium text-foreground">{label}:</span>
+                        <span className="truncate">
+                          {addr.split(",")[0].trim()
+                            .replace(/\bSoutheast\b/g, "SE")
+                            .replace(/\bNortheast\b/g, "NE")
+                            .replace(/\bNorthwest\b/g, "NW")
+                            .replace(/\bSouthwest\b/g, "SW")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardHeader>
               <CardContent className={step === 1 ? "flex flex-col flex-1 gap-5" : "space-y-6"}>
