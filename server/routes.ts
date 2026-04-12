@@ -1559,7 +1559,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       console.log(`[Location] Updated mover ${mover.id} GPS: ${latitude}, ${longitude} -> ${locationText}`);
-      
+
+      // LATE DISPATCH: Check for paid bookings with no active job notifications and notify this mover
+      // This handles the case where customer paid when no movers were online
+      try {
+        const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+        const { toDecimalString } = await import("@shared/utils");
+
+        // Find bookings that are paid/pending assignment with no active notifications for this mover
+        const pendingBookings = await db.select().from(bookings)
+          .where(and(
+            eq(bookings.paymentStatus, 'succeeded'),
+            eq(bookings.status, BOOKING_STATUSES.PENDING),
+            sql`${bookings.moverId} IS NULL`
+          ))
+          .orderBy(bookings.scheduledDate);
+
+        for (const pendingBooking of pendingBookings) {
+          // Check if this mover already has any notification (pending/expired/declined) for this booking
+          const existingNotif = await db.select({ id: jobNotifications.id })
+            .from(jobNotifications)
+            .where(and(
+              eq(jobNotifications.bookingId, pendingBooking.id),
+              eq(jobNotifications.moverId, mover.id)
+            ))
+            .limit(1);
+          if (existingNotif.length > 0) continue;
+
+          // Check if there are ANY active (pending, not expired) notifications for this booking
+          const activeNotifs = await db.select({ id: jobNotifications.id })
+            .from(jobNotifications)
+            .where(and(
+              eq(jobNotifications.bookingId, pendingBooking.id),
+              eq(jobNotifications.status, 'pending'),
+              sql`${jobNotifications.expiresAt} > NOW()`
+            ))
+            .limit(1);
+
+          // Only dispatch to movers if the booking has NO currently active notifications
+          if (activeNotifs.length > 0) continue;
+
+          // Check if this mover is within range of the pickup location using proximity matching
+          const pickupLat = parseFloat(String(pendingBooking.pickupLatitude || '0'));
+          const pickupLng = parseFloat(String(pendingBooking.pickupLongitude || '0'));
+          if (!pickupLat || !pickupLng) continue;
+
+          const moverData = [{
+            moverId: mover.id, userId: mover.userId,
+            name: user.name, vehicleType: mover.vehicleType,
+            rating: mover.rating || '0', totalMoves: mover.totalMoves,
+            isAvailable: mover.isAvailable, latitude, longitude,
+          }];
+
+          const matched = findNearestMovers(
+            { lat: pickupLat, lng: pickupLng },
+            { lat: parseFloat(String(pendingBooking.dropoffLatitude || '0')), lng: parseFloat(String(pendingBooking.dropoffLongitude || '0')) },
+            (pendingBooking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+            moverData, {}, pendingBooking.aiRecommendedVehicle || null
+          );
+
+          if (matched.length > 0) {
+            const expiresAt = calculateExpiryTime(10);
+            await storage.createJobNotification({
+              bookingId: pendingBooking.id, moverId: mover.id,
+              distanceToPickup: toDecimalString(matched[0].distanceToPickup),
+              estimatedEarnings: toDecimalString(matched[0].estimatedEarnings),
+              status: 'pending', expiresAt,
+            });
+            moverWebSocket.notifyMover(mover.userId, {
+              type: 'job_notification', bookingId: pendingBooking.id,
+              pickupAddress: pendingBooking.pickupAddress || '', dropoffAddress: pendingBooking.dropoffAddress || '',
+              price: toDecimalString(matched[0].estimatedEarnings),
+              estimatedTime: `${Math.round(matched[0].distanceToPickup)} km`, expiresAt,
+            });
+            const moverUser = await storage.getUser(mover.userId);
+            if (moverUser) {
+              await notificationService.sendJobAssignment(moverUser, pendingBooking, matched[0].estimatedEarnings.toFixed(2)).catch(() => {});
+            }
+            console.log(`[Late Dispatch] Sent pending booking ${pendingBooking.id} to newly-online mover ${mover.id}`);
+          }
+        }
+      } catch (dispatchErr) {
+        console.error('[Late Dispatch] Error checking for pending jobs:', dispatchErr);
+      }
+
       res.json({ 
         success: true, 
         location: locationText,
@@ -4525,50 +4608,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Find and notify nearby movers
+      // Find and notify nearby movers using proper proximity matching
       try {
-        const allMovers = await storage.getMovers();
-        const availableMovers = allMovers.filter(m => m.isAvailable);
-        
-        if (availableMovers.length > 0) {
-          // Notify up to 5 nearest movers
-          const moversToNotify = availableMovers.slice(0, 5);
-          const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-          for (const mover of moversToNotify) {
+        const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+        const { toDecimalString } = await import("@shared/utils");
+
+        const pickupCoords = {
+          lat: parseFloat(String(booking.pickupLatitude || '0')),
+          lng: parseFloat(String(booking.pickupLongitude || '0')),
+        };
+        const dropoffCoords = {
+          lat: parseFloat(String(booking.dropoffLatitude || '0')),
+          lng: parseFloat(String(booking.dropoffLongitude || '0')),
+        };
+
+        if (booking.preSelectedMoverId) {
+          // PRIORITY: notify pre-selected mover only
+          const preSelectedMover = await storage.getMover(booking.preSelectedMoverId);
+          if (preSelectedMover) {
+            const bookingPrice = parseFloat(booking.price || '0');
+            const feeBreakdown = calculatePlatformFee(bookingPrice);
+            const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
+            const expiresAt = calculateExpiryTime(10);
             await storage.createJobNotification({
-              moverId: mover.id,  // Use mover.id (movers table PK), NOT mover.userId
               bookingId: booking.id,
+              moverId: booking.preSelectedMoverId,
+              distanceToPickup: toDecimalString(0),
+              estimatedEarnings: toDecimalString(moverNetAmount),
               status: 'pending',
-              distanceToPickup: '0',
-              estimatedEarnings: booking.price || '0',
               expiresAt,
             });
-            
-            // Send real-time WebSocket notification to mover (uses userId for WebSocket client matching)
-            moverWebSocket.notifyMover(mover.userId, {
-              type: 'job_notification',
-              bookingId: booking.id,
-              pickupAddress: booking.pickupAddress || '',
-              dropoffAddress: booking.dropoffAddress || '',
-              price: booking.price || '0',
-              expiresAt,
-            });
-            
-            // Send email notification to mover
-            const moverUser = await storage.getUser(mover.userId);
+            const moverUser = await storage.getUser(preSelectedMover.userId);
             if (moverUser) {
-              try {
-                await notificationService.sendJobAssignment(
-                  moverUser,
-                  booking,
-                  booking.price || '0'
-                );
-              } catch (emailErr) {
-                console.error(`[Payment] Failed to email mover ${mover.userId}:`, emailErr);
+              await notificationService.sendJobAssignment(moverUser, booking, moverNetAmount.toFixed(2)).catch(() => {});
+              if (moverUser.phone) {
+                const baseUrl = process.env.BASE_URL || 'https://app.lervit.com';
+                await notificationService.sendSMS({ to: moverUser.phone, message: `LervIT PRIORITY: A customer selected YOU! Earn $${moverNetAmount.toFixed(2)} CAD. Accept within 10 min: ${baseUrl}/mover-dashboard`, type: 'job_alert' }).catch(() => {});
               }
+              moverWebSocket.notifyMover(moverUser.id, { type: 'job_notification', bookingId: booking.id, isPriority: true, estimatedEarnings: moverNetAmount.toFixed(2), pickupAddress: booking.pickupAddress, dropoffAddress: booking.dropoffAddress });
             }
+            console.log(`[Payment] Notified pre-selected mover ${booking.preSelectedMoverId} for booking ${booking.id}`);
           }
-          console.log(`[Payment] Notified ${moversToNotify.length} movers about job (with emails + WebSocket)`);
+        } else {
+          // PROXIMITY MATCHING: find nearest operational movers
+          const operationalMovers = await storage.getOperationalMovers();
+          const moversWithUserData = (await Promise.all(
+            operationalMovers.map(async (m: any) => {
+              const moverUser = await storage.getUser(m.userId);
+              if (!moverUser || m.latitude === null || m.longitude === null) return null;
+              return { moverId: m.id, userId: m.userId, name: moverUser.name, vehicleType: m.vehicleType, rating: m.rating || '0', totalMoves: m.totalMoves, isAvailable: m.isAvailable, latitude: m.latitude as number, longitude: m.longitude as number };
+            })
+          )).filter((m): m is NonNullable<typeof m> => m !== null);
+
+          const nearestMovers = findNearestMovers(
+            pickupCoords, dropoffCoords,
+            (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
+            moversWithUserData, {}, booking.aiRecommendedVehicle || null
+          );
+
+          const expiresAt = calculateExpiryTime(10);
+          if (nearestMovers.length > 0) {
+            await Promise.all(nearestMovers.map((mover: any) =>
+              storage.createJobNotification({ bookingId: booking.id, moverId: mover.moverId, distanceToPickup: toDecimalString(mover.distanceToPickup), estimatedEarnings: toDecimalString(mover.estimatedEarnings), status: 'pending', expiresAt })
+            ));
+            nearestMovers.forEach((mover: any) => {
+              moverWebSocket.notifyMover(mover.moverId, { type: 'job_notification', bookingId: booking.id, pickupAddress: booking.pickupAddress || '', dropoffAddress: booking.dropoffAddress || '', price: toDecimalString(mover.estimatedEarnings), estimatedTime: `${Math.round(mover.distanceToPickup)} km`, expiresAt });
+            });
+            await Promise.all(nearestMovers.map(async (mover: any) => {
+              const moverUser = await storage.getUser(mover.userId);
+              if (moverUser) await notificationService.sendJobAssignment(moverUser, booking, mover.estimatedEarnings.toFixed(2)).catch(() => {});
+            }));
+            console.log(`[Payment] Proximity matched ${nearestMovers.length} movers for booking ${booking.id}`);
+          } else {
+            console.log(`[Payment] No operational movers online for booking ${booking.id} - job will be dispatched when movers come online`);
+          }
         }
       } catch (moverErr) {
         console.error("[Payment] Failed to notify movers:", moverErr);
@@ -5091,10 +5204,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (successBookings.length > 0) {
             const booking = successBookings[0];
             
-            // Idempotency check - don't process if already succeeded
+            // Idempotency check - don't process if already succeeded AND job notifications exist
             if (booking.paymentStatus === 'succeeded') {
-              logEvent.payment('already_processed', { bookingId: booking.id, paymentIntentId: paymentIntent.id });
-              return res.json({ received: true, status: 'already_processed' });
+              const existingJobNotifs = await db.select({ id: jobNotifications.id })
+                .from(jobNotifications)
+                .where(eq(jobNotifications.bookingId, booking.id))
+                .limit(1);
+              if (existingJobNotifs.length > 0) {
+                logEvent.payment('already_processed', { bookingId: booking.id, paymentIntentId: paymentIntent.id });
+                return res.json({ received: true, status: 'already_processed' });
+              }
+              // Payment confirmed but no job notifications yet - proceed to notify movers
+              logEvent.payment('rerun_mover_notifications', { bookingId: booking.id, paymentIntentId: paymentIntent.id });
             }
             
             // STRIPE RADAR: Log and flag high-risk payments for manual review
