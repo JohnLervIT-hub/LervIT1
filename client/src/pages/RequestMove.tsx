@@ -1655,7 +1655,7 @@ export default function RequestMove() {
         }>
           {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
-            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[42vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
+            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[52vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
               <div ref={mapDivRefCallback} className="absolute inset-0" />
               {!mapsIsLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-sm">
