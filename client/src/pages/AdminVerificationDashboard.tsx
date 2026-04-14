@@ -318,7 +318,7 @@ export default function AdminVerificationDashboard() {
 
         <div>
         {/* Search & Filters */}
-        <Card className="mb-6 shadow-sm">
+        <Card className="mb-6">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
@@ -349,11 +349,11 @@ export default function AdminVerificationDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-xl">Drivers ({driversData?.total || 0})</CardTitle>
+                <CardTitle>Drivers ({driversData?.total || 0})</CardTitle>
                 <CardDescription>Click on a driver to review their verification documents</CardDescription>
               </div>
             </div>
@@ -468,7 +468,7 @@ export default function AdminVerificationDashboard() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="shrink-0"
                             data-testid={`button-view-${driver.driverId}`}
                           >
                             <Eye className="w-4 h-4 mr-1" />
@@ -770,7 +770,7 @@ export default function AdminVerificationDashboard() {
                           <img
                             src={url}
                             alt={`Verification document ${idx + 1}`}
-                            className="w-full h-36 object-cover rounded-lg border cursor-pointer hover:opacity-90"
+                            className="w-full h-36 object-cover rounded-lg border cursor-pointer"
                             onClick={() => window.open(url, '_blank')}
                           />
                         </div>
