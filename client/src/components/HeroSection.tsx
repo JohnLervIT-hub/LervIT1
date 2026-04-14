@@ -176,12 +176,12 @@ export default function HeroSection() {
                 <Label htmlFor="date" className="text-base font-semibold mb-2 block">
                   Preferred Date
                 </Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10" />
+                <div className="relative w-full overflow-hidden">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10 pointer-events-none" />
                   <Input
                     id="date"
                     type="date"
-                    className="pl-10 h-12"
+                    className="pl-10 h-12 w-full min-w-0"
                     value={preferredDate}
                     onChange={(e) => setPreferredDate(e.target.value)}
                     data-testid="input-date"
