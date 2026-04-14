@@ -1,5 +1,6 @@
 // PERFORMANCE: Preload Payment page when step >= 2
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useAnalytics, trackEvent } from "@/hooks/use-analytics";
 import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -152,6 +153,7 @@ export default function RequestMove() {
   const searchString = useSearch();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { track } = useAnalytics("booking_flow");
   const [step, setStep] = useState(1);
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
@@ -303,6 +305,17 @@ export default function RequestMove() {
       setShowLocationDialog(true);
     }
   }, [geoCoords, locationStatus]);
+
+  // Track booking funnel step views
+  useEffect(() => {
+    const stepNames: Record<number, string> = {
+      1: "booking_step_1_locations",
+      2: "booking_step_2_load_details",
+      3: "booking_step_3_schedule",
+    };
+    const name = stepNames[step];
+    if (name) track(name, { step });
+  }, [step]);
 
   // PERFORMANCE: Preload Payment page when user reaches step 2 for instant navigation
   useEffect(() => {
@@ -486,6 +499,12 @@ export default function RequestMove() {
       return data;
     },
     onSuccess: (data) => {
+      trackEvent("booking_submitted", {
+        bookingId: data?.id,
+        loadSize: data?.loadSize,
+        price: data?.price,
+        hasPromo: !!data?.promoCode,
+      });
       setCreatedBooking(data);
       setShowSuccessDialog(true);
       // Invalidate bookings cache so My Bookings page shows the new booking immediately

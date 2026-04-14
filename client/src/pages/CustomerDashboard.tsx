@@ -51,6 +51,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useState, useEffect } from "react";
+import { useAnalytics } from "@/hooks/use-analytics";
 import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
 import { WelcomeTutorial } from "@/components/WelcomeTutorial";
@@ -94,6 +95,7 @@ export default function CustomerDashboard() {
   const { user, refreshUser } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  useAnalytics("customer_dashboard");
   // Read ?tab= query param so the bottom nav Activity shortcut jumps to "past"
   const [activeTab, setActiveTab] = useState<string>(() => {
     const p = new URLSearchParams(window.location.search).get("tab");

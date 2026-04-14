@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAnalytics } from "@/hooks/use-analytics";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,6 +37,7 @@ export default function Home() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { coords, permissionState, requestLocation, isRequesting } = useGeoLocation();
+  useAnalytics("home_page");
 
   useEffect(() => {
     if (!isLoading && user) {

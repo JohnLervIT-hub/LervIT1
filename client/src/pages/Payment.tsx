@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
+import { trackEvent, useAnalytics } from "@/hooks/use-analytics";
 import { useRoute, useLocation } from "wouter";
 import { useStripe, Elements, PaymentElement, useElements } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
@@ -67,6 +68,11 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
           variant: "destructive",
         });
       } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        // Track successful payment
+        trackEvent("payment_completed", {
+          bookingId,
+          paymentIntentId: paymentIntent.id,
+        });
         // Payment succeeded - update booking status immediately (fallback for webhook)
         // This ensures the booking is confirmed even if webhook fails
         let confirmationSucceeded = false;
@@ -149,6 +155,7 @@ export default function Payment() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, params] = useRoute("/payment/:bookingId");
+  useAnalytics("payment_page");
   const [, setLocation] = useLocation();
   const [clientSecret, setClientSecret] = useState("");
   const [paymentError, setPaymentError] = useState<string | null>(null);

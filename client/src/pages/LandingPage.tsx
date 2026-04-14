@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAnalytics } from "@/hooks/use-analytics";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,6 +51,7 @@ import heroImage from "@assets/generated_images/calgary_mover_loading_furniture.
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useAnalytics("landing_page");
 
   return (
     <div className="min-h-screen bg-background">

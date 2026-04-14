@@ -1,14 +1,28 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Cell,
 } from "recharts";
-import { TrendingUp, Users, Truck, Clock, CheckCircle2, AlertTriangle, Zap, Star, Target } from "lucide-react";
+import { TrendingUp, Users, Truck, Clock, CheckCircle2, AlertTriangle, Zap, Star, Target, Activity, Eye, MousePointerClick } from "lucide-react";
 
 // ---- types ----
+type AnalyticsSummary = {
+  period: string;
+  totalEvents: number;
+  uniqueSessions: number;
+  uniqueUsers: number;
+  pageViews: { page: string; views: number }[];
+  eventBreakdown: { event: string; count: number }[];
+  dailyTrend: { date: string; views: number }[];
+  eventFunnel: { label: string; count: number }[];
+  recent: { id: string; eventName: string; page: string | null; sessionId: string | null; userId: string | null; createdAt: string }[];
+};
+
 type FunnelStep = { label: string; count: number };
 type LiveOps = {
   pendingJobs: number;
@@ -126,9 +140,21 @@ function RevenueTooltip({ active, payload, label }: any) {
 }
 
 export default function OperationsDashboard() {
+  const [analyticsRange, setAnalyticsRange] = useState("7");
+
   const { data, isLoading, error, refetch } = useQuery<OpsMetrics>({
     queryKey: ["/api/admin/ops-metrics"],
     refetchInterval: 30000,
+  });
+
+  const { data: analyticsData, isLoading: analyticsLoading } = useQuery<AnalyticsSummary>({
+    queryKey: ["/api/admin/analytics-summary", analyticsRange],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/analytics-summary?days=${analyticsRange}`);
+      if (!res.ok) throw new Error("Failed to fetch analytics");
+      return res.json();
+    },
+    refetchInterval: 60000,
   });
 
   if (isLoading) {
@@ -172,13 +198,175 @@ export default function OperationsDashboard() {
         </div>
       </div>
 
-      <Tabs defaultValue="funnel">
+      <Tabs defaultValue="analytics">
         <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="analytics" data-testid="tab-ops-analytics">Visitor Analytics</TabsTrigger>
           <TabsTrigger value="funnel" data-testid="tab-ops-funnel">Booking Funnel</TabsTrigger>
           <TabsTrigger value="liveops" data-testid="tab-ops-liveops">Live Ops</TabsTrigger>
           <TabsTrigger value="movers" data-testid="tab-ops-movers">Mover Performance</TabsTrigger>
           <TabsTrigger value="revenue" data-testid="tab-ops-revenue">Revenue Cohorts</TabsTrigger>
         </TabsList>
+
+        {/* ===== VISITOR ANALYTICS ===== */}
+        <TabsContent value="analytics" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm text-muted-foreground">
+              Events recorded directly from the app — page visits, booking steps, and payments.
+            </p>
+            <Select value={analyticsRange} onValueChange={setAnalyticsRange}>
+              <SelectTrigger className="w-32" data-testid="select-analytics-range">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Last 24 h</SelectItem>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value="90">Last 90 days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {analyticsLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-muted rounded-lg" />)}
+            </div>
+          ) : !analyticsData ? (
+            <Card><CardContent className="pt-6 text-center text-muted-foreground py-10">Failed to load analytics.</CardContent></Card>
+          ) : (
+            <>
+              {/* Top stats */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <StatTile label="Total Events" value={analyticsData.totalEvents.toLocaleString()} icon={Activity} />
+                <StatTile label="Unique Sessions" value={analyticsData.uniqueSessions.toLocaleString()} sub="Browser sessions" icon={Eye} />
+                <StatTile label="Logged-in Users" value={analyticsData.uniqueUsers.toLocaleString()} sub="With account" icon={Users} />
+              </div>
+
+              {analyticsData.totalEvents === 0 ? (
+                <Card>
+                  <CardContent className="pt-6 text-center py-10">
+                    <Activity className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-muted-foreground font-medium">No events recorded yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Events will appear here as customers visit pages and complete bookings.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* Daily page view trend */}
+                  {analyticsData.dailyTrend.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Daily Page Views</CardTitle>
+                        <CardDescription>How many page views per day in the selected period.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <LineChart data={analyticsData.dailyTrend}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="views" name="Page Views" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Page breakdown */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Pages Visited</CardTitle>
+                      <CardDescription>Which pages customers are landing on most.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {analyticsData.pageViews.map((p) => {
+                          const maxViews = analyticsData.pageViews[0]?.views ?? 1;
+                          const pct = Math.round((p.views / maxViews) * 100);
+                          return (
+                            <div key={p.page} data-testid={`row-page-${p.page}`}>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-medium capitalize">{p.page.replace(/_/g, " ")}</span>
+                                <span className="text-muted-foreground tabular-nums">{p.views} views</span>
+                              </div>
+                              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Event-based booking funnel */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Booking Funnel (from events)</CardTitle>
+                      <CardDescription>Real counts from user actions recorded in the app.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <FunnelBar steps={analyticsData.eventFunnel} />
+                    </CardContent>
+                  </Card>
+
+                  {/* All event type breakdown */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Event Breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left">
+                              <th className="pb-2 pr-4 font-medium text-muted-foreground">Event</th>
+                              <th className="pb-2 font-medium text-muted-foreground text-right">Count</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {analyticsData.eventBreakdown.map((e) => (
+                              <tr key={e.event} data-testid={`row-event-${e.event}`}>
+                                <td className="py-2 pr-4">
+                                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{e.event}</code>
+                                </td>
+                                <td className="py-2 text-right tabular-nums font-semibold">{e.count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Recent events feed */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Recent Activity</CardTitle>
+                      <CardDescription>Last 50 events across all users.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-1 max-h-80 overflow-y-auto">
+                        {analyticsData.recent.map((e) => (
+                          <div key={e.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0 flex-wrap" data-testid={`row-recent-${e.id}`}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <MousePointerClick className="w-3 h-3 text-muted-foreground shrink-0" />
+                              <code className="text-xs bg-muted px-1 py-0.5 rounded truncate">{e.eventName}</code>
+                              {e.page && <span className="text-xs text-muted-foreground truncate">{e.page}</span>}
+                            </div>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {new Date(e.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </>
+          )}
+        </TabsContent>
 
         {/* ===== FUNNEL ===== */}
         <TabsContent value="funnel" className="space-y-4 mt-4">

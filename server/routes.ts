@@ -10662,6 +10662,92 @@ Respond with VALID JSON only:
   });
 
   // ============================================================
+  // ANALYTICS SUMMARY (admin)
+  // ============================================================
+
+  app.get("/api/admin/analytics-summary", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const days = parseInt((req.query.days as string) || "7", 10);
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const events = await db
+        .select()
+        .from(analyticsEvents)
+        .where(sql`${analyticsEvents.createdAt} >= ${cutoff}`)
+        .orderBy(desc(analyticsEvents.createdAt));
+
+      // Page views per page
+      const pageViewEvents = events.filter(e => e.eventName === "page_view");
+      const pageViewMap: Record<string, number> = {};
+      for (const e of pageViewEvents) {
+        const props = e.properties ? JSON.parse(e.properties) : {};
+        const name = props.page_name ?? e.page ?? "unknown";
+        pageViewMap[name] = (pageViewMap[name] ?? 0) + 1;
+      }
+      const pageViews = Object.entries(pageViewMap)
+        .map(([page, views]) => ({ page, views }))
+        .sort((a, b) => b.views - a.views);
+
+      // Unique sessions
+      const uniqueSessions = new Set(events.map(e => e.sessionId).filter(Boolean)).size;
+      const uniqueUsers = new Set(events.map(e => e.userId).filter(Boolean)).size;
+
+      // All event type counts
+      const eventCounts: Record<string, number> = {};
+      for (const e of events) {
+        eventCounts[e.eventName] = (eventCounts[e.eventName] ?? 0) + 1;
+      }
+      const eventBreakdown = Object.entries(eventCounts)
+        .map(([event, count]) => ({ event, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Daily visit trend (page_view events grouped by day)
+      const dailyMap: Record<string, number> = {};
+      for (const e of pageViewEvents) {
+        const day = new Date(e.createdAt).toISOString().slice(0, 10);
+        dailyMap[day] = (dailyMap[day] ?? 0) + 1;
+      }
+      const dailyTrend = Object.entries(dailyMap)
+        .map(([date, views]) => ({ date: date.slice(5), views }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Booking funnel from events
+      const funnelEvents = ["booking_step_1_locations", "booking_step_2_load_details", "booking_step_3_schedule", "booking_submitted", "payment_completed"];
+      const eventFunnel = funnelEvents.map(name => ({
+        label: name.replace(/_/g, " "),
+        count: eventCounts[name] ?? 0,
+      }));
+
+      // Recent events (last 50)
+      const recent = events.slice(0, 50).map(e => ({
+        id: e.id,
+        eventName: e.eventName,
+        page: e.page,
+        sessionId: e.sessionId ? e.sessionId.slice(0, 8) + "…" : null,
+        userId: e.userId,
+        createdAt: e.createdAt,
+      }));
+
+      res.json({
+        period: `${days}d`,
+        totalEvents: events.length,
+        uniqueSessions,
+        uniqueUsers,
+        pageViews,
+        eventBreakdown,
+        dailyTrend,
+        eventFunnel,
+        recent,
+      });
+    } catch (error) {
+      console.error("[Admin] Analytics summary error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics summary" });
+    }
+  });
+
+  // ============================================================
   // ANALYTICS EVENT BEACON
   // ============================================================
 
