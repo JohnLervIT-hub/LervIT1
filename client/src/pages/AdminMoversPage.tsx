@@ -258,21 +258,24 @@ export default function AdminMoversPage() {
   const availableCount = movers.filter(m => m.isAvailable).length;
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-green-50/50 to-background dark:from-green-950/20">
+    <div className="min-h-screen pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Link href="/admin">
-            <Button variant="ghost" size="sm" className="mb-4 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back-admin">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              Command Center
             </Button>
           </Link>
-          <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="flex items-center justify-between gap-3 mb-1">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-600 rounded-lg">
-                <Truck className="w-6 h-6 text-white" />
+              <div className="p-2.5 bg-emerald-500/10 rounded-lg">
+                <Truck className="w-5 h-5 text-emerald-500" />
               </div>
-              <h1 className="text-3xl md:text-4xl font-bold">All Movers</h1>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">All Movers</h1>
+                <p className="text-sm text-muted-foreground">Manage registered movers and their verification status</p>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button 
@@ -297,35 +300,34 @@ export default function AdminMoversPage() {
               </Button>
             </div>
           </div>
-          <p className="text-muted-foreground text-lg">Manage registered movers and their verification status</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3 mb-6">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("verified")}>
+        <div className="grid gap-3 grid-cols-3 mb-6">
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("verified")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Verified</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Verified</CardTitle>
               <CheckCircle className="w-4 h-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{verifiedCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-green-600">{verifiedCount}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("unverified")}>
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("unverified")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unverified</CardTitle>
-              <XCircle className="w-4 h-4 text-yellow-500" />
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Unverified</CardTitle>
+              <XCircle className="w-4 h-4 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{unverifiedCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-amber-600">{unverifiedCount}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("available")}>
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("available")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Available Now</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Available Now</CardTitle>
               <Truck className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{availableCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-blue-600">{availableCount}</div>
             </CardContent>
           </Card>
         </div>
@@ -493,7 +495,7 @@ export default function AdminMoversPage() {
                       variant="outline"
                       onClick={() => overrideOnboardingMutation.mutate(selectedMover.id)}
                       disabled={overrideOnboardingMutation.isPending}
-                      className="border-amber-500 text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900"
+                      className="border-amber-500 text-amber-700"
                       data-testid="button-override-onboarding"
                     >
                       {overrideOnboardingMutation.isPending ? (

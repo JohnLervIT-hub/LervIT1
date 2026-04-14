@@ -313,65 +313,64 @@ export default function AdminUsersPage() {
   const adminCount = users?.filter(u => u.role === "admin").length || 0;
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
+    <div className="min-h-screen pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Link href="/admin">
-            <Button variant="ghost" size="sm" className="mb-4 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back-admin">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              Command Center
             </Button>
           </Link>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Users className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2.5 bg-blue-500/10 rounded-lg">
+              <Users className="w-5 h-5 text-blue-500" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold">All Users</h1>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">All Users</h1>
+              <p className="text-sm text-muted-foreground">Manage all registered users on the platform</p>
+            </div>
           </div>
-          <p className="text-muted-foreground text-lg">Manage all registered users on the platform</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <div className="grid gap-3 grid-cols-3 mb-6">
           <Card 
-            className={`cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${roleFilter === "customer" ? "ring-2 ring-blue-500" : ""}`}
+            className={`cursor-pointer hover-elevate ${roleFilter === "customer" ? "ring-2 ring-blue-500" : ""}`}
             onClick={() => setRoleFilter(roleFilter === "customer" ? "all" : "customer")}
             data-testid="card-filter-customers"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Customers</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
               <User className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{customerCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">Click to filter</p>
+              <div className="text-2xl font-bold tabular-nums text-blue-600">{customerCount}</div>
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${roleFilter === "mover" ? "ring-2 ring-green-500" : ""}`}
+            className={`cursor-pointer hover-elevate ${roleFilter === "mover" ? "ring-2 ring-green-500" : ""}`}
             onClick={() => setRoleFilter(roleFilter === "mover" ? "all" : "mover")}
             data-testid="card-filter-movers"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Movers</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Movers</CardTitle>
               <Truck className="w-4 h-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{moverCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">Click to filter</p>
+              <div className="text-2xl font-bold tabular-nums text-green-600">{moverCount}</div>
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${roleFilter === "admin" ? "ring-2 ring-red-500" : ""}`}
+            className={`cursor-pointer hover-elevate ${roleFilter === "admin" ? "ring-2 ring-red-500" : ""}`}
             onClick={() => setRoleFilter(roleFilter === "admin" ? "all" : "admin")}
             data-testid="card-filter-admins"
           >
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Admins</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Admins</CardTitle>
               <Shield className="w-4 h-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{adminCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">Click to filter</p>
+              <div className="text-2xl font-bold tabular-nums text-red-600">{adminCount}</div>
             </CardContent>
           </Card>
         </div>
@@ -472,7 +471,7 @@ export default function AdminUsersPage() {
                               <Button 
                                 variant="ghost" 
                                 size="icon"
-                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                className="text-red-500"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDeleteConfirmUser(u);
@@ -809,7 +808,7 @@ export default function AdminUsersPage() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-500 hover:bg-red-600"
+              className="bg-red-500"
               onClick={() => deleteConfirmUser && deleteUserMutation.mutate(deleteConfirmUser.id)}
               disabled={deleteUserMutation.isPending}
               data-testid="button-confirm-delete"

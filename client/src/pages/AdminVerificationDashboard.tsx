@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck, Rocket } from "lucide-react";
+import { Link } from "wouter";
+import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck, Rocket, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { AdminRowLayout, AdminRowCell, AdminRowPrimary, AdminRowProgress, AdminRowMobileExtras } from "@/components/admin/AdminRowLayout";
 
@@ -255,43 +256,66 @@ export default function AdminVerificationDashboard() {
   const needsAttention = driversData?.drivers?.filter((d: Driver) => d.hasExpired || d.hasRejected).length || 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
-      {/* Premium Header */}
-      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-8">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center">
-              <FileCheck className="w-7 h-7" />
+    <div className="min-h-screen pt-24 pb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <Link href="/admin">
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              Command Center
+            </Button>
+          </Link>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-blue-500/10 rounded-lg">
+              <FileCheck className="w-5 h-5 text-blue-500" />
             </div>
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold">Driver Verification</h1>
-              <p className="text-blue-200">Review and manage driver compliance documents</p>
+              <h1 className="text-2xl font-bold tracking-tight">Driver Verification</h1>
+              <p className="text-sm text-muted-foreground">Review and manage driver compliance documents</p>
             </div>
           </div>
-          
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-blue-200 text-sm mb-1">Total Drivers</p>
-              <p className="text-3xl font-bold">{totalDrivers}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-green-200 text-sm mb-1">Fully Approved</p>
-              <p className="text-3xl font-bold text-green-300">{approvedDrivers}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-amber-200 text-sm mb-1">Pending Review</p>
-              <p className="text-3xl font-bold text-amber-300">{pendingDrivers}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-red-200 text-sm mb-1">Needs Attention</p>
-              <p className="text-3xl font-bold text-red-300">{needsAttention}</p>
-            </div>
+
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Drivers</CardTitle>
+                <FileCheck className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums">{totalDrivers}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Approved</CardTitle>
+                <CheckCircle className="w-4 h-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums text-green-600">{approvedDrivers}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending</CardTitle>
+                <Clock className="w-4 h-4 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums text-amber-600">{pendingDrivers}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Needs Attention</CardTitle>
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums text-red-600">{needsAttention}</div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div>
         {/* Search & Filters */}
         <Card className="mb-6 shadow-sm">
           <CardContent className="p-4">
@@ -822,5 +846,6 @@ export default function AdminVerificationDashboard() {
         </Dialog>
       </div>
     </div>
+  </div>
   );
 }

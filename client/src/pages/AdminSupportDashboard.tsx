@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +22,7 @@ import {
   Brain,
   Lightbulb,
   Copy,
+  ArrowLeft,
   ArrowRight,
   RefreshCw,
   Target,
@@ -209,43 +211,66 @@ export default function AdminSupportDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50/50 to-background dark:from-purple-950/20">
-      {/* Premium Header */}
-      <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-700 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-8">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center">
-              <MessageSquare className="w-7 h-7" />
+    <div className="min-h-screen pt-24 pb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <Link href="/admin">
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              Command Center
+            </Button>
+          </Link>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-violet-500/10 rounded-lg">
+              <MessageSquare className="w-5 h-5 text-violet-500" />
             </div>
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold" data-testid="text-admin-support-title">Support Center</h1>
-              <p className="text-purple-200">Manage and respond to user support tickets</p>
+              <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-support-title">Support Center</h1>
+              <p className="text-sm text-muted-foreground">Manage and respond to user support tickets</p>
             </div>
           </div>
-          
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-purple-200 text-sm mb-1">Total Tickets</p>
-              <p className="text-3xl font-bold" data-testid="text-total-tickets">{ticketStats.total}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-blue-200 text-sm mb-1">Open</p>
-              <p className="text-3xl font-bold text-blue-300" data-testid="text-open-tickets">{ticketStats.open}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-amber-200 text-sm mb-1">In Progress</p>
-              <p className="text-3xl font-bold text-amber-300" data-testid="text-inprogress-tickets">{ticketStats.inProgress}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-4">
-              <p className="text-green-200 text-sm mb-1">Resolved</p>
-              <p className="text-3xl font-bold text-green-300" data-testid="text-resolved-tickets">{ticketStats.resolved}</p>
-            </div>
+
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Tickets</CardTitle>
+                <Filter className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums" data-testid="text-total-tickets">{ticketStats.total}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Open</CardTitle>
+                <Clock className="w-4 h-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums text-blue-600" data-testid="text-open-tickets">{ticketStats.open}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">In Progress</CardTitle>
+                <AlertCircle className="w-4 h-4 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums text-amber-600" data-testid="text-inprogress-tickets">{ticketStats.inProgress}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Resolved</CardTitle>
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums text-green-600" data-testid="text-resolved-tickets">{ticketStats.resolved}</div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div>
         {/* Filters */}
         <Card className="mb-6 shadow-sm">
           <CardContent className="p-4">
@@ -455,7 +480,7 @@ export default function AdminSupportDashboard() {
                               {!aiInsight && !aiAnalyzeMutation.isPending && (
                                 <Button
                                   onClick={() => aiAnalyzeMutation.mutate(ticket.id)}
-                                  className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                                  className="w-full bg-violet-600"
                                   data-testid="button-ai-analyze"
                                 >
                                   <Sparkles className="w-4 h-4 mr-2" />
@@ -568,7 +593,7 @@ export default function AdminSupportDashboard() {
                                           </Button>
                                           <Button
                                             size="sm"
-                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                            className="h-7 text-xs bg-green-600"
                                             onClick={() => handleUseResponse(aiInsight.customerResponse || aiInsight.suggestedResponse || "")}
                                             data-testid="button-ai-use-response"
                                           >
@@ -711,5 +736,6 @@ export default function AdminSupportDashboard() {
       </Card>
       </div>
     </div>
+  </div>
   );
 }

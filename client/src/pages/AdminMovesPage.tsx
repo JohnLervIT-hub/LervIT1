@@ -270,59 +270,61 @@ export default function AdminMovesPage() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-purple-50/50 to-background dark:from-purple-950/20">
+    <div className="min-h-screen pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Link href="/admin">
-            <Button variant="ghost" size="sm" className="mb-4 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back-admin">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              Command Center
             </Button>
           </Link>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-purple-600 rounded-lg">
-              <Calendar className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2.5 bg-violet-500/10 rounded-lg">
+              <Calendar className="w-5 h-5 text-violet-500" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold">All Moves</h1>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">All Moves</h1>
+              <p className="text-sm text-muted-foreground">View and manage all booking requests</p>
+            </div>
           </div>
-          <p className="text-muted-foreground text-lg">View and manage all booking requests</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4 mb-6">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("completed")}>
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4 mb-6">
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("completed")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Completed</CardTitle>
               <CheckCircle className="w-4 h-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{completedCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-green-600">{completedCount}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("in_progress")}>
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("in_progress")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">In Progress</CardTitle>
               <Truck className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{inProgressCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-blue-600">{inProgressCount}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("pending")}>
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("pending")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <Clock className="w-4 h-4 text-yellow-500" />
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending</CardTitle>
+              <Clock className="w-4 h-4 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-amber-600">{pendingCount}</div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("cancelled")}>
+          <Card className="cursor-pointer hover-elevate" onClick={() => setStatusFilter("cancelled")}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cancelled</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cancelled</CardTitle>
               <XCircle className="w-4 h-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{cancelledCount}</div>
+              <div className="text-2xl font-bold tabular-nums text-red-600">{cancelledCount}</div>
             </CardContent>
           </Card>
         </div>
@@ -490,7 +492,7 @@ export default function AdminMovesPage() {
                   <Button
                     onClick={handleAssignMover}
                     disabled={!selectedMoverId || assignMoverMutation.isPending}
-                    className="bg-green-600 hover:bg-green-700"
+                    className="bg-green-600"
                     data-testid="button-assign-mover"
                   >
                     {assignMoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -535,7 +537,7 @@ export default function AdminMovesPage() {
                   onClick={handleResendNotifications}
                   disabled={resendNotificationsMutation.isPending}
                   data-testid="button-resend-notifications"
-                  className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                  className="border-orange-500 text-orange-600"
                 >
                   {resendNotificationsMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   <Send className="w-4 h-4 mr-1" />

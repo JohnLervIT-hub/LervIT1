@@ -106,22 +106,24 @@ export default function AdminRevenuePage() {
     : 0;
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-amber-50/50 to-background dark:from-amber-950/20">
+    <div className="min-h-screen pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Link href="/admin">
-            <Button variant="ghost" size="sm" className="mb-4 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20" data-testid="button-back-admin">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+            <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              Command Center
             </Button>
           </Link>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-amber-500 rounded-lg">
-              <DollarSign className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2.5 bg-amber-500/10 rounded-lg">
+              <DollarSign className="w-5 h-5 text-amber-500" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold">Revenue Overview</h1>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Revenue Overview</h1>
+              <p className="text-sm text-muted-foreground">Track earnings and payment analytics</p>
+            </div>
           </div>
-          <p className="text-muted-foreground text-lg">Track earnings and payment analytics</p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
