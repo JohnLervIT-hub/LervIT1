@@ -10860,35 +10860,55 @@ Respond with VALID JSON only:
       const unverifiedMovers = allMovers.filter(m => !m.isVerified).length;
 
       // Proximity-matching job notification breakdown
-      // Build a lookup: bookingId → moverId for confirmed bookings (to catch historical PATCH acceptances
-      // where the mover accepted via PATCH /api/bookings/:id instead of POST /api/bookings/:id/accept,
-      // leaving the notification in 'pending' even though the job was taken).
+      // ------------------------------------------------------------------
+      // Three historical gaps we must account for:
+      //   A) Notification exists in 'pending' but booking is confirmed with that mover
+      //      → mover accepted via PATCH (pre-fix), notification was never updated.
+      //   B) No notification record exists at all for a confirmed proximity booking
+      //      → booking predates the job_notifications system entirely.
+      //   C) Notification exists with correct 'accepted' status → normal, modern flow.
+      // ------------------------------------------------------------------
+
+      // Map: bookingId → moverId for every confirmed/in_progress/completed booking
       const confirmedBookingMover = new Map(
         allBookings
           .filter(b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status))
           .map(b => [b.id, b.moverId!])
       );
 
+      // Set of bookingIds that have at least one notification record
+      const notifiedBookingIds = new Set(allNotifications.map(n => n.bookingId));
+
+      // Pending = truly still waiting (not secretly accepted via PATCH)
       const pendingNotifications = allNotifications.filter(n => {
         if (n.status !== 'pending') return false;
-        // Exclude notifications that are effectively "accepted" — the mover confirmed the booking
-        // but the notification status was never updated (historical PATCH path)
         const confirmedMover = n.bookingId ? confirmedBookingMover.get(n.bookingId) : undefined;
-        return confirmedMover !== n.moverId;
+        return confirmedMover !== n.moverId; // exclude gap-A entries
       }).length;
 
-      // Count explicitly accepted + retroactively accepted (pending but booking confirmed with this mover)
+      // Accepted = explicit + gap-A (pending notif, booking confirmed with same mover)
       const explicitlyAccepted = allNotifications.filter(n => n.status === 'accepted').length;
-      const retroactivelyAccepted = allNotifications.filter(n => {
+      const gapAAccepted = allNotifications.filter(n => {
         if (n.status !== 'pending') return false;
         const confirmedMover = n.bookingId ? confirmedBookingMover.get(n.bookingId) : undefined;
         return confirmedMover === n.moverId;
       }).length;
-      const acceptedNotifications = explicitlyAccepted + retroactivelyAccepted;
+
+      // Gap-B: confirmed proximity bookings with NO notification record at all
+      // (preSelectedMoverId null = not a direct booking, has moverId = mover assigned)
+      const gapBInferredAccepted = allBookings.filter(b =>
+        b.moverId &&
+        !b.preSelectedMoverId &&
+        ['confirmed', 'in_progress', 'completed'].includes(b.status) &&
+        !notifiedBookingIds.has(b.id)
+      ).length;
+
+      const acceptedNotifications = explicitlyAccepted + gapAAccepted + gapBInferredAccepted;
 
       const declinedNotifications = allNotifications.filter(n => n.status === 'declined').length;
       const expiredNotifications = allNotifications.filter(n => n.status === 'expired').length;
-      const totalNotifications = allNotifications.length;
+      // totalNotifications counts real records + inferred gap-B rows for chart sizing
+      const totalNotifications = allNotifications.length + gapBInferredAccepted;
 
       // Direct acceptances = bookings where customer explicitly pre-selected a mover who then confirmed
       // (preSelectedMoverId is the source-of-truth indicator — set at booking creation when customer picks a specific mover)
@@ -10897,20 +10917,29 @@ Respond with VALID JSON only:
       ).length;
 
       // ---- MOVER PERFORMANCE ----
-      // Track proximity notifications per mover
+      // Track proximity notifications per mover (notification-level stats)
       const moverNotifMap: Record<string, { total: number; accepted: number; declined: number; expired: number }> = {};
       for (const n of allNotifications) {
         if (!n.moverId) continue;
         if (!moverNotifMap[n.moverId]) moverNotifMap[n.moverId] = { total: 0, accepted: 0, declined: 0, expired: 0 };
         moverNotifMap[n.moverId].total++;
-        // Retroactively treat 'pending' notifications as 'accepted' when the booking was confirmed with this mover
-        // (historical: movers accepted via PATCH /api/bookings/:id before the notification-update fix)
-        const isRetroAccepted = n.status === 'pending' && n.bookingId
+        // Gap-A: pending notif where booking is already confirmed with this mover → count as accepted
+        const isGapA = n.status === 'pending' && n.bookingId
           ? confirmedBookingMover.get(n.bookingId) === n.moverId
           : false;
-        if (n.status === 'accepted' || isRetroAccepted) moverNotifMap[n.moverId].accepted++;
+        if (n.status === 'accepted' || isGapA) moverNotifMap[n.moverId].accepted++;
         else if (n.status === 'declined') moverNotifMap[n.moverId].declined++;
         else if (n.status === 'expired') moverNotifMap[n.moverId].expired++;
+      }
+      // Gap-B: add inferred accepted for movers whose confirmed bookings have no notification record
+      for (const b of allBookings) {
+        if (!b.moverId || b.preSelectedMoverId) continue;
+        if (!['confirmed', 'in_progress', 'completed'].includes(b.status)) continue;
+        if (notifiedBookingIds.has(b.id)) continue; // already counted above
+        const id = b.moverId;
+        if (!moverNotifMap[id]) moverNotifMap[id] = { total: 0, accepted: 0, declined: 0, expired: 0 };
+        moverNotifMap[id].total++;
+        moverNotifMap[id].accepted++;
       }
       // Track completed moves and direct acceptances per mover
       const moverCompletedMap: Record<string, number> = {};
