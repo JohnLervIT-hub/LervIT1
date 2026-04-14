@@ -10793,15 +10793,23 @@ Respond with VALID JSON only:
         .map(([event, count]) => ({ event, count }))
         .sort((a, b) => b.count - a.count);
 
-      // Daily visit trend (page_view events grouped by day)
+      // Daily visit trend — fill ALL days in range with 0 for days with no data
       const dailyMap: Record<string, number> = {};
       for (const e of pageViewEvents) {
         const day = new Date(e.createdAt).toISOString().slice(0, 10);
         dailyMap[day] = (dailyMap[day] ?? 0) + 1;
       }
-      const dailyTrend = Object.entries(dailyMap)
-        .map(([date, views]) => ({ date: date.slice(5), views }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+      // Generate every calendar day from cutoff to today
+      const dailyTrend: { date: string; views: number }[] = [];
+      const cursor = new Date(cutoff);
+      cursor.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      while (cursor <= today) {
+        const key = cursor.toISOString().slice(0, 10);
+        dailyTrend.push({ date: key.slice(5), views: dailyMap[key] ?? 0 });
+        cursor.setDate(cursor.getDate() + 1);
+      }
 
       // Booking funnel from events
       const funnelEvents = ["booking_step_1_locations", "booking_step_2_load_details", "booking_step_3_schedule", "booking_submitted", "payment_completed"];

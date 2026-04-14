@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Cell,
+  LineChart, Line, Cell, AreaChart, Area,
 } from "recharts";
 import { TrendingUp, Users, Truck, Clock, CheckCircle2, AlertTriangle, Zap, Star, Target, Activity, Eye, MousePointerClick } from "lucide-react";
 
@@ -258,18 +258,56 @@ export default function OperationsDashboard() {
                   {analyticsData.dailyTrend.length > 0 && (
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Daily Page Views</CardTitle>
-                        <CardDescription>How many page views per day in the selected period.</CardDescription>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div>
+                            <CardTitle className="text-base">Daily Page Views</CardTitle>
+                            <CardDescription>Historical page views per day — {analyticsData.dailyTrend.length}-day trend.</CardDescription>
+                          </div>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            Peak: <span className="font-semibold text-foreground">{Math.max(...analyticsData.dailyTrend.map(d => d.views))} views</span>
+                          </div>
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <ResponsiveContainer width="100%" height={200}>
-                          <LineChart data={analyticsData.dailyTrend}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                            <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="views" name="Page Views" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-                          </LineChart>
+                          <AreaChart data={analyticsData.dailyTrend} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="pageViewGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                            <XAxis
+                              dataKey="date"
+                              tick={{ fontSize: 10 }}
+                              tickLine={false}
+                              axisLine={false}
+                              interval={analyticsData.dailyTrend.length > 14 ? Math.floor(analyticsData.dailyTrend.length / 7) : 0}
+                            />
+                            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} tickLine={false} axisLine={false} />
+                            <Tooltip
+                              content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null;
+                                return (
+                                  <div className="rounded-lg border bg-background px-3 py-2 shadow-md text-sm">
+                                    <p className="font-semibold text-foreground">{label}</p>
+                                    <p className="text-muted-foreground">{payload[0].value} page views</p>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="views"
+                              name="Page Views"
+                              stroke="#6366f1"
+                              strokeWidth={2}
+                              fill="url(#pageViewGradient)"
+                              dot={false}
+                              activeDot={{ r: 4, fill: "#6366f1" }}
+                            />
+                          </AreaChart>
                         </ResponsiveContainer>
                       </CardContent>
                     </Card>
