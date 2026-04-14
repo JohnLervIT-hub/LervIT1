@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -396,16 +397,18 @@ export default function AdminVerificationDashboard() {
                   return (
                     <div
                       key={driver.driverId}
-                      className="group p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                      className="p-4 hover-elevate cursor-pointer"
                       onClick={() => setSelectedDriverId(driver.driverId)}
                       data-testid={`row-driver-${driver.driverId}`}
                     >
                       <AdminRowLayout preset="5-col">
                         <AdminRowPrimary
                           avatar={
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-lg">
-                              {driver.name?.charAt(0)?.toUpperCase() || "?"}
-                            </div>
+                            <Avatar className="w-10 h-10">
+                              <AvatarFallback className="bg-blue-500/10 text-blue-600 font-semibold">
+                                {driver.name?.charAt(0)?.toUpperCase() || "?"}
+                              </AvatarFallback>
+                            </Avatar>
                           }
                           title={
                             <span className="flex items-center gap-2">

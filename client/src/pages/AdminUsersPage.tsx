@@ -412,13 +412,11 @@ export default function AdminUsersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
+                      <TableHead>User</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Joined</TableHead>
-                      <TableHead>Last Login</TableHead>
-                      <TableHead>Last Logout</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>Last Active</TableHead>
+                      <TableHead className="w-24"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -426,22 +424,19 @@ export default function AdminUsersPage() {
                       <TableRow 
                         key={u.id} 
                         data-testid={`row-user-${u.id}`}
-                        className="cursor-pointer hover:bg-muted/50"
+                        className="cursor-pointer"
                         onClick={() => setSelectedUser(u)}
                       >
-                        <TableCell className="font-medium">
-                          {u.name || "Unknown User"}
+                        <TableCell>
+                          <div className="font-medium">{u.name || "Unknown User"}</div>
+                          <div className="text-xs text-muted-foreground truncate max-w-[200px]">{u.email}</div>
                         </TableCell>
-                        <TableCell>{u.email}</TableCell>
                         <TableCell>{getRoleBadge(u.role)}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {u.createdAt ? format(new Date(u.createdAt), "MMM d, yyyy") : "N/A"}
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {u.createdAt ? format(new Date(u.createdAt), "MMM d, yy") : "N/A"}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, yyyy h:mm a") : "Never"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {u.lastLogoutAt ? format(new Date(u.lastLogoutAt), "MMM d, yyyy h:mm a") : "N/A"}
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, yy") : "Never"}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">

@@ -368,52 +368,54 @@ export default function AdminMovesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Booking ID</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Mover</TableHead>
-                      <TableHead>Pickup</TableHead>
-                      <TableHead>Dropoff</TableHead>
+                      <TableHead>Route</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredBookings.map((b) => (
                       <TableRow key={b.id} data-testid={`row-booking-${b.id}`}>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {b.id.slice(0, 8)}...
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          <div>{b.customer?.name || "Unknown Customer"}</div>
-                          <div className="text-xs text-muted-foreground">{b.customer?.email || "No email"}</div>
+                        <TableCell>
+                          <div className="font-medium">{b.customer?.name || "Unknown"}</div>
+                          <div className="text-xs text-muted-foreground truncate max-w-[140px]">{b.customer?.email || "No email"}</div>
                         </TableCell>
                         <TableCell>
-                          {b.mover?.name ? b.mover.name : <span className="text-muted-foreground">Unassigned</span>}
+                          {b.mover?.name ? (
+                            <div>
+                              <div className="text-sm">{b.mover.name}</div>
+                              {b.mover.vehicleType && <div className="text-xs text-muted-foreground">{b.mover.vehicleType}</div>}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                          )}
                         </TableCell>
-                        <TableCell className="max-w-[150px] truncate" title={b.pickupAddress}>
-                          {b.pickupAddress || "N/A"}
+                        <TableCell className="max-w-[180px]">
+                          <div className="text-sm truncate" title={b.pickupAddress}>{b.pickupAddress?.split(",")[0] || "N/A"}</div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1 truncate" title={b.dropoffAddress}>
+                            <MapPin className="w-3 h-3 shrink-0" />
+                            {b.dropoffAddress?.split(",")[0] || "N/A"}
+                          </div>
                         </TableCell>
-                        <TableCell className="max-w-[150px] truncate" title={b.dropoffAddress}>
-                          {b.dropoffAddress || "N/A"}
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {b.scheduledDate ? format(new Date(b.scheduledDate), "MMM d, yy") : "N/A"}
                         </TableCell>
-                        <TableCell>
-                          {b.scheduledDate ? format(new Date(b.scheduledDate), "MMM d, yyyy") : "N/A"}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {b.price ? `$${parseFloat(b.price).toFixed(2)}` : "N/A"}
+                        <TableCell className="font-medium tabular-nums">
+                          {b.price ? `$${parseFloat(b.price).toFixed(0)}` : "—"}
                         </TableCell>
                         <TableCell>{getStatusBadge(b.status)}</TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             onClick={() => openEditDialog(b)}
                             data-testid={`button-edit-booking-${b.id}`}
                           >
-                            <Edit className="w-4 h-4 mr-1" />
-                            Edit
+                            <Edit className="w-4 h-4" />
                           </Button>
                         </TableCell>
                       </TableRow>

@@ -369,15 +369,13 @@ export default function AdminMoversPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
+                      <TableHead>Mover</TableHead>
                       <TableHead>Vehicle</TableHead>
-                      <TableHead>Photo</TableHead>
                       <TableHead>Rating</TableHead>
                       <TableHead>Moves</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Stripe</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -385,45 +383,32 @@ export default function AdminMoversPage() {
                       <TableRow 
                         key={m.id} 
                         data-testid={`row-mover-${m.id}`}
-                        className="cursor-pointer hover:bg-muted/50"
+                        className="cursor-pointer"
                         onClick={() => handleOpenDialog(m)}
                       >
-                        <TableCell className="font-medium">
-                          {m.user?.name || "Unknown Mover"}
+                        <TableCell>
+                          <div className="font-medium">{m.user?.name || "Unknown Mover"}</div>
+                          <div className="text-xs text-muted-foreground">{m.user?.email || "No email"}</div>
                         </TableCell>
-                        <TableCell>{m.user?.email || "N/A"}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{m.vehicleType || "Not specified"}</Badge>
                         </TableCell>
                         <TableCell>
-                          {m.vehiclePhoto ? (
-                            <div className="w-12 h-12 rounded overflow-hidden bg-muted">
-                              <img 
-                                src={m.vehiclePhoto} 
-                                alt="Vehicle" 
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">No photo</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
                           <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                            <span>{parseFloat(m.rating || "0").toFixed(1)}</span>
+                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                            <span className="text-sm tabular-nums">{parseFloat(m.rating || "0").toFixed(1)}</span>
                           </div>
                         </TableCell>
-                        <TableCell>{m.totalMoves || 0}</TableCell>
+                        <TableCell className="tabular-nums">{m.totalMoves || 0}</TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex flex-wrap gap-1">
                             {m.isVerified ? (
                               <Badge className="bg-green-500 text-white">Verified</Badge>
                             ) : (
                               <Badge variant="secondary">Pending</Badge>
                             )}
                             {m.isAvailable && (
-                              <Badge className="bg-blue-500 text-white">Available</Badge>
+                              <Badge className="bg-blue-500 text-white">Online</Badge>
                             )}
                           </div>
                         </TableCell>
@@ -432,7 +417,7 @@ export default function AdminMoversPage() {
                             m.stripeConnect.chargesEnabled && m.stripeConnect.payoutsEnabled ? (
                               <Badge className="bg-green-500 text-white" data-testid={`stripe-enabled-${m.userId}`}>
                                 <CreditCard className="w-3 h-3 mr-1" />
-                                Connected
+                                Active
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="text-amber-600 border-amber-500" data-testid={`stripe-pending-${m.userId}`}>
@@ -441,23 +426,22 @@ export default function AdminMoversPage() {
                               </Badge>
                             )
                           ) : (
-                            <Badge variant="secondary" className="text-muted-foreground" data-testid={`stripe-none-${m.userId}`}>
+                            <Badge variant="secondary" data-testid={`stripe-none-${m.userId}`}>
                               Not Setup
                             </Badge>
                           )}
                         </TableCell>
                         <TableCell>
                           <Button 
-                            variant="outline" 
-                            size="sm"
+                            variant="ghost" 
+                            size="icon"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenDialog(m);
                             }}
                             data-testid={`button-upload-photo-${m.id}`}
                           >
-                            <Camera className="w-4 h-4 mr-1" />
-                            Upload Photo
+                            <Camera className="w-4 h-4" />
                           </Button>
                         </TableCell>
                       </TableRow>
