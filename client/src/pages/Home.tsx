@@ -117,17 +117,17 @@ function GoogleReviewsSection() {
 
             {/* CTAs */}
             <div className="flex flex-col gap-3">
-              <a href={mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="link-google-reviews-cta">
-                <Button className="w-full gap-2 bg-white text-gray-900 hover:bg-white/90">
+              <Button asChild className="w-full gap-2 bg-white text-gray-900 hover:bg-white/90">
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="link-google-reviews-cta">
                   <GoogleIcon className="w-4 h-4" />
                   See all reviews
-                </Button>
-              </a>
-              <a href={mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="link-google-write-review">
-                <Button variant="outline" className="w-full gap-2 border-white/20 text-white/80 hover:text-white hover:border-white/40 bg-transparent">
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="w-full gap-2 border-white/20 text-white/80 hover:text-white hover:border-white/40 bg-transparent">
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="link-google-write-review">
                   Write a review
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
 
