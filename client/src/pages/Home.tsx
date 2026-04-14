@@ -70,6 +70,8 @@ function GoogleReviewsSection() {
   const reviews = data?.reviews ?? [];
   const totalRatings = data?.totalRatings ?? 0;
 
+  const openMaps = () => window.open(mapsUrl, "_blank", "noopener,noreferrer");
+
   return (
     <section className="relative py-20 md:py-28 bg-gray-950 dark:bg-gray-950">
       {/* Subtle radial glow in background */}
@@ -117,16 +119,21 @@ function GoogleReviewsSection() {
 
             {/* CTAs */}
             <div className="flex flex-col gap-3">
-              <Button asChild className="w-full gap-2 bg-white text-gray-900 hover:bg-white/90">
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="link-google-reviews-cta">
-                  <GoogleIcon className="w-4 h-4" />
-                  See all reviews
-                </a>
+              <Button
+                className="w-full gap-2 bg-white text-gray-900 hover:bg-white/90"
+                onClick={openMaps}
+                data-testid="link-google-reviews-cta"
+              >
+                <GoogleIcon className="w-4 h-4" />
+                See all reviews
               </Button>
-              <Button asChild variant="outline" className="w-full gap-2 border-white/20 text-white/80 hover:text-white hover:border-white/40 bg-transparent">
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" data-testid="link-google-write-review">
-                  Write a review
-                </a>
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-white/20 text-white/80 hover:text-white hover:border-white/40 bg-transparent"
+                onClick={openMaps}
+                data-testid="link-google-write-review"
+              >
+                Write a review
               </Button>
             </div>
           </div>
