@@ -10831,13 +10831,10 @@ Respond with VALID JSON only:
       const expiredNotifications = allNotifications.filter(n => n.status === 'expired').length;
       const totalNotifications = allNotifications.length;
 
-      // Build a set of booking IDs that were accepted via the notification system
-      const notifAcceptedBookingIds = new Set(
-        allNotifications.filter(n => n.status === 'accepted').map(n => n.bookingId).filter(Boolean)
-      );
-      // Direct acceptances = bookings confirmed/in_progress/completed with a mover but NOT via a job notification
+      // Direct acceptances = bookings where customer explicitly pre-selected a mover who then confirmed
+      // (preSelectedMoverId is the source-of-truth indicator — set at booking creation when customer picks a specific mover)
       const directAcceptedBookings = allBookings.filter(
-        b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status) && !notifAcceptedBookingIds.has(b.id)
+        b => b.preSelectedMoverId && b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status)
       ).length;
 
       // ---- MOVER PERFORMANCE ----
@@ -10859,7 +10856,8 @@ Respond with VALID JSON only:
         if (b.status === 'completed') {
           moverCompletedMap[id] = (moverCompletedMap[id] ?? 0) + 1;
         }
-        if (['confirmed', 'in_progress', 'completed'].includes(b.status) && !notifAcceptedBookingIds.has(b.id)) {
+        // Direct = customer pre-selected this mover (preSelectedMoverId set) and booking is confirmed
+        if (b.preSelectedMoverId === id && ['confirmed', 'in_progress', 'completed'].includes(b.status)) {
           moverDirectMap[id] = (moverDirectMap[id] ?? 0) + 1;
         }
       }
