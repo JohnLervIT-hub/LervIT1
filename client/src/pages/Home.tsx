@@ -73,7 +73,7 @@ function GoogleReviewsSection() {
   const openMaps = () => window.open(mapsUrl, "_blank", "noopener,noreferrer");
 
   return (
-    <section className="relative py-20 md:py-28 bg-muted/30">
+    <section className="relative py-20 md:py-28 bg-gray-100 dark:bg-muted/30">
       {/* Subtle radial glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center">
         <div className="w-[600px] h-[600px] rounded-full bg-primary/5 blur-3xl" />
@@ -116,18 +116,20 @@ function GoogleReviewsSection() {
             )}
 
             {/* CTAs */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-row gap-2 lg:flex-col lg:gap-3">
               <Button
-                className="w-full gap-2"
+                size="sm"
+                className="flex-1 lg:flex-none lg:w-full gap-1.5"
                 onClick={openMaps}
                 data-testid="link-google-reviews-cta"
               >
-                <GoogleIcon className="w-4 h-4" />
+                <GoogleIcon className="w-3.5 h-3.5" />
                 See all reviews
               </Button>
               <Button
+                size="sm"
                 variant="outline"
-                className="w-full gap-2"
+                className="flex-1 lg:flex-none lg:w-full gap-1.5"
                 onClick={openMaps}
                 data-testid="link-google-write-review"
               >
@@ -141,7 +143,7 @@ function GoogleReviewsSection() {
             {isLoading ? (
               <div className="flex gap-4 overflow-hidden">
                 {[0, 1, 2].map(i => (
-                  <div key={i} className="flex-shrink-0 w-[85vw] sm:w-80 lg:w-auto lg:flex-1 rounded-2xl border border-border bg-card p-6 flex flex-col gap-4">
+                  <div key={i} className="flex-shrink-0 w-[85vw] sm:w-80 lg:w-auto lg:flex-1 rounded-2xl border border-white/80 dark:border-white/10 bg-white/70 dark:bg-white/5 backdrop-blur-sm shadow-md shadow-black/5 dark:shadow-black/30 p-6 flex flex-col gap-4">
                     <Skeleton className="h-4 w-24" />
                     <Skeleton className="h-20 w-full" />
                     <div className="flex items-center gap-3 mt-auto">
@@ -155,7 +157,7 @@ function GoogleReviewsSection() {
                 ))}
               </div>
             ) : isError || reviews.length === 0 ? (
-              <div className="flex items-center justify-center h-48 rounded-2xl border border-border bg-card">
+              <div className="flex items-center justify-center h-48 rounded-2xl border border-white/80 dark:border-white/10 bg-white/70 dark:bg-white/5 backdrop-blur-sm shadow-md">
                 <p className="text-muted-foreground text-sm text-center px-6">
                   {isError ? "Could not load reviews right now." : "No reviews yet — be the first on Google!"}
                 </p>
@@ -171,8 +173,13 @@ function GoogleReviewsSection() {
                     className="group relative flex-shrink-0 snap-center
                                w-[85vw] sm:w-[360px]
                                lg:w-auto lg:flex-shrink lg:snap-none
-                               rounded-2xl border border-border bg-card
-                               hover:bg-muted/50 hover:border-border
+                               rounded-2xl
+                               border border-white/80 dark:border-white/10
+                               bg-white/70 dark:bg-white/[0.05]
+                               backdrop-blur-sm
+                               shadow-md shadow-black/5 dark:shadow-xl dark:shadow-black/30
+                               hover:bg-white/90 dark:hover:bg-white/[0.08]
+                               hover:shadow-lg hover:shadow-black/8
                                transition-all duration-300 p-6 flex flex-col gap-4"
                   >
                     {/* Decorative quote mark */}
