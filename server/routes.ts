@@ -10824,15 +10824,24 @@ Respond with VALID JSON only:
       const liveGpsMovers = allMovers.filter(m => m.isAvailable && m.lastLocationUpdate && new Date(m.lastLocationUpdate) > oneHourAgo).length;
       const unverifiedMovers = allMovers.filter(m => !m.isVerified).length;
 
-      // Active job notifications breakdown
+      // Proximity-matching job notification breakdown
       const pendingNotifications = allNotifications.filter(n => n.status === 'pending').length;
       const acceptedNotifications = allNotifications.filter(n => n.status === 'accepted').length;
       const declinedNotifications = allNotifications.filter(n => n.status === 'declined').length;
       const expiredNotifications = allNotifications.filter(n => n.status === 'expired').length;
       const totalNotifications = allNotifications.length;
 
+      // Build a set of booking IDs that were accepted via the notification system
+      const notifAcceptedBookingIds = new Set(
+        allNotifications.filter(n => n.status === 'accepted').map(n => n.bookingId).filter(Boolean)
+      );
+      // Direct acceptances = bookings confirmed/in_progress/completed with a mover but NOT via a job notification
+      const directAcceptedBookings = allBookings.filter(
+        b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status) && !notifAcceptedBookingIds.has(b.id)
+      ).length;
+
       // ---- MOVER PERFORMANCE ----
-      // Acceptance rate per mover
+      // Track proximity notifications per mover
       const moverNotifMap: Record<string, { total: number; accepted: number; declined: number; expired: number }> = {};
       for (const n of allNotifications) {
         if (!n.moverId) continue;
@@ -10842,16 +10851,28 @@ Respond with VALID JSON only:
         else if (n.status === 'declined') moverNotifMap[n.moverId].declined++;
         else if (n.status === 'expired') moverNotifMap[n.moverId].expired++;
       }
+      // Track completed moves and direct acceptances per mover
       const moverCompletedMap: Record<string, number> = {};
-      for (const b of allBookings.filter(b => b.status === 'completed' && b.moverId)) {
+      const moverDirectMap: Record<string, number> = {};
+      for (const b of allBookings.filter(b => b.moverId)) {
         const id = b.moverId!;
-        moverCompletedMap[id] = (moverCompletedMap[id] ?? 0) + 1;
+        if (b.status === 'completed') {
+          moverCompletedMap[id] = (moverCompletedMap[id] ?? 0) + 1;
+        }
+        if (['confirmed', 'in_progress', 'completed'].includes(b.status) && !notifAcceptedBookingIds.has(b.id)) {
+          moverDirectMap[id] = (moverDirectMap[id] ?? 0) + 1;
+        }
       }
 
       const moverPerf = allMovers.map(m => {
         const notifs = moverNotifMap[m.id] ?? { total: 0, accepted: 0, declined: 0, expired: 0 };
         const completed = moverCompletedMap[m.id] ?? 0;
-        const acceptanceRate = notifs.total > 0 ? Math.round((notifs.accepted / notifs.total) * 100) : null;
+        const directAccepts = moverDirectMap[m.id] ?? 0;
+        // Acceptance rate: combine both notification accepts and direct accepts as numerator
+        // denominator is proximity notifications + direct bookings dispatched to this mover
+        const totalDispatched = notifs.total + directAccepts;
+        const totalAccepted = notifs.accepted + directAccepts;
+        const acceptanceRate = totalDispatched > 0 ? Math.round((totalAccepted / totalDispatched) * 100) : null;
         const user = userById.get(m.userId);
         return {
           moverId: m.id,
@@ -10861,20 +10882,24 @@ Respond with VALID JSON only:
           isAvailable: m.isAvailable,
           isVerified: m.isVerified,
           rating: m.rating ? parseFloat(m.rating) : null,
-          totalOffers: notifs.total,
-          accepted: notifs.accepted,
+          totalOffers: totalDispatched,
+          accepted: totalAccepted,
           declined: notifs.declined,
           expired: notifs.expired,
+          directAccepts,
           acceptanceRate,
           completedMoves: completed,
         };
       }).filter(m => m.totalOffers > 0 || m.completedMoves > 0)
         .sort((a, b) => (b.completedMoves - a.completedMoves));
 
-      // Aggregate acceptance rate (all movers)
-      const aggTotal = allNotifications.length;
-      const aggAccepted = allNotifications.filter(n => n.status === 'accepted').length;
-      const overallAcceptanceRate = aggTotal > 0 ? Math.round((aggAccepted / aggTotal) * 100) : 0;
+      // Overall acceptance rate: booking-level (confirmed+in_progress+completed) / all paid
+      // This is the true ground-truth rate, covering both direct and notification flows
+      const totalPaidBookings = allBookings.filter(b => ['paid', 'succeeded'].includes(b.paymentStatus ?? '')).length;
+      const totalMoverConfirmed = allBookings.filter(
+        b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status)
+      ).length;
+      const overallAcceptanceRate = totalPaidBookings > 0 ? Math.round((totalMoverConfirmed / totalPaidBookings) * 100) : 0;
 
       // ---- REVENUE COHORTS (weekly, last 8 weeks) ----
       const cohortMap: Record<string, { week: string; revenue: number; bookings: number; avgValue: number }> = {};
@@ -10914,7 +10939,7 @@ Respond with VALID JSON only:
           onlineMovers,
           liveGpsMovers,
           unverifiedMovers,
-          notifications: { pending: pendingNotifications, accepted: acceptedNotifications, declined: declinedNotifications, expired: expiredNotifications, total: totalNotifications },
+          notifications: { pending: pendingNotifications, accepted: acceptedNotifications, declined: declinedNotifications, expired: expiredNotifications, direct: directAcceptedBookings, total: totalNotifications },
           overallAcceptanceRate,
         },
         moverPerformance: moverPerf,

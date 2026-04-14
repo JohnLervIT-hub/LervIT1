@@ -31,7 +31,7 @@ type LiveOps = {
   onlineMovers: number;
   liveGpsMovers: number;
   unverifiedMovers: number;
-  notifications: { pending: number; accepted: number; declined: number; expired: number; total: number };
+  notifications: { pending: number; accepted: number; declined: number; expired: number; direct: number; total: number };
   overallAcceptanceRate: number;
 };
 type MoverPerf = {
@@ -46,6 +46,7 @@ type MoverPerf = {
   accepted: number;
   declined: number;
   expired: number;
+  directAccepts: number;
   acceptanceRate: number | null;
   completedMoves: number;
 };
@@ -463,7 +464,7 @@ export default function OperationsDashboard() {
             <StatTile
               label="Overall Acceptance Rate"
               value={`${liveOps.overallAcceptanceRate}%`}
-              sub="Across all time"
+              sub="Paid bookings that got a mover"
               icon={CheckCircle2}
             />
             <StatTile
@@ -477,30 +478,37 @@ export default function OperationsDashboard() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Notification Outcomes</CardTitle>
-              <CardDescription>Breakdown of all job notifications ever sent</CardDescription>
+              <CardTitle className="text-base">Job Dispatch Outcomes</CardTitle>
+              <CardDescription>
+                Direct = customer pre-selected a mover who confirmed. Proximity = auto-matched notifications sent to nearby movers.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {liveOps.notifications.total === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-4">No notifications yet.</p>
+              {liveOps.notifications.total === 0 && liveOps.notifications.direct === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-4">No dispatch data yet.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart
                     data={[
-                      { name: "Accepted", value: liveOps.notifications.accepted, fill: "#22c55e" },
-                      { name: "Declined", value: liveOps.notifications.declined, fill: "#ef4444" },
-                      { name: "Expired", value: liveOps.notifications.expired, fill: "#f59e0b" },
-                      { name: "Pending", value: liveOps.notifications.pending, fill: "#6366f1" },
+                      { name: "Direct", value: liveOps.notifications.direct },
+                      { name: "Accepted", value: liveOps.notifications.accepted },
+                      { name: "Declined", value: liveOps.notifications.declined },
+                      { name: "Expired", value: liveOps.notifications.expired },
+                      { name: "Pending", value: liveOps.notifications.pending },
                     ]}
                     barCategoryGap="30%"
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                     <Tooltip />
                     <Bar dataKey="value" name="Count" radius={[4, 4, 0, 0]}>
                       {[
-                        { fill: "#22c55e" }, { fill: "#ef4444" }, { fill: "#f59e0b" }, { fill: "#6366f1" }
+                        { fill: "#22c55e" },
+                        { fill: "#4ade80" },
+                        { fill: "#ef4444" },
+                        { fill: "#f59e0b" },
+                        { fill: "#6366f1" },
                       ].map((entry, i) => (
                         <Cell key={i} fill={entry.fill} />
                       ))}
@@ -517,7 +525,7 @@ export default function OperationsDashboard() {
           {moverPerformance.length === 0 ? (
             <Card>
               <CardContent className="pt-6 text-center text-muted-foreground py-10">
-                No mover performance data yet. It appears once job notifications are sent.
+                No mover performance data yet. Appears once movers have accepted or been sent job offers.
               </CardContent>
             </Card>
           ) : (
