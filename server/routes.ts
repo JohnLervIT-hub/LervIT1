@@ -3878,6 +3878,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.error('[PATCH Accept] Failed to update Stripe metadata:', stripeErr);
           }
         }
+
+        // Mark the mover's job notification as accepted and expire all other pending ones.
+        // This ensures the ops-metrics chart correctly counts accepted proximity/direct notifications
+        // regardless of whether acceptance came through PATCH or POST /accept.
+        try {
+          const moverNotifs = await db
+            .select()
+            .from(jobNotifications)
+            .where(and(
+              eq(jobNotifications.bookingId, req.params.id),
+              eq(jobNotifications.moverId, updates.moverId!)
+            ))
+            .limit(1);
+
+          if (moverNotifs.length > 0) {
+            // Mark this mover's notification as accepted
+            await db
+              .update(jobNotifications)
+              .set({ status: 'accepted', respondedAt: new Date() })
+              .where(eq(jobNotifications.id, moverNotifs[0].id));
+
+            // Expire all other pending notifications for this booking
+            await db
+              .update(jobNotifications)
+              .set({ status: 'expired', respondedAt: new Date() })
+              .where(and(
+                eq(jobNotifications.bookingId, req.params.id),
+                eq(jobNotifications.status, 'pending')
+              ));
+
+            console.log(`[PATCH Accept] Marked notification ${moverNotifs[0].id} as accepted for booking ${req.params.id}`);
+          }
+        } catch (notifErr) {
+          console.error('[PATCH Accept] Failed to update notification status:', notifErr);
+        }
       }
       
       // Convert preferredDate to Date if it's a string
@@ -10825,8 +10860,32 @@ Respond with VALID JSON only:
       const unverifiedMovers = allMovers.filter(m => !m.isVerified).length;
 
       // Proximity-matching job notification breakdown
-      const pendingNotifications = allNotifications.filter(n => n.status === 'pending').length;
-      const acceptedNotifications = allNotifications.filter(n => n.status === 'accepted').length;
+      // Build a lookup: bookingId → moverId for confirmed bookings (to catch historical PATCH acceptances
+      // where the mover accepted via PATCH /api/bookings/:id instead of POST /api/bookings/:id/accept,
+      // leaving the notification in 'pending' even though the job was taken).
+      const confirmedBookingMover = new Map(
+        allBookings
+          .filter(b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status))
+          .map(b => [b.id, b.moverId!])
+      );
+
+      const pendingNotifications = allNotifications.filter(n => {
+        if (n.status !== 'pending') return false;
+        // Exclude notifications that are effectively "accepted" — the mover confirmed the booking
+        // but the notification status was never updated (historical PATCH path)
+        const confirmedMover = n.bookingId ? confirmedBookingMover.get(n.bookingId) : undefined;
+        return confirmedMover !== n.moverId;
+      }).length;
+
+      // Count explicitly accepted + retroactively accepted (pending but booking confirmed with this mover)
+      const explicitlyAccepted = allNotifications.filter(n => n.status === 'accepted').length;
+      const retroactivelyAccepted = allNotifications.filter(n => {
+        if (n.status !== 'pending') return false;
+        const confirmedMover = n.bookingId ? confirmedBookingMover.get(n.bookingId) : undefined;
+        return confirmedMover === n.moverId;
+      }).length;
+      const acceptedNotifications = explicitlyAccepted + retroactivelyAccepted;
+
       const declinedNotifications = allNotifications.filter(n => n.status === 'declined').length;
       const expiredNotifications = allNotifications.filter(n => n.status === 'expired').length;
       const totalNotifications = allNotifications.length;
@@ -10844,7 +10903,12 @@ Respond with VALID JSON only:
         if (!n.moverId) continue;
         if (!moverNotifMap[n.moverId]) moverNotifMap[n.moverId] = { total: 0, accepted: 0, declined: 0, expired: 0 };
         moverNotifMap[n.moverId].total++;
-        if (n.status === 'accepted') moverNotifMap[n.moverId].accepted++;
+        // Retroactively treat 'pending' notifications as 'accepted' when the booking was confirmed with this mover
+        // (historical: movers accepted via PATCH /api/bookings/:id before the notification-update fix)
+        const isRetroAccepted = n.status === 'pending' && n.bookingId
+          ? confirmedBookingMover.get(n.bookingId) === n.moverId
+          : false;
+        if (n.status === 'accepted' || isRetroAccepted) moverNotifMap[n.moverId].accepted++;
         else if (n.status === 'declined') moverNotifMap[n.moverId].declined++;
         else if (n.status === 'expired') moverNotifMap[n.moverId].expired++;
       }
