@@ -49,7 +49,7 @@ export default function Header() {
   return (
     <>
       <header
-        className="fixed top-0 left-0 right-0 z-[5000] bg-background/95 backdrop-blur-sm border-b"
+        className="fixed top-0 left-0 right-0 z-[5000] bg-gray-100/95 dark:bg-muted/80 backdrop-blur-sm border-b"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -145,7 +145,7 @@ export default function Header() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t bg-background relative z-[1000]">
+          <div className="md:hidden border-t bg-gray-100 dark:bg-muted/80 relative z-[1000]">
             <div className="px-4 py-4 space-y-2 relative z-[1000]">
               {user ? (
                 <>
