@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,8 +72,22 @@ function GoogleReviewsSection() {
 
   const openMaps = () => window.open(mapsUrl, "_blank", "noopener,noreferrer");
 
+  const [activeIdx, setActiveIdx] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const cardWidth = el.scrollWidth / Math.max(reviews.length, 1);
+      setActiveIdx(Math.min(Math.round(el.scrollLeft / cardWidth), reviews.length - 1));
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [reviews.length]);
+
   return (
-    <section className="relative py-20 md:py-28 bg-gray-100 dark:bg-muted/30">
+    <section className="relative py-12 md:py-20 lg:py-28 bg-gray-100 dark:bg-muted/30">
       {/* Subtle radial glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center">
         <div className="w-[600px] h-[600px] rounded-full bg-primary/5 blur-3xl" />
@@ -82,34 +96,34 @@ function GoogleReviewsSection() {
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* ── Two-column layout on desktop ── */}
-        <div className="flex flex-col lg:flex-row lg:items-start gap-12 lg:gap-20">
+        <div className="flex flex-col lg:flex-row lg:items-start gap-6 md:gap-10 lg:gap-20">
 
           {/* ── LEFT: Rating panel ── */}
           <div className="lg:w-64 lg:flex-shrink-0">
             {/* Google badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-background text-xs font-medium text-muted-foreground mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-background text-xs font-medium text-muted-foreground mb-3 md:mb-6">
               <GoogleIcon className="w-3.5 h-3.5" />
               Google Reviews
             </div>
 
-            <h2 className="text-xl md:text-2xl font-bold text-foreground mb-5 leading-tight">
+            <h2 className="text-lg md:text-2xl font-bold text-foreground mb-3 md:mb-5 leading-tight">
               Loved by Calgary customers
             </h2>
 
             {/* Big rating */}
             {isLoading ? (
-              <div className="flex flex-col gap-3 mb-6">
-                <Skeleton className="h-12 w-20" />
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-4 w-40" />
+              <div className="flex flex-col gap-2 mb-4 md:mb-6">
+                <Skeleton className="h-10 w-16 md:h-12 md:w-20" />
+                <Skeleton className="h-4 w-28 md:h-5 md:w-32" />
+                <Skeleton className="h-3 w-36 md:h-4 md:w-40" />
               </div>
             ) : (
-              <div className="mb-8">
-                <span className="text-5xl font-bold tabular-nums leading-none text-foreground block mb-2">
+              <div className="mb-4 md:mb-8">
+                <span className="text-4xl md:text-5xl font-bold tabular-nums leading-none text-foreground block mb-1.5 md:mb-2">
                   {rating !== null ? rating.toFixed(1) : "—"}
                 </span>
                 <Stars count={Math.round(rating ?? 5)} size="md" />
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1.5 md:mt-2">
                   {totalRatings > 0 ? `${totalRatings} verified reviews` : "Verified reviews"} · Google
                 </p>
               </div>
@@ -163,9 +177,12 @@ function GoogleReviewsSection() {
                 </p>
               </div>
             ) : (
-              <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory
-                              [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
-                              lg:grid lg:grid-cols-1 lg:overflow-visible lg:pb-0 lg:gap-4">
+              <div
+                ref={carouselRef}
+                className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory
+                            [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
+                            lg:grid lg:grid-cols-1 lg:overflow-visible lg:pb-0 lg:gap-4"
+              >
                 {reviews.slice(0, 3).map((review, i) => (
                   <div
                     key={i}
@@ -179,11 +196,11 @@ function GoogleReviewsSection() {
                                backdrop-blur-sm
                                shadow-md shadow-black/5 dark:shadow-xl dark:shadow-black/30
                                hover:bg-white/90 dark:hover:bg-white/[0.08]
-                               hover:shadow-lg hover:shadow-black/8
-                               transition-all duration-300 p-6 flex flex-col gap-4"
+                               hover:shadow-lg
+                               transition-all duration-300 p-4 md:p-6 flex flex-col gap-3 md:gap-4"
                   >
                     {/* Decorative quote mark */}
-                    <span className="absolute top-4 right-5 text-6xl font-serif text-foreground/5 leading-none select-none">"</span>
+                    <span className="absolute top-3 right-4 text-5xl font-serif text-foreground/5 leading-none select-none">"</span>
 
                     {/* Stars */}
                     <Stars count={review.rating} size="sm" />
@@ -194,39 +211,48 @@ function GoogleReviewsSection() {
                     </p>
 
                     {/* Reviewer row */}
-                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-border mt-auto">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-border mt-auto">
+                      <div className="flex items-center gap-2.5">
                         {review.profilePhoto ? (
                           <img
                             src={review.profilePhoto}
                             alt={review.authorName}
-                            className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border"
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 ring-1 ring-border">
-                            <span className="text-sm font-bold text-primary">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 ring-1 ring-border">
+                            <span className="text-xs font-bold text-primary">
                               {review.authorName.charAt(0).toUpperCase()}
                             </span>
                           </div>
                         )}
                         <div>
-                          <div className="font-semibold text-sm text-foreground">{review.authorName}</div>
+                          <div className="font-semibold text-xs text-foreground">{review.authorName}</div>
                           <div className="text-xs text-muted-foreground">{review.relativeTime}</div>
                         </div>
                       </div>
-                      <GoogleIcon className="w-4 h-4 flex-shrink-0" />
+                      <GoogleIcon className="w-3.5 h-3.5 flex-shrink-0" />
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Mobile swipe hint */}
+            {/* Pagination dots — mobile only */}
             {!isLoading && reviews.length > 1 && (
-              <p className="text-center text-muted-foreground/60 text-xs mt-4 lg:hidden">
-                Swipe to see more
-              </p>
+              <div className="flex justify-center items-center gap-1.5 mt-3 lg:hidden">
+                {reviews.slice(0, 3).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`rounded-full transition-all duration-300 ${
+                      i === activeIdx
+                        ? "w-4 h-1.5 bg-foreground"
+                        : "w-1.5 h-1.5 bg-foreground/20"
+                    }`}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </div>
