@@ -127,56 +127,48 @@ export default function AdminRevenuePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-          <Card>
+          <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Earned Revenue</CardTitle>
-              <div className="p-1.5 bg-amber-500/10 rounded-md">
-                <DollarSign className="w-4 h-4 text-amber-500" />
-              </div>
+              <CardTitle className="text-sm font-medium text-amber-100">Earned Revenue</CardTitle>
+              <DollarSign className="w-5 h-5 text-amber-200" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tabular-nums" data-testid="stat-total-revenue">
+              <div className="text-3xl font-bold" data-testid="stat-total-revenue">
                 ${earnedRevenue.toFixed(2)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">CAD from completed moves</p>
+              <p className="text-xs text-amber-200 mt-1">CAD from completed moves</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Week</CardTitle>
-              <div className="p-1.5 bg-green-500/10 rounded-md">
-                <TrendingUp className="w-4 h-4 text-green-500" />
-              </div>
+              <CardTitle className="text-sm font-medium">This Week</CardTitle>
+              <TrendingUp className="w-4 h-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tabular-nums">${revenueThisWeek.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-green-600">${revenueThisWeek.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Last 7 days</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month</CardTitle>
-              <div className="p-1.5 bg-blue-500/10 rounded-md">
-                <Calendar className="w-4 h-4 text-blue-500" />
-              </div>
+              <CardTitle className="text-sm font-medium">This Month</CardTitle>
+              <Calendar className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tabular-nums">${revenueThisMonth.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-blue-600">${revenueThisMonth.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Last 30 days</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Avg. Booking</CardTitle>
-              <div className="p-1.5 bg-purple-500/10 rounded-md">
-                <CreditCard className="w-4 h-4 text-purple-500" />
-              </div>
+              <CardTitle className="text-sm font-medium">Avg. Booking</CardTitle>
+              <CreditCard className="w-4 h-4 text-purple-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tabular-nums">${avgBookingValue.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-purple-600">${avgBookingValue.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Per completed move</p>
             </CardContent>
           </Card>
@@ -194,16 +186,16 @@ export default function AdminRevenuePage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Total Payments Received</span>
-                  <span className="font-bold tabular-nums">${totalPaidRevenue.toFixed(2)}</span>
+                  <span className="font-bold text-green-600">${totalPaidRevenue.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Completed & Earned</span>
-                  <span className="font-bold tabular-nums">${earnedRevenue.toFixed(2)}</span>
+                  <span className="font-bold text-green-600">${earnedRevenue.toFixed(2)}</span>
                 </div>
                 {pendingRefundAmount > 0 && (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Paid Not Completed</span>
-                    <span className="font-bold tabular-nums">${pendingRefundAmount.toFixed(2)}</span>
+                    <span className="font-bold text-amber-600">${pendingRefundAmount.toFixed(2)}</span>
                   </div>
                 )}
               </div>
@@ -259,7 +251,7 @@ export default function AdminRevenuePage() {
           <CardContent>
             <div className="flex items-center justify-between mb-4 p-3 bg-muted/50 rounded-lg">
               <span className="text-sm font-medium">Filtered Total:</span>
-              <span className="text-lg font-bold tabular-nums">${filteredRevenue.toFixed(2)}</span>
+              <span className="text-lg font-bold text-green-600">${filteredRevenue.toFixed(2)}</span>
             </div>
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">Loading...</div>
@@ -279,25 +271,24 @@ export default function AdminRevenuePage() {
                   <TableBody>
                     {filteredCompletedBookings.slice(0, 10).map((b) => (
                       <TableRow key={b.id} data-testid={`row-revenue-${b.id}`}>
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {b.preferredDate ? format(new Date(b.preferredDate), "MMM d, yy") : "N/A"}
+                        <TableCell>
+                          {b.preferredDate ? format(new Date(b.preferredDate), "MMM d, yyyy") : "N/A"}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {b.customer?.name || "Unknown Customer"}
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium">{b.customer?.name || "Unknown"}</div>
-                          <div className="text-xs text-muted-foreground truncate max-w-[140px]">{b.customer?.email || ""}</div>
+                          {b.mover?.name || "N/A"}
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {b.mover?.name || <span className="text-muted-foreground italic">Unassigned</span>}
-                        </TableCell>
-                        <TableCell className="max-w-[180px]">
+                        <TableCell className="max-w-[200px]">
                           <div className="truncate text-sm" title={b.pickupAddress}>
                             {b.pickupAddress?.split(",")[0] || "N/A"}
                           </div>
                           <div className="truncate text-xs text-muted-foreground" title={b.dropoffAddress}>
-                            {b.dropoffAddress?.split(",")[0] || "N/A"}
+                            → {b.dropoffAddress?.split(",")[0] || "N/A"}
                           </div>
                         </TableCell>
-                        <TableCell className="font-bold tabular-nums">
+                        <TableCell className="font-bold text-green-600">
                           ${parseFloat(b.price || "0").toFixed(2)}
                         </TableCell>
                         <TableCell>
@@ -321,7 +312,7 @@ export default function AdminRevenuePage() {
                     variant="ghost" 
                     size="sm"
                     onClick={() => setFilterPeriod("all")}
-                    className="mt-2"
+                    className="mt-2 text-primary"
                   >
                     View all completed moves
                   </Button>

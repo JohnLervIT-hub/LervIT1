@@ -8,7 +8,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
@@ -227,7 +226,7 @@ function GrowthDashboard() {
               <span className="text-xs uppercase tracking-wide">Revenue</span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="ml-0.5 px-1" data-testid="button-revenue-period">
+                  <Button size="icon" variant="ghost" className="h-5 w-5 ml-0.5" data-testid="button-revenue-period">
                     <ChevronDown className="w-3 h-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -459,89 +458,81 @@ function GrowthDashboard() {
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-2xl font-bold tabular-nums" data-testid="text-total-tracked-moves">{metrics.fulfilment.totalTrackedMoves}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Tracked Moves</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-2xl font-bold tabular-nums" data-testid="text-avg-move-time">
-                      {metrics.fulfilment.avgMoveHours >= 1
-                        ? `${metrics.fulfilment.avgMoveHours}h`
-                        : `${metrics.fulfilment.avgMoveMinutes}m`}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">Avg Move Time</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-2xl font-bold tabular-nums" data-testid="text-fastest-move">
-                      {metrics.fulfilment.fastestMoveMinutes >= 60
-                        ? `${(metrics.fulfilment.fastestMoveMinutes / 60).toFixed(1)}h`
-                        : `${metrics.fulfilment.fastestMoveMinutes}m`}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">Fastest Move</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-2xl font-bold tabular-nums" data-testid="text-slowest-move">
-                      {metrics.fulfilment.slowestMoveMinutes >= 60
-                        ? `${(metrics.fulfilment.slowestMoveMinutes / 60).toFixed(1)}h`
-                        : `${metrics.fulfilment.slowestMoveMinutes}m`}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">Slowest Move</p>
-                  </CardContent>
-                </Card>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold" data-testid="text-total-tracked-moves">{metrics.fulfilment.totalTrackedMoves}</p>
+                  <p className="text-xs text-muted-foreground">Tracked Moves</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold" data-testid="text-avg-move-time">
+                    {metrics.fulfilment.avgMoveHours >= 1
+                      ? `${metrics.fulfilment.avgMoveHours}h`
+                      : `${metrics.fulfilment.avgMoveMinutes}m`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Avg Move Time</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold text-green-500" data-testid="text-fastest-move">
+                    {metrics.fulfilment.fastestMoveMinutes >= 60
+                      ? `${(metrics.fulfilment.fastestMoveMinutes / 60).toFixed(1)}h`
+                      : `${metrics.fulfilment.fastestMoveMinutes}m`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Fastest Move</p>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-2xl font-bold text-amber-500" data-testid="text-slowest-move">
+                    {metrics.fulfilment.slowestMoveMinutes >= 60
+                      ? `${(metrics.fulfilment.slowestMoveMinutes / 60).toFixed(1)}h`
+                      : `${metrics.fulfilment.slowestMoveMinutes}m`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Slowest Move</p>
+                </div>
               </div>
 
               {metrics.fulfilment.driverPerformance.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-muted-foreground">Driver Breakdown</h4>
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Driver</TableHead>
-                          <TableHead className="text-center">Moves</TableHead>
-                          <TableHead className="text-center">Avg Time</TableHead>
-                          <TableHead className="text-center hidden sm:table-cell">Fastest</TableHead>
-                          <TableHead className="text-center hidden sm:table-cell">Slowest</TableHead>
-                          <TableHead className="text-center hidden md:table-cell">Avg Distance</TableHead>
-                          <TableHead className="text-right">Total Hrs</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="text-left p-3 font-medium">Driver</th>
+                          <th className="text-center p-3 font-medium">Moves</th>
+                          <th className="text-center p-3 font-medium">Avg Time</th>
+                          <th className="text-center p-3 font-medium hidden sm:table-cell">Fastest</th>
+                          <th className="text-center p-3 font-medium hidden sm:table-cell">Slowest</th>
+                          <th className="text-center p-3 font-medium hidden md:table-cell">Avg Distance</th>
+                          <th className="text-right p-3 font-medium">Total Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {metrics.fulfilment.driverPerformance.map((driver) => (
-                          <TableRow key={driver.moverId} data-testid={`row-driver-${driver.moverId}`}>
-                            <TableCell className="font-medium">{driver.name}</TableCell>
-                            <TableCell className="text-center tabular-nums">{driver.totalMoves}</TableCell>
-                            <TableCell className="text-center tabular-nums text-muted-foreground">
+                          <tr key={driver.moverId} className="border-t" data-testid={`row-driver-${driver.moverId}`}>
+                            <td className="p-3 font-medium">{driver.name}</td>
+                            <td className="p-3 text-center">{driver.totalMoves}</td>
+                            <td className="p-3 text-center">
                               {driver.avgMinutes >= 60
                                 ? `${(driver.avgMinutes / 60).toFixed(1)}h`
                                 : `${driver.avgMinutes}m`}
-                            </TableCell>
-                            <TableCell className="text-center tabular-nums hidden sm:table-cell">
+                            </td>
+                            <td className="p-3 text-center text-green-500 hidden sm:table-cell">
                               {driver.fastestMinutes >= 60
                                 ? `${(driver.fastestMinutes / 60).toFixed(1)}h`
                                 : `${driver.fastestMinutes}m`}
-                            </TableCell>
-                            <TableCell className="text-center tabular-nums hidden sm:table-cell">
+                            </td>
+                            <td className="p-3 text-center text-amber-500 hidden sm:table-cell">
                               {driver.slowestMinutes >= 60
                                 ? `${(driver.slowestMinutes / 60).toFixed(1)}h`
                                 : `${driver.slowestMinutes}m`}
-                            </TableCell>
-                            <TableCell className="text-center tabular-nums text-muted-foreground hidden md:table-cell">
+                            </td>
+                            <td className="p-3 text-center text-blue-500 hidden md:table-cell">
                               {driver.avgDistanceKm !== null ? `${driver.avgDistanceKm} km` : '—'}
-                            </TableCell>
-                            <TableCell className="text-right font-medium tabular-nums">{driver.totalHours}h</TableCell>
-                          </TableRow>
+                            </td>
+                            <td className="p-3 text-right font-medium">{driver.totalHours}h</td>
+                          </tr>
                         ))}
-                      </TableBody>
-                    </Table>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -561,25 +552,19 @@ function GrowthDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="pt-4 text-center">
-                <p className="text-2xl font-bold tabular-nums">{metrics.abandoned.pending}</p>
-                <p className="text-xs text-muted-foreground mt-1">Pending Follow-up</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 text-center">
-                <p className="text-2xl font-bold tabular-nums">{metrics.abandoned.recovered}</p>
-                <p className="text-xs text-muted-foreground mt-1">Recovered</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 text-center">
-                <p className="text-2xl font-bold tabular-nums">{metrics.abandoned.recoveryRate}%</p>
-                <p className="text-xs text-muted-foreground mt-1">Recovery Rate</p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-2xl font-bold text-amber-500">{metrics.abandoned.pending}</p>
+              <p className="text-xs text-muted-foreground">Pending Follow-up</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-2xl font-bold text-green-500">{metrics.abandoned.recovered}</p>
+              <p className="text-xs text-muted-foreground">Recovered</p>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-2xl font-bold">{metrics.abandoned.recoveryRate}%</p>
+              <p className="text-xs text-muted-foreground">Recovery Rate</p>
+            </div>
           </div>
         </CardContent>
       </Card>
