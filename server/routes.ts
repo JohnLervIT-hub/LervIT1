@@ -10783,13 +10783,17 @@ Respond with VALID JSON only:
       const now = new Date();
 
       // Fetch raw data from existing tables
-      const [allBookings, allMovers, allNotifications, allAbandoned, allMetrics] = await Promise.all([
+      const [allBookings, allMovers, allUsers, allNotifications, allAbandoned, allMetrics] = await Promise.all([
         db.select().from(bookings),
         db.select().from(moversTable),
+        db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, phone: usersTable.phone }).from(usersTable),
         db.select().from(jobNotifications),
         db.select().from(abandonedBookings),
         db.select().from(bookingMetricsTable),
       ]);
+
+      // Build userId → user lookup for mover name/email resolution
+      const userById = new Map(allUsers.map(u => [u.id, u]));
 
       // ---- BOOKING FUNNEL ----
       // Step 1: Users who visited booking page (abandoned at step 1 OR made it further)
@@ -10848,9 +10852,12 @@ Respond with VALID JSON only:
         const notifs = moverNotifMap[m.id] ?? { total: 0, accepted: 0, declined: 0, expired: 0 };
         const completed = moverCompletedMap[m.id] ?? 0;
         const acceptanceRate = notifs.total > 0 ? Math.round((notifs.accepted / notifs.total) * 100) : null;
+        const user = userById.get(m.userId);
         return {
           moverId: m.id,
-          name: m.name,
+          name: user?.name ?? "Unknown Mover",
+          email: user?.email ?? null,
+          phone: user?.phone ?? null,
           isAvailable: m.isAvailable,
           isVerified: m.isVerified,
           rating: m.rating ? parseFloat(m.rating) : null,

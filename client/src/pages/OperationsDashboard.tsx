@@ -37,6 +37,8 @@ type LiveOps = {
 type MoverPerf = {
   moverId: string;
   name: string;
+  email: string | null;
+  phone: string | null;
   isAvailable: boolean;
   isVerified: boolean;
   rating: number | null;
@@ -543,7 +545,7 @@ export default function OperationsDashboard() {
                           <tr key={m.moverId} data-testid={`row-mover-perf-${m.moverId}`}>
                             <td className="py-2 pr-4">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium">{m.name}</span>
+                                <span className="font-semibold">{m.name}</span>
                                 {m.isAvailable && (
                                   <Badge className="text-xs py-0" variant="outline">Online</Badge>
                                 )}
@@ -551,8 +553,14 @@ export default function OperationsDashboard() {
                                   <Badge className="text-xs py-0 text-amber-600 border-amber-300" variant="outline">Unverified</Badge>
                                 )}
                               </div>
+                              {m.email && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{m.email}</p>
+                              )}
+                              {m.phone && (
+                                <p className="text-xs text-muted-foreground">{m.phone}</p>
+                              )}
                               {m.rating !== null && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{m.rating.toFixed(1)} stars</p>
+                                <p className="text-xs text-muted-foreground">{m.rating.toFixed(1)} ★</p>
                               )}
                             </td>
                             <td className="py-2 pr-4 text-right tabular-nums">{m.totalOffers}</td>
