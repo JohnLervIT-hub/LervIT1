@@ -222,7 +222,7 @@ export default function Home() {
                   ))}
                 </div>
                 <a
-                  href="https://g.page/r/lervit/review"
+                  href="https://g.page/r/Y9bvS5poKKYdkTZK9/review"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
@@ -302,7 +302,7 @@ export default function Home() {
           {/* CTA */}
           <div className="text-center">
             <a
-              href="https://g.page/r/lervit/review"
+              href="https://g.page/r/Y9bvS5poKKYdkTZK9/review"
               target="_blank"
               rel="noopener noreferrer"
               data-testid="link-google-reviews-cta"
