@@ -5,10 +5,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, Lock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { PriceBreakdown } from "@shared/pricing";
 import { VOLUME_LOAD_FEE_PER_CUFT } from "@shared/pricing";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface PromoState {
   code: string;
@@ -29,6 +30,7 @@ interface PricingSummaryProps {
 }
 
 export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showPromoInput = false, appliedPromo, onPromoApplied }: PricingSummaryProps) {
+  const { user } = useAuth();
   const [promoInput, setPromoInput] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -329,6 +331,41 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
             <p className="text-[11px] text-green-600 dark:text-green-400 font-medium">
               You save ${(breakdown.totalCost - discountedTotal).toFixed(2)} with promo code {appliedPromo.code}
             </p>
+          </div>
+        )}
+
+        {!user && !hasPromo && (
+          <div className="flex items-start gap-3 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-3" data-testid="promo-nudge-banner">
+            <div className="w-7 h-7 rounded-full bg-green-500/15 flex items-center justify-center shrink-0 mt-0.5">
+              <Lock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-green-700 dark:text-green-400 leading-tight">
+                Save 20% on this move
+              </p>
+              <p className="text-xs text-green-700/70 dark:text-green-500 mt-0.5 leading-relaxed">
+                Sign in or create a free account and apply code{" "}
+                <span className="font-semibold text-green-700 dark:text-green-400">LERVIT20</span>{" "}
+                at checkout — valid on your first 2 moves.
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <a
+                  href="/login"
+                  className="text-xs font-semibold text-green-700 dark:text-green-400 underline underline-offset-2 hover:opacity-80"
+                  data-testid="link-promo-signin"
+                >
+                  Sign in
+                </a>
+                <span className="text-xs text-green-700/40 dark:text-green-500/40">·</span>
+                <a
+                  href="/signup"
+                  className="text-xs font-semibold text-green-700 dark:text-green-400 underline underline-offset-2 hover:opacity-80"
+                  data-testid="link-promo-signup"
+                >
+                  Create account
+                </a>
+              </div>
+            </div>
           </div>
         )}
 
