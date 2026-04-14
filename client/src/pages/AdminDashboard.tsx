@@ -324,14 +324,14 @@ function GrowthDashboard() {
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">Online Now</span>
-                <Badge className="bg-green-500">{metrics.users.onlineMovers}</Badge>
+                <Badge className="bg-green-500 text-white">{metrics.users.onlineMovers}</Badge>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <Radio className="w-3 h-3" />
                   Live GPS
                 </span>
-                <Badge className="bg-blue-500">{metrics.users.liveGpsMovers}</Badge>
+                <Badge className="bg-blue-500 text-white">{metrics.users.liveGpsMovers}</Badge>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className="text-muted-foreground">Verified</span>
@@ -356,15 +356,15 @@ function GrowthDashboard() {
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">Accepted</span>
-                <Badge className="bg-blue-500">{metrics.bookings.statusBreakdown.accepted}</Badge>
+                <Badge className="bg-blue-500 text-white">{metrics.bookings.statusBreakdown.accepted}</Badge>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">In Progress</span>
-                <Badge className="bg-amber-500">{metrics.bookings.statusBreakdown.in_progress}</Badge>
+                <Badge className="bg-amber-500 text-white">{metrics.bookings.statusBreakdown.in_progress}</Badge>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">Completed</span>
-                <Badge className="bg-green-500">{metrics.bookings.statusBreakdown.completed}</Badge>
+                <Badge className="bg-green-500 text-white">{metrics.bookings.statusBreakdown.completed}</Badge>
               </div>
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">Cancelled</span>
@@ -579,6 +579,7 @@ function GrowthDashboard() {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [bookingFilter, setBookingFilter] = useState<string>("all");
   const { toast } = useToast();
 
   const { data: usersResponse, isLoading: usersLoading, error: usersError } = useQuery<{ data: User[], total: number }>({
@@ -657,10 +658,10 @@ export default function AdminDashboard() {
   };
 
   const getPaymentBadge = (status?: string | null) => {
-    if (!status || status === "pending") return <Badge variant="secondary">Unpaid</Badge>;
-    if (status === "paid") return <Badge className="bg-green-500">Paid</Badge>;
-    if (status === "refunded") return <Badge variant="destructive">Refunded</Badge>;
-    return <Badge variant="secondary">{status}</Badge>;
+    if (!status || status === "pending") return <Badge variant="secondary" className="text-xs py-0">Unpaid</Badge>;
+    if (status === "paid" || status === "succeeded") return <Badge className="bg-green-500 text-white text-xs py-0">Paid</Badge>;
+    if (status === "refunded") return <Badge variant="destructive" className="text-xs py-0">Refunded</Badge>;
+    return <Badge variant="secondary" className="text-xs py-0">{status}</Badge>;
   };
 
   const getLoadSizeLabel = (size?: string | null) => {
@@ -722,409 +723,379 @@ export default function AdminDashboard() {
   const completedBookings = bookings.filter(b => b.status === "completed").length;
   const verifiedMovers = movers.filter(m => m.isVerified).length;
 
-  const pendingBookings = bookings.filter(b => b.status === "pending").length;
+  const pendingBookings = bookings.filter(b => b.status === "pending" && (b.paymentStatus === "paid" || b.paymentStatus === "succeeded")).length;
   const activeBookings = bookings.filter(b => b.status === "in_progress" || b.status === "accepted").length;
 
+  const filteredBookings = bookingFilter === "all"
+    ? bookings
+    : bookings.filter(b => b.status === bookingFilter);
+
+  const bookingStatusCounts: Record<string, number> = {
+    pending: bookings.filter(b => b.status === "pending").length,
+    confirmed: bookings.filter(b => b.status === "confirmed").length,
+    in_progress: bookings.filter(b => b.status === "in_progress").length,
+    completed: bookings.filter(b => b.status === "completed").length,
+    cancelled: bookings.filter(b => b.status === "cancelled").length,
+  };
+
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gradient-to-b from-blue-50/50 to-background dark:from-blue-950/20">
+    <div className="min-h-screen pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-600 rounded-lg">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-3xl md:text-4xl font-bold">Admin Dashboard</h1>
+
+        {/* ── Header ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-primary/10 rounded-lg">
+              <Shield className="w-5 h-5 text-primary" />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => syncCountersMutation.mutate()}
-                disabled={syncCountersMutation.isPending}
-                data-testid="button-sync-mover-counters"
-              >
-                {syncCountersMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                )}
-                Sync Trip Counters
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => cleanupMutation.mutate()}
-                disabled={cleanupMutation.isPending}
-                data-testid="button-cleanup-bookings"
-              >
-                {cleanupMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4 mr-2" />
-                )}
-                Clean Broken Bookings
-              </Button>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                LervIT · Platform Admin
+              </p>
             </div>
           </div>
-          <p className="text-muted-foreground text-lg">Platform overview and management</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => syncCountersMutation.mutate()} disabled={syncCountersMutation.isPending} data-testid="button-sync-mover-counters">
+              {syncCountersMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <TrendingUp className="w-3.5 h-3.5 mr-1.5" />}
+              Sync Counters
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => cleanupMutation.mutate()} disabled={cleanupMutation.isPending} data-testid="button-cleanup-bookings">
+              {cleanupMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
+              Clean Bookings
+            </Button>
+          </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        {/* ── Primary KPI Tiles ── */}
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-4">
           <Link href="/admin/users" data-testid="link-admin-users">
-            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25">
+            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 cursor-pointer hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-blue-100">Total Users</CardTitle>
-                <Users className="w-5 h-5 text-blue-200" />
+                <CardTitle className="text-xs font-medium text-blue-100 uppercase tracking-wide">Total Users</CardTitle>
+                <Users className="w-4 h-4 text-blue-200" />
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold" data-testid="stat-total-users">
-                  {users?.length || 0}
-                </div>
-                <div className="flex items-center justify-between mt-1">
+              <CardContent className="pt-0">
+                <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-users">{users?.length || 0}</div>
+                <div className="flex items-center justify-between mt-1.5">
                   <p className="text-xs text-blue-200">Registered accounts</p>
-                  <ChevronRight className="w-4 h-4 text-blue-200" />
+                  <ChevronRight className="w-3.5 h-3.5 text-blue-200" />
                 </div>
               </CardContent>
             </Card>
           </Link>
 
           <Link href="/admin/movers?status=verified" data-testid="link-admin-movers">
-            <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-green-500/25">
+            <Card className="bg-gradient-to-br from-emerald-500 to-green-600 text-white border-0 cursor-pointer hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-green-100">Verified Movers</CardTitle>
-                <Truck className="w-5 h-5 text-green-200" />
+                <CardTitle className="text-xs font-medium text-green-100 uppercase tracking-wide">Verified Movers</CardTitle>
+                <Truck className="w-4 h-4 text-green-200" />
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold" data-testid="stat-verified-movers">
-                  {verifiedMovers}
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-green-200">Active drivers</p>
-                  <ChevronRight className="w-4 h-4 text-green-200" />
+              <CardContent className="pt-0">
+                <div className="text-3xl font-bold tabular-nums" data-testid="stat-verified-movers">{verifiedMovers}</div>
+                <div className="flex items-center justify-between mt-1.5">
+                  <p className="text-xs text-green-200">{movers.length} registered total</p>
+                  <ChevronRight className="w-3.5 h-3.5 text-green-200" />
                 </div>
               </CardContent>
             </Card>
           </Link>
 
           <Link href="/admin/moves?status=completed" data-testid="link-admin-moves">
-            <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-purple-500/25">
+            <Card className="bg-gradient-to-br from-violet-500 to-purple-600 text-white border-0 cursor-pointer hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-100">Completed Moves</CardTitle>
-                <CheckCircle className="w-5 h-5 text-purple-200" />
+                <CardTitle className="text-xs font-medium text-purple-100 uppercase tracking-wide">Completed Moves</CardTitle>
+                <CheckCircle className="w-4 h-4 text-purple-200" />
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold" data-testid="stat-completed-bookings">
-                  {completedBookings}
-                </div>
-                <div className="flex items-center justify-between mt-1">
+              <CardContent className="pt-0">
+                <div className="text-3xl font-bold tabular-nums" data-testid="stat-completed-bookings">{completedBookings}</div>
+                <div className="flex items-center justify-between mt-1.5">
                   <p className="text-xs text-purple-200">Successful deliveries</p>
-                  <ChevronRight className="w-4 h-4 text-purple-200" />
+                  <ChevronRight className="w-3.5 h-3.5 text-purple-200" />
                 </div>
               </CardContent>
             </Card>
           </Link>
 
           <Link href="/admin/revenue" data-testid="link-admin-revenue">
-            <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl hover:shadow-orange-500/25">
+            <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 cursor-pointer hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-amber-100">Total Revenue</CardTitle>
-                <TrendingUp className="w-5 h-5 text-amber-200" />
+                <CardTitle className="text-xs font-medium text-amber-100 uppercase tracking-wide">Total Revenue</CardTitle>
+                <TrendingUp className="w-4 h-4 text-amber-200" />
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold" data-testid="stat-total-revenue">
-                  ${totalRevenue.toFixed(2)}
-                </div>
-                <div className="flex items-center justify-between mt-1">
+              <CardContent className="pt-0">
+                <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-revenue">${totalRevenue.toFixed(2)}</div>
+                <div className="flex items-center justify-between mt-1.5">
                   <p className="text-xs text-amber-200">CAD earned</p>
-                  <ChevronRight className="w-4 h-4 text-amber-200" />
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-200" />
                 </div>
               </CardContent>
             </Card>
           </Link>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Bookings</CardTitle>
-              <Clock className="w-4 h-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{pendingBookings}</div>
-              <p className="text-xs text-muted-foreground">Awaiting mover</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Moves</CardTitle>
-              <Calendar className="w-4 h-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{activeBookings}</div>
-              <p className="text-xs text-muted-foreground">Currently in progress</p>
-            </CardContent>
-          </Card>
+        {/* ── Live Platform Health Strip ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border rounded-lg overflow-hidden mb-6 border">
+          <div className="bg-card px-4 py-3 flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${pendingBookings > 0 ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground/25'}`} />
+            <div>
+              <p className="text-xl font-bold tabular-nums leading-tight">{pendingBookings}</p>
+              <p className="text-xs text-muted-foreground">Paid · Awaiting Mover</p>
+            </div>
+          </div>
+          <div className="bg-card px-4 py-3 flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${activeBookings > 0 ? 'bg-blue-500 animate-pulse' : 'bg-muted-foreground/25'}`} />
+            <div>
+              <p className="text-xl font-bold tabular-nums leading-tight">{activeBookings}</p>
+              <p className="text-xs text-muted-foreground">Active Moves</p>
+            </div>
+          </div>
+          <div className="bg-card px-4 py-3 flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full shrink-0 bg-muted-foreground/25" />
+            <div>
+              <p className="text-xl font-bold tabular-nums leading-tight">{bookings.length}</p>
+              <p className="text-xs text-muted-foreground">Total Bookings</p>
+            </div>
+          </div>
+          <Link href="/admin/support" className="bg-card px-4 py-3 flex items-center gap-3 hover-elevate">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${(openTicketCount?.count ?? 0) > 0 ? 'bg-rose-500 animate-pulse' : 'bg-muted-foreground/25'}`} />
+            <div>
+              <p className={`text-xl font-bold tabular-nums leading-tight ${(openTicketCount?.count ?? 0) > 0 ? 'text-rose-500' : ''}`} data-testid="badge-open-tickets">
+                {openTicketCount?.count ?? 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Open Tickets</p>
+            </div>
+          </Link>
         </div>
 
+        {/* ── Quick Access ── */}
         <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">Admin Tools</h2>
-          <div className="grid gap-4 md:grid-cols-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Quick Access</p>
+          <div className="flex flex-wrap gap-2">
             <Link href="/admin/support" data-testid="link-admin-support">
-              <Card className="hover-elevate cursor-pointer h-full relative">
-                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
-                  <div className="p-2 rounded-lg bg-rose-500/10">
-                    <MessageSquare className="w-5 h-5 text-rose-500" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">Support Tickets</CardTitle>
-                    <CardDescription className="text-xs">Manage customer support</CardDescription>
-                  </div>
-                  {openTicketCount && openTicketCount.count > 0 && (
-                    <Badge variant="destructive" className="text-xs" data-testid="badge-open-tickets">
-                      {openTicketCount.count} open
-                    </Badge>
-                  )}
-                </CardHeader>
-              </Card>
+              <Button variant="outline" size="sm" className="gap-2">
+                <MessageSquare className="w-3.5 h-3.5 text-rose-500" />
+                Support
+                {openTicketCount && openTicketCount.count > 0 && (
+                  <Badge variant="destructive" className="text-xs py-0 px-1.5 ml-0.5">
+                    {openTicketCount.count}
+                  </Badge>
+                )}
+              </Button>
             </Link>
             <Link href="/admin/verification" data-testid="link-admin-verification">
-              <Card className="hover-elevate cursor-pointer h-full">
-                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
-                  <div className="p-2 rounded-lg bg-emerald-500/10">
-                    <ShieldCheck className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Verification</CardTitle>
-                    <CardDescription className="text-xs">Review driver documents</CardDescription>
-                  </div>
-                </CardHeader>
-              </Card>
+              <Button variant="outline" size="sm" className="gap-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                Verification
+              </Button>
             </Link>
             <Link href="/admin/email-center" data-testid="link-admin-email-center">
-              <Card className="hover-elevate cursor-pointer h-full">
-                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
-                  <div className="p-2 rounded-lg bg-indigo-500/10">
-                    <Send className="w-5 h-5 text-indigo-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Email Center</CardTitle>
-                    <CardDescription className="text-xs">Send bulk or personal emails</CardDescription>
-                  </div>
-                </CardHeader>
-              </Card>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Send className="w-3.5 h-3.5 text-indigo-500" />
+                Email Center
+              </Button>
             </Link>
             <Link href="/admin/payouts" data-testid="link-admin-payouts">
-              <Card className="hover-elevate cursor-pointer h-full">
-                <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <DollarSign className="w-5 h-5 text-green-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Mover Payouts</CardTitle>
-                    <CardDescription className="text-xs">Process pending earnings</CardDescription>
-                  </div>
-                </CardHeader>
-              </Card>
+              <Button variant="outline" size="sm" className="gap-2">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+                Payouts
+              </Button>
             </Link>
           </div>
         </div>
 
+        {/* ── Data Tabs ── */}
         <Tabs defaultValue="bookings">
-          <TabsList className="flex-wrap h-auto gap-1">
-            <TabsTrigger value="bookings">Bookings</TabsTrigger>
-            <TabsTrigger value="movers">Movers</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsList className="flex-wrap h-auto gap-1 mb-1">
+            <TabsTrigger value="bookings">
+              Bookings
+              {bookings.length > 0 && <span className="ml-1.5 text-xs opacity-50 tabular-nums">{bookings.length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="movers">
+              Movers
+              {movers.length > 0 && <span className="ml-1.5 text-xs opacity-50 tabular-nums">{movers.length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="users">
+              Users
+              {users.length > 0 && <span className="ml-1.5 text-xs opacity-50 tabular-nums">{users.length}</span>}
+            </TabsTrigger>
             <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
             <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="bookings" className="space-y-4">
+          {/* Bookings Tab */}
+          <TabsContent value="bookings" className="space-y-4 mt-4">
             <Card>
-              <CardHeader>
-                <CardTitle>All Bookings</CardTitle>
-                <CardDescription>Click on a booking to view full itinerary details</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {!bookings || bookings.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Package className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-                      <p className="text-muted-foreground">No bookings yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {bookings.map((booking) => (
-                        <div
-                          key={booking.id}
-                          className="group p-4 border rounded-lg hover-elevate cursor-pointer transition-all"
-                          onClick={() => setSelectedBooking(booking)}
-                          data-testid={`booking-row-${booking.id}`}
-                        >
-                          {/* Header Row: Booker & Status */}
-                          <div className="flex items-start justify-between gap-4 mb-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                <UserIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                              </div>
-                              <div>
-                                <p className="font-semibold text-foreground">
-                                  {booking.customer?.name || "Unknown Customer"}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  {booking.customer?.email || "No email"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-1">
-                              <Badge className={`${getStatusColor(booking.status)} text-white`}>
-                                {booking.status.replace("_", " ")}
-                              </Badge>
-                              {getPaymentBadge(booking.paymentStatus)}
-                            </div>
-                          </div>
-
-                          {/* Route Summary */}
-                          <div className="flex items-center gap-2 mb-3 text-sm">
-                            <MapPin className="w-4 h-4 text-green-500 shrink-0" />
-                            <span className="truncate max-w-[180px]">{booking.pickupAddress?.split(",")[0] || "Pickup"}</span>
-                            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                            <MapPin className="w-4 h-4 text-red-500 shrink-0" />
-                            <span className="truncate max-w-[180px]">{booking.dropoffAddress?.split(",")[0] || "Dropoff"}</span>
-                          </div>
-
-                          {/* Details Row */}
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-4 h-4" />
-                              <span>{booking.preferredDate ? format(new Date(booking.preferredDate), "MMM d, yyyy") : "No date"}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Box className="w-4 h-4" />
-                              <span className="capitalize">{booking.loadSize || "Unknown"}</span>
-                            </div>
-                            {booking.mover && (
-                              <div className="flex items-center gap-1">
-                                <Truck className="w-4 h-4 text-blue-500" />
-                                <span>{booking.mover.user?.name || booking.mover.name || "Assigned"}</span>
-                              </div>
-                            )}
-                            {!booking.mover && (
-                              <div className="flex items-center gap-1 text-amber-600">
-                                <AlertCircle className="w-4 h-4" />
-                                <span>Awaiting mover</span>
-                              </div>
-                            )}
-                            <div className="ml-auto flex items-center gap-2">
-                              <span className="font-semibold text-foreground">
-                                ${booking.price ? parseFloat(booking.price).toFixed(2) : "0.00"}
-                              </span>
-                              <Button size="sm" variant="ghost" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Eye className="w-4 h-4 mr-1" />
-                                View
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">All Bookings</CardTitle>
+                    <CardDescription>Click a booking to view full itinerary</CardDescription>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["all", "pending", "confirmed", "in_progress", "completed", "cancelled"] as const).map(s => (
+                      <Button
+                        key={s}
+                        variant={bookingFilter === s ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setBookingFilter(s)}
+                        className="text-xs capitalize h-7 px-2.5"
+                      >
+                        {s === "all" ? "All" : s.replace("_", " ")}
+                        <span className="ml-1 opacity-50 tabular-nums">
+                          {s === "all" ? bookings.length : (bookingStatusCounts[s] ?? 0)}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="movers" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Movers</CardTitle>
-                <CardDescription>Registered mover accounts</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {!movers || movers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No movers registered yet
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {movers.map((mover) => (
-                        <div
-                          key={mover.id}
-                          className="flex items-center justify-between p-3 border rounded-md"
-                          data-testid={`mover-row-${mover.id}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                              <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                            </div>
+                {filteredBookings.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Package className="w-10 h-10 mx-auto text-muted-foreground/25 mb-3" />
+                    <p className="text-muted-foreground text-sm">No {bookingFilter !== "all" ? bookingFilter.replace("_", " ") : ""} bookings</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredBookings.map((booking) => (
+                      <div
+                        key={booking.id}
+                        className="group flex items-start gap-3 p-4 border rounded-lg hover-elevate cursor-pointer"
+                        onClick={() => setSelectedBooking(booking)}
+                        data-testid={`booking-row-${booking.id}`}
+                      >
+                        <div className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${getStatusColor(booking.status)}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 flex-wrap">
                             <div>
-                              <p className="text-sm font-medium">
-                                {mover.user?.name || "Unknown Mover"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {mover.user?.email || "No email"}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {mover.vehicleType} • {mover.totalMoves} moves
-                              </p>
+                              <p className="font-semibold text-sm">{booking.customer?.name || "Unknown Customer"}</p>
+                              <p className="text-xs text-muted-foreground">{booking.customer?.email}</p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <p className="font-bold text-sm tabular-nums">${booking.price ? parseFloat(booking.price).toFixed(2) : "0.00"}</p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs capitalize text-muted-foreground">{booking.status.replace("_", " ")}</span>
+                                {getPaymentBadge(booking.paymentStatus)}
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {mover.isVerified && (
-                              <Badge variant="default">Verified</Badge>
+                          <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground min-w-0">
+                            <MapPin className="w-3 h-3 text-green-500 shrink-0" />
+                            <span className="truncate">{booking.pickupAddress?.split(",")[0] || "Pickup"}</span>
+                            <ArrowRight className="w-3 h-3 shrink-0 opacity-40" />
+                            <MapPin className="w-3 h-3 text-red-500 shrink-0" />
+                            <span className="truncate">{booking.dropoffAddress?.split(",")[0] || "Dropoff"}</span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                            <span>{booking.preferredDate ? format(new Date(booking.preferredDate), "MMM d, yyyy") : "No date"}</span>
+                            <span className="capitalize">{booking.loadSize || "Unknown load"}</span>
+                            {booking.mover ? (
+                              <span className="flex items-center gap-1">
+                                <Truck className="w-3 h-3 text-primary" />
+                                {booking.mover.user?.name || booking.mover.name || "Assigned"}
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-amber-500">
+                                <AlertCircle className="w-3 h-3" />
+                                No mover
+                              </span>
                             )}
-                            <span className="text-sm font-medium">
-                              {parseFloat(mover.rating).toFixed(1)}★
-                            </span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <Eye className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors mt-1 shrink-0" />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="users" className="space-y-4">
+          {/* Movers Tab */}
+          <TabsContent value="movers" className="space-y-4 mt-4">
             <Card>
-              <CardHeader>
-                <CardTitle>All Users</CardTitle>
-                <CardDescription>Registered user accounts</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">All Movers</CardTitle>
+                <CardDescription>{movers.length} registered · {verifiedMovers} verified</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                {movers.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Truck className="w-10 h-10 mx-auto text-muted-foreground/25 mb-3" />
+                    <p className="text-muted-foreground text-sm">No movers registered yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {movers.map((mover) => (
+                      <div key={mover.id} className="flex items-center gap-3 p-3 border rounded-lg" data-testid={`mover-row-${mover.id}`}>
+                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <Truck className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{mover.user?.name || "Unknown Mover"}</p>
+                          <p className="text-xs text-muted-foreground truncate">{mover.user?.email}</p>
+                          <p className="text-xs text-muted-foreground">{mover.vehicleType} · {mover.totalMoves} moves</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold tabular-nums text-muted-foreground">{parseFloat(mover.rating).toFixed(1)}★</span>
+                          {mover.isVerified ? (
+                            <Badge variant="default" className="text-xs py-0">Verified</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs py-0">Pending</Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">All Users</CardTitle>
+                <CardDescription>{users.length} registered accounts</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
                   {!users || users.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No users registered yet
-                    </p>
+                    <div className="text-center py-10">
+                      <Users className="w-10 h-10 mx-auto text-muted-foreground/25 mb-3" />
+                      <p className="text-muted-foreground text-sm">No users registered yet</p>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       {users?.map((u) => (
                         <div
                           key={u.id}
-                          className="flex items-center justify-between p-3 border rounded-md"
+                          className="flex items-center gap-3 p-3 border rounded-lg"
                           data-testid={`user-row-${u.id}`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              u.role === 'admin' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                              u.role === 'mover' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                              'bg-green-100 dark:bg-green-900/30'
-                            }`}>
-                              <UserIcon className={`w-5 h-5 ${
-                                u.role === 'admin' ? 'text-purple-600 dark:text-purple-400' :
-                                u.role === 'mover' ? 'text-blue-600 dark:text-blue-400' :
-                                'text-green-600 dark:text-green-400'
-                              }`} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">{u.name || "Unnamed User"}</p>
-                              <p className="text-xs text-muted-foreground">{u.email}</p>
-                            </div>
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                            u.role === 'admin' ? 'bg-purple-500/10' :
+                            u.role === 'mover' ? 'bg-primary/10' :
+                            'bg-emerald-500/10'
+                          }`}>
+                            <UserIcon className={`w-4 h-4 ${
+                              u.role === 'admin' ? 'text-purple-500' :
+                              u.role === 'mover' ? 'text-primary' :
+                              'text-emerald-500'
+                            }`} />
                           </div>
-                          <Badge variant="secondary" className="capitalize">
-                            {u.role}
-                          </Badge>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{u.name || "Unnamed User"}</p>
+                            <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                            {u.phone && <p className="text-xs text-muted-foreground">{u.phone}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-muted-foreground tabular-nums">{format(new Date(u.createdAt), "MMM d, yyyy")}</span>
+                            <Badge variant="secondary" className="text-xs py-0 capitalize">{u.role}</Badge>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1134,12 +1105,18 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="growth" className="space-y-4">
+          {/* Growth Tab */}
+          <TabsContent value="growth" className="space-y-4 mt-4">
             <GrowthDashboard />
           </TabsContent>
 
-          <TabsContent value="operations" className="space-y-4">
-            <Suspense fallback={<div className="space-y-4 animate-pulse">{[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-muted rounded-lg" />)}</div>}>
+          {/* Operations Tab */}
+          <TabsContent value="operations" className="space-y-4 mt-4">
+            <Suspense fallback={
+              <div className="space-y-4 animate-pulse">
+                {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-muted rounded-lg" />)}
+              </div>
+            }>
               <OperationsDashboard />
             </Suspense>
           </TabsContent>
