@@ -73,8 +73,8 @@ function GoogleReviewsSection() {
   const openMaps = () => window.open(mapsUrl, "_blank", "noopener,noreferrer");
 
   return (
-    <section className="relative py-20 md:py-28 bg-gray-950 dark:bg-gray-950">
-      {/* Subtle radial glow in background */}
+    <section className="relative py-20 md:py-28 bg-muted/30">
+      {/* Subtle radial glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center">
         <div className="w-[600px] h-[600px] rounded-full bg-primary/5 blur-3xl" />
       </div>
@@ -87,31 +87,29 @@ function GoogleReviewsSection() {
           {/* ── LEFT: Rating panel ── */}
           <div className="lg:w-64 lg:flex-shrink-0">
             {/* Google badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-xs font-medium text-white/70 mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-background text-xs font-medium text-muted-foreground mb-6">
               <GoogleIcon className="w-3.5 h-3.5" />
               Google Reviews
             </div>
 
-            <h2 className="text-xl md:text-2xl font-bold text-white mb-5 leading-tight">
+            <h2 className="text-xl md:text-2xl font-bold text-foreground mb-5 leading-tight">
               Loved by Calgary customers
             </h2>
 
             {/* Big rating */}
             {isLoading ? (
               <div className="flex flex-col gap-3 mb-6">
-                <Skeleton className="h-12 w-20 bg-white/10" />
-                <Skeleton className="h-5 w-32 bg-white/10" />
-                <Skeleton className="h-4 w-40 bg-white/10" />
+                <Skeleton className="h-12 w-20" />
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-40" />
               </div>
             ) : (
               <div className="mb-8">
-                <div className="flex items-end gap-3 mb-2">
-                  <span className="text-5xl font-bold tabular-nums leading-none text-white">
-                    {rating !== null ? rating.toFixed(1) : "—"}
-                  </span>
-                </div>
+                <span className="text-5xl font-bold tabular-nums leading-none text-foreground block mb-2">
+                  {rating !== null ? rating.toFixed(1) : "—"}
+                </span>
                 <Stars count={Math.round(rating ?? 5)} size="md" />
-                <p className="text-sm text-white/50 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   {totalRatings > 0 ? `${totalRatings} verified reviews` : "Verified reviews"} · Google
                 </p>
               </div>
@@ -120,7 +118,7 @@ function GoogleReviewsSection() {
             {/* CTAs */}
             <div className="flex flex-col gap-3">
               <Button
-                className="w-full gap-2 bg-white text-gray-900 hover:bg-white/90"
+                className="w-full gap-2"
                 onClick={openMaps}
                 data-testid="link-google-reviews-cta"
               >
@@ -129,7 +127,7 @@ function GoogleReviewsSection() {
               </Button>
               <Button
                 variant="outline"
-                className="w-full gap-2 border-white/20 text-white/80 hover:text-white hover:border-white/40 bg-transparent"
+                className="w-full gap-2"
                 onClick={openMaps}
                 data-testid="link-google-write-review"
               >
@@ -141,30 +139,28 @@ function GoogleReviewsSection() {
           {/* ── RIGHT: Review cards ── */}
           <div className="flex-1 min-w-0">
             {isLoading ? (
-              /* Skeleton */
               <div className="flex gap-4 overflow-hidden">
                 {[0, 1, 2].map(i => (
-                  <div key={i} className="flex-shrink-0 w-[85vw] sm:w-80 lg:w-auto lg:flex-1 rounded-2xl border border-white/10 bg-white/5 p-6 flex flex-col gap-4">
-                    <Skeleton className="h-4 w-24 bg-white/10" />
-                    <Skeleton className="h-20 w-full bg-white/10" />
+                  <div key={i} className="flex-shrink-0 w-[85vw] sm:w-80 lg:w-auto lg:flex-1 rounded-2xl border border-border bg-card p-6 flex flex-col gap-4">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-20 w-full" />
                     <div className="flex items-center gap-3 mt-auto">
-                      <Skeleton className="w-10 h-10 rounded-full bg-white/10" />
+                      <Skeleton className="w-10 h-10 rounded-full" />
                       <div className="flex flex-col gap-1.5">
-                        <Skeleton className="h-3 w-24 bg-white/10" />
-                        <Skeleton className="h-3 w-16 bg-white/10" />
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-3 w-16" />
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : isError || reviews.length === 0 ? (
-              <div className="flex items-center justify-center h-48 rounded-2xl border border-white/10 bg-white/5">
-                <p className="text-white/40 text-sm text-center px-6">
+              <div className="flex items-center justify-center h-48 rounded-2xl border border-border bg-card">
+                <p className="text-muted-foreground text-sm text-center px-6">
                   {isError ? "Could not load reviews right now." : "No reviews yet — be the first on Google!"}
                 </p>
               </div>
             ) : (
-              /* Mobile: horizontal scroll carousel · Desktop: stacked column */
               <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory
                               [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
                               lg:grid lg:grid-cols-1 lg:overflow-visible lg:pb-0 lg:gap-4">
@@ -175,41 +171,41 @@ function GoogleReviewsSection() {
                     className="group relative flex-shrink-0 snap-center
                                w-[85vw] sm:w-[360px]
                                lg:w-auto lg:flex-shrink lg:snap-none
-                               rounded-2xl border border-white/10 bg-white/[0.04]
-                               hover:bg-white/[0.07] hover:border-white/20
+                               rounded-2xl border border-border bg-card
+                               hover:bg-muted/50 hover:border-border
                                transition-all duration-300 p-6 flex flex-col gap-4"
                   >
                     {/* Decorative quote mark */}
-                    <span className="absolute top-4 right-5 text-6xl font-serif text-white/5 leading-none select-none">"</span>
+                    <span className="absolute top-4 right-5 text-6xl font-serif text-foreground/5 leading-none select-none">"</span>
 
                     {/* Stars */}
                     <Stars count={review.rating} size="sm" />
 
                     {/* Review text */}
-                    <p className="text-white/80 text-sm leading-relaxed flex-1">
+                    <p className="text-foreground/80 text-sm leading-relaxed flex-1">
                       "{review.text}"
                     </p>
 
                     {/* Reviewer row */}
-                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/10 mt-auto">
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-border mt-auto">
                       <div className="flex items-center gap-3">
                         {review.profilePhoto ? (
                           <img
                             src={review.profilePhoto}
                             alt={review.authorName}
-                            className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-white/20"
+                            className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-border"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 ring-1 ring-white/20">
+                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 ring-1 ring-border">
                             <span className="text-sm font-bold text-primary">
                               {review.authorName.charAt(0).toUpperCase()}
                             </span>
                           </div>
                         )}
                         <div>
-                          <div className="font-semibold text-sm text-white/90">{review.authorName}</div>
-                          <div className="text-xs text-white/40">{review.relativeTime}</div>
+                          <div className="font-semibold text-sm text-foreground">{review.authorName}</div>
+                          <div className="text-xs text-muted-foreground">{review.relativeTime}</div>
                         </div>
                       </div>
                       <GoogleIcon className="w-4 h-4 flex-shrink-0" />
@@ -221,7 +217,7 @@ function GoogleReviewsSection() {
 
             {/* Mobile swipe hint */}
             {!isLoading && reviews.length > 1 && (
-              <p className="text-center text-white/30 text-xs mt-4 lg:hidden">
+              <p className="text-center text-muted-foreground/60 text-xs mt-4 lg:hidden">
                 Swipe to see more
               </p>
             )}
