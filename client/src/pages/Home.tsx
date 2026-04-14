@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAnalytics } from "@/hooks/use-analytics";
@@ -9,11 +10,182 @@ import { Button } from "@/components/ui/button";
 import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
-import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
 import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_background.png";
+
+// ---- Types ----
+interface GoogleReview {
+  authorName: string;
+  rating: number;
+  text: string;
+  relativeTime: string;
+  profilePhoto: string | null;
+}
+interface GoogleReviewsData {
+  rating: number;
+  totalRatings: number;
+  mapsUrl: string;
+  reviews: GoogleReview[];
+}
+
+// ---- Star helper ----
+function Stars({ count, size = "sm" }: { count: number; size?: "sm" | "md" }) {
+  const cls = size === "md" ? "w-5 h-5" : "w-4 h-4";
+  return (
+    <div className="flex gap-0.5">
+      {[...Array(5)].map((_, i) => (
+        <svg key={i} className={`${cls} ${i < count ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"}`} viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+// ---- Google Reviews Section component ----
+function GoogleReviewsSection() {
+  const { data, isLoading, isError } = useQuery<GoogleReviewsData>({
+    queryKey: ["/api/google-reviews"],
+    staleTime: 60 * 60 * 1000, // match server cache — 1 hour
+    retry: 1,
+  });
+
+  const mapsUrl = data?.mapsUrl ?? "https://www.google.com/maps/search/LervIT+Calgary";
+  const rating = data?.rating ?? null;
+  const reviews = data?.reviews ?? [];
+
+  return (
+    <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center mb-12 md:mb-14 space-y-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-background border text-sm font-medium">
+            <SiGoogle className="w-4 h-4 text-[#4285F4]" />
+            <span>Google Reviews</span>
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold">What Calgary Customers Say</h2>
+
+          {/* Overall rating */}
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            {isLoading ? (
+              <Skeleton className="h-12 w-32 rounded-lg" />
+            ) : (
+              <>
+                <span className="text-5xl font-bold tabular-nums">
+                  {rating !== null ? rating.toFixed(1) : "—"}
+                </span>
+                <div className="flex flex-col items-start gap-1">
+                  <Stars count={Math.round(rating ?? 5)} size="md" />
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                    data-testid="link-google-verified"
+                  >
+                    <SiGoogle className="w-3 h-3 text-[#4285F4]" />
+                    {data?.totalRatings ? `${data.totalRatings} reviews · ` : ""}Verified on Google
+                  </a>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Review cards */}
+        {isLoading ? (
+          <div className="grid md:grid-cols-3 gap-5 md:gap-6 mb-10">
+            {[0, 1, 2].map(i => (
+              <Card key={i}>
+                <CardContent className="pt-6 pb-6 px-6 flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="w-10 h-10 rounded-full" />
+                    <div className="flex flex-col gap-1.5">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-16 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : isError || reviews.length === 0 ? (
+          <p className="text-center text-muted-foreground text-sm mb-10">
+            {isError
+              ? "Could not load reviews right now. Check back soon."
+              : "No reviews yet — be the first to leave one on Google!"}
+          </p>
+        ) : (
+          <StaggerChildren className="grid md:grid-cols-3 gap-5 md:gap-6 mb-10">
+            {reviews.slice(0, 3).map((review, i) => (
+              <StaggerItem key={i}>
+                <Card className="h-full" data-testid={`card-review-${i}`}>
+                  <CardContent className="pt-6 pb-6 px-6 flex flex-col gap-4 h-full">
+                    {/* Reviewer row */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {review.profilePhoto ? (
+                          <img
+                            src={review.profilePhoto}
+                            alt={review.authorName}
+                            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-primary">
+                              {review.authorName.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold text-sm">{review.authorName}</div>
+                          <div className="text-xs text-muted-foreground">{review.relativeTime}</div>
+                        </div>
+                      </div>
+                      <SiGoogle className="w-5 h-5 text-[#4285F4] flex-shrink-0" />
+                    </div>
+                    {/* Stars */}
+                    <Stars count={review.rating} />
+                    {/* Text */}
+                    <p className="text-sm text-muted-foreground leading-relaxed flex-1">
+                      &ldquo;{review.text}&rdquo;
+                    </p>
+                    {/* Footer */}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1 border-t">
+                      <SiGoogle className="w-3 h-3 text-[#4285F4]" />
+                      <span>Reviewed on Google</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </StaggerItem>
+            ))}
+          </StaggerChildren>
+        )}
+
+        {/* CTA */}
+        <div className="text-center">
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="link-google-reviews-cta"
+          >
+            <Button variant="outline" className="gap-2">
+              <SiGoogle className="w-4 h-4 text-[#4285F4]" />
+              See all reviews on Google
+            </Button>
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 const FOOTER_LINKS = {
   social: {
@@ -201,120 +373,7 @@ export default function Home() {
       </section>
 
       {/* Google Reviews Section */}
-      <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="text-center mb-12 md:mb-14 space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-background border text-sm font-medium">
-              <SiGoogle className="w-4 h-4 text-[#4285F4]" />
-              <span>Google Reviews</span>
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold">What Calgary Customers Say</h2>
-            {/* Overall rating bar */}
-            <div className="flex items-center justify-center gap-3 flex-wrap">
-              <span className="text-5xl font-bold tabular-nums">4.9</span>
-              <div className="flex flex-col items-start gap-1">
-                <div className="flex gap-0.5">
-                  {[...Array(5)].map((_, i) => (
-                    <svg key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  ))}
-                </div>
-                <a
-                  href="https://g.page/r/Y9bvS5poKKYdkTZK9/review"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                  data-testid="link-google-all-reviews"
-                >
-                  <SiGoogle className="w-3 h-3 text-[#4285F4]" />
-                  Verified on Google
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Review Cards */}
-          <StaggerChildren className="grid md:grid-cols-3 gap-5 md:gap-6 mb-10">
-            {[
-              {
-                name: "Tariq A.",
-                initials: "TA",
-                date: "March 2025",
-                rating: 5,
-                text: "Booked on a Tuesday morning and my mover arrived within 2 hours. The AI quote matched almost exactly what I paid — no surprises. Couldn't be easier.",
-              },
-              {
-                name: "Jessica L.",
-                initials: "JL",
-                date: "February 2025",
-                rating: 5,
-                text: "Used LervIT for a last-minute move. The live GPS tracking is a game changer — I knew exactly when my mover was 10 minutes away. Super professional service.",
-              },
-              {
-                name: "David K.",
-                initials: "DK",
-                date: "January 2025",
-                rating: 5,
-                text: "Took 3 photos of my boxes and furniture and got an instant quote. Movers showed up on time, handled everything carefully. Will 100% use again.",
-              },
-            ].map((review, i) => (
-              <StaggerItem key={i}>
-                <Card className="h-full" data-testid={`card-review-${i}`}>
-                  <CardContent className="pt-6 pb-6 px-6 flex flex-col gap-4 h-full">
-                    {/* Reviewer row */}
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-bold text-primary">{review.initials}</span>
-                        </div>
-                        <div>
-                          <div className="font-semibold text-sm">{review.name}</div>
-                          <div className="text-xs text-muted-foreground">{review.date}</div>
-                        </div>
-                      </div>
-                      <SiGoogle className="w-5 h-5 text-[#4285F4] flex-shrink-0" />
-                    </div>
-                    {/* Stars */}
-                    <div className="flex gap-0.5">
-                      {[...Array(review.rating)].map((_, j) => (
-                        <svg key={j} className="w-4 h-4 fill-yellow-400 text-yellow-400" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </div>
-                    {/* Review text */}
-                    <p className="text-sm text-muted-foreground leading-relaxed flex-1">
-                      &ldquo;{review.text}&rdquo;
-                    </p>
-                    {/* Footer */}
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1 border-t">
-                      <SiGoogle className="w-3 h-3 text-[#4285F4]" />
-                      <span>Reviewed on Google</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </StaggerItem>
-            ))}
-          </StaggerChildren>
-
-          {/* CTA */}
-          <div className="text-center">
-            <a
-              href="https://g.page/r/Y9bvS5poKKYdkTZK9/review"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="link-google-reviews-cta"
-            >
-              <Button variant="outline" className="gap-2">
-                <SiGoogle className="w-4 h-4 text-[#4285F4]" />
-                See all reviews on Google
-              </Button>
-            </a>
-          </div>
-        </div>
-      </section>
+      <GoogleReviewsSection />
 
       {/* Footer */}
       <footer className="bg-black/90 text-white border-t border-white/10" data-testid="footer">

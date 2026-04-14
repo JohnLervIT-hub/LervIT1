@@ -1258,6 +1258,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ---- GOOGLE REVIEWS (public, cached 1 hour) ----
+  let googleReviewsCache: { data: unknown; fetchedAt: number } | null = null;
+  const GOOGLE_REVIEWS_TTL = 60 * 60 * 1000;
+
+  app.get("/api/google-reviews", async (_req: Request, res: Response) => {
+    try {
+      if (googleReviewsCache && Date.now() - googleReviewsCache.fetchedAt < GOOGLE_REVIEWS_TTL) {
+        return res.json(googleReviewsCache.data);
+      }
+
+      const apiKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(503).json({ error: "Google API key not configured" });
+
+      // Step 1: Text search to find the Place ID
+      const searchRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/textsearch/json?query=LervIT+Calgary+moving&key=${apiKey}`
+      );
+      const searchData: any = await searchRes.json();
+
+      if (!searchData.results?.length) {
+        return res.status(404).json({ error: "Business not found on Google Maps" });
+      }
+
+      const placeId: string = searchData.results[0].place_id;
+
+      // Step 2: Fetch place details — reviews, rating, and canonical Google Maps URL
+      const detailsRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,rating,user_ratings_total,reviews,url&key=${apiKey}&language=en&reviews_sort=newest`
+      );
+      const detailsData: any = await detailsRes.json();
+      const place = detailsData.result;
+
+      if (!place) return res.status(404).json({ error: "Place details not found" });
+
+      const payload = {
+        rating: place.rating ?? null,
+        totalRatings: place.user_ratings_total ?? 0,
+        mapsUrl: place.url ?? "https://www.google.com/maps/search/LervIT+Calgary",
+        reviews: (place.reviews ?? []).map((r: any) => ({
+          authorName: r.author_name,
+          rating: r.rating,
+          text: r.text,
+          relativeTime: r.relative_time_description,
+          profilePhoto: r.profile_photo_url ?? null,
+        })),
+      };
+
+      googleReviewsCache = { data: payload, fetchedAt: Date.now() };
+      return res.json(payload);
+    } catch (err) {
+      console.error("Google Reviews fetch error:", err);
+      return res.status(500).json({ error: "Failed to fetch Google reviews" });
+    }
+  });
+
   app.get("/api/movers", async (req: Request, res: Response) => {
     try {
       const userId = req.query.userId as string | undefined;
