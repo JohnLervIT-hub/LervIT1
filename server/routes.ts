@@ -40,7 +40,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, generateWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -10658,6 +10658,180 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Get abandoned bookings error:', error);
       res.status(500).json({ error: "Failed to fetch abandoned bookings" });
+    }
+  });
+
+  // ============================================================
+  // ANALYTICS EVENT BEACON
+  // ============================================================
+
+  app.post("/api/analytics/event", async (req: Request, res: Response) => {
+    try {
+      const { eventName, sessionId, page, properties } = req.body;
+      if (!eventName || typeof eventName !== "string") {
+        return res.status(400).json({ error: "eventName required" });
+      }
+      const userId = (req.session as any)?.userId ?? null;
+      await db.insert(analyticsEvents).values({
+        eventName: eventName.slice(0, 100),
+        userId: userId ?? undefined,
+        sessionId: sessionId ? String(sessionId).slice(0, 100) : undefined,
+        page: page ? String(page).slice(0, 200) : undefined,
+        properties: properties ? JSON.stringify(properties) : undefined,
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      // Silent fail — never block UX for analytics
+      res.json({ ok: false });
+    }
+  });
+
+  // ============================================================
+  // OPERATIONS DASHBOARD METRICS
+  // ============================================================
+
+  app.get("/api/admin/ops-metrics", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const now = new Date();
+
+      // Fetch raw data from existing tables
+      const [allBookings, allMovers, allNotifications, allAbandoned, allMetrics] = await Promise.all([
+        db.select().from(bookings),
+        db.select().from(moversTable),
+        db.select().from(jobNotifications),
+        db.select().from(abandonedBookings),
+        db.select().from(bookingMetricsTable),
+      ]);
+
+      // ---- BOOKING FUNNEL ----
+      // Step 1: Users who visited booking page (abandoned at step 1 OR made it further)
+      const abandonedAtStep1 = allAbandoned.filter(a => a.currentStep === 1 || a.currentStep === 2).length;
+      const abandonedAtStep2 = allAbandoned.filter(a => a.currentStep === 3).length;
+      const totalAbandoned = allAbandoned.length;
+      const totalCreatedBookings = allBookings.length;
+      const totalPaid = allBookings.filter(b => b.paymentStatus === 'paid' || b.paymentStatus === 'succeeded').length;
+      const totalCompleted = allBookings.filter(b => b.status === 'completed').length;
+      const totalConfirmed = allBookings.filter(b => ['confirmed', 'in_progress', 'completed'].includes(b.status)).length;
+      const totalStarted = totalAbandoned + totalCreatedBookings;
+
+      const funnelSteps = [
+        { label: "Started Booking", count: totalStarted },
+        { label: "Selected Mover", count: totalAbandoned - abandonedAtStep1 + totalCreatedBookings },
+        { label: "Booking Created", count: totalCreatedBookings },
+        { label: "Payment Completed", count: totalPaid },
+        { label: "Mover Accepted", count: totalConfirmed },
+        { label: "Move Completed", count: totalCompleted },
+      ];
+
+      // ---- LIVE OPS ----
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const pendingJobs = allBookings.filter(b => b.status === 'pending' && b.paymentStatus === 'paid').length;
+      const inProgressJobs = allBookings.filter(b => b.status === 'in_progress').length;
+      const pendingMoverAcceptance = allBookings.filter(b => b.status === 'confirmed' && b.moverId).length;
+      const onlineMovers = allMovers.filter(m => m.isAvailable).length;
+      const liveGpsMovers = allMovers.filter(m => m.isAvailable && m.lastLocationUpdate && new Date(m.lastLocationUpdate) > oneHourAgo).length;
+      const unverifiedMovers = allMovers.filter(m => !m.isVerified).length;
+
+      // Active job notifications breakdown
+      const pendingNotifications = allNotifications.filter(n => n.status === 'pending').length;
+      const acceptedNotifications = allNotifications.filter(n => n.status === 'accepted').length;
+      const declinedNotifications = allNotifications.filter(n => n.status === 'declined').length;
+      const expiredNotifications = allNotifications.filter(n => n.status === 'expired').length;
+      const totalNotifications = allNotifications.length;
+
+      // ---- MOVER PERFORMANCE ----
+      // Acceptance rate per mover
+      const moverNotifMap: Record<string, { total: number; accepted: number; declined: number; expired: number }> = {};
+      for (const n of allNotifications) {
+        if (!n.moverId) continue;
+        if (!moverNotifMap[n.moverId]) moverNotifMap[n.moverId] = { total: 0, accepted: 0, declined: 0, expired: 0 };
+        moverNotifMap[n.moverId].total++;
+        if (n.status === 'accepted') moverNotifMap[n.moverId].accepted++;
+        else if (n.status === 'declined') moverNotifMap[n.moverId].declined++;
+        else if (n.status === 'expired') moverNotifMap[n.moverId].expired++;
+      }
+      const moverCompletedMap: Record<string, number> = {};
+      for (const b of allBookings.filter(b => b.status === 'completed' && b.moverId)) {
+        const id = b.moverId!;
+        moverCompletedMap[id] = (moverCompletedMap[id] ?? 0) + 1;
+      }
+
+      const moverPerf = allMovers.map(m => {
+        const notifs = moverNotifMap[m.id] ?? { total: 0, accepted: 0, declined: 0, expired: 0 };
+        const completed = moverCompletedMap[m.id] ?? 0;
+        const acceptanceRate = notifs.total > 0 ? Math.round((notifs.accepted / notifs.total) * 100) : null;
+        return {
+          moverId: m.id,
+          name: m.name,
+          isAvailable: m.isAvailable,
+          isVerified: m.isVerified,
+          rating: m.rating ? parseFloat(m.rating) : null,
+          totalOffers: notifs.total,
+          accepted: notifs.accepted,
+          declined: notifs.declined,
+          expired: notifs.expired,
+          acceptanceRate,
+          completedMoves: completed,
+        };
+      }).filter(m => m.totalOffers > 0 || m.completedMoves > 0)
+        .sort((a, b) => (b.completedMoves - a.completedMoves));
+
+      // Aggregate acceptance rate (all movers)
+      const aggTotal = allNotifications.length;
+      const aggAccepted = allNotifications.filter(n => n.status === 'accepted').length;
+      const overallAcceptanceRate = aggTotal > 0 ? Math.round((aggAccepted / aggTotal) * 100) : 0;
+
+      // ---- REVENUE COHORTS (weekly, last 8 weeks) ----
+      const cohortMap: Record<string, { week: string; revenue: number; bookings: number; avgValue: number }> = {};
+      const paidBookings = allBookings.filter(b => b.paymentStatus === 'paid' || b.paymentStatus === 'succeeded');
+      for (const b of paidBookings) {
+        const d = new Date(b.createdAt);
+        // ISO week start (Monday)
+        const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1;
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() - dayOfWeek);
+        weekStart.setHours(0, 0, 0, 0);
+        const key = weekStart.toISOString().slice(0, 10);
+        if (!cohortMap[key]) cohortMap[key] = { week: key, revenue: 0, bookings: 0, avgValue: 0 };
+        cohortMap[key].revenue += parseFloat(b.price || '0');
+        cohortMap[key].bookings++;
+      }
+      const revenueCohorts = Object.values(cohortMap)
+        .sort((a, b) => a.week.localeCompare(b.week))
+        .slice(-8)
+        .map(c => ({ ...c, revenue: Math.round(c.revenue * 100) / 100, avgValue: c.bookings > 0 ? Math.round((c.revenue / c.bookings) * 100) / 100 : 0 }));
+
+      // ---- ESTIMATION ACCURACY ----
+      const metricsWithBoth = allMetrics.filter(m => m.estimatedPrice && m.actualPrice);
+      const avgPriceAccuracy = metricsWithBoth.length > 0
+        ? Math.round(metricsWithBoth.reduce((s, m) => s + parseFloat(m.priceAccuracyPercent ?? '0'), 0) / metricsWithBoth.length)
+        : null;
+      const avgVolumeAccuracy = metricsWithBoth.length > 0
+        ? Math.round(metricsWithBoth.reduce((s, m) => s + parseFloat(m.volumeAccuracyPercent ?? '0'), 0) / metricsWithBoth.length)
+        : null;
+
+      res.json({
+        funnel: funnelSteps,
+        liveOps: {
+          pendingJobs,
+          inProgressJobs,
+          pendingMoverAcceptance,
+          onlineMovers,
+          liveGpsMovers,
+          unverifiedMovers,
+          notifications: { pending: pendingNotifications, accepted: acceptedNotifications, declined: declinedNotifications, expired: expiredNotifications, total: totalNotifications },
+          overallAcceptanceRate,
+        },
+        moverPerformance: moverPerf,
+        revenueCohorts,
+        aiAccuracy: { avgPriceAccuracy, avgVolumeAccuracy, sampleSize: metricsWithBoth.length },
+        generatedAt: now.toISOString(),
+      });
+    } catch (error) {
+      console.error('[Admin] Ops metrics error:', error);
+      res.status(500).json({ error: "Failed to fetch ops metrics" });
     }
   });
 

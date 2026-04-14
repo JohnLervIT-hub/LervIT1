@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+
+const OperationsDashboard = lazy(() => import("@/pages/OperationsDashboard"));
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -927,11 +929,12 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="bookings">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="bookings">Bookings</TabsTrigger>
             <TabsTrigger value="movers">Movers</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
+            <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
           </TabsList>
 
           <TabsContent value="bookings" className="space-y-4">
@@ -1133,6 +1136,12 @@ export default function AdminDashboard() {
 
           <TabsContent value="growth" className="space-y-4">
             <GrowthDashboard />
+          </TabsContent>
+
+          <TabsContent value="operations" className="space-y-4">
+            <Suspense fallback={<div className="space-y-4 animate-pulse">{[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-muted rounded-lg" />)}</div>}>
+              <OperationsDashboard />
+            </Suspense>
           </TabsContent>
         </Tabs>
 

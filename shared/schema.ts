@@ -1061,3 +1061,28 @@ export const insertInAppNotificationSchema = createInsertSchema(inAppNotificatio
 
 export type InsertInAppNotification = z.infer<typeof insertInAppNotificationSchema>;
 export type InAppNotification = typeof inAppNotifications.$inferSelect;
+
+// ============================================================
+// ANALYTICS EVENTS - lightweight event tracking layer
+// ============================================================
+export const analyticsEvents = pgTable("analytics_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventName: varchar("event_name", { length: 100 }).notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  sessionId: varchar("session_id", { length: 100 }),
+  page: varchar("page", { length: 200 }),
+  properties: text("properties"), // JSON string for flexible metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventNameIdx: index("analytics_events_name_idx").on(table.eventName),
+  userIdIdx: index("analytics_events_user_id_idx").on(table.userId),
+  createdAtIdx: index("analytics_events_created_at_idx").on(table.createdAt),
+}));
+
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
