@@ -7,7 +7,7 @@ import HeroSection from "@/components/HeroSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
-import { SiFacebook, SiInstagram, SiLinkedin, SiStripe } from "react-icons/si";
+import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Separator } from "@/components/ui/separator";
 import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
@@ -196,6 +196,122 @@ export default function Home() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Google Reviews Section */}
+      <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="text-center mb-12 md:mb-14 space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-background border text-sm font-medium">
+              <SiGoogle className="w-4 h-4 text-[#4285F4]" />
+              <span>Google Reviews</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold">What Calgary Customers Say</h2>
+            {/* Overall rating bar */}
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <span className="text-5xl font-bold tabular-nums">4.9</span>
+              <div className="flex flex-col items-start gap-1">
+                <div className="flex gap-0.5">
+                  {[...Array(5)].map((_, i) => (
+                    <svg key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                <a
+                  href="https://g.page/r/lervit/review"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  data-testid="link-google-all-reviews"
+                >
+                  <SiGoogle className="w-3 h-3 text-[#4285F4]" />
+                  Verified on Google
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Review Cards */}
+          <StaggerChildren className="grid md:grid-cols-3 gap-5 md:gap-6 mb-10">
+            {[
+              {
+                name: "Tariq A.",
+                initials: "TA",
+                date: "March 2025",
+                rating: 5,
+                text: "Booked on a Tuesday morning and my mover arrived within 2 hours. The AI quote matched almost exactly what I paid — no surprises. Couldn't be easier.",
+              },
+              {
+                name: "Jessica L.",
+                initials: "JL",
+                date: "February 2025",
+                rating: 5,
+                text: "Used LervIT for a last-minute move. The live GPS tracking is a game changer — I knew exactly when my mover was 10 minutes away. Super professional service.",
+              },
+              {
+                name: "David K.",
+                initials: "DK",
+                date: "January 2025",
+                rating: 5,
+                text: "Took 3 photos of my boxes and furniture and got an instant quote. Movers showed up on time, handled everything carefully. Will 100% use again.",
+              },
+            ].map((review, i) => (
+              <StaggerItem key={i}>
+                <Card className="h-full" data-testid={`card-review-${i}`}>
+                  <CardContent className="pt-6 pb-6 px-6 flex flex-col gap-4 h-full">
+                    {/* Reviewer row */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm font-bold text-primary">{review.initials}</span>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-sm">{review.name}</div>
+                          <div className="text-xs text-muted-foreground">{review.date}</div>
+                        </div>
+                      </div>
+                      <SiGoogle className="w-5 h-5 text-[#4285F4] flex-shrink-0" />
+                    </div>
+                    {/* Stars */}
+                    <div className="flex gap-0.5">
+                      {[...Array(review.rating)].map((_, j) => (
+                        <svg key={j} className="w-4 h-4 fill-yellow-400 text-yellow-400" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    {/* Review text */}
+                    <p className="text-sm text-muted-foreground leading-relaxed flex-1">
+                      &ldquo;{review.text}&rdquo;
+                    </p>
+                    {/* Footer */}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1 border-t">
+                      <SiGoogle className="w-3 h-3 text-[#4285F4]" />
+                      <span>Reviewed on Google</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </StaggerItem>
+            ))}
+          </StaggerChildren>
+
+          {/* CTA */}
+          <div className="text-center">
+            <a
+              href="https://g.page/r/lervit/review"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="link-google-reviews-cta"
+            >
+              <Button variant="outline" className="gap-2">
+                <SiGoogle className="w-4 h-4 text-[#4285F4]" />
+                See all reviews on Google
+              </Button>
+            </a>
           </div>
         </div>
       </section>
