@@ -71,9 +71,9 @@ function GoogleReviewsSection() {
   const totalRatings = data?.totalRatings ?? 0;
 
   return (
-    <section className="relative py-20 md:py-28 overflow-hidden bg-gray-950 dark:bg-gray-950">
+    <section className="relative py-20 md:py-28 bg-gray-950 dark:bg-gray-950">
       {/* Subtle radial glow in background */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center">
         <div className="w-[600px] h-[600px] rounded-full bg-primary/5 blur-3xl" />
       </div>
 
