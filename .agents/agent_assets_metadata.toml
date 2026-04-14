@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "GifJ2V3leOcbRaDzlCOce"
+uri = "file://attached_assets/screenshots/6397d05f-aa2c-4df0-92ef-e226018b8f65-00-278pmwf971x7j_spock_replit_dev_mockup_preview_lervit-architecture_PhasedOrchestration.png"
+type = "image"
+title = "LervIT Phase-Gated Orchestration Architecture"
