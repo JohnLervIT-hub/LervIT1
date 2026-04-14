@@ -363,13 +363,13 @@ export default function AdminPayoutsPage() {
           </Link>
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-3 mb-1">
                 <div className="p-2 bg-green-500 rounded-lg">
                   <Wallet className="w-6 h-6 text-white" />
                 </div>
-                <h1 className="text-3xl md:text-4xl font-bold">Mover Payouts</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Mover Payouts</h1>
               </div>
-              <p className="text-muted-foreground text-lg">Manage and reconcile mover earnings</p>
+              <p className="text-sm text-muted-foreground">Manage and reconcile mover earnings</p>
             </div>
             <Button 
               variant="outline" 
@@ -387,13 +387,13 @@ export default function AdminPayoutsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Clock className="w-4 h-4" />
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
                 Total Pending
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-amber-600">
+              <div className="text-2xl font-bold tabular-nums text-amber-600">
                 ${pendingData?.totalPending || "0.00"}
               </div>
               <p className="text-xs text-muted-foreground">{pendingData?.count || 0} payouts</p>
@@ -402,13 +402,13 @@ export default function AdminPayoutsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" />
                 Ready to Pay
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold tabular-nums text-green-600">
                 ${pendingData?.readyToPay || "0.00"}
               </div>
               <p className="text-xs text-muted-foreground">{readyPayouts.length} movers verified</p>
@@ -417,13 +417,13 @@ export default function AdminPayoutsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
                 Needs Setup
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">
+              <div className="text-2xl font-bold tabular-nums text-red-600">
                 ${pendingData?.needsStripeSetup || "0.00"}
               </div>
               <p className="text-xs text-muted-foreground">{notReadyPayouts.length} movers unverified</p>
@@ -432,13 +432,13 @@ export default function AdminPayoutsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5" />
                 Total Paid
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold tabular-nums">
                 ${paidEarnings.reduce((sum, e) => sum + parseFloat(e.netAmount), 0).toFixed(2)}
               </div>
               <p className="text-xs text-muted-foreground">{paidEarnings.length} transfers completed</p>
@@ -835,14 +835,14 @@ export default function AdminPayoutsPage() {
                   <>
                     <div className="grid grid-cols-2 gap-4 mb-6">
                       <div className="p-4 bg-muted/50 rounded-lg">
-                        <p className="text-sm text-muted-foreground">Total Balance Owed</p>
-                        <p className="text-2xl font-bold text-amber-600">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total Balance Owed</p>
+                        <p className="text-2xl font-bold tabular-nums text-amber-600">
                           ${promoBalances.filter(b => !b.moverBalancePaid).reduce((sum, b) => sum + parseFloat(b.moverBalanceOwed || '0'), 0).toFixed(2)}
                         </p>
                       </div>
                       <div className="p-4 bg-muted/50 rounded-lg">
-                        <p className="text-sm text-muted-foreground">Already Paid</p>
-                        <p className="text-2xl font-bold text-green-600">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Already Paid</p>
+                        <p className="text-2xl font-bold tabular-nums text-green-600">
                           ${promoBalances.filter(b => b.moverBalancePaid).reduce((sum, b) => sum + parseFloat(b.moverBalanceOwed || '0'), 0).toFixed(2)}
                         </p>
                       </div>
@@ -923,8 +923,8 @@ export default function AdminPayoutsPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm font-medium">Selected Payouts:</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected Payouts</p>
+                <p className="text-2xl font-bold tabular-nums text-green-600">
                   ${pendingPayouts
                     .filter(p => selectedEarnings.includes(p.earningsId))
                     .reduce((sum, p) => sum + parseFloat(p.netAmount), 0)

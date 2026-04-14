@@ -133,7 +133,7 @@ export default function AdminRevenuePage() {
               <DollarSign className="w-5 h-5 text-amber-200" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold" data-testid="stat-total-revenue">
+              <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-revenue">
                 ${earnedRevenue.toFixed(2)}
               </div>
               <p className="text-xs text-amber-200 mt-1">CAD from completed moves</p>
@@ -142,33 +142,33 @@ export default function AdminRevenuePage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Week</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Week</CardTitle>
               <TrendingUp className="w-4 h-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">${revenueThisWeek.toFixed(2)}</div>
+              <div className="text-2xl font-bold tabular-nums text-green-600">${revenueThisWeek.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Last 7 days</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Month</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month</CardTitle>
               <Calendar className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">${revenueThisMonth.toFixed(2)}</div>
+              <div className="text-2xl font-bold tabular-nums text-blue-600">${revenueThisMonth.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Last 30 days</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg. Booking</CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Avg. Booking</CardTitle>
               <CreditCard className="w-4 h-4 text-purple-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">${avgBookingValue.toFixed(2)}</div>
+              <div className="text-2xl font-bold tabular-nums text-purple-600">${avgBookingValue.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Per completed move</p>
             </CardContent>
           </Card>

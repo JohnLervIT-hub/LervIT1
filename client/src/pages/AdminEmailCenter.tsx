@@ -303,7 +303,7 @@ export default function AdminEmailCenter() {
             <Mail className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">Email Center</h1>
+            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Email Center</h1>
             <p className="text-muted-foreground text-sm">Send bulk or personal emails to users</p>
           </div>
         </div>
