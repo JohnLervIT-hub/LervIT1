@@ -143,7 +143,7 @@ function RevenueTooltip({ active, payload, label }: any) {
 }
 
 export default function OperationsDashboard() {
-  const [analyticsRange, setAnalyticsRange] = useState("7");
+  const [analyticsRange, setAnalyticsRange] = useState("30");
 
   const { data, isLoading, error, refetch } = useQuery<OpsMetrics>({
     queryKey: ["/api/admin/ops-metrics"],
@@ -221,8 +221,8 @@ export default function OperationsDashboard() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">Last 24 h</SelectItem>
                 <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="14">Last 14 days</SelectItem>
                 <SelectItem value="30">Last 30 days</SelectItem>
                 <SelectItem value="90">Last 90 days</SelectItem>
               </SelectContent>
@@ -269,11 +269,11 @@ export default function OperationsDashboard() {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <AreaChart data={analyticsData.dailyTrend} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <AreaChart data={analyticsData.dailyTrend} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                             <defs>
                               <linearGradient id="pageViewGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
                                 <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                               </linearGradient>
                             </defs>
@@ -283,15 +283,23 @@ export default function OperationsDashboard() {
                               tick={{ fontSize: 10 }}
                               tickLine={false}
                               axisLine={false}
-                              interval={analyticsData.dailyTrend.length > 14 ? Math.floor(analyticsData.dailyTrend.length / 7) : 0}
+                              interval={Math.max(0, Math.ceil(analyticsData.dailyTrend.length / 7) - 1)}
+                              tickFormatter={(val: string) => {
+                                const [m, d] = val.split("-");
+                                const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                                return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}`;
+                              }}
                             />
-                            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} tickLine={false} axisLine={false} />
+                            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} tickLine={false} axisLine={false} width={28} />
                             <Tooltip
                               content={({ active, payload, label }) => {
                                 if (!active || !payload?.length) return null;
+                                const [m, d] = (label as string).split("-");
+                                const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                                const formatted = `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}`;
                                 return (
                                   <div className="rounded-lg border bg-background px-3 py-2 shadow-md text-sm">
-                                    <p className="font-semibold text-foreground">{label}</p>
+                                    <p className="font-semibold text-foreground">{formatted}</p>
                                     <p className="text-muted-foreground">{payload[0].value} page views</p>
                                   </div>
                                 );
@@ -304,8 +312,8 @@ export default function OperationsDashboard() {
                               stroke="#6366f1"
                               strokeWidth={2}
                               fill="url(#pageViewGradient)"
-                              dot={false}
-                              activeDot={{ r: 4, fill: "#6366f1" }}
+                              dot={analyticsData.dailyTrend.length <= 14 ? { r: 3, fill: "#6366f1", strokeWidth: 0 } : false}
+                              activeDot={{ r: 5, fill: "#6366f1" }}
                             />
                           </AreaChart>
                         </ResponsiveContainer>
