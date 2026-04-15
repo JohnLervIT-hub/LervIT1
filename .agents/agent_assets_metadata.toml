@@ -4,13 +4,13 @@ uploads = []
 id = "XeZyRGSnJtvk3FWDg9_vE"
 uri = "file://client/src/assets/generated_images/how_it_works_step1.png"
 type = "image"
-title = "step1 enter details phone map"
+title = "step1 phone map 70 dollars"
 
 [[generated]]
 id = "ZkKH7Wk-tjc4rqRd06jW0"
 uri = "file://client/src/assets/generated_images/how_it_works_step2.png"
 type = "image"
-title = "step2 get price laptop character"
+title = "step2 laptop price 150 dollars"
 
 [[generated]]
 id = "sIaS8VIRKq6Y6gMqIaV8m"
