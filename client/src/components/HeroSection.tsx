@@ -96,14 +96,12 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="text-white">
             <h1 className="font-display text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
-              Book Small Moves Instantly —{" "}
+              Book small moves and furniture pickup in Calgary —{" "}
               <br className="hidden md:block" />
-              Upfront Pricing,{" "}
-              <br className="hidden md:block" />
-              Live Tracking
+              Instantly.
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
-              Get a quote fast, book trusted movers, and track your move every step of the way.
+              Get upfront pricing, book verified movers, and track your move live.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-white/90 mb-8">
               <div className="flex items-center gap-1.5">
