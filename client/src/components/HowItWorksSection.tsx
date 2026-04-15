@@ -1,51 +1,73 @@
 import step1Img from "@assets/generated_images/how_it_works_step1.png";
 import step2Img from "@assets/generated_images/how_it_works_step2.png";
 import step3Img from "@assets/generated_images/how_it_works_step3.png";
+import { Zap, BadgeDollarSign, MapPin } from "lucide-react";
 
 const steps = [
   {
     number: "1",
     title: "Enter Your Details",
-    body: "Enter locations, upload photos of items and get smart price estimates.",
+    body: "Enter pickup and dropoff locations, choose your preferred date, and upload photos of your items for a smart price estimate.",
+    pill: "Instant estimate",
+    pillIcon: Zap,
     image: step1Img,
-    badgeBg: "bg-violet-600",
+    badgeGradient: "from-violet-600 to-purple-700",
+    pillBg: "bg-violet-50 dark:bg-violet-950/50",
+    pillText: "text-violet-700 dark:text-violet-300",
+    pillBorder: "border-violet-200 dark:border-violet-800",
+    glowColor: "rgba(124,58,237,0.12)",
     arrowColor: "#a78bfa",
   },
   {
     number: "2",
     title: "Get Your Price",
-    body: "See your upfront price before you book. No calls. No negotiation.",
+    body: "See your upfront price before you commit. No calls. No negotiation. No surprises — just a clear, fair quote.",
+    pill: "Upfront pricing",
+    pillIcon: BadgeDollarSign,
     image: step2Img,
-    badgeBg: "bg-blue-500",
+    badgeGradient: "from-blue-500 to-indigo-600",
+    pillBg: "bg-blue-50 dark:bg-blue-950/50",
+    pillText: "text-blue-700 dark:text-blue-300",
+    pillBorder: "border-blue-200 dark:border-blue-800",
+    glowColor: "rgba(59,130,246,0.12)",
     arrowColor: "#60a5fa",
   },
   {
     number: "3",
     title: "Book and Track",
-    body: "Confirm your booking, get matched with a verified mover, and track the move live.",
+    body: "Confirm your booking, get matched with a verified local mover, and watch your move happen live on GPS.",
+    pill: "Live GPS tracking",
+    pillIcon: MapPin,
     image: step3Img,
-    badgeBg: "bg-emerald-500",
+    badgeGradient: "from-emerald-500 to-teal-600",
+    pillBg: "bg-emerald-50 dark:bg-emerald-950/50",
+    pillText: "text-emerald-700 dark:text-emerald-300",
+    pillBorder: "border-emerald-200 dark:border-emerald-800",
+    glowColor: "rgba(16,185,129,0.12)",
     arrowColor: null,
   },
 ];
 
-function Arrow({ color }: { color: string }) {
+function ConnectorArrow({ color }: { color: string }) {
   return (
-    <div className="hidden md:flex items-center justify-center self-center w-10 flex-shrink-0 -mt-16">
-      <svg width="40" height="24" viewBox="0 0 40 24" fill="none">
+    <div className="hidden lg:flex items-center justify-center flex-shrink-0 w-14 self-center mt-8">
+      <svg width="56" height="32" viewBox="0 0 56 32" fill="none">
         <path
-          d="M0 12 C10 4, 30 20, 38 12"
+          d="M2 16 C12 6, 44 26, 54 16"
           stroke={color}
-          strokeWidth="2.5"
+          strokeWidth="2"
           strokeLinecap="round"
+          strokeDasharray="4 3"
           fill="none"
+          opacity="0.7"
         />
         <path
-          d="M32 8 L38 12 L32 16"
+          d="M46 10 L54 16 L46 22"
           stroke={color}
-          strokeWidth="2.5"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          opacity="0.9"
         />
       </svg>
     </div>
@@ -54,59 +76,119 @@ function Arrow({ color }: { color: string }) {
 
 export default function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-16 md:py-20 lg:py-24 bg-muted/30">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section
+      id="how-it-works"
+      className="relative py-20 md:py-24 lg:py-32 overflow-hidden"
+    >
+      {/* Subtle gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-muted/40 to-background pointer-events-none" />
+      {/* Faint grid pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.03] dark:opacity-[0.06] pointer-events-none"
+        style={{
+          backgroundImage:
+            "linear-gradient(#6366f1 1px, transparent 1px), linear-gradient(to right, #6366f1 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-12 md:mb-16 space-y-3">
-          <h2 className="text-3xl md:text-4xl font-bold">How LervIT Works</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+        <div className="text-center mb-16 md:mb-20 space-y-4">
+          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold border border-primary/20">
+            Simple 3-step process
+          </span>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+            How LervIT Works
+          </h2>
+          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             From quote to mover at your door —{" "}
             <span className="font-semibold text-foreground">in minutes, not hours.</span>
           </p>
         </div>
 
-        {/* Cards + arrows row */}
-        <div className="flex flex-col md:flex-row items-stretch gap-4 md:gap-0">
-          {steps.map((step, i) => (
-            <div key={i} className="flex md:flex-row items-stretch flex-1 min-w-0">
-              {/* Card */}
+        {/* Cards row */}
+        <div className="flex flex-col lg:flex-row items-start gap-6 lg:gap-0">
+          {steps.map((step, i) => {
+            const PillIcon = step.pillIcon;
+            return (
               <div
-                className="flex flex-col w-full rounded-2xl bg-white dark:bg-card border border-border shadow-sm overflow-hidden"
-                data-testid={`step-${i}`}
+                key={i}
+                className="flex lg:flex-row items-start flex-1 min-w-0 w-full"
               >
-                {/* Step badge + title */}
-                <div className="flex flex-col items-center pt-5 pb-3 px-5">
-                  <div className={`w-12 h-12 rounded-full ${step.badgeBg} flex items-center justify-center shadow-md mb-3`}>
-                    <span className="text-white font-bold text-2xl leading-none">{step.number}</span>
+                {/* Card wrapper — extra top padding gives room for floating badge */}
+                <div className="relative flex flex-col flex-1 min-w-0 pt-7">
+                  {/* Floating numbered badge */}
+                  <div
+                    className={`absolute -top-0 left-1/2 -translate-x-1/2 z-10 w-14 h-14 rounded-full bg-gradient-to-br ${step.badgeGradient} flex items-center justify-center shadow-lg`}
+                  >
+                    <span className="text-white font-extrabold text-2xl leading-none">
+                      {step.number}
+                    </span>
                   </div>
-                  <h3 className="font-bold text-base text-left w-full">
-                    <span className="text-muted-foreground mr-1">&gt;</span>
-                    {step.title}
-                  </h3>
+
+                  {/* Card */}
+                  <div
+                    className="flex flex-col h-full rounded-2xl bg-white dark:bg-card border border-border/60 shadow-md transition-shadow duration-300 hover:shadow-xl"
+                    data-testid={`step-${i}`}
+                    style={{
+                      boxShadow: `0 4px 24px 0 ${step.glowColor}, 0 1px 4px 0 rgba(0,0,0,0.06)`,
+                    }}
+                  >
+                    {/* Illustration */}
+                    <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-b from-muted/60 to-muted/20 pt-10 px-6 pb-4 flex items-center justify-center min-h-[220px]">
+                      <img
+                        src={step.image}
+                        alt={step.title}
+                        className="w-full max-h-48 object-contain drop-shadow-md"
+                        draggable={false}
+                      />
+                    </div>
+
+                    {/* Divider */}
+                    <div className="h-px bg-border mx-6" />
+
+                    {/* Text content */}
+                    <div className="flex flex-col gap-3 px-6 py-5 flex-1">
+                      {/* Feature pill */}
+                      <span
+                        className={`inline-flex items-center gap-1.5 self-start text-xs font-semibold px-2.5 py-1 rounded-full border ${step.pillBg} ${step.pillText} ${step.pillBorder}`}
+                      >
+                        <PillIcon className="w-3 h-3" />
+                        {step.pill}
+                      </span>
+
+                      <h3 className="font-bold text-xl leading-snug">{step.title}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {step.body}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Illustration */}
-                <div className="flex-1 flex items-center justify-center px-4 pb-2">
-                  <img
-                    src={step.image}
-                    alt={step.title}
-                    className="w-full max-h-52 object-contain"
-                    draggable={false}
-                  />
-                </div>
-
-                {/* Divider + text */}
-                <div className="border-t border-border mx-0" />
-                <div className="px-5 py-4 text-center">
-                  <h4 className="font-bold text-base mb-1">{step.title}</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.body}</p>
-                </div>
+                {/* Connector arrow between cards */}
+                {step.arrowColor && (
+                  <ConnectorArrow color={step.arrowColor} />
+                )}
               </div>
+            );
+          })}
+        </div>
 
-              {/* Arrow between cards */}
-              {step.arrowColor && <Arrow color={step.arrowColor} />}
-            </div>
-          ))}
+        {/* Bottom CTA strip */}
+        <div className="mt-14 flex flex-col sm:flex-row items-center justify-center gap-3 text-center">
+          <p className="text-muted-foreground text-sm">
+            Ready to experience a smarter move?
+          </p>
+          <a
+            href="/request-move"
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-primary text-white text-sm font-semibold shadow-md hover:opacity-90 transition-opacity"
+          >
+            Get a free quote
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
         </div>
       </div>
     </section>
