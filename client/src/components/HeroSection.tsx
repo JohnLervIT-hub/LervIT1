@@ -120,7 +120,7 @@ export default function HeroSection() {
           </div>
 
           <div className="bg-card/95 backdrop-blur-sm p-6 md:p-8 rounded-xl border border-card-border shadow-xl">
-            <h2 className="text-2xl font-bold mb-6">Get Your Free Quote</h2>
+            <h2 className="text-2xl font-bold mb-6">Get Your Price</h2>
             <div className="space-y-4">
               <div>
                 <Label htmlFor="pickup" className="text-base font-semibold mb-2 block">
