@@ -8,7 +8,7 @@ const steps = [
   {
     number: "1",
     title: "Enter Your Details",
-    body: "Enter pickup and dropoff locations, choose your preferred date, and upload photos of your items for a smart price estimate.",
+    body: "Add your pickup and dropoff details to get started.",
     pill: "Instant estimate",
     pillIcon: Zap,
     image: step1Img,
@@ -22,7 +22,7 @@ const steps = [
   {
     number: "2",
     title: "Get Your Price",
-    body: "See your upfront price before you commit. No calls. No negotiation. No surprises — just a clear, fair quote.",
+    body: "See your upfront price before you book. No calls. No negotiation.",
     pill: "Upfront pricing",
     pillIcon: BadgeDollarSign,
     image: step2Img,
