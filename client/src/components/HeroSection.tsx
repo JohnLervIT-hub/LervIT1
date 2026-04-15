@@ -6,10 +6,6 @@ import { useState, Component, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import heroImage from "@assets/generated_images/moving_truck_calgary_hero.png";
-import moverAvatar1 from "@assets/generated_images/mover_avatar_1.png";
-import moverAvatar2 from "@assets/generated_images/mover_avatar_2.png";
-import moverAvatar3 from "@assets/generated_images/mover_avatar_3.png";
-import moverAvatar4 from "@assets/generated_images/mover_avatar_4.png";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 
 // Error boundary for address inputs
@@ -205,13 +201,18 @@ export default function HeroSection() {
               <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 py-1 text-center">
                 {/* Overlapping mover avatars */}
                 <div className="flex items-center shrink-0">
-                  {[moverAvatar1, moverAvatar2, moverAvatar3, moverAvatar4].map((src, i) => (
-                    <img
+                  {[
+                    { initials: "MK", bg: "bg-blue-500" },
+                    { initials: "SR", bg: "bg-emerald-500" },
+                    { initials: "JT", bg: "bg-violet-500" },
+                    { initials: "RB", bg: "bg-orange-500" },
+                  ].map((m, i) => (
+                    <div
                       key={i}
-                      src={src}
-                      alt={`Mover ${i + 1}`}
-                      className="w-8 h-8 rounded-full border-2 border-card object-cover object-top -ml-2 first:ml-0"
-                    />
+                      className={`w-7 h-7 rounded-full ${m.bg} border-2 border-card flex items-center justify-center text-white text-[10px] font-bold -ml-2 first:ml-0`}
+                    >
+                      {m.initials}
+                    </div>
                   ))}
                 </div>
                 {/* Stars + rating */}
