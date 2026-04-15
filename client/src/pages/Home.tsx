@@ -8,6 +8,7 @@ import HeroSection from "@/components/HeroSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
@@ -393,6 +394,53 @@ export default function Home() {
               </StaggerItem>
             ))}
           </StaggerChildren>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-16 md:py-20 bg-background">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 space-y-3">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
+              Common Questions
+            </span>
+            <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight">
+              Frequently Asked
+            </h2>
+          </div>
+          <Accordion type="single" collapsible className="space-y-3">
+            {[
+              {
+                q: "How is pricing calculated?",
+                a: "Pricing is determined by AI analysis of your item volume from photos, along with the driving distance, access factors (stairs, elevators), and estimated time. You see the full price upfront — no hidden fees, no surprises.",
+              },
+              {
+                q: "Are movers background-checked and insured?",
+                a: "Yes. All LervIT movers go through background checks, vehicle inspections, and identity verification before they're allowed on the platform. Platform-provided liability coverage applies to every move.",
+              },
+              {
+                q: "Can I get same-day service?",
+                a: "In most cases yes — depending on mover availability in your area, a mover can be at your door within minutes of booking.",
+              },
+              {
+                q: "What is your cancellation policy?",
+                a: "You can cancel for free within the cancellation window. Late cancellations may incur a small fee. If a mover cancels on you, you'll be rematched at no extra cost.",
+              },
+              {
+                q: "What if there is damage or a problem?",
+                a: "You can report issues directly through the app. Our support team reviews every claim and will arrange a resolution — including refunds or re-service where applicable.",
+              },
+            ].map(({ q, a }, i) => (
+              <AccordionItem key={i} value={`faq-${i}`} className="border border-border rounded-lg px-5">
+                <AccordionTrigger className="text-left font-semibold text-base py-4 hover:no-underline">
+                  {q}
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground text-sm leading-relaxed pb-4">
+                  {a}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </section>
 
