@@ -1,190 +1,225 @@
 function IllustrationEnterDetails() {
   return (
-    <svg viewBox="0 0 220 170" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      {/* Phone frame */}
-      <rect x="62" y="8" width="96" height="154" rx="16" fill="#1e1b4b" />
-      <rect x="68" y="16" width="84" height="138" rx="10" fill="#ede9fe" />
-      {/* Status bar notch */}
-      <rect x="90" y="16" width="40" height="8" rx="4" fill="#1e1b4b" />
+    <svg viewBox="0 0 220 175" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      {/* Background circle */}
+      <circle cx="110" cy="88" r="72" fill="#ede9fe" />
 
-      {/* Map background tiles */}
-      <rect x="68" y="24" width="84" height="52" rx="6" fill="#ddd6fe" />
-      <line x1="68" y1="38" x2="152" y2="38" stroke="#c4b5fd" strokeWidth="0.6" />
-      <line x1="68" y1="52" x2="152" y2="52" stroke="#c4b5fd" strokeWidth="0.6" />
-      <line x1="68" y1="66" x2="152" y2="66" stroke="#c4b5fd" strokeWidth="0.6" />
-      <line x1="88" y1="24" x2="88" y2="76" stroke="#c4b5fd" strokeWidth="0.6" />
-      <line x1="110" y1="24" x2="110" y2="76" stroke="#c4b5fd" strokeWidth="0.6" />
-      <line x1="132" y1="24" x2="132" y2="76" stroke="#c4b5fd" strokeWidth="0.6" />
-      {/* Road */}
-      <path d="M68 56 Q100 46 152 50" stroke="#a78bfa" strokeWidth="3" strokeLinecap="round" />
+      {/* Person body */}
+      <rect x="88" y="108" width="44" height="38" rx="10" fill="#7c3aed" />
+      {/* Collar */}
+      <path d="M104 108 L110 116 L116 108" fill="#5b21b6" />
 
-      {/* Pickup pin (green) */}
-      <ellipse cx="92" cy="55" rx="5" ry="2" fill="#059669" opacity="0.3" />
-      <path d="M92 32 C87 32 83 36 83 41 C83 47 92 55 92 55 C92 55 101 47 101 41 C101 36 97 32 92 32Z" fill="#10b981" />
-      <circle cx="92" cy="41" r="3.5" fill="white" />
+      {/* Left arm extended holding phone */}
+      <path d="M88 118 Q68 122 62 130" stroke="#f4a261" strokeWidth="11" strokeLinecap="round" />
+      {/* Right arm down */}
+      <path d="M132 118 Q148 124 150 134" stroke="#f4a261" strokeWidth="11" strokeLinecap="round" />
 
-      {/* Dropoff pin (violet) */}
-      <ellipse cx="130" cy="62" rx="5" ry="2" fill="#7c3aed" opacity="0.3" />
-      <path d="M130 39 C125 39 121 43 121 48 C121 54 130 62 130 62 C130 62 139 54 139 48 C139 43 135 39 130 39Z" fill="#7c3aed" />
-      <circle cx="130" cy="48" r="3.5" fill="white" />
+      {/* Legs */}
+      <rect x="93" y="142" width="14" height="22" rx="7" fill="#5b21b6" />
+      <rect x="113" y="142" width="14" height="22" rx="7" fill="#5b21b6" />
+      {/* Shoes */}
+      <ellipse cx="100" cy="164" rx="9" ry="5" fill="#1e1b4b" />
+      <ellipse cx="120" cy="164" rx="9" ry="5" fill="#1e1b4b" />
 
-      {/* Form fields below map */}
-      <rect x="72" y="82" width="76" height="14" rx="4" fill="white" />
-      <circle cx="81" cy="89" r="3" fill="#10b981" />
-      <rect x="87" y="86" width="40" height="2.5" rx="1.5" fill="#d1fae5" />
-      <rect x="87" y="90" width="28" height="2" rx="1" fill="#d1fae5" />
+      {/* Head */}
+      <circle cx="110" cy="90" r="22" fill="#f4a261" />
+      {/* Hair */}
+      <path d="M89 86 Q90 68 110 66 Q130 68 131 86" fill="#1e1b4b" />
+      <ellipse cx="110" cy="66" rx="21" ry="8" fill="#1e1b4b" />
+      {/* Eyes */}
+      <ellipse cx="103" cy="89" rx="3" ry="3.5" fill="#1e1b4b" />
+      <ellipse cx="117" cy="89" rx="3" ry="3.5" fill="#1e1b4b" />
+      {/* Eye shine */}
+      <circle cx="104.5" cy="87.5" r="1" fill="white" />
+      <circle cx="118.5" cy="87.5" r="1" fill="white" />
+      {/* Smile */}
+      <path d="M104 96 Q110 101 116 96" stroke="#1e1b4b" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      {/* Eyebrows */}
+      <path d="M100 85 Q103 83 106 85" stroke="#1e1b4b" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      <path d="M114 85 Q117 83 120 85" stroke="#1e1b4b" strokeWidth="1.5" strokeLinecap="round" fill="none" />
 
-      <rect x="72" y="100" width="76" height="14" rx="4" fill="white" />
-      <circle cx="81" cy="107" r="3" fill="#7c3aed" />
-      <rect x="87" y="104" width="40" height="2.5" rx="1.5" fill="#ede9fe" />
-      <rect x="87" y="108" width="28" height="2" rx="1" fill="#ede9fe" />
+      {/* Phone held in left hand */}
+      <rect x="40" y="118" width="26" height="42" rx="5" fill="#1e1b4b" />
+      <rect x="43" y="122" width="20" height="34" rx="3" fill="#ddd6fe" />
+      {/* Phone screen content */}
+      <circle cx="50" cy="130" r="2" fill="#10b981" />
+      <rect x="54" y="128.5" width="8" height="2" rx="1" fill="#a78bfa" />
+      <circle cx="50" cy="138" r="2" fill="#7c3aed" />
+      <rect x="54" y="136.5" width="8" height="2" rx="1" fill="#a78bfa" />
+      <rect x="45" y="145" width="16" height="6" rx="2" fill="#7c3aed" />
+      <rect x="48" y="147" width="10" height="2" rx="1" fill="white" opacity="0.9" />
 
-      {/* Upload photo row */}
-      <rect x="72" y="118" width="76" height="14" rx="4" fill="white" />
-      <rect x="77" y="122" width="14" height="10" rx="2" fill="#ddd6fe" />
-      <path d="M84 130 L84 126 L87 128 Z" fill="#7c3aed" />
-      <rect x="95" y="124" width="30" height="2.5" rx="1.5" fill="#ddd6fe" />
-      <rect x="95" y="128" width="20" height="2" rx="1" fill="#ddd6fe" />
+      {/* Map pin floating top-right */}
+      <circle cx="175" cy="55" r="18" fill="#7c3aed" opacity="0.15" />
+      <path d="M175 40 C169 40 164 45 164 51 C164 58 175 68 175 68 C175 68 186 58 186 51 C186 45 181 40 175 40Z" fill="#7c3aed" />
+      <circle cx="175" cy="51" r="4" fill="white" />
 
-      {/* CTA button */}
-      <rect x="72" y="136" width="76" height="13" rx="4" fill="#7c3aed" />
-      <rect x="88" y="140" width="44" height="2.5" rx="1.5" fill="white" opacity="0.9" />
-      <rect x="95" y="143.5" width="30" height="2" rx="1" fill="white" opacity="0.5" />
+      {/* AI sparkle */}
+      <circle cx="48" cy="80" r="14" fill="#10b981" opacity="0.15" />
+      <circle cx="48" cy="80" r="10" fill="#10b981" />
+      <text x="48" y="84" textAnchor="middle" fill="white" fontSize="9" fontWeight="800">AI</text>
 
-      {/* Home button */}
-      <rect x="97" y="151" width="26" height="3" rx="1.5" fill="#4c1d95" />
-
-      {/* Floating camera badge */}
-      <circle cx="175" cy="42" r="18" fill="#7c3aed" opacity="0.15" />
-      <circle cx="175" cy="42" r="13" fill="#7c3aed" />
-      <rect x="170" y="38" width="10" height="8" rx="2" fill="white" />
-      <circle cx="175" cy="42" r="2.5" fill="#7c3aed" />
-
-      {/* Floating AI sparkle */}
-      <circle cx="43" cy="78" r="16" fill="#10b981" opacity="0.15" />
-      <circle cx="43" cy="78" r="11" fill="#10b981" />
-      <text x="43" y="82" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">AI</text>
+      {/* Stars/sparkles */}
+      <path d="M160 80 L161.5 84 L165 85 L161.5 86 L160 90 L158.5 86 L155 85 L158.5 84 Z" fill="#f59e0b" />
+      <path d="M172 100 L173 103 L176 104 L173 105 L172 108 L171 105 L168 104 L171 103 Z" fill="#f59e0b" opacity="0.6" />
     </svg>
   );
 }
 
 function IllustrationGetPrice() {
   return (
-    <svg viewBox="0 0 220 170" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      {/* Receipt / quote card */}
-      <rect x="38" y="14" width="144" height="142" rx="14" fill="#1e1b4b" />
-      <rect x="44" y="20" width="132" height="130" rx="10" fill="#f5f3ff" />
+    <svg viewBox="0 0 220 175" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      {/* Background circle */}
+      <circle cx="110" cy="88" r="72" fill="#d1fae5" />
 
-      {/* Torn receipt top edge */}
-      <path d="M44 44 Q50 40 56 44 Q62 40 68 44 Q74 40 80 44 Q86 40 92 44 Q98 40 104 44 Q110 40 116 44 Q122 40 128 44 Q134 40 140 44 Q146 40 152 44 Q158 40 164 44 Q170 40 176 44" stroke="#ddd6fe" strokeWidth="1.5" fill="none" />
+      {/* Person body */}
+      <rect x="54" y="108" width="44" height="38" rx="10" fill="#10b981" />
+      {/* Collar */}
+      <path d="M70 108 L76 116 L82 108" fill="#059669" />
 
-      {/* LervIT brand label */}
-      <rect x="80" y="26" width="60" height="12" rx="4" fill="#7c3aed" />
-      <rect x="88" y="29" width="44" height="2.5" rx="1.5" fill="white" opacity="0.9" />
-      <rect x="93" y="32.5" width="34" height="2" rx="1" fill="white" opacity="0.5" />
+      {/* Left arm down */}
+      <path d="M54 118 Q40 126 38 136" stroke="#f4a261" strokeWidth="11" strokeLinecap="round" />
+      {/* Right arm raised pointing at quote */}
+      <path d="M98 115 Q120 105 138 98" stroke="#f4a261" strokeWidth="11" strokeLinecap="round" />
 
-      {/* Big price display */}
-      <text x="110" y="80" textAnchor="middle" fill="#1e1b4b" fontSize="32" fontWeight="800">$149</text>
-      <text x="110" y="92" textAnchor="middle" fill="#7c3aed" fontSize="9" fontWeight="600" letterSpacing="1">UPFRONT PRICE</text>
+      {/* Legs */}
+      <rect x="59" y="142" width="14" height="22" rx="7" fill="#059669" />
+      <rect x="79" y="142" width="14" height="22" rx="7" fill="#059669" />
+      {/* Shoes */}
+      <ellipse cx="66" cy="164" rx="9" ry="5" fill="#1e1b4b" />
+      <ellipse cx="86" cy="164" rx="9" ry="5" fill="#1e1b4b" />
 
-      {/* Breakdown rows */}
-      <line x1="52" y1="100" x2="168" y2="100" stroke="#ddd6fe" strokeWidth="1" strokeDasharray="3 2" />
-      <rect x="52" y="106" width="50" height="2.5" rx="1.5" fill="#a78bfa" opacity="0.6" />
-      <rect x="136" y="106" width="24" height="2.5" rx="1.5" fill="#1e1b4b" opacity="0.5" />
-      <rect x="52" y="112" width="40" height="2.5" rx="1.5" fill="#a78bfa" opacity="0.6" />
-      <rect x="140" y="112" width="20" height="2.5" rx="1.5" fill="#1e1b4b" opacity="0.5" />
-      <rect x="52" y="118" width="55" height="2.5" rx="1.5" fill="#a78bfa" opacity="0.6" />
-      <rect x="134" y="118" width="26" height="2.5" rx="1.5" fill="#1e1b4b" opacity="0.5" />
-      <line x1="52" y1="125" x2="168" y2="125" stroke="#ddd6fe" strokeWidth="1" />
+      {/* Head */}
+      <circle cx="76" cy="90" r="22" fill="#f4a261" />
+      {/* Hair */}
+      <path d="M55 86 Q56 68 76 66 Q96 68 97 86" fill="#92400e" />
+      <ellipse cx="76" cy="66" rx="21" ry="8" fill="#92400e" />
+      {/* Eyes — wide open, excited */}
+      <ellipse cx="69" cy="89" rx="3.5" ry="4" fill="#1e1b4b" />
+      <ellipse cx="83" cy="89" rx="3.5" ry="4" fill="#1e1b4b" />
+      <circle cx="70.5" cy="87.5" r="1.2" fill="white" />
+      <circle cx="84.5" cy="87.5" r="1.2" fill="white" />
+      {/* Big smile */}
+      <path d="M68 97 Q76 104 84 97" stroke="#1e1b4b" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <path d="M69 97 Q76 103 83 97" fill="#ef4444" opacity="0.3" />
+      {/* Eyebrows raised */}
+      <path d="M66 83 Q69.5 80 73 83" stroke="#92400e" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      <path d="M80 83 Q83.5 80 87 83" stroke="#92400e" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      {/* Cheeks */}
+      <circle cx="63" cy="95" r="5" fill="#f87171" opacity="0.35" />
+      <circle cx="89" cy="95" r="5" fill="#f87171" opacity="0.35" />
 
-      {/* Total row */}
-      <rect x="52" y="130" width="30" height="3" rx="1.5" fill="#1e1b4b" opacity="0.8" />
-      <rect x="128" y="130" width="32" height="3" rx="1.5" fill="#7c3aed" />
-
+      {/* Floating quote card */}
+      <rect x="128" y="52" width="74" height="88" rx="10" fill="white" />
+      <rect x="128" y="52" width="74" height="88" rx="10" stroke="#10b981" strokeWidth="2" />
+      {/* Card header */}
+      <rect x="128" y="52" width="74" height="20" rx="10" fill="#10b981" />
+      <rect x="128" y="62" width="74" height="10" fill="#10b981" />
+      <rect x="136" y="57" width="40" height="2.5" rx="1.5" fill="white" opacity="0.9" />
+      {/* Big price */}
+      <text x="165" y="98" textAnchor="middle" fill="#1e1b4b" fontSize="24" fontWeight="800">$149</text>
+      <rect x="136" y="101" width="58" height="1.5" stroke="#e5e7eb" fill="#e5e7eb" />
+      {/* Line items */}
+      <rect x="136" y="107" width="32" height="2" rx="1" fill="#d1d5db" />
+      <rect x="178" y="107" width="16" height="2" rx="1" fill="#6b7280" />
+      <rect x="136" y="113" width="26" height="2" rx="1" fill="#d1d5db" />
+      <rect x="180" y="113" width="14" height="2" rx="1" fill="#6b7280" />
+      {/* Green checkmark badge */}
+      <circle cx="190" cy="80" r="12" fill="#10b981" />
+      <path d="M184 80 L188 84 L196 75" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {/* Confirm button */}
-      <rect x="52" y="138" width="116" height="8" rx="4" fill="#7c3aed" />
-      <rect x="72" y="140.5" width="76" height="2.5" rx="1.5" fill="white" opacity="0.9" />
+      <rect x="136" y="120" width="58" height="12" rx="6" fill="#10b981" />
+      <rect x="146" y="123.5" width="38" height="2.5" rx="1.5" fill="white" opacity="0.9" />
 
-      {/* Shield badge top-right */}
-      <circle cx="178" cy="32" r="16" fill="#10b981" opacity="0.12" />
-      <circle cx="178" cy="32" r="12" fill="#10b981" />
-      <path d="M178 24 L184 27 L184 33 C184 37 178 40 178 40 C178 40 172 37 172 33 L172 27 Z" fill="white" opacity="0.95" />
-      <path d="M175 32 L177 34 L181 30" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-
-      {/* No-calls badge */}
-      <circle cx="42" cy="38" r="16" fill="#f59e0b" opacity="0.12" />
-      <circle cx="42" cy="38" r="12" fill="#f59e0b" />
-      <path d="M38 34 C37 33 37 32 38 31 L39 30 C39.5 29.5 40 30 40 30 L41.5 32 C42 32.5 41.5 33 41.5 33 C41 33.5 41 34 42 35 L45 38 C46 39 46.5 38.5 47 38.5 C47 38.5 47.5 38 48 38.5 L50 40 C50 40 50.5 40.5 50 41 L49 42 C48 43 47 43 46 42 C43 40 39 37 38 34Z" fill="white" />
-      <line x1="38" y1="44" x2="46" y2="32" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+      {/* Stars floating */}
+      <path d="M116 58 L117.5 62 L121 63 L117.5 64 L116 68 L114.5 64 L111 63 L114.5 62 Z" fill="#f59e0b" />
+      <path d="M42 100 L43 102.5 L46 103.5 L43 104.5 L42 107 L41 104.5 L38 103.5 L41 102.5 Z" fill="#f59e0b" opacity="0.6" />
     </svg>
   );
 }
 
 function IllustrationBookAndTrack() {
   return (
-    <svg viewBox="0 0 220 170" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      {/* Map background */}
-      <rect x="24" y="18" width="172" height="110" rx="14" fill="#ddd6fe" />
-      {/* Map grid */}
-      <line x1="24" y1="46" x2="196" y2="46" stroke="#c4b5fd" strokeWidth="0.7" />
-      <line x1="24" y1="74" x2="196" y2="74" stroke="#c4b5fd" strokeWidth="0.7" />
-      <line x1="24" y1="102" x2="196" y2="102" stroke="#c4b5fd" strokeWidth="0.7" />
-      <line x1="66" y1="18" x2="66" y2="128" stroke="#c4b5fd" strokeWidth="0.7" />
-      <line x1="110" y1="18" x2="110" y2="128" stroke="#c4b5fd" strokeWidth="0.7" />
-      <line x1="154" y1="18" x2="154" y2="128" stroke="#c4b5fd" strokeWidth="0.7" />
+    <svg viewBox="0 0 220 175" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      {/* Background circle */}
+      <circle cx="110" cy="88" r="72" fill="#dbeafe" />
 
-      {/* Route path */}
-      <path d="M55 108 Q80 60 150 48" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round" strokeDasharray="6 3" />
+      {/* Ground / path line */}
+      <ellipse cx="110" cy="168" rx="68" ry="8" fill="#bfdbfe" opacity="0.6" />
 
-      {/* Destination pin (pulsing rings) */}
-      <circle cx="150" cy="48" r="16" fill="#10b981" opacity="0.12" />
-      <circle cx="150" cy="48" r="10" fill="#10b981" opacity="0.2" />
-      <path d="M150 32 C144 32 139 37 139 43 C139 50 150 58 150 58 C150 58 161 50 161 43 C161 37 156 32 150 32Z" fill="#10b981" />
-      <circle cx="150" cy="43" r="4" fill="white" />
+      {/* Person body — mover */}
+      <rect x="82" y="108" width="40" height="36" rx="9" fill="#3b82f6" />
+      {/* Hi-vis stripe */}
+      <rect x="82" y="122" width="40" height="6" rx="0" fill="#fbbf24" opacity="0.7" />
+      {/* Collar */}
+      <path d="M96 108 L102 115 L108 108" fill="#2563eb" />
 
-      {/* Live truck */}
-      <g transform="translate(44,94)">
-        {/* Truck body */}
-        <rect x="0" y="4" width="26" height="16" rx="3" fill="#7c3aed" />
-        <rect x="18" y="0" width="12" height="14" rx="2" fill="#5b21b6" />
-        {/* Cab windshield */}
-        <rect x="19" y="2" width="9" height="7" rx="1" fill="#a78bfa" opacity="0.7" />
-        {/* Wheels */}
-        <circle cx="6" cy="21" r="4" fill="#1e1b4b" />
-        <circle cx="6" cy="21" r="2" fill="#c4b5fd" />
-        <circle cx="22" cy="21" r="4" fill="#1e1b4b" />
-        <circle cx="22" cy="21" r="2" fill="#c4b5fd" />
-        {/* Package in truck */}
-        <rect x="4" y="6" width="12" height="10" rx="1" fill="#a78bfa" />
-        <line x1="10" y1="6" x2="10" y2="16" stroke="#7c3aed" strokeWidth="0.8" />
-        <line x1="4" y1="11" x2="16" y2="11" stroke="#7c3aed" strokeWidth="0.8" />
-      </g>
+      {/* Left arm up holding box */}
+      <path d="M82 114 Q62 106 52 96" stroke="#f4a261" strokeWidth="11" strokeLinecap="round" />
+      {/* Right arm up holding box */}
+      <path d="M122 114 Q142 106 152 96" stroke="#f4a261" strokeWidth="11" strokeLinecap="round" />
 
+      {/* Legs walking */}
+      <rect x="85" y="140" width="14" height="24" rx="7" fill="#2563eb" transform="rotate(-8 92 140)" />
+      <rect x="105" y="140" width="14" height="24" rx="7" fill="#2563eb" transform="rotate(8 112 140)" />
+      {/* Boots */}
+      <ellipse cx="90" cy="163" rx="10" ry="5" fill="#1e3a8a" transform="rotate(-8 90 163)" />
+      <ellipse cx="114" cy="163" rx="10" ry="5" fill="#1e3a8a" transform="rotate(8 114 163)" />
+
+      {/* Head */}
+      <circle cx="102" cy="90" r="21" fill="#f4a261" />
+      {/* Hard hat */}
+      <path d="M81 88 Q82 70 102 68 Q122 70 123 88" fill="#fbbf24" />
+      <rect x="79" y="86" width="46" height="7" rx="3" fill="#f59e0b" />
+      {/* Eyes — focused/determined */}
+      <ellipse cx="95" cy="90" rx="3" ry="3" fill="#1e1b4b" />
+      <ellipse cx="109" cy="90" rx="3" ry="3" fill="#1e1b4b" />
+      <circle cx="96.2" cy="88.8" r="1" fill="white" />
+      <circle cx="110.2" cy="88.8" r="1" fill="white" />
+      {/* Friendly smile */}
+      <path d="M96 97 Q102 102 108 97" stroke="#1e1b4b" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      {/* Eyebrows */}
+      <path d="M92 86 Q95 84 98 86" stroke="#92400e" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      <path d="M106 86 Q109 84 112 86" stroke="#92400e" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      {/* Cheeks */}
+      <circle cx="88" cy="95" r="5" fill="#f87171" opacity="0.3" />
+      <circle cx="116" cy="95" r="5" fill="#f87171" opacity="0.3" />
+
+      {/* Box being carried */}
+      <rect x="48" y="66" width="52" height="40" rx="6" fill="#a78bfa" />
+      <rect x="48" y="66" width="52" height="40" rx="6" stroke="#7c3aed" strokeWidth="1.5" />
+      {/* Box tape cross */}
+      <line x1="74" y1="66" x2="74" y2="106" stroke="#7c3aed" strokeWidth="2" />
+      <line x1="48" y1="86" x2="100" y2="86" stroke="#7c3aed" strokeWidth="2" />
+      {/* LervIT label on box */}
+      <rect x="56" y="74" width="36" height="14" rx="3" fill="#7c3aed" />
+      <rect x="60" y="77.5" width="28" height="2.5" rx="1.5" fill="white" opacity="0.9" />
+      <rect x="63" y="81.5" width="22" height="2" rx="1" fill="white" opacity="0.5" />
+
+      {/* Live tracking card — floating right */}
+      <rect x="142" y="60" width="66" height="56" rx="10" fill="white" />
+      <rect x="142" y="60" width="66" height="56" rx="10" stroke="#3b82f6" strokeWidth="1.5" />
+      {/* Map miniature inside card */}
+      <rect x="148" y="66" width="54" height="28" rx="4" fill="#dbeafe" />
+      {/* Route dots */}
+      <circle cx="158" cy="80" r="3" fill="#3b82f6" />
+      <path d="M158 80 Q170 72 188 74" stroke="#3b82f6" strokeWidth="1.5" strokeDasharray="3 2" strokeLinecap="round" />
+      <circle cx="188" cy="74" r="3" fill="#10b981" />
       {/* Live badge */}
-      <rect x="34" y="80" width="34" height="12" rx="6" fill="#ef4444" />
-      <circle cx="43" cy="86" r="2.5" fill="white" />
-      <rect x="48" y="84" width="14" height="2.5" rx="1.5" fill="white" opacity="0.9" />
+      <rect x="150" y="98" width="30" height="11" rx="5" fill="#ef4444" />
+      <circle cx="158" cy="103.5" r="2.5" fill="white" />
+      <rect x="163" y="101.5" width="12" height="2.5" rx="1.5" fill="white" opacity="0.9" />
+      {/* ETA */}
+      <rect x="184" y="98" width="20" height="11" rx="5" fill="#10b981" />
+      <rect x="187" y="101.5" width="14" height="2.5" rx="1.5" fill="white" opacity="0.9" />
 
-      {/* ETA card floating */}
-      <rect x="120" y="104" width="68" height="32" rx="8" fill="white" />
-      <rect x="126" y="110" width="20" height="2.5" rx="1.5" fill="#a78bfa" />
-      <text x="126" y="126" fill="#1e1b4b" fontSize="12" fontWeight="800">12 min</text>
-      <rect x="152" y="110" width="30" height="2.5" rx="1.5" fill="#ddd6fe" />
-      <rect x="152" y="122" width="24" height="2" rx="1" fill="#ddd6fe" />
+      {/* Verified checkmark badge */}
+      <circle cx="178" cy="46" r="14" fill="#10b981" opacity="0.15" />
+      <circle cx="178" cy="46" r="10" fill="#10b981" />
+      <path d="M173 46 L176 49 L183 41" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
 
-      {/* Bottom action strip */}
-      <rect x="24" y="130" width="172" height="28" rx="8" fill="#7c3aed" />
-      <circle cx="42" cy="144" r="8" fill="#5b21b6" />
-      <path d="M39 144 L42 141 L45 144 L42 147 Z" fill="white" />
-      <rect x="56" y="140" width="60" height="3" rx="1.5" fill="white" opacity="0.9" />
-      <rect x="56" y="145" width="44" height="2.5" rx="1.5" fill="white" opacity="0.5" />
-      <rect x="162" y="139" width="26" height="10" rx="5" fill="#10b981" />
-      <rect x="166" y="142.5" width="18" height="2.5" rx="1.5" fill="white" opacity="0.9" />
-
-      {/* Verified badge top-right */}
-      <circle cx="192" cy="32" r="15" fill="#10b981" opacity="0.12" />
-      <circle cx="192" cy="32" r="11" fill="#10b981" />
-      <path d="M189 32 L191 34 L195 29" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Sparkle */}
+      <path d="M38 62 L39.5 66 L43 67 L39.5 68 L38 72 L36.5 68 L33 67 L36.5 66 Z" fill="#f59e0b" />
     </svg>
   );
 }
@@ -196,7 +231,6 @@ const steps = [
     body: "Enter locations, upload photos of items and get smart price estimates.",
     illustration: <IllustrationEnterDetails />,
     accent: "from-violet-500 to-purple-600",
-    accentSolid: "#7c3aed",
     accentLight: "bg-violet-50 dark:bg-violet-950/40",
     accentBorder: "border-violet-200 dark:border-violet-800",
     accentText: "text-violet-600 dark:text-violet-400",
@@ -207,7 +241,6 @@ const steps = [
     body: "See your upfront price before you book. No calls. No negotiation.",
     illustration: <IllustrationGetPrice />,
     accent: "from-emerald-500 to-teal-500",
-    accentSolid: "#059669",
     accentLight: "bg-emerald-50 dark:bg-emerald-950/40",
     accentBorder: "border-emerald-200 dark:border-emerald-800",
     accentText: "text-emerald-600 dark:text-emerald-400",
@@ -218,7 +251,6 @@ const steps = [
     body: "Confirm your booking, get matched with a verified mover, and track the move live.",
     illustration: <IllustrationBookAndTrack />,
     accent: "from-blue-500 to-indigo-600",
-    accentSolid: "#3b82f6",
     accentLight: "bg-blue-50 dark:bg-blue-950/40",
     accentBorder: "border-blue-200 dark:border-blue-800",
     accentText: "text-blue-600 dark:text-blue-400",
@@ -240,13 +272,13 @@ export default function HowItWorksSection() {
         {/* Cards */}
         <div className="grid md:grid-cols-3 gap-6 lg:gap-8 relative">
           {/* Connector arrows — desktop only */}
-          <div className="hidden md:flex absolute top-[130px] left-[33%] -translate-x-1/2 items-center pointer-events-none z-10">
+          <div className="hidden md:block absolute top-[140px] left-[calc(33.3%-28px)] pointer-events-none z-10">
             <svg width="56" height="20" viewBox="0 0 56 20" fill="none">
               <path d="M0 10 Q14 4 28 10 Q42 16 56 10" stroke="#a78bfa" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" />
               <path d="M50 7 L56 10 L50 13" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <div className="hidden md:flex absolute top-[130px] left-[67%] -translate-x-1/2 items-center pointer-events-none z-10">
+          <div className="hidden md:block absolute top-[140px] left-[calc(66.6%-28px)] pointer-events-none z-10">
             <svg width="56" height="20" viewBox="0 0 56 20" fill="none">
               <path d="M0 10 Q14 4 28 10 Q42 16 56 10" stroke="#a78bfa" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" />
               <path d="M50 7 L56 10 L50 13" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -267,7 +299,7 @@ export default function HowItWorksSection() {
               </div>
 
               {/* Illustration */}
-              <div className="w-full h-[170px] px-4 pt-4 flex items-center justify-center">
+              <div className="w-full h-[175px] px-4 pt-4 flex items-center justify-center">
                 {step.illustration}
               </div>
 
