@@ -96,7 +96,11 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="text-white">
             <h1 className="text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-bold mb-6 leading-tight">
-              Book Small Moves Instantly — Upfront Pricing, Live Tracking
+              Book Small Moves Instantly —{" "}
+              <br className="hidden md:block" />
+              Upfront Pricing,{" "}
+              <br className="hidden md:block" />
+              Live Tracking
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
               Get a quote fast, book trusted movers, and track your move every step of the way.
