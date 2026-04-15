@@ -18,6 +18,30 @@ uri = "file://client/src/assets/generated_images/how_it_works_step3.png"
 type = "image"
 title = "step3 mover delivery track live"
 
+[[generated]]
+id = "R_WUv_DEYFNhny5Otoazf"
+uri = "file://attached_assets/generated_images/mover_avatar_1.png"
+type = "image"
+title = "mover avatar 1 headshot"
+
+[[generated]]
+id = "0lPqs_s2td-7fhM8nxMkL"
+uri = "file://attached_assets/generated_images/mover_avatar_2.png"
+type = "image"
+title = "mover avatar 2 headshot"
+
+[[generated]]
+id = "FFBU_EhrrxE0Ql8cxTwqW"
+uri = "file://attached_assets/generated_images/mover_avatar_3.png"
+type = "image"
+title = "mover avatar 3 headshot"
+
+[[generated]]
+id = "SptdGCXozowq-Opzun9Xj"
+uri = "file://attached_assets/generated_images/mover_avatar_4.png"
+type = "image"
+title = "mover avatar 4 headshot"
+
 [[outputs]]
 id = "GifJ2V3leOcbRaDzlCOce"
 uri = "file://attached_assets/screenshots/6397d05f-aa2c-4df0-92ef-e226018b8f65-00-278pmwf971x7j_spock_replit_dev_mockup_preview_lervit-architecture_PhasedOrchestration.png"
