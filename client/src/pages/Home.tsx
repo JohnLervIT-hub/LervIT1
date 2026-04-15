@@ -360,6 +360,9 @@ export default function Home() {
       )}
       <HeroSection />
 
+      {/* Google Reviews Section */}
+      <GoogleReviewsSection />
+
       <section className="py-16 md:py-20 lg:py-24 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12 md:mb-16 space-y-4">
@@ -445,9 +448,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* Google Reviews Section */}
-      <GoogleReviewsSection />
 
       {/* Footer */}
       <footer className="bg-black/90 text-white border-t border-white/10" data-testid="footer">
