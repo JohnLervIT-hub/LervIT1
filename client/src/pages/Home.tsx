@@ -9,7 +9,7 @@ import HowItWorksSection from "@/components/HowItWorksSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
+import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag, BadgeDollarSign, Zap } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -398,49 +398,74 @@ export default function Home() {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-16 md:py-20 bg-background">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 space-y-3">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
-              Common Questions
-            </span>
-            <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight">
-              Frequently Asked
-            </h2>
+      <section className="py-16 md:py-24 bg-muted/30">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row lg:gap-20 gap-10">
+
+            {/* Left: header + CTA */}
+            <div className="lg:w-72 lg:flex-shrink-0 lg:pt-2">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
+                Common Questions
+              </span>
+              <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight mb-4">
+                Got questions?
+              </h2>
+              <p className="text-muted-foreground text-base leading-relaxed mb-6">
+                Everything you need to know before your first move. Can't find an answer?
+              </p>
+              <Button variant="outline" size="sm" asChild>
+                <a href="mailto:support@lervit.com" className="inline-flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  Contact support
+                </a>
+              </Button>
+            </div>
+
+            {/* Right: accordion */}
+            <div className="flex-1">
+              <Accordion type="single" collapsible className="space-y-2.5">
+                {[
+                  {
+                    icon: <BadgeDollarSign className="w-4 h-4 text-primary shrink-0 mt-0.5" />,
+                    q: "How is pricing calculated?",
+                    a: "Pricing is determined by AI analysis of your item volume from photos, along with the driving distance, access factors (stairs, elevators), and estimated time. You see the full price upfront — no hidden fees, no surprises.",
+                  },
+                  {
+                    icon: <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />,
+                    q: "Are movers background-checked and insured?",
+                    a: "Yes. All LervIT movers go through background checks, vehicle inspections, and identity verification before they're allowed on the platform. Platform-provided liability coverage applies to every move.",
+                  },
+                  {
+                    icon: <Zap className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />,
+                    q: "Can I get same-day service?",
+                    a: "In most cases yes — depending on mover availability in your area, a mover can be at your door within minutes of booking.",
+                  },
+                  {
+                    icon: <FileText className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />,
+                    q: "What is your cancellation policy?",
+                    a: "You can cancel for free within the cancellation window. Late cancellations may incur a small fee. If a mover cancels on you, you'll be rematched at no extra cost.",
+                  },
+                  {
+                    icon: <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />,
+                    q: "What if there is damage or a problem?",
+                    a: "You can report issues directly through the app. Our support team reviews every claim and will arrange a resolution — including refunds or re-service where applicable.",
+                  },
+                ].map(({ icon, q, a }, i) => (
+                  <AccordionItem key={i} value={`faq-${i}`} className="bg-background border border-border rounded-lg px-5">
+                    <AccordionTrigger className="text-left font-semibold text-base py-4 hover:no-underline gap-3">
+                      <span className="flex items-start gap-3 text-left">
+                        {icon}
+                        <span>{q}</span>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent className="text-muted-foreground text-sm leading-relaxed pb-4 pl-7">
+                      {a}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
           </div>
-          <Accordion type="single" collapsible className="space-y-3">
-            {[
-              {
-                q: "How is pricing calculated?",
-                a: "Pricing is determined by AI analysis of your item volume from photos, along with the driving distance, access factors (stairs, elevators), and estimated time. You see the full price upfront — no hidden fees, no surprises.",
-              },
-              {
-                q: "Are movers background-checked and insured?",
-                a: "Yes. All LervIT movers go through background checks, vehicle inspections, and identity verification before they're allowed on the platform. Platform-provided liability coverage applies to every move.",
-              },
-              {
-                q: "Can I get same-day service?",
-                a: "In most cases yes — depending on mover availability in your area, a mover can be at your door within minutes of booking.",
-              },
-              {
-                q: "What is your cancellation policy?",
-                a: "You can cancel for free within the cancellation window. Late cancellations may incur a small fee. If a mover cancels on you, you'll be rematched at no extra cost.",
-              },
-              {
-                q: "What if there is damage or a problem?",
-                a: "You can report issues directly through the app. Our support team reviews every claim and will arrange a resolution — including refunds or re-service where applicable.",
-              },
-            ].map(({ q, a }, i) => (
-              <AccordionItem key={i} value={`faq-${i}`} className="border border-border rounded-lg px-5">
-                <AccordionTrigger className="text-left font-semibold text-base py-4 hover:no-underline">
-                  {q}
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground text-sm leading-relaxed pb-4">
-                  {a}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
         </div>
       </section>
 
