@@ -5,9 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
+import HowItWorksSection from "@/components/HowItWorksSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Camera, Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
+import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -393,61 +394,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-16 md:py-20 lg:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 md:mb-16 space-y-4">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              How It Works
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From booking to mover at your door—in minutes, not hours
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {[
-              {
-                step: "1",
-                icon: <Camera className="w-6 h-6" />,
-                title: "Book & Quote",
-                description: "Enter your locations, upload photos of your items, and get an instant AI-powered price estimate",
-                gradient: "from-violet-500 to-purple-600",
-              },
-              {
-                step: "2",
-                icon: <Users className="w-6 h-6" />,
-                title: "Pay Securely",
-                description: "Review your AI-powered quote, pay securely with SecurePay™, and confirm your booking",
-                gradient: "from-blue-500 to-cyan-500",
-              },
-              {
-                step: "3",
-                icon: <Navigation className="w-6 h-6" />,
-                title: "Match & Track",
-                description: "We match you with verified movers, track them live on GPS, and rate your experience when complete",
-                gradient: "from-emerald-500 to-teal-500",
-              },
-            ].map((step, index) => (
-              <div key={index} className="relative text-center group" data-testid={`step-${index}`}>
-                <div className="relative inline-block mb-6">
-                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${step.gradient} text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                    {step.icon}
-                  </div>
-                  <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-background border-2 border-primary flex items-center justify-center text-sm font-bold text-primary shadow-sm">
-                    {step.step}
-                  </div>
-                </div>
-                <h3 className="font-semibold text-xl mb-3">{step.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{step.description}</p>
-                
-                {index < 2 && (
-                  <div className="hidden md:block absolute top-8 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-muted-foreground/20 to-transparent" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <HowItWorksSection />
 
       {/* Footer */}
       <footer className="bg-black/90 text-white border-t border-white/10" data-testid="footer">
