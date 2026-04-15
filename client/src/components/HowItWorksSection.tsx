@@ -137,20 +137,20 @@ export default function HowItWorksSection() {
                     }}
                   >
                     {/* Illustration */}
-                    <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-b from-muted/60 to-muted/20 pt-10 px-6 pb-4 flex items-center justify-center min-h-[220px]">
+                    <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-b from-muted/60 to-muted/20 pt-6 md:pt-10 px-5 md:px-6 pb-3 md:pb-4 flex items-center justify-center min-h-[160px] md:min-h-[220px]">
                       <img
                         src={step.image}
                         alt={step.title}
-                        className="w-full max-h-48 object-contain drop-shadow-md"
+                        className="w-full max-h-32 md:max-h-48 object-contain drop-shadow-md"
                         draggable={false}
                       />
                     </div>
 
                     {/* Divider */}
-                    <div className="h-px bg-border mx-6" />
+                    <div className="h-px bg-border mx-5 md:mx-6" />
 
                     {/* Text content */}
-                    <div className="flex flex-col gap-3 px-6 py-5 flex-1">
+                    <div className="flex flex-col gap-2 md:gap-3 px-5 md:px-6 py-4 md:py-5 flex-1">
                       {/* Feature pill */}
                       <span
                         className={`inline-flex items-center gap-1.5 self-start text-xs font-semibold px-2.5 py-1 rounded-full border ${step.pillBg} ${step.pillText} ${step.pillBorder}`}
