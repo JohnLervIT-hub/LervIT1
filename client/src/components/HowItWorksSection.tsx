@@ -36,7 +36,7 @@ const steps = [
   {
     number: "3",
     title: "Book and Track",
-    body: "Confirm your booking, get matched with a verified local mover, and watch your move happen live on GPS.",
+    body: "Confirm your booking and track your move live on GPS.",
     pill: "Live GPS tracking",
     pillIcon: MapPin,
     image: step3Img,
