@@ -2,6 +2,7 @@ import step1Img from "@assets/generated_images/how_it_works_step1.png";
 import step2Img from "@assets/generated_images/how_it_works_step2.png";
 import step3Img from "@assets/generated_images/how_it_works_step3.png";
 import { Zap, BadgeDollarSign, MapPin } from "lucide-react";
+import { Link } from "wouter";
 
 const steps = [
   {
@@ -180,7 +181,7 @@ export default function HowItWorksSection() {
           <p className="text-muted-foreground text-sm">
             Ready to experience a smarter move?
           </p>
-          <a
+          <Link
             href="/request-move"
             className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-primary text-white text-sm font-semibold shadow-md hover:opacity-90 transition-opacity"
           >
@@ -188,7 +189,7 @@ export default function HowItWorksSection() {
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          </a>
+          </Link>
         </div>
       </div>
     </section>
