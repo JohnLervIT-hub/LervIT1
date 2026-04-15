@@ -44,6 +44,7 @@
   --chart-4: 280 65% 45%;
   --chart-5: 35 80% 50%;
   --font-sans: Inter, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: .5rem;

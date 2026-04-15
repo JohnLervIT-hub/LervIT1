@@ -99,7 +99,7 @@ export default function HowItWorksSection() {
           <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold border border-primary/20">
             Simple 3-step process
           </span>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+          <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight">
             How LervIT Works
           </h2>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
@@ -159,7 +159,7 @@ export default function HowItWorksSection() {
                         {step.pill}
                       </span>
 
-                      <h3 className="font-bold text-xl leading-snug">{step.title}</h3>
+                      <h3 className="font-display font-bold text-xl leading-snug tracking-tight">{step.title}</h3>
                       <p className="text-sm text-muted-foreground leading-relaxed">
                         {step.body}
                       </p>

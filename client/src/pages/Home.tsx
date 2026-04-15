@@ -107,7 +107,7 @@ function GoogleReviewsSection() {
               Google Reviews
             </div>
 
-            <h2 className="text-lg md:text-2xl font-bold text-foreground mb-3 md:mb-5 leading-tight">
+            <h2 className="font-display text-lg md:text-2xl font-extrabold text-foreground mb-3 md:mb-5 leading-tight tracking-tight">
               Loved by Calgary customers
             </h2>
 
@@ -372,7 +372,7 @@ export default function Home() {
             <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
               Why Customers Love Us
             </span>
-            <h2 className="text-3xl md:text-4xl font-bold">
+            <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight">
               Why Choose LervIT?
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -387,7 +387,7 @@ export default function Home() {
                   <div className="inline-flex items-center justify-center w-24 h-24 mb-5 group-hover:scale-110 transition-transform duration-300">
                     <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain" style={{ background: 'none' }} />
                   </div>
-                  <h3 className="font-semibold text-lg mb-3">{feature.title}</h3>
+                  <h3 className="font-display font-bold text-lg mb-3 tracking-tight">{feature.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
                 </div>
               </StaggerItem>
@@ -423,7 +423,7 @@ export default function Home() {
 
             <div className="grid grid-cols-2 gap-x-8 lg:gap-x-12 gap-y-8 flex-1">
               <div className="space-y-4">
-                <h4 className="font-semibold">Company</h4>
+                <h4 className="font-display font-bold tracking-tight">Company</h4>
                 <ul className="space-y-3 text-sm">
                   <li>
                     <a href={FOOTER_LINKS.company.aboutUs} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-about">
@@ -447,7 +447,7 @@ export default function Home() {
               </div>
 
               <div className="space-y-4">
-                <h4 className="font-semibold">Contact</h4>
+                <h4 className="font-display font-bold tracking-tight">Contact</h4>
                 <ul className="space-y-3 text-sm">
                   <li>
                     <a href="mailto:support@lervit.com" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-email">
@@ -469,7 +469,7 @@ export default function Home() {
               </div>
 
               <div className="space-y-4">
-                <h4 className="font-semibold">Support</h4>
+                <h4 className="font-display font-bold tracking-tight">Support</h4>
                 <ul className="space-y-3 text-sm">
                   <li>
                     <a href="https://lervit.com/help" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors" data-testid="link-help-center">
