@@ -95,11 +95,11 @@ export default function HowItWorksSection() {
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-16 md:mb-20 space-y-4">
+        <div className="text-center mb-12 md:mb-16 space-y-4">
           <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold border border-primary/20">
             Simple 3-step process
           </span>
-          <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight">
+          <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight">
             How LervIT Works
           </h2>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
