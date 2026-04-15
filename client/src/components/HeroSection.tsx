@@ -96,9 +96,7 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="text-white">
             <h1 className="font-display text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
-              Book small moves and furniture pickup{" "}
-              <br className="hidden md:block" />
-              in Calgary — Instantly.
+              Book small moves and furniture pickup in Calgary — Instantly.
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
               Get upfront pricing, book verified movers, and track your move live.
