@@ -398,7 +398,7 @@ export default function Home() {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-16 md:py-24 bg-muted/30">
+      <section className="py-16 md:py-24 bg-gray-100 dark:bg-gray-900/40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col lg:flex-row lg:gap-20 gap-10">
 
