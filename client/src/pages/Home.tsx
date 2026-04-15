@@ -121,7 +121,7 @@ function GoogleReviewsSection() {
               </div>
             ) : (
               <div className="mb-4 md:mb-8">
-                <span className="text-4xl md:text-5xl font-bold tabular-nums leading-none text-foreground block mb-1.5 md:mb-2">
+                <span className="font-display text-4xl md:text-5xl font-extrabold tabular-nums leading-none text-foreground block mb-1.5 md:mb-2">
                   {rating !== null ? rating.toFixed(1) : "—"}
                 </span>
                 <Stars count={Math.round(rating ?? 5)} size="md" />
@@ -230,7 +230,7 @@ function GoogleReviewsSection() {
                           </div>
                         )}
                         <div>
-                          <div className="font-semibold text-xs text-foreground">{review.authorName}</div>
+                          <div className="font-display font-semibold text-xs text-foreground">{review.authorName}</div>
                           <div className="text-xs text-muted-foreground">{review.relativeTime}</div>
                         </div>
                       </div>
