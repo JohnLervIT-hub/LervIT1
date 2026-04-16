@@ -2649,7 +2649,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await notificationService.sendEmail({
             to: existingUser[0].email,
             subject: 'Your LervIT Account Email Was Changed',
-            html: `
+            type: 'status_update',
+            body: `
               <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
                 <h2 style="color:#1a1a1a;">Email Address Updated</h2>
                 <p>Hi ${updatedUser.name || 'there'},</p>
@@ -2689,6 +2690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           await notificationService.sendSMS({
             to: phone,
+            type: 'booking_update',
             message: `LervIT: Your account phone number has been updated by an administrator. If you did not request this, contact support at support@lervit.ca`,
           });
           logger.info({ env: process.env.NODE_ENV, event: "admin_contact_change", userId, action: 'phone_change_sms_sent' });
@@ -3694,7 +3696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Trigger proximity matching to find other available movers
         try {
-          const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+          const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import("@shared/matching");
           const { toDecimalString } = await import("@shared/utils");
           
           const pickupCoords = {
@@ -4356,10 +4358,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let finalPrice = priceBreakdown.totalCost;
       let moverBalanceOwed = 0;
       
-      if (booking.promoCode === "LERVIT20") {
+      if (existingBooking.promoCode === "LERVIT20") {
         discountPercent = 20;
         discountAmount = priceBreakdown.totalCost * 0.20;
-        discountReason = booking.discountReason;
+        discountReason = existingBooking.discountReason;
         finalPrice = priceBreakdown.totalCost - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       }
@@ -8603,7 +8605,7 @@ Respond with VALID JSON only:
       if (booking.moverId) {
         const mover = await storage.getMover(booking.moverId);
         if (mover) {
-          const moverUser = await storage.getUserById(mover.userId);
+          const moverUser = await storage.getUser(mover.userId);
           moverData = {
             name: moverUser?.name || "Your mover",
             phone: moverUser?.phone || "",
@@ -10905,8 +10907,8 @@ Respond with VALID JSON only:
 
       // ---- BOOKING FUNNEL ----
       // Step 1: Users who visited booking page (abandoned at step 1 OR made it further)
-      const abandonedAtStep1 = allAbandoned.filter(a => a.currentStep === 1 || a.currentStep === 2).length;
-      const abandonedAtStep2 = allAbandoned.filter(a => a.currentStep === 3).length;
+      const abandonedAtStep1 = allAbandoned.filter(a => a.lastStep === 1 || a.lastStep === 2).length;
+      const abandonedAtStep2 = allAbandoned.filter(a => a.lastStep === 3).length;
       const totalAbandoned = allAbandoned.length;
       const totalCreatedBookings = allBookings.length;
       const totalPaid = allBookings.filter(b => b.paymentStatus === 'paid' || b.paymentStatus === 'succeeded').length;
