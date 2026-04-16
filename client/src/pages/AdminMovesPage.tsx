@@ -396,7 +396,7 @@ export default function AdminMovesPage() {
                       <TableHead>Customer</TableHead>
                       <TableHead>Mover</TableHead>
                       <TableHead>Route</TableHead>
-                      <TableHead>Date</TableHead>
+                      <TableHead>Booking Date</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-10"></TableHead>
@@ -407,13 +407,13 @@ export default function AdminMovesPage() {
                       <TableRow key={b.id} data-testid={`row-booking-${b.id}`}>
                         <TableCell>
                           <div className="font-medium">{b.customer?.name || "Unknown"}</div>
-                          <div className="text-xs text-muted-foreground truncate max-w-[140px]">{b.customer?.email || "No email"}</div>
+                          <div className="text-xs text-muted-foreground font-mono">#{b.id.slice(0, 8)}</div>
                         </TableCell>
                         <TableCell>
                           {b.mover?.name ? (
                             <div>
                               <div className="text-sm">{b.mover.name}</div>
-                              {b.mover.vehicleType && <div className="text-xs text-muted-foreground">{b.mover.vehicleType}</div>}
+                              {b.mover.id && <div className="text-xs text-muted-foreground font-mono">#{b.mover.id.slice(0, 8)}</div>}
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground italic">Unassigned</span>
