@@ -36,6 +36,24 @@ uri = "file://attached_assets/generated_images/mover_reputation_stars.png"
 type = "image"
 title = "mover reputation 5 stars"
 
+[[generated]]
+id = "yKEJ6q2_EobH0tsW3SXSm"
+uri = "file://attached_assets/generated_images/hiw_step1_v2.png"
+type = "image"
+title = "enter details phone map"
+
+[[generated]]
+id = "wpYBG0E81HeykqQztU6ja"
+uri = "file://attached_assets/generated_images/hiw_step2_v2.png"
+type = "image"
+title = "upfront price laptop checkmark"
+
+[[generated]]
+id = "2KCbf64z_GTuLx8cuJHxy"
+uri = "file://attached_assets/generated_images/hiw_step3_v2.png"
+type = "image"
+title = "live GPS tracking phone truck"
+
 [[outputs]]
 id = "GifJ2V3leOcbRaDzlCOce"
 uri = "file://attached_assets/screenshots/6397d05f-aa2c-4df0-92ef-e226018b8f65-00-278pmwf971x7j_spock_replit_dev_mockup_preview_lervit-architecture_PhasedOrchestration.png"

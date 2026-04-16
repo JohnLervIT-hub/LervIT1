@@ -1,6 +1,6 @@
-import step1Img from "@assets/generated_images/how_it_works_step1.png";
-import step2Img from "@assets/generated_images/how_it_works_step2_v2.png";
-import step3Img from "@assets/generated_images/how_it_works_step3.png";
+import step1Img from "@assets/generated_images/hiw_step1_v2.png";
+import step2Img from "@assets/generated_images/hiw_step2_v2.png";
+import step3Img from "@assets/generated_images/hiw_step3_v2.png";
 import { Zap, BadgeDollarSign, MapPin } from "lucide-react";
 import { Link } from "wouter";
 
