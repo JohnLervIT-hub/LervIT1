@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
@@ -9,7 +9,7 @@ import HowItWorksSection from "@/components/HowItWorksSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag, BadgeDollarSign, Zap } from "lucide-react";
+import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Briefcase, Newspaper, HelpCircle, AlertTriangle, FileText, Lock, Phone, Tag, BadgeDollarSign, Zap, DollarSign, Calendar, Star, ChevronRight } from "lucide-react";
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -466,6 +466,77 @@ export default function Home() {
               </Accordion>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Become a Mover Section */}
+      <section className="py-20 md:py-28 bg-background" data-testid="section-become-mover">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-12">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
+                Earn with LervIT
+              </span>
+              <h2 className="font-display text-3xl md:text-5xl font-extrabold tracking-tight mb-4">
+                Turn your truck into<br className="hidden sm:inline" /> a business
+              </h2>
+              <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto leading-relaxed">
+                Join Calgary's growing network of independent movers. Set your own schedule, keep most of every booking, and grow your own reputation.
+              </p>
+            </div>
+          </FadeIn>
+
+          <StaggerChildren className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
+            {[
+              {
+                icon: <DollarSign className="w-6 h-6 text-emerald-500" />,
+                title: "Keep 85% of every job",
+                desc: "LervIT takes only a small platform fee. The rest goes straight to you — with automated weekly payouts via Stripe.",
+              },
+              {
+                icon: <Calendar className="w-6 h-6 text-primary" />,
+                title: "Work when you want",
+                desc: "Go online with one tap and get matched to nearby jobs instantly. No shifts, no minimums — move on your own terms.",
+              },
+              {
+                icon: <Star className="w-6 h-6 text-yellow-500" />,
+                title: "Build your reputation",
+                desc: "Earn verified reviews after every move. Higher ratings unlock more bookings and a premium badge on your profile.",
+              },
+            ].map(({ icon, title, desc }, i) => (
+              <StaggerItem key={i}>
+                <Card className="h-full">
+                  <CardContent className="pt-6 space-y-3">
+                    <div className="w-11 h-11 rounded-md bg-muted flex items-center justify-center">
+                      {icon}
+                    </div>
+                    <h3 className="font-display font-bold text-lg tracking-tight">{title}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">{desc}</p>
+                  </CardContent>
+                </Card>
+              </StaggerItem>
+            ))}
+          </StaggerChildren>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button size="lg" asChild data-testid="button-become-mover-cta">
+              <Link href="/signup">
+                <Truck className="w-4 h-4 mr-2" />
+                Apply to become a mover
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild data-testid="button-become-mover-learn">
+              <a href="mailto:movers@lervit.com" className="inline-flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                Talk to our team
+              </a>
+            </Button>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            Verification required. Must have a valid driver's license and vehicle insurance.
+          </p>
         </div>
       </section>
 

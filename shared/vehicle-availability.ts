@@ -28,10 +28,10 @@ export interface VehicleMatchResult {
 }
 
 /**
- * Vehicle priority order from smallest to largest
- * Used for determining upgrade path
+ * Vehicle priority order from smallest to largest capacity
+ * car (~15 ft³) → pickup (~80 ft³) → van (~300 ft³) → truck (800+ ft³)
  */
-const VEHICLE_PRIORITY_ORDER: VehicleType[] = ['car', 'van', 'pickup', 'truck'];
+const VEHICLE_PRIORITY_ORDER: VehicleType[] = ['car', 'pickup', 'van', 'truck'];
 
 /**
  * Get only the requested vehicle type + ONE tier higher

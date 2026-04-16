@@ -194,6 +194,34 @@ export function calculateExpiryTime(timeoutMinutes: number = 10): Date {
 }
 
 /**
+ * Resolve the correct vehicle type to use for mover matching.
+ * Priority: aiRecommendedVehicle (from Vision Engine) → loadSize-derived vehicle.
+ * Never returns null — always produces a filterable vehicle type so the wrong
+ * vehicle class is never dispatched for a job.
+ *
+ * loadSize mapping:
+ *   'boxes'     → 'car'     (small: SUV / small vehicle)
+ *   'medium'    → 'pickup'  (medium: pickup truck)
+ *   'large'     → 'van'     (large: cargo van)
+ *   'apartment' → 'truck'   (full: moving truck)
+ */
+export function resolveVehicleForBooking(
+  aiRecommendedVehicle: string | null | undefined,
+  loadSize: string | null | undefined
+): string {
+  if (aiRecommendedVehicle && aiRecommendedVehicle.trim()) {
+    return aiRecommendedVehicle.trim();
+  }
+  switch (loadSize) {
+    case 'apartment': return 'truck';
+    case 'large':     return 'van';
+    case 'medium':    return 'pickup';
+    case 'boxes':
+    default:          return 'car';
+  }
+}
+
+/**
  * Result of vehicle matching with status
  */
 export interface VehicleMatchingResult {

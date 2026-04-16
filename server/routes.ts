@@ -1620,7 +1620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // LATE DISPATCH: Check for paid bookings with no active job notifications and notify this mover
       // This handles the case where customer paid when no movers were online
       try {
-        const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+        const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import("@shared/matching");
         const { toDecimalString } = await import("@shared/utils");
 
         // Find bookings that are paid/pending assignment with no active notifications for this mover
@@ -1672,7 +1672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { lat: pickupLat, lng: pickupLng },
             { lat: parseFloat(String(pendingBooking.dropoffLatitude || '0')), lng: parseFloat(String(pendingBooking.dropoffLongitude || '0')) },
             (pendingBooking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
-            moverData, {}, pendingBooking.aiRecommendedVehicle || null
+            moverData, {}, resolveVehicleForBooking(pendingBooking.aiRecommendedVehicle, pendingBooking.loadSize)
           );
 
           if (matched.length > 0) {
@@ -3143,7 +3143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Geocode addresses using Google Maps API for accurate coordinates
       const { geocodeAddress, getDrivingDistance } = await import("./google-maps");
       const { calculatePrice } = await import("@shared/pricing");
-      const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+      const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import("@shared/matching");
       const { toDecimalString } = await import("@shared/utils");
       
       // Use Google Maps Geocoding API for real coordinates (not mock)
@@ -3736,7 +3736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
             moversWithUserData,
             {},
-            booking.aiRecommendedVehicle || null
+            resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize)
           );
           
           if (nearestMovers.length > 0) {
@@ -4703,7 +4703,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Find and notify nearby movers using proper proximity matching
       try {
-        const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+        const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import("@shared/matching");
         const { toDecimalString } = await import("@shared/utils");
 
         const pickupCoords = {
@@ -4756,7 +4756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const nearestMovers = findNearestMovers(
             pickupCoords, dropoffCoords,
             (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
-            moversWithUserData, {}, booking.aiRecommendedVehicle || null
+            moversWithUserData, {}, resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize)
           );
 
           const expiresAt = calculateExpiryTime(10);
@@ -5393,7 +5393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // Find and notify movers (non-blocking - booking is already confirmed)
             try {
-              const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+              const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import("@shared/matching");
               const { toDecimalString } = await import("@shared/utils");
               
               const pickupCoords = {
@@ -5545,7 +5545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
                   moversWithUserData,
                   {},
-                  booking.aiRecommendedVehicle || null
+                  resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize)
                 );
                 
                 // Create job notifications for top movers
@@ -8213,7 +8213,7 @@ Respond with VALID JSON only:
       });
       
       // Get matching movers and send notifications
-      const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
+      const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import("@shared/matching");
       const { toDecimalString } = await import("@shared/utils");
       
       const pickupCoords = {
@@ -8255,7 +8255,7 @@ Respond with VALID JSON only:
         (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
         moversWithUserData,
         {},
-        booking.aiRecommendedVehicle || null
+        resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize)
       );
       
       // If no matching movers found, fall back to ALL available movers (admin override)
