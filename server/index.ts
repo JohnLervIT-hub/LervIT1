@@ -1,3 +1,6 @@
+// MUST be first — sets the process timezone before any Date operations
+process.env.TZ = 'America/Edmonton';
+
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import pgSession from "connect-pg-simple";

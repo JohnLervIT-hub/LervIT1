@@ -34,55 +34,58 @@ async function withJobLock<T>(jobName: string, fn: () => Promise<T>): Promise<T 
 export function initBackgroundJobs() {
   logger.info({ event: 'background_jobs', action: 'init' }, 'Initializing background jobs');
 
+  const TZ = { timezone: 'America/Edmonton' };
+
   // Merged into a single tick (was two separate */5 schedules competing for the DB)
   cron.schedule('*/5 * * * *', async () => {
     await withJobLock('expire_notifications', expireOldNotifications);
     await withJobLock('expire_stale_bookings', expireStaleBookings);
-  });
+  }, TZ);
 
   // Offset by 1 min so it never fires at the same second as the */5 job above
   cron.schedule('1-59/2 * * * *', async () => {
     await withJobLock('payment_reminders', sendPaymentReminders);
-  });
+  }, TZ);
 
   // Offset to minute :03 so it doesn't collide with the :00 batch
   cron.schedule('3,13,23,33,43,53 * * * *', async () => {
     await withJobLock('orphaned_payments', recoverOrphanedPayments);
-  });
+  }, TZ);
 
+  // 3 AM Calgary time (MDT = UTC-6, MST = UTC-7)
   cron.schedule('0 3 * * *', async () => {
     await withJobLock('daily_cleanup', dailyCleanup);
-  });
+  }, TZ);
 
   // Offset to minute :07 to spread load
   cron.schedule('7,22,37,52 * * * *', async () => {
     await withJobLock('expire_past_jobs', expirePastScheduledJobs);
-  });
+  }, TZ);
 
   // Offset to minute :02 (not :00) to avoid colliding with other hourly jobs
   cron.schedule('2 * * * *', async () => {
     await withJobLock('auto_complete_bookings', autoCompletePastPaidBookings);
-  });
+  }, TZ);
 
   // Offset to minute :06 (not :05) for same reason
   cron.schedule('6 * * * *', async () => {
     await withJobLock('cancel_past_bookings', cancelPastDatedBookings);
-  });
+  }, TZ);
 
   // Offset to minute :15 and :45 instead of :00 and :30
   cron.schedule('15,45 * * * *', async () => {
     await withJobLock('abandoned_reminders', sendAbandonedBookingReminders);
-  });
+  }, TZ);
 
-  // Offset to minute :10 of the 6-hour interval
+  // Every 6 hours at :10 Calgary time
   cron.schedule('10 */6 * * *', async () => {
     await withJobLock('stripe_onboarding_reminders', sendStripeOnboardingReminders);
-  });
+  }, TZ);
 
-  // Offset to minute :20 of the 6-hour interval
+  // 3 AM, 9 AM, 3 PM, 9 PM Calgary time
   cron.schedule('20 3,9,15,21 * * *', async () => {
     await withJobLock('profile_reminders', sendProfileCompletionReminders);
-  });
+  }, TZ);
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
 }

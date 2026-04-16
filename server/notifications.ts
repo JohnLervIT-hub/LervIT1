@@ -1,6 +1,27 @@
 import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
 
+// Calgary timezone used for all date formatting in emails, SMS, and logs
+const CALGARY_TZ = 'America/Edmonton';
+
+/**
+ * Format a date value as a human-readable string in Calgary (Mountain) time.
+ * Shows timezone abbreviation (MDT/MST) so recipients see the correct local time.
+ */
+function formatCalgaryDate(date: Date | string | null | undefined, fallback = 'TBD'): string {
+  if (!date) return fallback;
+  return new Date(date).toLocaleDateString('en-US', {
+    timeZone: CALGARY_TZ,
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
 // Initialize Resend client
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -322,17 +343,7 @@ class NotificationService {
   // Booking confirmation email to customer
   async sendBookingConfirmation(customer: User, booking: Partial<Booking>): Promise<void> {
     const subject = `Booking Confirmed - Move #${booking.id?.slice(0, 8)}`;
-    const formattedDate = booking.preferredDate 
-      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
-          weekday: 'short', 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZoneName: 'short'
-        })
-      : 'TBD';
+    const formattedDate = formatCalgaryDate(booking.preferredDate, 'TBD');
     
     const body = `
 <!DOCTYPE html>
@@ -395,17 +406,7 @@ class NotificationService {
       (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
     const dashboardUrl = `${baseUrl}/mover-dashboard`;
     
-    const formattedDate = booking.preferredDate 
-      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
-          weekday: 'short', 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZoneName: 'short'
-        })
-      : 'ASAP';
+    const formattedDate = formatCalgaryDate(booking.preferredDate, 'ASAP');
     
     const subject = `[URGENT] NEW JOB - Earn $${estimatedEarnings} CAD (Expires in 10 min)`;
     const body = `
@@ -510,17 +511,7 @@ class NotificationService {
   // Payment receipt email to customer
   async sendPaymentReceipt(customer: User, booking: Partial<Booking>, amount: string): Promise<void> {
     const subject = `Payment Receipt - Move #${booking.id?.slice(0, 8)}`;
-    const formattedDate = booking.preferredDate 
-      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
-          weekday: 'short', 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZoneName: 'short'
-        })
-      : 'TBD';
+    const formattedDate = formatCalgaryDate(booking.preferredDate, 'TBD');
     
     const body = `
 <!DOCTYPE html>
@@ -783,7 +774,7 @@ class NotificationService {
                 </tr>
                 <tr>
                   <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>When:</strong></td>
-                  <td style="padding:8px 0;color:#333333;font-size:14px;">${booking.preferredDate ? new Date(booking.preferredDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'ASAP'}</td>
+                  <td style="padding:8px 0;color:#333333;font-size:14px;">${formatCalgaryDate(booking.preferredDate, 'ASAP')}</td>
                 </tr>
                 <tr>
                   <td style="padding:8px 0;color:#555555;font-size:14px;"><strong>Total:</strong></td>
@@ -1477,12 +1468,7 @@ class NotificationService {
 
   async sendAdminNewBookingAlert(adminEmail: string, customer: User, booking: Partial<Booking>): Promise<void> {
     const subject = `New Booking - Move #${booking.id?.slice(0, 8)}`;
-    const formattedDate = booking.preferredDate 
-      ? new Date(booking.preferredDate).toLocaleDateString('en-US', { 
-          weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-          hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
-        })
-      : 'TBD';
+    const formattedDate = formatCalgaryDate(booking.preferredDate, 'TBD');
     const price = booking.price ? `$${parseFloat(booking.price).toFixed(2)}` : 'TBD';
     const promoInfo = booking.promoCode 
       ? `<li><strong>Promo Code:</strong> ${booking.promoCode} (-${booking.discountPercent || 20}%)</li>` 
