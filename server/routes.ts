@@ -1626,9 +1626,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(and(
             eq(bookings.paymentStatus, 'succeeded'),
             eq(bookings.status, BOOKING_STATUSES.PENDING),
-            sql`${bookings.moverId} IS NULL`
+            isNull(bookings.moverId)
           ))
-          .orderBy(bookings.scheduledDate);
+          .orderBy(bookings.preferredDate);
 
         for (const pendingBooking of pendingBookings) {
           // Check if this mover already has any notification (pending/expired/declined) for this booking
@@ -4667,10 +4667,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ success: true, message: "Payment already confirmed" });
       }
       
-      // Update booking payment status
+      // Update booking payment status — use PENDING (awaiting mover match), NOT confirmed.
+      // 'confirmed' is only set when a mover explicitly accepts the job.
       await storage.updateBooking(bookingId, {
         paymentStatus: 'succeeded',
-        status: 'confirmed',
+        status: BOOKING_STATUSES.PENDING,
       });
       
       console.log(`[Payment] Confirmed payment for booking ${bookingId}`);
