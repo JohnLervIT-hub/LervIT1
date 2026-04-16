@@ -10955,10 +10955,6 @@ Respond with VALID JSON only:
       //   C) Notification exists with correct 'accepted' status → normal, modern flow.
       // ------------------------------------------------------------------
 
-      // Statuses that mean a mover has accepted/is actively working on a booking
-      // 'accepted' is a legacy alias set by the admin assign-mover endpoint (now fixed to 'confirmed')
-      const ACTIVE_STATUSES = ['confirmed', 'accepted', 'in_progress', 'en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'completed'];
-
       // Map: bookingId → moverId for every booking where a mover is/was active
       const confirmedBookingMover = new Map(
         allBookings

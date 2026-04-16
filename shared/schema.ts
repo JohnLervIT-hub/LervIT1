@@ -848,11 +848,14 @@ export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> 
 };
 
 // Statuses that count as "active" (mover is working on the job)
-export const ACTIVE_STATUSES: BookingStatus[] = [
+export const ACTIVE_STATUSES: string[] = [
+  BOOKING_STATUSES.CONFIRMED,
+  'accepted',
   BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
   BOOKING_STATUSES.LOADING,
   BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
   BOOKING_STATUSES.UNLOADING,
+  BOOKING_STATUSES.COMPLETED,
 ];
 
 // Helper to check if status transition is valid
