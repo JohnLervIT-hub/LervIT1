@@ -18,6 +18,24 @@ uri = "file://client/src/assets/generated_images/how_it_works_step3.png"
 type = "image"
 title = "step3 mover delivery track live"
 
+[[generated]]
+id = "TS8YE3UxV2z45rOci_cGw"
+uri = "file://attached_assets/generated_images/mover_earnings_85.png"
+type = "image"
+title = "mover earnings 85 percent"
+
+[[generated]]
+id = "P_vdgqy_EGwMB_Vcl2OJz"
+uri = "file://attached_assets/generated_images/mover_go_online_flex.png"
+type = "image"
+title = "mover go online flexibility"
+
+[[generated]]
+id = "4QUwBviAxXQO53VUw0QRy"
+uri = "file://attached_assets/generated_images/mover_reputation_stars.png"
+type = "image"
+title = "mover reputation 5 stars"
+
 [[outputs]]
 id = "GifJ2V3leOcbRaDzlCOce"
 uri = "file://attached_assets/screenshots/6397d05f-aa2c-4df0-92ef-e226018b8f65-00-278pmwf971x7j_spock_replit_dev_mockup_preview_lervit-architecture_PhasedOrchestration.png"

@@ -17,6 +17,9 @@ import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.p
 import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
 import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
 import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_background.png";
+import moverEarningsImg from "@assets/generated_images/mover_earnings_85.png";
+import moverFlexImg from "@assets/generated_images/mover_go_online_flex.png";
+import moverReputationImg from "@assets/generated_images/mover_reputation_stars.png";
 
 // ---- Types ----
 interface GoogleReview {
@@ -496,36 +499,15 @@ export default function Home() {
             {/* Card 1 — Keep 85% */}
             <StaggerItem>
               <div className="h-full rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/10 to-transparent overflow-hidden flex flex-col">
-                {/* 3D Cartoon Illustration — Earnings */}
-                <div className="flex items-center justify-center pt-8 pb-4 px-6">
-                  <svg width="180" height="148" viewBox="0 0 180 148" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    {/* Glow blob */}
-                    <ellipse cx="90" cy="90" rx="72" ry="52" fill="#10b981" opacity="0.12"/>
-                    {/* Bill stack — back */}
-                    <rect x="26" y="82" width="88" height="44" rx="8" fill="#065f46" opacity="0.7"/>
-                    <rect x="22" y="76" width="88" height="44" rx="8" fill="#047857"/>
-                    <rect x="28" y="80" width="76" height="36" rx="6" fill="#059669" opacity="0.4"/>
-                    <text x="66" y="103" textAnchor="middle" fill="#a7f3d0" fontSize="11" fontWeight="bold" fontFamily="monospace">$  $  $</text>
-                    {/* Bill stack — front */}
-                    <rect x="18" y="66" width="88" height="44" rx="8" fill="#059669"/>
-                    <rect x="24" y="70" width="76" height="36" rx="5" fill="#10b981" opacity="0.35"/>
-                    <rect x="18" y="66" width="88" height="14" rx="8" fill="#047857" opacity="0.5"/>
-                    <text x="62" y="91" textAnchor="middle" fill="white" fontSize="11" fontWeight="600" fontFamily="monospace">$  $  $</text>
-                    {/* Floating badge — 85% */}
-                    <circle cx="128" cy="52" r="34" fill="#0f1c14" opacity="0.8"/>
-                    <circle cx="128" cy="52" r="30" fill="#14532d"/>
-                    <circle cx="128" cy="52" r="26" fill="#166534"/>
-                    <text x="128" y="46" textAnchor="middle" fill="#4ade80" fontSize="18" fontWeight="900" fontFamily="sans-serif">85%</text>
-                    <text x="128" y="60" textAnchor="middle" fill="#86efac" fontSize="7.5" fontFamily="sans-serif">yours</text>
-                    {/* Stripe badge */}
-                    <rect x="106" y="98" width="52" height="18" rx="6" fill="#6366f1"/>
-                    <text x="132" y="111" textAnchor="middle" fill="white" fontSize="8" fontWeight="700" fontFamily="sans-serif">via Stripe</text>
-                    {/* Arrow up */}
-                    <path d="M34 55 L42 42 L50 55" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                    <line x1="42" y1="42" x2="42" y2="63" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round"/>
-                  </svg>
+                <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+                  <img
+                    src={moverEarningsImg}
+                    alt="Mover holding cash with 85% badge"
+                    className="w-full h-full object-contain"
+                    style={{ maxHeight: 220 }}
+                  />
                 </div>
-                <div className="px-6 pb-7 space-y-2 flex-1">
+                <div className="px-6 py-5 space-y-2 flex-1">
                   <h3 className="font-display font-bold text-lg tracking-tight text-white">Keep 85% of every job</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">LervIT takes only a small platform fee. The rest goes straight to you — with automated weekly payouts via Stripe.</p>
                 </div>
@@ -535,43 +517,15 @@ export default function Home() {
             {/* Card 2 — Work when you want */}
             <StaggerItem>
               <div className="h-full rounded-2xl border border-blue-500/20 bg-gradient-to-b from-blue-500/10 to-transparent overflow-hidden flex flex-col">
-                {/* 3D Cartoon Illustration — Flexibility */}
-                <div className="flex items-center justify-center pt-8 pb-4 px-6">
-                  <svg width="180" height="148" viewBox="0 0 180 148" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    {/* Glow */}
-                    <ellipse cx="90" cy="88" rx="68" ry="50" fill="#3b82f6" opacity="0.10"/>
-                    {/* Phone shadow */}
-                    <rect x="58" y="20" width="68" height="112" rx="16" fill="#0c1220" opacity="0.6"/>
-                    {/* Phone body */}
-                    <rect x="54" y="16" width="68" height="112" rx="16" fill="#1e293b" stroke="#334155" strokeWidth="1.5"/>
-                    {/* Screen */}
-                    <rect x="60" y="26" width="56" height="92" rx="10" fill="#0f172a"/>
-                    {/* Top bar */}
-                    <rect x="60" y="26" width="56" height="22" rx="10" fill="#1d4ed8"/>
-                    <rect x="60" y="36" width="56" height="12" fill="#1d4ed8"/>
-                    <text x="88" y="41" textAnchor="middle" fill="white" fontSize="8" fontWeight="700" fontFamily="sans-serif">LervIT</text>
-                    {/* GO toggle */}
-                    <rect x="66" y="56" width="44" height="22" rx="11" fill="#1e3a5f"/>
-                    <circle cx="99" cy="67" r="9" fill="#22d3ee"/>
-                    <text x="74" y="71" textAnchor="middle" fill="#7dd3fc" fontSize="8" fontWeight="700" fontFamily="sans-serif">GO</text>
-                    {/* Clock decoration */}
-                    <circle cx="88" cy="98" r="13" fill="#172554" stroke="#3b82f6" strokeWidth="1.5"/>
-                    <line x1="88" y1="92" x2="88" y2="98" stroke="#93c5fd" strokeWidth="2" strokeLinecap="round"/>
-                    <line x1="88" y1="98" x2="94" y2="101" stroke="#93c5fd" strokeWidth="2" strokeLinecap="round"/>
-                    {/* Floating pin left */}
-                    <circle cx="36" cy="60" r="14" fill="#1e3a8a" opacity="0.8"/>
-                    <path d="M36 50 C30 50 26 54 26 59 C26 65 36 74 36 74 C36 74 46 65 46 59 C46 54 42 50 36 50Z" fill="#3b82f6"/>
-                    <circle cx="36" cy="59" r="4" fill="white"/>
-                    {/* Floating pin right */}
-                    <circle cx="148" cy="78" r="12" fill="#1e3a8a" opacity="0.8"/>
-                    <path d="M148 69 C143 69 140 73 140 77 C140 83 148 90 148 90 C148 90 156 83 156 77 C156 73 153 69 148 69Z" fill="#60a5fa"/>
-                    <circle cx="148" cy="77" r="3.5" fill="white"/>
-                    {/* Radio waves */}
-                    <path d="M118 44 C122 40 128 38 134 40" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7"/>
-                    <path d="M116 50 C122 44 132 41 140 44" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.5"/>
-                  </svg>
+                <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+                  <img
+                    src={moverFlexImg}
+                    alt="Mover going online with phone showing GO ONLINE toggle"
+                    className="w-full h-full object-contain"
+                    style={{ maxHeight: 220 }}
+                  />
                 </div>
-                <div className="px-6 pb-7 space-y-2 flex-1">
+                <div className="px-6 py-5 space-y-2 flex-1">
                   <h3 className="font-display font-bold text-lg tracking-tight text-white">Work when you want</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">Go online with one tap and get matched to nearby jobs instantly. No shifts, no minimums — move on your own terms.</p>
                 </div>
@@ -581,47 +535,15 @@ export default function Home() {
             {/* Card 3 — Build your reputation */}
             <StaggerItem>
               <div className="h-full rounded-2xl border border-amber-500/20 bg-gradient-to-b from-amber-500/10 to-transparent overflow-hidden flex flex-col">
-                {/* 3D Cartoon Illustration — Reputation */}
-                <div className="flex items-center justify-center pt-8 pb-4 px-6">
-                  <svg width="180" height="148" viewBox="0 0 180 148" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    {/* Glow */}
-                    <ellipse cx="90" cy="90" rx="68" ry="48" fill="#f59e0b" opacity="0.10"/>
-                    {/* Profile card shadow */}
-                    <rect x="34" y="32" width="112" height="82" rx="14" fill="#0c0a00" opacity="0.5"/>
-                    {/* Profile card */}
-                    <rect x="30" y="28" width="112" height="82" rx="14" fill="#1c1505" stroke="#78350f" strokeWidth="1.5"/>
-                    {/* Avatar */}
-                    <circle cx="62" cy="58" r="18" fill="#292524"/>
-                    <circle cx="62" cy="58" r="15" fill="#44403c"/>
-                    <circle cx="62" cy="53" r="7" fill="#78716c"/>
-                    <path d="M47 72 C47 65 54 61 62 61 C70 61 77 65 77 72" fill="#78716c"/>
-                    {/* Verified badge */}
-                    <circle cx="74" cy="44" r="10" fill="#d97706"/>
-                    <circle cx="74" cy="44" r="8" fill="#f59e0b"/>
-                    <path d="M70 44 L73 47 L79 41" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                    {/* Name line */}
-                    <rect x="84" y="45" width="46" height="7" rx="3.5" fill="#292524"/>
-                    <rect x="84" y="56" width="32" height="5" rx="2.5" fill="#1c1a19"/>
-                    {/* Divider */}
-                    <line x1="38" y1="82" x2="134" y2="82" stroke="#292524" strokeWidth="1"/>
-                    {/* 5 Stars */}
-                    {[0,1,2,3,4].map((i) => (
-                      <g key={i} transform={`translate(${42 + i * 20}, 90)`}>
-                        <polygon points="9,0 11,6 18,6 12,10 14,16 9,12 4,16 6,10 0,6 7,6" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5"/>
-                      </g>
-                    ))}
-                    {/* Rating number */}
-                    <text x="152" y="104" textAnchor="middle" fill="#fbbf24" fontSize="9" fontWeight="700" fontFamily="sans-serif">4.9</text>
-                    {/* Growth arrow */}
-                    <path d="M140 50 L154 36" stroke="#34d399" strokeWidth="2" strokeLinecap="round" fill="none"/>
-                    <path d="M148 36 L154 36 L154 42" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                    {/* Sparkle dots */}
-                    <circle cx="24" cy="38" r="3" fill="#fbbf24" opacity="0.7"/>
-                    <circle cx="18" cy="55" r="2" fill="#fbbf24" opacity="0.4"/>
-                    <circle cx="160" cy="65" r="2.5" fill="#fbbf24" opacity="0.6"/>
-                  </svg>
+                <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+                  <img
+                    src={moverReputationImg}
+                    alt="Mover holding 5-star rating card with verified badge"
+                    className="w-full h-full object-contain"
+                    style={{ maxHeight: 220 }}
+                  />
                 </div>
-                <div className="px-6 pb-7 space-y-2 flex-1">
+                <div className="px-6 py-5 space-y-2 flex-1">
                   <h3 className="font-display font-bold text-lg tracking-tight text-white">Build your reputation</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">Earn verified reviews after every move. Higher ratings unlock more bookings and a premium badge on your profile.</p>
                 </div>
