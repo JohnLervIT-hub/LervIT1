@@ -8414,11 +8414,22 @@ Respond with VALID JSON only:
       // Update the booking with the mover
       const updatedBooking = await storage.updateBooking(bookingId, {
         moverId: moverId,
-        status: 'accepted', // Mark as accepted since admin assigned it
+        status: 'confirmed', // 'confirmed' is the canonical "mover accepted" status
       });
       
       // Clear any pending job notifications for this booking
       await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+      
+      // Create an accepted notification record so the mover appears in analytics/leaderboard
+      const { calculateExpiryTime } = await import("@shared/matching");
+      await storage.createJobNotification({
+        bookingId: bookingId,
+        moverId: moverId,
+        distanceToPickup: "0",
+        estimatedEarnings: ((parseFloat(booking.price || '0')) * 0.85).toFixed(2),
+        status: 'accepted',
+        expiresAt: calculateExpiryTime(10080), // far future — admin assignments don't expire
+      });
       
       // Notify the mover about the assignment
       moverWebSocket.notifyMover(mover.userId, {
@@ -10913,7 +10924,7 @@ Respond with VALID JSON only:
       const totalCreatedBookings = allBookings.length;
       const totalPaid = allBookings.filter(b => b.paymentStatus === 'paid' || b.paymentStatus === 'succeeded').length;
       const totalCompleted = allBookings.filter(b => b.status === 'completed').length;
-      const totalConfirmed = allBookings.filter(b => ['confirmed', 'in_progress', 'completed'].includes(b.status)).length;
+      const totalConfirmed = allBookings.filter(b => ACTIVE_STATUSES.includes(b.status)).length;
       const totalStarted = totalAbandoned + totalCreatedBookings;
 
       const funnelSteps = [
@@ -10928,8 +10939,8 @@ Respond with VALID JSON only:
       // ---- LIVE OPS ----
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
       const pendingJobs = allBookings.filter(b => b.status === 'pending' && b.paymentStatus === 'paid').length;
-      const inProgressJobs = allBookings.filter(b => b.status === 'in_progress').length;
-      const pendingMoverAcceptance = allBookings.filter(b => b.status === 'confirmed' && b.moverId).length;
+      const inProgressJobs = allBookings.filter(b => ACTIVE_STATUSES.includes(b.status) && b.status !== 'completed').length;
+      const pendingMoverAcceptance = allBookings.filter(b => ['confirmed', 'accepted'].includes(b.status) && b.moverId).length;
       const onlineMovers = allMovers.filter(m => m.isAvailable).length;
       const liveGpsMovers = allMovers.filter(m => m.isAvailable && m.lastLocationUpdate && new Date(m.lastLocationUpdate) > oneHourAgo).length;
       const unverifiedMovers = allMovers.filter(m => !m.isVerified).length;
@@ -10944,10 +10955,14 @@ Respond with VALID JSON only:
       //   C) Notification exists with correct 'accepted' status → normal, modern flow.
       // ------------------------------------------------------------------
 
-      // Map: bookingId → moverId for every confirmed/in_progress/completed booking
+      // Statuses that mean a mover has accepted/is actively working on a booking
+      // 'accepted' is a legacy alias set by the admin assign-mover endpoint (now fixed to 'confirmed')
+      const ACTIVE_STATUSES = ['confirmed', 'accepted', 'in_progress', 'en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading', 'completed'];
+
+      // Map: bookingId → moverId for every booking where a mover is/was active
       const confirmedBookingMover = new Map(
         allBookings
-          .filter(b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status))
+          .filter(b => b.moverId && ACTIVE_STATUSES.includes(b.status))
           .map(b => [b.id, b.moverId!])
       );
 
@@ -11006,10 +11021,14 @@ Respond with VALID JSON only:
         else if (n.status === 'declined') moverNotifMap[n.moverId].declined++;
         else if (n.status === 'expired') moverNotifMap[n.moverId].expired++;
       }
-      // Gap-B: add inferred accepted for movers whose confirmed bookings have no notification record
+      // Gap-B: add inferred accepted for movers whose confirmed bookings have no notification record.
+      // Only skip when preSelectedMoverId === moverId (genuine direct accept counted in moverDirectMap).
+      // If preSelectedMoverId points to a DIFFERENT mover (original who declined), the current mover
+      // was proximity-matched as a replacement and still needs to be counted here.
       for (const b of allBookings) {
-        if (!b.moverId || b.preSelectedMoverId) continue;
-        if (!['confirmed', 'in_progress', 'completed'].includes(b.status)) continue;
+        if (!b.moverId) continue;
+        if (b.preSelectedMoverId === b.moverId) continue; // genuine direct accept — counted via moverDirectMap
+        if (!ACTIVE_STATUSES.includes(b.status)) continue;
         if (notifiedBookingIds.has(b.id)) continue; // already counted above
         const id = b.moverId;
         if (!moverNotifMap[id]) moverNotifMap[id] = { total: 0, accepted: 0, declined: 0, expired: 0 };
@@ -11024,8 +11043,8 @@ Respond with VALID JSON only:
         if (b.status === 'completed') {
           moverCompletedMap[id] = (moverCompletedMap[id] ?? 0) + 1;
         }
-        // Direct = customer pre-selected this mover (preSelectedMoverId set) and booking is confirmed
-        if (b.preSelectedMoverId === id && ['confirmed', 'in_progress', 'completed'].includes(b.status)) {
+        // Direct = customer pre-selected this specific mover and the booking is active
+        if (b.preSelectedMoverId === id && ACTIVE_STATUSES.includes(b.status)) {
           moverDirectMap[id] = (moverDirectMap[id] ?? 0) + 1;
         }
       }
@@ -11063,7 +11082,7 @@ Respond with VALID JSON only:
       // This is the true ground-truth rate, covering both direct and notification flows
       const totalPaidBookings = allBookings.filter(b => ['paid', 'succeeded'].includes(b.paymentStatus ?? '')).length;
       const totalMoverConfirmed = allBookings.filter(
-        b => b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status)
+        b => b.moverId && ACTIVE_STATUSES.includes(b.status)
       ).length;
       const overallAcceptanceRate = totalPaidBookings > 0 ? Math.round((totalMoverConfirmed / totalPaidBookings) * 100) : 0;
 
