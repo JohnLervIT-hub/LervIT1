@@ -227,6 +227,17 @@ export default function AdminMovesPage() {
     );
   }
 
+  // All statuses that mean the move is actively underway (mover accepted through final unloading)
+  const IN_PROGRESS_STATUSES = [
+    "confirmed",           // mover accepted the job
+    "accepted",            // legacy alias for confirmed
+    "in_progress",         // legacy generic in-progress
+    "en_route_to_pickup",  // mover driving to customer
+    "loading",             // loading items at pickup
+    "en_route_to_dropoff", // driving to destination
+    "unloading",           // unloading at destination
+  ];
+
   const filteredBookings = bookings?.filter(b => {
     const matchesSearch = 
       b.pickupAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -235,6 +246,7 @@ export default function AdminMovesPage() {
     
     const matchesStatus = 
       statusFilter === "all" ||
+      (statusFilter === "in_progress" && IN_PROGRESS_STATUSES.includes(b.status)) ||
       b.status === statusFilter;
     
     return matchesSearch && matchesStatus;
@@ -243,7 +255,7 @@ export default function AdminMovesPage() {
   const completedCount = bookings?.filter(b => b.status === "completed").length || 0;
   const pendingCount = bookings?.filter(b => b.status === "pending").length || 0;
   const pendingPaymentCount = bookings?.filter(b => b.status === "pending_payment" || b.status === "payment_failed").length || 0;
-  const inProgressCount = bookings?.filter(b => b.status === "in_progress" || b.status === "accepted" || b.status === "confirmed").length || 0;
+  const inProgressCount = bookings?.filter(b => IN_PROGRESS_STATUSES.includes(b.status)).length || 0;
   const cancelledCount = bookings?.filter(b => b.status === "cancelled").length || 0;
 
   const getStatusBadge = (status: string) => {
@@ -254,12 +266,20 @@ export default function AdminMovesPage() {
         return <Badge className="bg-red-500 text-white"><AlertTriangle className="w-3 h-3 mr-1" />Payment Failed</Badge>;
       case "completed":
         return <Badge className="bg-green-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
-      case "in_progress":
-        return <Badge className="bg-blue-500 text-white"><Truck className="w-3 h-3 mr-1" />In Progress</Badge>;
-      case "accepted":
-        return <Badge className="bg-blue-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Accepted</Badge>;
       case "confirmed":
         return <Badge className="bg-blue-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Confirmed</Badge>;
+      case "accepted":
+        return <Badge className="bg-blue-500 text-white"><CheckCircle className="w-3 h-3 mr-1" />Accepted</Badge>;
+      case "in_progress":
+        return <Badge className="bg-blue-500 text-white"><Truck className="w-3 h-3 mr-1" />In Progress</Badge>;
+      case "en_route_to_pickup":
+        return <Badge className="bg-blue-600 text-white"><Truck className="w-3 h-3 mr-1" />En Route</Badge>;
+      case "loading":
+        return <Badge className="bg-blue-700 text-white"><Truck className="w-3 h-3 mr-1" />Loading</Badge>;
+      case "en_route_to_dropoff":
+        return <Badge className="bg-indigo-500 text-white"><Truck className="w-3 h-3 mr-1" />To Dropoff</Badge>;
+      case "unloading":
+        return <Badge className="bg-indigo-700 text-white"><Truck className="w-3 h-3 mr-1" />Unloading</Badge>;
       case "pending":
         return <Badge className="bg-yellow-500 text-white"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
       case "cancelled":
@@ -351,9 +371,14 @@ export default function AdminMovesPage() {
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="accepted">Accepted</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress (all active)</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="en_route_to_pickup">En Route to Pickup</SelectItem>
+                    <SelectItem value="loading">Loading</SelectItem>
+                    <SelectItem value="en_route_to_dropoff">En Route to Dropoff</SelectItem>
+                    <SelectItem value="unloading">Unloading</SelectItem>
+                    <SelectItem value="pending">Pending (finding mover)</SelectItem>
+                    <SelectItem value="pending_payment">Awaiting Payment</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
