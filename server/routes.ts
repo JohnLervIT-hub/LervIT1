@@ -8431,15 +8431,19 @@ Respond with VALID JSON only:
         expiresAt: calculateExpiryTime(10080), // far future — admin assignments don't expire
       });
       
-      // Notify the mover about the assignment
-      moverWebSocket.notifyMover(mover.userId, {
-        type: 'job_notification',
-        bookingId: booking.id,
-        pickupAddress: booking.pickupAddress,
-        dropoffAddress: booking.dropoffAddress,
-        price: booking.price?.toString(),
-        data: { message: 'You have been assigned a new job by admin' },
-      });
+      // Notify the mover about the assignment (best-effort — don't fail the request if WS is down)
+      try {
+        moverWebSocket.notifyMover(mover.userId, {
+          type: 'job_notification',
+          bookingId: booking.id,
+          pickupAddress: booking.pickupAddress,
+          dropoffAddress: booking.dropoffAddress,
+          price: booking.price?.toString(),
+          data: { message: 'You have been assigned a new job by admin' },
+        });
+      } catch (wsErr) {
+        logger.warn({ bookingId, moverId, error: (wsErr as Error).message }, 'admin_assign_mover: WS notify failed (non-fatal)');
+      }
       
       // Send SMS to mover
       if (moverUser.phone) {

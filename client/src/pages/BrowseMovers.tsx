@@ -101,13 +101,14 @@ export default function BrowseMovers() {
     ? `${baseUrl}&lat=${userCoords.lat}&lng=${userCoords.lng}`
     : baseUrl;
 
-  const { data: movers, isLoading, refetch } = useQuery({
+  const { data: movers, isLoading, isError, refetch } = useQuery({
     queryKey: [baseUrl, userCoords?.lat, userCoords?.lng],
     queryFn: async () => {
       const res = await fetch(apiUrl);
       if (!res.ok) throw new Error('Failed to fetch movers');
       return res.json();
     },
+    retry: 2,
   });
 
   // Refetch when coords become available
@@ -359,6 +360,20 @@ export default function BrowseMovers() {
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <MoverCardSkeleton key={i} />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-16">
+            <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+              <X className="w-7 h-7 text-destructive" />
+            </div>
+            <p className="text-muted-foreground mb-4">Could not load movers. Please check your connection.</p>
+            <button
+              onClick={() => refetch()}
+              className="text-sm text-primary hover:underline"
+              data-testid="button-retry-movers"
+            >
+              Try again
+            </button>
           </div>
         ) : filteredMovers.length === 0 ? (
           <div className="text-center py-12">

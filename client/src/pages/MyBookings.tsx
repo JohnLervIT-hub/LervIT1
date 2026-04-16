@@ -117,9 +117,10 @@ export default function MyBookings() {
     setFocusedBookingId(bookingId);
   }, [location]);
 
-  const { data: bookings, isLoading } = useQuery<Booking[]>({
+  const { data: bookings, isLoading, isError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
+    retry: 2,
   });
   
   // Sort and filter bookings with safe date handling
@@ -276,6 +277,14 @@ export default function MyBookings() {
           <div className="flex flex-col items-center justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
             <p className="text-muted-foreground">Loading your bookings...</p>
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-7 h-7 text-destructive" />
+            </div>
+            <p className="text-muted-foreground mb-4">Could not load your bookings. Please try again.</p>
+            <Button onClick={() => window.location.reload()} size="sm" variant="outline">Retry</Button>
           </div>
         ) : !sortedBookings || sortedBookings.length === 0 ? (
           <Card className="border-dashed">

@@ -23,7 +23,8 @@ import {
   ChevronRight,
   Truck,
   Star,
-  RotateCcw
+  RotateCcw,
+  AlertCircle
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { format, isToday, isTomorrow, formatDistanceToNow } from "date-fns";
@@ -126,9 +127,10 @@ export default function CustomerDashboard() {
   const [actualLoadSize, setActualLoadSize] = useState('');
   const [feedbackComment, setFeedbackComment] = useState('');
 
-  const { data: bookings, isLoading } = useQuery<Booking[]>({
+  const { data: bookings, isLoading, isError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
+    retry: 2,
   });
 
   // Show welcome tutorial for new customers who haven't completed onboarding
@@ -460,6 +462,21 @@ export default function CustomerDashboard() {
 
   if (isLoading) {
     return <CustomerDashboardSkeleton />;
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen pt-20 pb-12 bg-background flex items-center justify-center">
+        <div className="text-center max-w-sm mx-auto px-4">
+          <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold mb-2">Could not load your bookings</h2>
+          <p className="text-sm text-muted-foreground mb-4">There was a problem connecting to the server. Please check your connection and try again.</p>
+          <Button onClick={() => window.location.reload()} size="sm">Retry</Button>
+        </div>
+      </div>
+    );
   }
 
   return (

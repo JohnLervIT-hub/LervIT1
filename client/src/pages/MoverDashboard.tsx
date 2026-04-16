@@ -344,10 +344,11 @@ export default function MoverDashboard() {
   };
 
   // Get all bookings for this mover (server returns assigned + available)
-  const { data: allBookings, isLoading } = useQuery<Booking[]>({
+  const { data: allBookings, isLoading, isError: bookingsError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
     refetchInterval: 30000,
+    retry: 2,
   });
 
   // Client-side filtering: separate assigned from available bookings
@@ -1011,6 +1012,21 @@ export default function MoverDashboard() {
 
   if (isLoading || !mover) {
     return <MoverDashboardSkeleton />;
+  }
+
+  if (bookingsError) {
+    return (
+      <div className="min-h-screen pt-20 pb-12 bg-background flex items-center justify-center">
+        <div className="text-center max-w-sm mx-auto px-4">
+          <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-7 h-7 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold mb-2">Could not load jobs</h2>
+          <p className="text-sm text-muted-foreground mb-4">There was a problem connecting to the server. Please check your connection and try again.</p>
+          <Button onClick={() => window.location.reload()} size="sm">Retry</Button>
+        </div>
+      </div>
+    );
   }
 
   const renderBookingCard = (booking: Booking, showActions: boolean = false) => (

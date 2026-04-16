@@ -160,7 +160,11 @@ class MoverWebSocketServer {
       });
 
       // Send connection acknowledgment
-      ws.send(JSON.stringify({ type: 'connected', moverId, userId }));
+      try {
+        ws.send(JSON.stringify({ type: 'connected', moverId, userId }));
+      } catch (e) {
+        logger.warn({ userId, moverId }, 'Failed to send WS connection ack');
+      }
     });
 
     // Start ping interval to keep connections alive
@@ -169,10 +173,14 @@ class MoverWebSocketServer {
       this.clients.forEach((client, clientId) => {
         if (now - client.lastPing > 60000) {
           // No pong for 60 seconds, close connection
-          client.ws.close(4002, 'Ping timeout');
+          try { client.ws.close(4002, 'Ping timeout'); } catch (_) {}
           this.clients.delete(clientId);
         } else if (client.ws.readyState === WebSocket.OPEN) {
-          client.ws.send(JSON.stringify({ type: 'ping' }));
+          try {
+            client.ws.send(JSON.stringify({ type: 'ping' }));
+          } catch (e) {
+            this.clients.delete(clientId);
+          }
         }
       });
     }, 30000);
@@ -201,11 +209,15 @@ class MoverWebSocketServer {
     // Match by userId since job notifications use userId as the moverId
     this.clients.forEach((client) => {
       if (client.userId === userId && client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(JSON.stringify({
-          ...notification,
-          timestamp: new Date().toISOString()
-        }));
-        sentCount++;
+        try {
+          client.ws.send(JSON.stringify({
+            ...notification,
+            timestamp: new Date().toISOString()
+          }));
+          sentCount++;
+        } catch (e) {
+          logger.warn({ userId, type: notification.type }, 'Failed to send WS notification to mover');
+        }
       }
     });
 
@@ -220,8 +232,12 @@ class MoverWebSocketServer {
     let sentCount = 0;
     this.clients.forEach((client) => {
       if (client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(JSON.stringify(message));
-        sentCount++;
+        try {
+          client.ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (e) {
+          logger.warn('Failed to broadcast WS message to a client');
+        }
       }
     });
     return sentCount;

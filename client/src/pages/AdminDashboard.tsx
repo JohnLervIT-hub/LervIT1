@@ -388,7 +388,7 @@ function GrowthDashboard() {
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-2 h-24">
-            {metrics.trends.dailyBookings.map((day) => (
+            {(metrics.trends?.dailyBookings ?? []).map((day) => (
               <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
                 <div 
                   className="w-full bg-primary/20 rounded-t"
@@ -506,7 +506,7 @@ function GrowthDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {metrics.fulfilment.driverPerformance.map((driver) => (
+                        {(metrics.fulfilment?.driverPerformance ?? []).map((driver) => (
                           <tr key={driver.moverId} className="border-t" data-testid={`row-driver-${driver.moverId}`}>
                             <td className="p-3 font-medium">{driver.name}</td>
                             <td className="p-3 text-center">{driver.totalMoves}</td>
