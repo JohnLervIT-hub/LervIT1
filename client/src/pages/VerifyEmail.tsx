@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,20 +10,19 @@ export default function VerifyEmail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
-  const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [verificationStatus, setVerificationStatus] = useState<"pending" | "success" | "error">("pending");
   const [errorMessage, setErrorMessage] = useState("");
   const [isResending, setIsResending] = useState(false);
   const [emailFromApi, setEmailFromApi] = useState("");
-  
-  // Prevent duplicate verification calls
+  const [countdown, setCountdown] = useState(3);
+
   const verificationAttemptedRef = useRef(false);
   const verificationInProgressRef = useRef(false);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const userEmail = emailFromApi || user?.email || "";
 
-  // Helper function to get dashboard based on user role
   const getDashboardRoute = (role: string) => {
     switch (role) {
       case 'mover': return '/mover-dashboard';
@@ -32,67 +31,120 @@ export default function VerifyEmail() {
     }
   };
 
+  const navigateToDashboard = useCallback((role?: string) => {
+    setLocation(role ? getDashboardRoute(role) : '/login');
+  }, [setLocation]);
+
+  // Stop polling helper
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
+
+  // Poll /api/auth/me every 4 seconds while on the waiting screen.
+  // Handles the case where the user clicks the link in an external browser (Safari/Chrome)
+  // then switches back to the app — the app detects the change automatically.
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return; // already polling
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.emailVerified) {
+            stopPolling();
+            if (refreshUser) await refreshUser();
+            setVerificationStatus("success");
+            toast({ title: "Email verified!", description: "Welcome to LervIT!" });
+          }
+        }
+      } catch {
+        // network error during polling — silently ignore, will retry
+      }
+    }, 4000);
+  }, [refreshUser, stopPolling, toast]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
+
+  // Listen for Capacitor app resume events (user switches back from external browser)
+  useEffect(() => {
+    let removeListener: (() => void) | undefined;
+    const setupCapacitorListener = async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        const handle = await App.addListener("appStateChange", async ({ isActive }) => {
+          if (isActive && verificationStatus === "pending") {
+            if (refreshUser) await refreshUser();
+          }
+        });
+        removeListener = () => handle.remove();
+      } catch {
+        // Not running in Capacitor — listener not needed
+      }
+    };
+    setupCapacitorListener();
+    return () => { if (removeListener) removeListener(); };
+  }, [verificationStatus, refreshUser]);
+
+  // Main effect: runs when token is in URL or when user auth state changes
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenParam = params.get("token");
-    
+
     if (tokenParam) {
-      // Only attempt verification once per page load
-      if (verificationAttemptedRef.current || verificationInProgressRef.current) {
-        return;
-      }
+      if (verificationAttemptedRef.current || verificationInProgressRef.current) return;
       verificationAttemptedRef.current = true;
-      setToken(tokenParam);
       verifyEmail(tokenParam);
     } else {
-      // No token - user is here to see verification required message
       setIsLoading(false);
-      // If user is logged in but not verified, show pending state
-      if (user && !user.emailVerified) {
-        setVerificationStatus("pending");
-      } else if (user && user.emailVerified) {
-        // Already verified, redirect to appropriate dashboard based on role
+      if (user && user.emailVerified) {
+        stopPolling();
         setLocation(getDashboardRoute(user.role));
+      } else if (user && !user.emailVerified) {
+        setVerificationStatus("pending");
+        startPolling();
       } else {
         setVerificationStatus("error");
         setErrorMessage("No verification token found. Please check your email for the verification link.");
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const verifyEmail = async (verificationToken: string) => {
-    // Prevent concurrent verification attempts
-    if (verificationInProgressRef.current) {
+  // Auto-redirect countdown after successful in-app verification
+  useEffect(() => {
+    if (verificationStatus !== "success") return;
+    stopPolling();
+    if (countdown <= 0) {
+      navigateToDashboard(user?.role);
       return;
     }
+    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [verificationStatus, countdown, user, navigateToDashboard, stopPolling]);
+
+  const verifyEmail = async (verificationToken: string) => {
+    if (verificationInProgressRef.current) return;
     verificationInProgressRef.current = true;
-    
     try {
       const response = await fetch("/api/auth/verify-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: verificationToken }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
-        if (data.email) {
-          setEmailFromApi(data.email);
-        }
+        if (data.email) setEmailFromApi(data.email);
         throw new Error(data.error || "Failed to verify email");
       }
-
       setVerificationStatus("success");
-      
-      if (refreshUser) {
-        await refreshUser();
-      }
-      
-      toast({
-        title: "Email verified!",
-        description: "Your email has been successfully verified. Welcome to LervIT!",
-      });
+      if (refreshUser) await refreshUser();
+      toast({ title: "Email verified!", description: "Your email has been successfully verified. Welcome to LervIT!" });
     } catch (error) {
       setVerificationStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Verification failed. Please try again.");
@@ -109,15 +161,10 @@ export default function VerifyEmail() {
 
   const handleResendVerification = async () => {
     if (!userEmail) {
-      toast({
-        variant: "destructive",
-        title: "Email required",
-        description: "Please log in to resend the verification email.",
-      });
+      toast({ variant: "destructive", title: "Email required", description: "Please log in to resend the verification email." });
       setLocation("/login");
       return;
     }
-
     setIsResending(true);
     try {
       const response = await fetch("/api/auth/resend-verification", {
@@ -125,22 +172,13 @@ export default function VerifyEmail() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail }),
       });
-
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to resend verification email");
+        const err = await response.json();
+        throw new Error(err.error || "Failed to resend verification email");
       }
-
-      toast({
-        title: "Verification email sent!",
-        description: "Please check your inbox for the new verification link.",
-      });
+      toast({ title: "Verification email sent!", description: "Please check your inbox for the new verification link." });
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to resend",
-        description: error instanceof Error ? error.message : "Please try again later.",
-      });
+      toast({ variant: "destructive", title: "Failed to resend", description: error instanceof Error ? error.message : "Please try again later." });
     } finally {
       setIsResending(false);
     }
@@ -157,16 +195,13 @@ export default function VerifyEmail() {
               </div>
             </div>
             <h1 className="text-2xl font-bold">Verifying Your Email</h1>
-            <p className="text-muted-foreground">
-              Please wait while we verify your email address...
-            </p>
+            <p className="text-muted-foreground">Please wait while we verify your email address...</p>
           </CardHeader>
         </Card>
       </div>
     );
   }
 
-  // Show pending verification message when user needs to verify email
   if (verificationStatus === "pending" && user && !user.emailVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
@@ -178,18 +213,16 @@ export default function VerifyEmail() {
               </div>
             </div>
             <h1 className="text-2xl font-bold">Verify Your Email</h1>
-            <p className="text-muted-foreground">
-              Please verify your email address to access the dashboard
-            </p>
+            <p className="text-muted-foreground">Please verify your email address to access the dashboard</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-center text-muted-foreground">
-              We've sent a verification link to <strong>{user.email}</strong>. 
+              We've sent a verification link to <strong>{user.email}</strong>.{" "}
               Please check your inbox and spam folder, then click the link to verify your account.
             </p>
             <div className="bg-muted/50 p-4 rounded-lg">
-              <p className="text-sm text-center">
-                Didn't receive the email? Click below to resend.
+              <p className="text-sm text-center text-muted-foreground">
+                After clicking the link in your email, this page will automatically update.
               </p>
             </div>
           </CardContent>
@@ -201,29 +234,17 @@ export default function VerifyEmail() {
               data-testid="button-resend-verification"
             >
               {isResending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Sending...
-                </>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
               ) : (
-                <>
-                  <Mail className="w-4 h-4 mr-2" />
-                  Resend Verification Email
-                </>
+                <><Mail className="w-4 h-4 mr-2" />Resend Verification Email</>
               )}
             </Button>
             <Button
               variant="outline"
               className="w-full"
               onClick={async () => {
-                toast({
-                  title: "Checking verification status...",
-                  description: "Please wait...",
-                });
-                if (refreshUser) {
-                  await refreshUser();
-                }
-                // After refresh, useEffect will handle redirect if verified
+                toast({ title: "Checking verification status...", description: "Please wait..." });
+                if (refreshUser) await refreshUser();
               }}
               data-testid="button-check-status"
             >
@@ -252,16 +273,16 @@ export default function VerifyEmail() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-center text-muted-foreground">
-              Thank you for verifying your email address. Your account is now fully activated.
+              Redirecting you to your dashboard in {countdown} second{countdown !== 1 ? "s" : ""}...
             </p>
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <Button
               className="w-full"
-              onClick={() => setLocation(user ? getDashboardRoute(user.role) : "/dashboard")}
+              onClick={() => navigateToDashboard(user?.role)}
               data-testid="button-go-to-dashboard"
             >
-              Go to Dashboard
+              Go to Dashboard Now
             </Button>
             <Button
               variant="outline"
@@ -287,9 +308,7 @@ export default function VerifyEmail() {
             </div>
           </div>
           <h1 className="text-2xl font-bold">Verification Failed</h1>
-          <p className="text-muted-foreground">
-            {errorMessage}
-          </p>
+          <p className="text-muted-foreground">{errorMessage}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-center text-muted-foreground">
@@ -305,15 +324,9 @@ export default function VerifyEmail() {
               data-testid="button-resend-verification"
             >
               {isResending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Sending...
-                </>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
               ) : (
-                <>
-                  <Mail className="w-4 h-4 mr-2" />
-                  Resend Verification Email
-                </>
+                <><Mail className="w-4 h-4 mr-2" />Resend Verification Email</>
               )}
             </Button>
           ) : (

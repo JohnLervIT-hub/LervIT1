@@ -881,8 +881,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(usersTable.id, user.id));
       
-      // Send role-specific welcome email
-      await notificationService.sendWelcomeEmail(user.email, user.name, user.role);
+      // Send welcome email fire-and-forget — never block or fail the verification response
+      notificationService.sendWelcomeEmail(user.email, user.name, user.role).catch((err) => {
+        console.error("Failed to send welcome email (non-critical):", err);
+      });
       
       res.json({ message: "Email verified successfully! Welcome to LervIT." });
     } catch (error) {
