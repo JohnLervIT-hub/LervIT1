@@ -480,18 +480,23 @@ export default function Home() {
       </section>
 
       {/* Become a Mover Section */}
-      <section className="py-16 md:py-20 lg:py-24 bg-muted/30" data-testid="section-become-mover">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-20 md:py-32 relative overflow-hidden" data-testid="section-become-mover">
+        {/* Dark showcase background */}
+        <div className="absolute inset-0 bg-slate-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(59,130,246,0.12),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_80%_80%,rgba(16,185,129,0.07),transparent)]" />
+
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
-            <div className="text-center mb-12 md:mb-16 space-y-4">
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-sm font-medium">
+            <div className="text-center mb-16">
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-sm font-medium mb-6">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                 Now hiring in Calgary
               </span>
-              <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight">
+              <h2 className="font-display text-4xl md:text-6xl font-extrabold tracking-tight mb-5 text-white">
                 Become a Mover
               </h2>
-              <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
+              <p className="text-slate-400 text-base md:text-xl max-w-2xl mx-auto leading-relaxed">
                 Join Calgary's fastest-growing moving network. Keep the majority of every job, set your own hours, and build a business on your terms.
               </p>
             </div>
@@ -500,8 +505,8 @@ export default function Home() {
           <StaggerChildren className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-14">
             {/* Card 1 — Keep 85% */}
             <StaggerItem>
-              <div className="h-full rounded-2xl border bg-card overflow-hidden flex flex-col">
-                <div className="bg-muted rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+              <div className="h-full rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/10 to-transparent overflow-hidden flex flex-col">
+                <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
                   <img
                     src={moverEarningsImg}
                     alt="Mover holding cash with 85% badge"
@@ -510,16 +515,16 @@ export default function Home() {
                   />
                 </div>
                 <div className="px-6 py-5 space-y-2 flex-1">
-                  <h3 className="font-display font-bold text-lg tracking-tight text-foreground">Keep 85% of every job</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">LervIT takes only a small platform fee. The rest goes straight to you — with automated weekly payouts via Stripe.</p>
+                  <h3 className="font-display font-bold text-lg tracking-tight text-white">Keep 85% of every job</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">LervIT takes only a small platform fee. The rest goes straight to you — with automated weekly payouts via Stripe.</p>
                 </div>
               </div>
             </StaggerItem>
 
             {/* Card 2 — Work when you want */}
             <StaggerItem>
-              <div className="h-full rounded-2xl border bg-card overflow-hidden flex flex-col">
-                <div className="bg-muted rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+              <div className="h-full rounded-2xl border border-blue-500/20 bg-gradient-to-b from-blue-500/10 to-transparent overflow-hidden flex flex-col">
+                <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
                   <img
                     src={moverFlexImg}
                     alt="Mover going online with phone showing GO ONLINE toggle"
@@ -528,16 +533,16 @@ export default function Home() {
                   />
                 </div>
                 <div className="px-6 py-5 space-y-2 flex-1">
-                  <h3 className="font-display font-bold text-lg tracking-tight text-foreground">Work when you want</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">Go online with one tap and get matched to nearby jobs instantly. No shifts, no minimums — move on your own terms.</p>
+                  <h3 className="font-display font-bold text-lg tracking-tight text-white">Work when you want</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">Go online with one tap and get matched to nearby jobs instantly. No shifts, no minimums — move on your own terms.</p>
                 </div>
               </div>
             </StaggerItem>
 
             {/* Card 3 — Build your reputation */}
             <StaggerItem>
-              <div className="h-full rounded-2xl border bg-card overflow-hidden flex flex-col">
-                <div className="bg-muted rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+              <div className="h-full rounded-2xl border border-amber-500/20 bg-gradient-to-b from-amber-500/10 to-transparent overflow-hidden flex flex-col">
+                <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
                   <img
                     src={moverReputationImg}
                     alt="Mover holding 5-star rating card with verified badge"
@@ -546,16 +551,16 @@ export default function Home() {
                   />
                 </div>
                 <div className="px-6 py-5 space-y-2 flex-1">
-                  <h3 className="font-display font-bold text-lg tracking-tight text-foreground">Build your reputation</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">Earn verified reviews after every move. Higher ratings unlock more bookings and a premium badge on your profile.</p>
+                  <h3 className="font-display font-bold text-lg tracking-tight text-white">Build your reputation</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">Earn verified reviews after every move. Higher ratings unlock more bookings and a premium badge on your profile.</p>
                 </div>
               </div>
             </StaggerItem>
           </StaggerChildren>
 
-          {/* Stats row */}
+          {/* Investor-grade stats row */}
           <FadeIn>
-            <div className="flex flex-wrap justify-center gap-x-10 gap-y-6 mb-12 border-t pt-10">
+            <div className="flex flex-wrap justify-center gap-x-10 gap-y-6 mb-12 border-t border-white/5 pt-10">
               {[
                 { value: "85%", label: "Avg. payout rate" },
                 { value: "Weekly", label: "Automatic payouts" },
@@ -563,8 +568,8 @@ export default function Home() {
                 { value: "24 hr", label: "Avg. first job match" },
               ].map(({ value, label }) => (
                 <div key={label} className="text-center min-w-[90px]">
-                  <div className="text-2xl md:text-3xl font-extrabold text-foreground font-display tracking-tight">{value}</div>
-                  <div className="text-xs text-muted-foreground mt-1 font-medium uppercase tracking-wider">{label}</div>
+                  <div className="text-2xl md:text-3xl font-extrabold text-white font-display tracking-tight">{value}</div>
+                  <div className="text-xs text-slate-500 mt-1 font-medium uppercase tracking-wider">{label}</div>
                 </div>
               ))}
             </div>
@@ -578,7 +583,7 @@ export default function Home() {
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild data-testid="button-become-mover-learn">
+            <Button size="lg" variant="outline" className="border-white/20 text-white bg-white/5 hover:bg-white/10" asChild data-testid="button-become-mover-learn">
               <a href="mailto:movers@lervit.com" className="inline-flex items-center gap-2">
                 <Mail className="w-4 h-4" />
                 Talk to our team
@@ -586,7 +591,7 @@ export default function Home() {
             </Button>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground mt-6">
+          <p className="text-center text-xs text-slate-600 mt-6">
             Verification required. Must have a valid driver's license and vehicle insurance.
           </p>
         </div>
