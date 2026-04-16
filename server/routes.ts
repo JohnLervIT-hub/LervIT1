@@ -8197,13 +8197,20 @@ Respond with VALID JSON only:
       
       if (bookingDate < today) {
         return res.status(400).json({ 
-          error: "Cannot resend notifications for past bookings. This booking was scheduled for " + booking.preferredDate.toLocaleDateString(),
+          error: "Cannot resend notifications for past bookings. This booking was scheduled for " + new Date(booking.preferredDate).toLocaleDateString('en-US', { timeZone: 'America/Edmonton' }),
           preferredDate: booking.preferredDate
         });
       }
       
       // Delete any existing pending notifications for this booking
       await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+      
+      // Reset booking to pending state so the customer sees "Awaiting Mover"
+      // and movers see the job as available (not already claimed)
+      await storage.updateBooking(bookingId, {
+        status: 'pending',
+        moverId: null,
+      });
       
       // Get matching movers and send notifications
       const { findNearestMovers, calculateExpiryTime } = await import("@shared/matching");
