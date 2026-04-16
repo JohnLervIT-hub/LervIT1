@@ -493,7 +493,7 @@ export default function Home() {
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                 Now hiring in Calgary
               </span>
-              <h2 className="font-display text-4xl md:text-6xl font-extrabold tracking-tight mb-5 text-white">
+              <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight mb-5 text-white">
                 Become a Mover
               </h2>
               <p className="text-slate-400 text-base md:text-xl max-w-2xl mx-auto leading-relaxed">
@@ -505,7 +505,7 @@ export default function Home() {
           <StaggerChildren className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-14">
             {/* Card 1 — Keep 85% */}
             <StaggerItem>
-              <div className="h-full rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/10 to-transparent overflow-hidden flex flex-col">
+              <div className="h-full rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800/60 to-slate-900/30 overflow-hidden flex flex-col">
                 <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
                   <img
                     src={moverEarningsImg}
@@ -523,7 +523,7 @@ export default function Home() {
 
             {/* Card 2 — Work when you want */}
             <StaggerItem>
-              <div className="h-full rounded-2xl border border-blue-500/20 bg-gradient-to-b from-blue-500/10 to-transparent overflow-hidden flex flex-col">
+              <div className="h-full rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800/60 to-slate-900/30 overflow-hidden flex flex-col">
                 <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
                   <img
                     src={moverFlexImg}
@@ -541,7 +541,7 @@ export default function Home() {
 
             {/* Card 3 — Build your reputation */}
             <StaggerItem>
-              <div className="h-full rounded-2xl border border-amber-500/20 bg-gradient-to-b from-amber-500/10 to-transparent overflow-hidden flex flex-col">
+              <div className="h-full rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800/60 to-slate-900/30 overflow-hidden flex flex-col">
                 <div className="bg-white rounded-xl mx-4 mt-5 overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
                   <img
                     src={moverReputationImg}
