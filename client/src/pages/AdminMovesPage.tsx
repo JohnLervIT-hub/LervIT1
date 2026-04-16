@@ -81,6 +81,7 @@ export default function AdminMovesPage() {
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
+    refetchInterval: 30000,
   });
 
   // Fetch available movers for assignment

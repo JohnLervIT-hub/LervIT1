@@ -594,6 +594,7 @@ export default function AdminDashboard() {
 
   const { data: bookingsData, isLoading: bookingsLoading, error: bookingsError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
+    refetchInterval: 30000,
   });
   const bookings = Array.isArray(bookingsData) ? bookingsData : [];
 

@@ -10986,7 +10986,7 @@ Respond with VALID JSON only:
       const gapBInferredAccepted = allBookings.filter(b =>
         b.moverId &&
         !b.preSelectedMoverId &&
-        ['confirmed', 'in_progress', 'completed'].includes(b.status) &&
+        ACTIVE_STATUSES.includes(b.status) &&
         !notifiedBookingIds.has(b.id)
       ).length;
 
@@ -11000,7 +11000,7 @@ Respond with VALID JSON only:
       // Direct acceptances = bookings where customer explicitly pre-selected a mover who then confirmed
       // (preSelectedMoverId is the source-of-truth indicator — set at booking creation when customer picks a specific mover)
       const directAcceptedBookings = allBookings.filter(
-        b => b.preSelectedMoverId && b.moverId && ['confirmed', 'in_progress', 'completed'].includes(b.status)
+        b => b.preSelectedMoverId && b.moverId && ACTIVE_STATUSES.includes(b.status)
       ).length;
 
       // ---- MOVER PERFORMANCE ----
