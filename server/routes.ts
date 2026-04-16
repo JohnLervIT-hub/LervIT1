@@ -10938,7 +10938,8 @@ Respond with VALID JSON only:
 
       // ---- LIVE OPS ----
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      const pendingJobs = allBookings.filter(b => b.status === 'pending' && b.paymentStatus === 'paid').length;
+      const isPaid = (b: typeof allBookings[0]) => b.paymentStatus === 'succeeded' || b.paymentStatus === 'paid';
+      const pendingJobs = allBookings.filter(b => b.status === 'pending' && isPaid(b)).length;
       const inProgressJobs = allBookings.filter(b => ACTIVE_STATUSES.includes(b.status) && b.status !== 'completed').length;
       const pendingMoverAcceptance = allBookings.filter(b => ['confirmed', 'accepted'].includes(b.status) && b.moverId).length;
       const onlineMovers = allMovers.filter(m => m.isAvailable).length;
