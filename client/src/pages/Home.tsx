@@ -13,10 +13,10 @@ import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Bri
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Skeleton } from "@/components/ui/skeleton";
-import visionEngineIcon from "@assets/generated_images/3d_ai_eye_no_background.png";
-import matchLogicIcon from "@assets/generated_images/3d_network_pins_no_background.png";
-import securePayIcon from "@assets/generated_images/3d_secure_card_no_background.png";
-import trustShieldIcon from "@assets/generated_images/3d_trust_shield_no_background.png";
+import visionEngineIcon from "@assets/generated_images/feature_vision_engine.png";
+import matchLogicIcon from "@assets/generated_images/feature_match_logic.png";
+import securePayIcon from "@assets/generated_images/feature_secure_pay.png";
+import trustShieldIcon from "@assets/generated_images/feature_trust_shield.png";
 import moverEarningsImg from "@assets/generated_images/mover_earnings_85.png";
 import moverFlexImg from "@assets/generated_images/mover_go_online_flex.png";
 import moverReputationImg from "@assets/generated_images/mover_reputation_stars.png";
@@ -387,12 +387,19 @@ export default function Home() {
           <StaggerChildren className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
             {features.map((feature, index) => (
               <StaggerItem key={index}>
-                <div className="group text-center p-6" data-testid={`card-feature-${index}`}>
-                  <div className="inline-flex items-center justify-center w-24 h-24 mb-5 group-hover:scale-110 transition-transform duration-300">
-                    <img src={feature.icon} alt={feature.title} className="w-full h-full object-contain" style={{ background: 'none' }} />
+                <div className="group flex flex-col rounded-2xl border border-border/50 bg-card overflow-hidden hover-elevate" data-testid={`card-feature-${index}`}>
+                  <div className="bg-white flex items-center justify-center p-4" style={{ minHeight: 160 }}>
+                    <img
+                      src={feature.icon}
+                      alt={feature.title}
+                      className="w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                      style={{ maxHeight: 150 }}
+                    />
                   </div>
-                  <h3 className="font-display font-bold text-lg mb-3 tracking-tight">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+                  <div className="p-5 space-y-1.5">
+                    <h3 className="font-display font-bold text-base tracking-tight">{feature.title}</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>
+                  </div>
                 </div>
               </StaggerItem>
             ))}
@@ -572,7 +579,7 @@ export default function Home() {
             <Button size="lg" asChild data-testid="button-become-mover-cta">
               <Link href="/signup">
                 <Truck className="w-4 h-4 mr-2" />
-                Apply to become a mover
+                Become a mover
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Link>
             </Button>

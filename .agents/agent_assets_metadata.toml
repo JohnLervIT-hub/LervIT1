@@ -54,6 +54,30 @@ uri = "file://attached_assets/generated_images/hiw_step3_v2.png"
 type = "image"
 title = "live GPS tracking phone truck"
 
+[[generated]]
+id = "x1JJYlE90hfG5B2y1WjNN"
+uri = "file://attached_assets/generated_images/feature_vision_engine.png"
+type = "image"
+title = "AI vision engine phone scanning furniture"
+
+[[generated]]
+id = "u88Tm8X-wiLZ2nXUwf623"
+uri = "file://attached_assets/generated_images/feature_match_logic.png"
+type = "image"
+title = "match logic GPS mover network"
+
+[[generated]]
+id = "sXTsmhBYT4M_nVGUTNel8"
+uri = "file://attached_assets/generated_images/feature_secure_pay.png"
+type = "image"
+title = "secure pay Stripe card shield"
+
+[[generated]]
+id = "nrbCsuYxLlmdz50yORvhR"
+uri = "file://attached_assets/generated_images/feature_trust_shield.png"
+type = "image"
+title = "trust shield verified badge"
+
 [[outputs]]
 id = "GifJ2V3leOcbRaDzlCOce"
 uri = "file://attached_assets/screenshots/6397d05f-aa2c-4df0-92ef-e226018b8f65-00-278pmwf971x7j_spock_replit_dev_mockup_preview_lervit-architecture_PhasedOrchestration.png"
