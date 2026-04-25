@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, DollarSign, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
+import { VOLUME_LOAD_FEE_PER_CUFT, VOLUME_LOAD_FEE_MINIMUM } from "@shared/pricing";
 import { memo } from "react";
 
 interface IdentifiedItemsListProps {
@@ -42,7 +43,8 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   
   const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
   const totalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
-  const totalEstimatedPrice = completedItems.reduce((sum, item) => sum + parseFloat(item.estimatedPrice || '0'), 0);
+  // Recalculate live from current rate so it always matches totalVolume × VOLUME_LOAD_FEE_PER_CUFT
+  const totalEstimatedPrice = Math.max(totalVolume * VOLUME_LOAD_FEE_PER_CUFT, VOLUME_LOAD_FEE_MINIMUM);
   const maxRecommendedMovers = completedItems.length > 0 
     ? Math.max(...completedItems.map(item => item.recommendedMovers || 1))
     : 1;
@@ -238,13 +240,13 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                               : '—'}
                           </span>
                         </div>
-                        {item.estimatedPrice && parseFloat(item.estimatedPrice) > 0 && (
+                        {item.volumeCuft && parseFloat(item.volumeCuft) > 0 && (
                           <div className="flex items-center gap-1.5 text-sm col-span-2 sm:col-span-2" data-testid={`text-price-${index}`}>
                             <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                             <span className="font-semibold text-green-700 dark:text-green-400">
-                              Est. ${parseFloat(item.estimatedPrice).toFixed(2)}
+                              Est. ${Math.max(parseFloat(item.volumeCuft) * VOLUME_LOAD_FEE_PER_CUFT, VOLUME_LOAD_FEE_MINIMUM).toFixed(2)}
                             </span>
-                            <span className="text-muted-foreground text-xs">($0.19/ft³)</span>
+                            <span className="text-muted-foreground text-xs">(${VOLUME_LOAD_FEE_PER_CUFT.toFixed(2)}/ft³)</span>
                           </div>
                         )}
                       </div>
