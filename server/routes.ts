@@ -408,21 +408,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!apiKey) {
         return res.status(500).json({ error: "API configuration error" });
       }
-      const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
-      url.searchParams.append('latlng', `${lat},${lng}`);
-      url.searchParams.append('key', apiKey);
-      url.searchParams.append('result_type', 'street_address|premise');
-      url.searchParams.append('language', 'en');
 
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        return res.status(500).json({ error: "Geocoding failed" });
+      async function geocode(resultType?: string): Promise<string | null> {
+        const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+        url.searchParams.append('latlng', `${lat},${lng}`);
+        url.searchParams.append('key', apiKey!);
+        url.searchParams.append('language', 'en');
+        if (resultType) url.searchParams.append('result_type', resultType);
+        const response = await fetch(url.toString());
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (data.status !== 'OK' || !data.results?.length) return null;
+        // Prefer a result whose types include a specific address
+        const preferred = data.results.find((r: any) =>
+          r.types?.some((t: string) => ['street_address', 'premise', 'subpremise', 'route'].includes(t))
+        );
+        return (preferred ?? data.results[0]).formatted_address as string;
       }
-      const data = await response.json();
-      if (data.status !== 'OK' || !data.results?.length) {
-        return res.json({ address: null });
-      }
-      res.json({ address: data.results[0].formatted_address });
+
+      // Try strict filter first; fall back to all result types
+      const address = (await geocode('street_address|premise')) ?? (await geocode());
+      res.json({ address: address ?? null });
     } catch (error) {
       console.error('[REVERSE GEOCODE] Error:', error);
       res.status(500).json({ error: "Internal server error" });

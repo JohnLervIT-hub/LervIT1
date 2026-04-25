@@ -330,8 +330,8 @@ export default function RequestMove() {
   // Auto-fill pickup address from GPS coordinates once permission is granted
   useEffect(() => {
     if (!geoCoords || pickupAddress) return;
-    const { latitude, longitude } = geoCoords;
-    fetch(`/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}`)
+    const { lat, lng } = geoCoords;
+    fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`)
       .then(r => r.json())
       .then(data => {
         if (data.address && !pickupAddress) {
