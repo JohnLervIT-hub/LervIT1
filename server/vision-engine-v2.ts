@@ -211,6 +211,12 @@ function enforceMinimumVolume(
 ): { volume: number; wasEnforced: boolean; minApplied?: number } {
   const categoryLower = category.toLowerCase();
   const nameLower = itemName.toLowerCase();
+
+  // Boxes are counted individually — never apply a category floor to them
+  // (a single small box is legitimately 1-2 ft³; the quantity multiplier handles the total)
+  if (nameLower.includes('box') || nameLower.includes('cardboard') || nameLower.includes('packing box')) {
+    return { volume: calculatedVolume, wasEnforced: false };
+  }
   
   // First, check subcategory-specific minimums
   for (const [subcat, minVol] of Object.entries(SUBCATEGORY_MIN_VOLUMES)) {
@@ -356,6 +362,23 @@ function detectQuantity(itemName: string): { quantity: number; singleItemName: s
     return { quantity: count, singleItemName: singleName };
   }
   
+  // Pattern: any explicit number 5 or above (e.g., "25 moving boxes", "approximately 30 boxes", "10 cardboard boxes")
+  const largeNumPattern = /^(?:approximately\s+)?(\d{1,3})\s+(?:of\s+)?(.+)/i;
+  const largeNumMatch = nameLower.match(largeNumPattern);
+  if (largeNumMatch) {
+    const count = parseInt(largeNumMatch[1], 10);
+    if (count >= 5) {
+      const singleName = largeNumMatch[2]
+        .replace(/boxes/i, 'box')
+        .replace(/chairs$/i, 'chair')
+        .replace(/tables$/i, 'table')
+        .replace(/items$/i, 'item')
+        .replace(/bags$/i, 'bag');
+      console.log(`[Vision Engine 2.0] Quantity detected: ${count} (numeric) - "${itemName}" → "${singleName}"`);
+      return { quantity: count, singleItemName: singleName };
+    }
+  }
+
   // Pattern: Plural form at end suggesting multiple (e.g., "upholstered accent chairs")
   // Only apply if no explicit quantity, but name ends in plural furniture
   const pluralEndings = [
@@ -465,6 +488,20 @@ SECTIONAL SOFA BED TIERS:
 • LARGE (4+ piece L/U-shaped with sleeper + storage): 6+ cushions, oversized. ~340×220×90cm, 180kg
 
 Include "sofa bed" in the item name (e.g., "Medium sectional sofa bed", "Queen sofa bed").
+
+MOVING BOXES / CARDBOARD BOXES (CRITICAL — read before classifying any box photo):
+When you see cardboard boxes or moving boxes in the image:
+• COUNT every visible box — including stacked, partially visible, and background boxes
+• Use depth cues: if boxes are 3 stacks deep, multiply visible face count by estimated depth
+• Express the count DIRECTLY in the item name: "25 moving boxes", "40 cardboard boxes", "12 small boxes"
+• Do NOT say "stack of boxes" or "pile of boxes" — always give a number estimate
+• BOX SIZE CLASSIFICATION:
+  - SMALL (~40×30×30 cm): book boxes, small kitchen, personal items
+  - MEDIUM (~50×40×40 cm): clothing, standard household — use when unsure
+  - LARGE (~60×50×50 cm): wardrobe boxes, bedding, large kitchen items
+• Category: Storage, Subcategory: Boxes
+• estimatedDimensions: use single-box dimensions above (NOT the pile dimensions)
+• estimatedWeight: use 5-12 kg per single box (single box weight, NOT total pile weight)
 
 PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
 - Use standard furniture dimensions for the identified type

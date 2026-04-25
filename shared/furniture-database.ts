@@ -1447,13 +1447,13 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   },
   {
     item_id: 'BOXES_SMALL_001',
-    name: 'Moving boxes (small, set of 10)',
+    name: 'Moving box (small)',
     category: 'Other',
     subcategory: 'Boxes',
-    keywords: ['boxes', 'small', 'moving', 'cardboard', 'packing'],
+    keywords: ['box', 'small', 'moving', 'cardboard', 'packing', 'boxes'],
     dimensions_cm: { length: 40, width: 30, height: 30 },
-    volume_ft3: calcVolume(40, 30, 30) * 10,  // 10 boxes
-    weight_kg: 50,  // Assuming filled boxes
+    volume_ft3: calcVolume(40, 30, 30),  // Single box ~1.27 ft³ — quantity comes from vision count
+    weight_kg: 5,  // Single filled small box
     load_size: 'boxes',
     vehicle: 'car',
     movers_required: 1,
@@ -1462,32 +1462,32 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   },
   {
     item_id: 'BOXES_MEDIUM_001',
-    name: 'Moving boxes (medium, set of 10)',
+    name: 'Moving box (medium)',
     category: 'Other',
     subcategory: 'Boxes',
-    keywords: ['boxes', 'medium', 'moving', 'cardboard', 'packing'],
+    keywords: ['box', 'medium', 'moving', 'cardboard', 'packing', 'standard', 'boxes'],
     dimensions_cm: { length: 50, width: 40, height: 40 },
-    volume_ft3: calcVolume(50, 40, 40) * 10,  // 10 boxes
-    weight_kg: 80,  // Assuming filled boxes
-    load_size: 'medium',
-    vehicle: 'pickup',
+    volume_ft3: calcVolume(50, 40, 40),  // Single box ~2.83 ft³ — quantity comes from vision count
+    weight_kg: 8,  // Single filled medium box
+    load_size: 'boxes',
+    vehicle: 'car',
     movers_required: 1,
     handling_complexity: 'low',
     insurance_level: 'standard',
   },
   {
     item_id: 'BOXES_LARGE_001',
-    name: 'Moving boxes (large, set of 10)',
+    name: 'Moving box (large)',
     category: 'Other',
     subcategory: 'Boxes',
-    keywords: ['boxes', 'large', 'moving', 'cardboard', 'packing'],
+    keywords: ['box', 'large', 'moving', 'cardboard', 'packing', 'wardrobe', 'boxes'],
     dimensions_cm: { length: 60, width: 50, height: 50 },
-    volume_ft3: calcVolume(60, 50, 50) * 10,  // 10 boxes
-    weight_kg: 100,  // Assuming filled boxes
-    load_size: 'medium',
-    vehicle: 'pickup',
-    movers_required: 2,
-    handling_complexity: 'medium',
+    volume_ft3: calcVolume(60, 50, 50),  // Single box ~5.30 ft³ — quantity comes from vision count
+    weight_kg: 12,  // Single filled large box
+    load_size: 'boxes',
+    vehicle: 'car',
+    movers_required: 1,
+    handling_complexity: 'low',
     insurance_level: 'standard',
   },
   
