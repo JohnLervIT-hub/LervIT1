@@ -8285,44 +8285,25 @@ Respond with VALID JSON only:
         })
       ).then(results => results.filter((m): m is NonNullable<typeof m> => m !== null));
       
-      // Use AI-recommended vehicle type if available, otherwise use booking's load size
-      const recommendedVehicle = booking.aiRecommendedVehicle || booking.loadSize;
+      // Resolve the exact vehicle type required for this booking — never falls back to a smaller class
+      const requiredVehicle = resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize);
       
-      // Find nearest movers with matching vehicle types
-      let nearestMovers = findNearestMovers(
+      // Find nearest movers with the correct vehicle type (strict — no fallback to wrong class)
+      const nearestMovers = findNearestMovers(
         pickupCoords,
         dropoffCoords,
         (booking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
         moversWithUserData,
         {},
-        resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize)
+        requiredVehicle
       );
-      
-      // If no matching movers found, fall back to ALL available movers (admin override)
-      let usedFallback = false;
-      if (nearestMovers.length === 0 && moversWithUserData.length > 0) {
-        usedFallback = true;
-        // Create a simple list from all operational movers with estimated earnings
-        nearestMovers = moversWithUserData.map(m => ({
-          moverId: m.moverId,
-          userId: m.userId,
-          name: m.name,
-          vehicleType: m.vehicleType,
-          rating: m.rating,
-          totalMoves: m.totalMoves,
-          isAvailable: m.isAvailable,
-          latitude: m.latitude,
-          longitude: m.longitude,
-          distanceToPickup: 10, // Default estimate
-          estimatedEarnings: parseFloat(booking.price || '0') * 0.85, // 85% of booking price
-          priceBreakdown: {} as any, // Fallback - not used in notifications
-        }));
-      }
       
       if (nearestMovers.length === 0) {
         return res.status(404).json({ 
-          error: "No available movers found. Please ensure movers are online and available.",
-          totalOperationalMovers: allMovers.length
+          error: `No available ${requiredVehicle} movers found. This ${booking.loadSize} move requires a ${requiredVehicle}. Please ensure a mover with the correct vehicle type is online and available.`,
+          requiredVehicle,
+          loadSize: booking.loadSize,
+          totalOperationalMovers: allMovers.length,
         });
       }
       
@@ -8389,18 +8370,15 @@ Respond with VALID JSON only:
         bookingId,
         adminUserId: user.id,
         moversNotified: successCount,
-        vehicleType: recommendedVehicle,
-        usedFallback
+        vehicleType: requiredVehicle,
+        loadSize: booking.loadSize,
       });
       
       res.json({
         success: true,
-        message: usedFallback 
-          ? `No matching vehicle found. Sent to ALL ${successCount} available mover(s)` 
-          : `Job notifications sent to ${successCount} mover(s)`,
+        message: `Job notifications sent to ${successCount} ${requiredVehicle} mover(s)`,
         bookingId,
-        vehicleType: recommendedVehicle,
-        usedFallback,
+        requiredVehicle,
         expiresAt,
         notifiedMovers: successCount,
         moversNotified: notificationResults
