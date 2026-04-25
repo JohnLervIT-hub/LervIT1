@@ -1,16 +1,19 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Weight, Ruler, Truck, Users, Shield, AlertCircle, Sparkles, CheckCircle2, Box, DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, DollarSign, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
-import { memo, useMemo } from "react";
+import { memo } from "react";
 
 interface IdentifiedItemsListProps {
   items: IdentifiedItem[];
   isLoading?: boolean;
+  /** Called when the user removes an item; receives the item's photoUrl */
+  onRemoveItem?: (photoUrl: string) => void;
 }
 
 // Memoized component to prevent unnecessary re-renders
-export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListProps) {
+export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, isLoading, onRemoveItem }: IdentifiedItemsListProps) {
   if (isLoading) {
     return (
       <Card className="overflow-hidden" data-testid="card-identified-items-loading">
@@ -198,6 +201,19 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                             )}
                           </div>
                         </div>
+                        {onRemoveItem && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="flex-shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => onRemoveItem(item.photoUrl)}
+                            data-testid={`button-remove-item-${index}`}
+                            aria-label={`Remove ${item.itemName} from analysis`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                       
                       {/* Specs Grid */}

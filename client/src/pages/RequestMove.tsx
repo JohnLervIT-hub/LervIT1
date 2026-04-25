@@ -1174,6 +1174,29 @@ export default function RequestMove() {
     handleIdentifyItems(photoUrls);
   };
 
+  // Called by ImageUpload when images change (new uploads or grid removals)
+  const handleImagesChange = (newUrls: string[]) => {
+    // Detect removed URLs so we can clean up identified items
+    const removedUrls = images.filter(url => !newUrls.includes(url));
+    if (removedUrls.length > 0) {
+      removedUrls.forEach(url => analyzedUrlsRef.current.delete(url));
+      const filtered = identifiedItemsRef.current.filter(item => !removedUrls.includes(item.photoUrl));
+      identifiedItemsRef.current = filtered;
+      setIdentifiedItems(filtered);
+    }
+    setImages(newUrls);
+  };
+
+  // Called by IdentifiedItemsList when the user taps the X on an item row
+  const handleRemoveItem = (photoUrl: string) => {
+    analyzedUrlsRef.current.delete(photoUrl);
+    const filtered = identifiedItemsRef.current.filter(item => item.photoUrl !== photoUrl);
+    identifiedItemsRef.current = filtered;
+    setIdentifiedItems(filtered);
+    // Also remove the photo from the upload grid
+    setImages(prev => prev.filter(url => url !== photoUrl));
+  };
+
   // Apply AI recommendations to booking form
   const handleApplyAIRecommendations = () => {
     const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed');
@@ -2024,7 +2047,8 @@ export default function RequestMove() {
                         At least one photo required - Our AI will automatically analyze your items
                       </p>
                       <ImageUpload 
-                        onImagesChange={setImages} 
+                        value={images}
+                        onImagesChange={handleImagesChange} 
                         onAnalyze={handleAutoAnalyze}
                         maxImages={10} 
                       />
@@ -2052,6 +2076,7 @@ export default function RequestMove() {
                           <IdentifiedItemsList
                             items={identifiedItems}
                             isLoading={false}
+                            onRemoveItem={handleRemoveItem}
                           />
                         </div>
                       )}

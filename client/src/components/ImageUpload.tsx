@@ -10,6 +10,8 @@ interface ImageUploadProps {
   onImagesChange: (urls: string[]) => void;
   onAnalyze?: (urls: string[]) => void;
   maxImages?: number;
+  /** Controlled mode: pass the current image URLs from the parent. */
+  value?: string[];
 }
 
 async function compressImage(file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<Blob> {
@@ -62,8 +64,10 @@ async function dataUriToFile(dataUri: string, fileName: string): Promise<File> {
   return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
 }
 
-export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 }: ImageUploadProps) {
-  const [images, setImages] = useState<string[]>([]);
+export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10, value }: ImageUploadProps) {
+  const [internalImages, setInternalImages] = useState<string[]>([]);
+  // When value is provided by parent, use it (controlled); otherwise use internal state
+  const images = value ?? internalImages;
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -151,7 +155,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
       const data = await response.json();
       
       const newImages = [...images, ...data.urls];
-      setImages(newImages);
+      if (!value) setInternalImages(newImages); // uncontrolled: update internal state
       onImagesChange(newImages);
       setUploadProgress(100);
       
@@ -230,7 +234,7 @@ export default function ImageUpload({ onImagesChange, onAnalyze, maxImages = 10 
 
   const removeImage = (index: number) => {
     const newImages = images.filter((_, i) => i !== index);
-    setImages(newImages);
+    if (!value) setInternalImages(newImages); // uncontrolled: update internal state
     onImagesChange(newImages);
   };
 
