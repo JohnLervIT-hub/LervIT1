@@ -237,15 +237,6 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                               : '—'}
                           </span>
                         </div>
-                        {item.volumeCuft && parseFloat(item.volumeCuft) > 0 && (
-                          <div className="flex items-center gap-1.5 text-sm col-span-2 sm:col-span-2" data-testid={`text-price-${index}`}>
-                            <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-                            <span className="font-semibold text-green-700 dark:text-green-400">
-                              Est. ${Math.max(parseFloat(item.volumeCuft) * VOLUME_LOAD_FEE_PER_CUFT, VOLUME_LOAD_FEE_MINIMUM).toFixed(2)}
-                            </span>
-                            <span className="text-muted-foreground text-xs">(${VOLUME_LOAD_FEE_PER_CUFT.toFixed(2)}/ft³)</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
