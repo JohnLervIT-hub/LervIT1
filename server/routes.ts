@@ -350,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
       url.searchParams.append('input', sanitizedInput);
       url.searchParams.append('key', apiKey);
-      url.searchParams.append('types', 'address');
+      // No 'types' restriction so results include both street addresses and business names
       url.searchParams.append('components', 'country:ca');
       
       // Bias to Calgary
@@ -397,6 +397,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // ===== Reverse Geocoding =====
+  app.get("/api/places/reverse-geocode", async (req: Request, res: Response) => {
+    try {
+      const { lat, lng } = req.query;
+      if (!lat || !lng || typeof lat !== 'string' || typeof lng !== 'string') {
+        return res.status(400).json({ error: "lat and lng parameters are required" });
+      }
+      const apiKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "API configuration error" });
+      }
+      const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+      url.searchParams.append('latlng', `${lat},${lng}`);
+      url.searchParams.append('key', apiKey);
+      url.searchParams.append('result_type', 'street_address|premise');
+      url.searchParams.append('language', 'en');
+
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        return res.status(500).json({ error: "Geocoding failed" });
+      }
+      const data = await response.json();
+      if (data.status !== 'OK' || !data.results?.length) {
+        return res.json({ address: null });
+      }
+      res.json({ address: data.results[0].formatted_address });
+    } catch (error) {
+      console.error('[REVERSE GEOCODE] Error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ===== AUTH ROUTES =====
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {

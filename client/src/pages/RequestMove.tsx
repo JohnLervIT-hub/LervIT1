@@ -327,6 +327,20 @@ export default function RequestMove() {
     }
   }, [geoCoords, locationStatus]);
 
+  // Auto-fill pickup address from GPS coordinates once permission is granted
+  useEffect(() => {
+    if (!geoCoords || pickupAddress) return;
+    const { latitude, longitude } = geoCoords;
+    fetch(`/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.address && !pickupAddress) {
+          setPickupAddress(data.address);
+        }
+      })
+      .catch(() => {});
+  }, [geoCoords]);
+
   // Track booking funnel step views
   useEffect(() => {
     const stepNames: Record<number, string> = {
