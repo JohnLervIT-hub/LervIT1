@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
@@ -1831,7 +1832,9 @@ export default function RequestMove() {
         {/* ── STEP 1: Premium two-column layout ── */}
         <div className={step === 1
           ? "flex flex-col lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 lg:items-stretch"
-          : "grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start"
+          : step === 2
+            ? "grid gap-6 xl:grid-cols-[1fr_360px] xl:items-start"
+            : "grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start"
         }>
           {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
