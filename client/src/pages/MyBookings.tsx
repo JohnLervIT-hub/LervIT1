@@ -9,13 +9,21 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil, RotateCcw } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
+
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { generatePriceExplanation, AI_FEATURES } from "@shared/ai";
 import EditBookingForm from "@/components/EditBookingForm";
+
+function safeFormatDate(dateStr: string | null | undefined, fmt: string, fallback = "TBD"): string {
+  if (!dateStr) return fallback;
+  const d = new Date(dateStr);
+  if (!isValid(d)) return fallback;
+  return format(d, fmt);
+}
 
 // Constants for pending payment timeout (must match server)
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours
@@ -368,7 +376,7 @@ export default function MyBookings() {
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Booked on {format(new Date(booking.createdAt), "MMMM d, yyyy")}
+                        Booked on {safeFormatDate(booking.createdAt, "MMMM d, yyyy")}
                       </p>
                     </div>
                     <div className="text-right">
@@ -417,8 +425,8 @@ export default function MyBookings() {
                           <Calendar className="w-4 h-4 text-muted-foreground" />
                           <p className="text-xs text-muted-foreground">Date & Time</p>
                         </div>
-                        <p className="font-medium">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
-                        <p className="text-sm text-muted-foreground">{format(new Date(booking.preferredDate), "h:mm a")}</p>
+                        <p className="font-medium">{safeFormatDate(booking.preferredDate, "MMM d, yyyy")}</p>
+                        <p className="text-sm text-muted-foreground">{safeFormatDate(booking.preferredDate, "h:mm a")}</p>
                       </div>
                       <div className="bg-muted/30 rounded-lg p-4">
                         <div className="flex items-center gap-2 mb-1">

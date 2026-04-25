@@ -27,7 +27,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useLocation } from "wouter";
-import { format, isToday, isTomorrow, formatDistanceToNow } from "date-fns";
+import { format, isToday, isTomorrow, formatDistanceToNow, isValid } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -57,6 +57,13 @@ import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
 import { WelcomeTutorial } from "@/components/WelcomeTutorial";
 import { FirstMovePromo } from "@/components/FirstMovePromo";
+
+function safeFormatDate(dateStr: string | null | undefined, fmt: string, fallback = "TBD"): string {
+  if (!dateStr) return fallback;
+  const d = new Date(dateStr);
+  if (!isValid(d)) return fallback;
+  return format(d, fmt);
+}
 
 type Booking = {
   id: string;
@@ -451,8 +458,10 @@ export default function CustomerDashboard() {
     }
   };
 
-  const getDateLabel = (dateStr: string) => {
+  const getDateLabel = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "TBD";
     const date = new Date(dateStr);
+    if (!isValid(date)) return "TBD";
     if (isToday(date)) return "Today";
     if (isTomorrow(date)) return "Tomorrow";
     return format(date, "EEEE, MMM d");
@@ -526,7 +535,7 @@ export default function CustomerDashboard() {
                   {getDateLabel(upcomingBooking.preferredDate)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {format(new Date(upcomingBooking.preferredDate), "h:mm a")} - {upcomingBooking.loadSize} load
+                  {safeFormatDate(upcomingBooking.preferredDate, "h:mm a")} - {upcomingBooking.loadSize} load
                 </p>
               </div>
 
@@ -629,7 +638,7 @@ export default function CustomerDashboard() {
                       <div>
                         <p className="font-semibold">{getDateLabel(booking.preferredDate)}</p>
                         <p className="text-sm text-muted-foreground">
-                          {format(new Date(booking.preferredDate), "h:mm a")}
+                          {safeFormatDate(booking.preferredDate, "h:mm a")}
                         </p>
                       </div>
                       <Badge className={getStatusColor(booking.status)}>
@@ -705,7 +714,7 @@ export default function CustomerDashboard() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div>
-                        <p className="font-medium">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
+                        <p className="font-medium">{safeFormatDate(booking.preferredDate, "MMM d, yyyy")}</p>
                         <p className="text-sm text-muted-foreground">{booking.loadSize} load</p>
                       </div>
                       <div className="flex flex-col items-end gap-1">

@@ -16,7 +16,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
+
 import { useLocation } from "wouter";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -35,6 +36,13 @@ import MoveProgressIndicator from "@/components/MoveProgressIndicator";
 import { MoverWelcomeTutorial } from "@/components/MoverWelcomeTutorial";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { LocationPrompt } from "@/components/LocationPrompt";
+
+function safeFormatDate(dateStr: string | null | undefined, fmt: string, fallback = "TBD"): string {
+  if (!dateStr) return fallback;
+  const d = new Date(dateStr);
+  if (!isValid(d)) return fallback;
+  return format(d, fmt);
+}
 
 type Booking = {
   id: string;
@@ -1053,7 +1061,7 @@ export default function MoverDashboard() {
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Requested on {format(new Date(booking.createdAt), "MMMM d, yyyy")}
+              Requested on {safeFormatDate(booking.createdAt, "MMMM d, yyyy")}
             </p>
           </div>
           <div className="text-right">
@@ -1153,8 +1161,8 @@ export default function MoverDashboard() {
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <p className="text-xs text-muted-foreground">Date & Time</p>
               </div>
-              <p className="font-medium text-sm">{format(new Date(booking.preferredDate), "MMM d, yyyy")}</p>
-              <p className="text-xs text-muted-foreground">{format(new Date(booking.preferredDate), "h:mm a")}</p>
+              <p className="font-medium text-sm">{safeFormatDate(booking.preferredDate, "MMM d, yyyy")}</p>
+              <p className="text-xs text-muted-foreground">{safeFormatDate(booking.preferredDate, "h:mm a")}</p>
             </div>
             <div className="bg-muted/30 rounded-lg p-3">
               <div className="flex items-center gap-2 mb-1">

@@ -55,6 +55,24 @@ export class ErrorBoundary extends Component<Props, State> {
       return;
     }
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+
+    // Report to server so crashes are visible in production logs
+    try {
+      fetch('/api/analytics/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventName: 'frontend_crash',
+          page: window.location.pathname,
+          properties: {
+            errorName: error.name,
+            errorMessage: error.message,
+            componentStack: errorInfo.componentStack?.slice(0, 500),
+            stack: error.stack?.slice(0, 500),
+          },
+        }),
+      }).catch(() => {});
+    } catch {}
   }
 
   componentWillUnmount(): void {
