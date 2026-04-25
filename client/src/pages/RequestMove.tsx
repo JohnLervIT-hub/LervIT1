@@ -936,6 +936,11 @@ export default function RequestMove() {
     };
   }, [step, pickupAddress, dropoffAddress, loadSize, date, preSelectedMoverId, user, createdBooking]);
   
+  // Tracks which photo URLs have already been sent to the Vision Engine so that
+  // adding new photos only analyzes the incremental batch, keeping existing
+  // item prices stable.
+  const analyzedUrlsRef = useRef<Set<string>>(new Set());
+
   // Save AI-identified items to the database once the booking is created (runs once)
   const hasSavedItemsRef = useRef(false);
   useEffect(() => {
@@ -1026,14 +1031,15 @@ export default function RequestMove() {
       setIsAnalyzingPhoto(false);
     }
   };
-  ============================================================ */
 
-  // AI Product Identifier - Identify items from uploaded photos
-  // This function can be called manually or automatically after photo upload
-  const handleIdentifyItems = async (photoUrls?: string[]) => {
-    const urlsToAnalyze = photoUrls || images;
+  // AI Product Identifier - Identify items from uploaded photos.
+  // When called automatically after a new upload, only the NEW (unanalyzed) photos
+  // are sent to the Vision Engine and their results are MERGED with existing items so
+  // previously-analyzed item prices remain stable.
+  const handleIdentifyItems = async (photoUrls?: string[], forceAll = false) => {
+    const allUrls = photoUrls || images;
     
-    if (urlsToAnalyze.length === 0) {
+    if (allUrls.length === 0) {
       toast({
         title: "No photos to analyze",
         description: "Please upload at least one photo first.",
@@ -1041,13 +1047,32 @@ export default function RequestMove() {
       });
       return;
     }
+
+    // Only send URLs that have not been analyzed yet (incremental analysis).
+    // forceAll=true is used when the user explicitly requests a full re-scan.
+    const newUrls = forceAll
+      ? allUrls
+      : allUrls.filter(url => !analyzedUrlsRef.current.has(url));
+
+    if (newUrls.length === 0) {
+      // Nothing new to analyze — all photos were already processed.
+      return;
+    }
+
+    // Mark URLs as analyzed before the API call so duplicate triggers are ignored.
+    newUrls.forEach(url => analyzedUrlsRef.current.add(url));
+
+    if (forceAll) {
+      // Full re-scan: clear previous results and analyzed URL cache.
+      analyzedUrlsRef.current = new Set(newUrls);
+      setIdentifiedItems([]);
+    }
     
     setIsIdentifyingItems(true);
-    setIdentifiedItems([]);
     
     try {
       const response = await apiRequest("POST", "/api/ai/items/identify", {
-        photoUrls: urlsToAnalyze,
+        photoUrls: newUrls,
       });
       
       if (!response.ok) {
@@ -1055,76 +1080,77 @@ export default function RequestMove() {
       }
       
       const result = await response.json();
-      const items = result.items || [];
-      setIdentifiedItems(items);
-      
-      const completedItems = items.filter((item: IdentifiedItem) => item.processingStatus === 'completed');
-      
-      if (completedItems.length > 0) {
-        // AUTO-APPLY AI recommendations based on total volume
-        const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
-          sum + parseFloat(item.volumeCuft || '0'), 0);
-        setAiDetectedVolume(totalVolume);
-        
-        // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
-        // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
-        const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-        const vehicleTiers = ['car', 'van', 'pickup', 'truck'] as const;
-        let tierIndex = 0;
-        if (totalVolume > 300) tierIndex = 3;
-        else if (totalVolume > 165) tierIndex = 2;
-        else if (totalVolume > 20) tierIndex = 1;
-        
-        // Get max recommended movers from all items
-        const maxMovers = Math.max(...completedItems.map((item: IdentifiedItem) => item.recommendedMovers || 1));
-        
-        // Check for heavy/complex items
-        const itemTotalWeight = completedItems.reduce((sum: number, item: IdentifiedItem) => sum + parseFloat(item.weightKg || '0'), 0);
-        const hasHeavyItems = completedItems.some((item: IdentifiedItem) => 
-          item.handlingComplexity === 'high' || 
-          item.handlingComplexity === 'very_high' ||
-          parseFloat(item.weightKg || '0') > 30
-        );
-        
-        // WEIGHT OVERRIDE (matching server getVehicleRecommendationWithCategory):
-        // >150kg → truck, >100kg → pickup, >50kg → van
-        if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
-        else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
-        else if (itemTotalWeight > 50 && tierIndex < 1) tierIndex = 1;
-        
-        // DIMENSION OVERRIDE: Check max dimension across all items
-        const maxDimension = Math.max(...completedItems.map((item: IdentifiedItem) => {
-          return Math.max(
-            parseFloat(String(item.dimensionsLcm || 0)),
-            parseFloat(String(item.dimensionsWcm || 0)),
-            parseFloat(String(item.dimensionsHcm || 0))
+      const newItems: IdentifiedItem[] = result.items || [];
+
+      // Merge new items with any already-identified items from previous batches.
+      setIdentifiedItems(prev => {
+        const merged = [...prev, ...newItems];
+        const completedAll = merged.filter(item => item.processingStatus === 'completed');
+
+        if (completedAll.length > 0) {
+          const totalVolume = completedAll.reduce((sum, item) =>
+            sum + parseFloat(item.volumeCuft || '0'), 0);
+          setAiDetectedVolume(totalVolume);
+
+          // Determine load size / vehicle tier from the full combined volume.
+          const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+          const vehicleTiers = ['car', 'van', 'pickup', 'truck'] as const;
+          let tierIndex = 0;
+          if (totalVolume > 300) tierIndex = 3;
+          else if (totalVolume > 165) tierIndex = 2;
+          else if (totalVolume > 20) tierIndex = 1;
+
+          const maxMovers = Math.max(...completedAll.map(item => item.recommendedMovers || 1));
+
+          const itemTotalWeight = completedAll.reduce((sum, item) =>
+            sum + parseFloat(item.weightKg || '0'), 0);
+          const hasHeavyItems = completedAll.some(item =>
+            item.handlingComplexity === 'high' ||
+            item.handlingComplexity === 'very_high' ||
+            parseFloat(item.weightKg || '0') > 30
           );
-        }));
-        if (maxDimension > 200 && tierIndex < 2) tierIndex = 2;
-        else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
-        if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
-        
-        const recommendedLoadSize = loadSizeTiers[tierIndex];
-        const recommendedVehicle = vehicleTiers[tierIndex];
-        
-        // Auto-apply all recommendations
-        setLoadSize(recommendedLoadSize);
-        setNumberOfMovers(maxMovers > 1 ? 2 : 1);
-        setHeavyItem(hasHeavyItems);
-        setHasAutoAnalyzed(true);
-        
-        toast({
-          title: "AI Auto-Applied Recommendations!",
-          description: `Total: ${totalVolume.toFixed(1)} ft³ → ${capitalizeFirst(recommendedLoadSize)} load (${recommendedVehicle}), ${maxMovers} mover${maxMovers !== 1 ? 's' : ''}${hasHeavyItems ? ', Heavy items' : ''}`,
-        });
-      } else {
-        toast({
-          title: "Identification Complete",
-          description: "AI could not identify items. Please select load details manually.",
-          variant: "destructive",
-        });
-      }
+
+          if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
+          else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
+          else if (itemTotalWeight > 50 && tierIndex < 1) tierIndex = 1;
+
+          const maxDimension = Math.max(...completedAll.map(item =>
+            Math.max(
+              parseFloat(String(item.dimensionsLcm || 0)),
+              parseFloat(String(item.dimensionsWcm || 0)),
+              parseFloat(String(item.dimensionsHcm || 0))
+            )
+          ));
+          if (maxDimension > 200 && tierIndex < 2) tierIndex = 2;
+          else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
+          if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
+
+          const recommendedLoadSize = loadSizeTiers[tierIndex];
+          const recommendedVehicle = vehicleTiers[tierIndex];
+
+          setLoadSize(recommendedLoadSize);
+          setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+          setHeavyItem(hasHeavyItems);
+          setHasAutoAnalyzed(true);
+
+          const isIncremental = !forceAll && prev.length > 0;
+          toast({
+            title: isIncremental ? "New Items Added" : "AI Auto-Applied Recommendations!",
+            description: `Total: ${totalVolume.toFixed(1)} ft³ → ${capitalizeFirst(recommendedLoadSize)} load (${recommendedVehicle}), ${maxMovers} mover${maxMovers !== 1 ? 's' : ''}${hasHeavyItems ? ', Heavy items' : ''}`,
+          });
+        } else if (newItems.length === 0) {
+          toast({
+            title: "Identification Complete",
+            description: "AI could not identify items. Please select load details manually.",
+            variant: "destructive",
+          });
+        }
+
+        return merged;
+      });
     } catch {
+      // Remove the URLs from the analyzed set so the user can retry.
+      newUrls.forEach(url => analyzedUrlsRef.current.delete(url));
       toast({
         title: "Analysis Unavailable",
         description: "We couldn't analyze your photos right now. Please select your load details manually below.",
@@ -1135,7 +1161,8 @@ export default function RequestMove() {
     }
   };
   
-  // Auto-analyze callback for ImageUpload - runs in background after photo upload
+  // Auto-analyze callback for ImageUpload - runs in background after photo upload.
+  // Only new (unanalyzed) images are sent to the API; existing item prices are preserved.
   const handleAutoAnalyze = (photoUrls: string[]) => {
     handleIdentifyItems(photoUrls);
   };
