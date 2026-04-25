@@ -167,6 +167,13 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
       icon: Truck,
       show: breakdown.moverTravelFee > 0
     },
+    { 
+      label: "Item Premiums", 
+      amount: breakdown.heavyItemFee, 
+      testId: "fee-item-premiums",
+      icon: Package,
+      show: (breakdown.heavyItemFee || 0) > 0
+    },
   ];
 
   const visibleFees = feeItems.filter(item => item.show);

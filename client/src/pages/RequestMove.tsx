@@ -29,12 +29,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
-
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
 import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
+
+// Returns a flat item-type premium based on AI-identified items
+// Refrigerators: +$8, Beds: +$5
+function getItemTypePremium(items: IdentifiedItem[]): number {
+  let premium = 0;
+  for (const item of items) {
+    if (item.processingStatus !== 'completed') continue;
+    const text = `${item.itemName || ''} ${item.category || ''}`.toLowerCase();
+    if (/refrigerator|fridge/.test(text)) premium += 8;
+    else if (/\bbed\b/.test(text)) premium += 5;
+  }
+  return premium;
+}
 
 // Calgary city center – default map position before addresses are entered
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
@@ -806,7 +818,13 @@ export default function RequestMove() {
           };
           setPriceBreakdown(step1Preview);
         } else {
-          setPriceBreakdown(breakdown);
+          const itemPremium = getItemTypePremium(identifiedItems);
+          setPriceBreakdown({
+            ...breakdown,
+            heavyItemFee: itemPremium,
+            subtotal: breakdown.subtotal + itemPremium,
+            totalCost: breakdown.totalCost + itemPremium,
+          });
         }
         setPricingError(null);
       } catch (error) {
@@ -831,7 +849,7 @@ export default function RequestMove() {
         totalCost: 0,
       });
     }
-  }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume]);
+  }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, identifiedItems]);
 
   // Show warning when user selects 1 mover for items that require 2 movers
   useEffect(() => {

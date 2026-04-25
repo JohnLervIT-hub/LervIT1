@@ -1,9 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, DollarSign, X } from "lucide-react";
+import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
-import { VOLUME_LOAD_FEE_PER_CUFT, VOLUME_LOAD_FEE_MINIMUM } from "@shared/pricing";
 import { memo } from "react";
 
 interface IdentifiedItemsListProps {
@@ -43,8 +42,6 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   
   const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
   const totalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
-  // Recalculate live from current rate so it always matches totalVolume × VOLUME_LOAD_FEE_PER_CUFT
-  const totalEstimatedPrice = Math.max(totalVolume * VOLUME_LOAD_FEE_PER_CUFT, VOLUME_LOAD_FEE_MINIMUM);
   const maxRecommendedMovers = completedItems.length > 0 
     ? Math.max(...completedItems.map(item => item.recommendedMovers || 1))
     : 1;
