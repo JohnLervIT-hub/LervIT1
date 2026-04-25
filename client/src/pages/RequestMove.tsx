@@ -139,11 +139,6 @@ function isLoadSizeSmaller(selected: string, aiRecommended: string): boolean {
   return selectedIndex < recommendedIndex && selectedIndex !== -1 && recommendedIndex !== -1;
 }
 
-function toLocalDatetime(date: Date): string {
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
@@ -2224,10 +2219,10 @@ export default function RequestMove() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                const d = new Date();
-                                d.setDate(d.getDate() + 1);
-                                d.setHours(9, 0, 0, 0);
-                                setDate(toLocalDatetime(d));
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                tomorrow.setHours(9, 0, 0, 0);
+                                setDate(tomorrow.toISOString().slice(0, 16));
                               }}
                               data-testid="button-quick-tomorrow-morning"
                               className="h-auto py-3 flex-col gap-1"
@@ -2241,10 +2236,10 @@ export default function RequestMove() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                const d = new Date();
-                                d.setDate(d.getDate() + 1);
-                                d.setHours(14, 0, 0, 0);
-                                setDate(toLocalDatetime(d));
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                tomorrow.setHours(14, 0, 0, 0);
+                                setDate(tomorrow.toISOString().slice(0, 16));
                               }}
                               data-testid="button-quick-tomorrow-afternoon"
                               className="h-auto py-3 flex-col gap-1"
@@ -2258,10 +2253,10 @@ export default function RequestMove() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                const d = new Date();
-                                d.setDate(d.getDate() + 7);
-                                d.setHours(9, 0, 0, 0);
-                                setDate(toLocalDatetime(d));
+                                const nextWeek = new Date();
+                                nextWeek.setDate(nextWeek.getDate() + 7);
+                                nextWeek.setHours(9, 0, 0, 0);
+                                setDate(nextWeek.toISOString().slice(0, 16));
                               }}
                               data-testid="button-quick-next-week"
                               className="h-auto py-3 flex-col gap-1"
@@ -2275,11 +2270,11 @@ export default function RequestMove() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                const d = new Date();
-                                const daysUntilSaturday = (6 - d.getDay() + 7) % 7 || 7;
-                                d.setDate(d.getDate() + daysUntilSaturday);
-                                d.setHours(10, 0, 0, 0);
-                                setDate(toLocalDatetime(d));
+                                const weekend = new Date();
+                                const daysUntilSaturday = (6 - weekend.getDay() + 7) % 7 || 7;
+                                weekend.setDate(weekend.getDate() + daysUntilSaturday);
+                                weekend.setHours(10, 0, 0, 0);
+                                setDate(weekend.toISOString().slice(0, 16));
                               }}
                               data-testid="button-quick-weekend"
                               className="h-auto py-3 flex-col gap-1"

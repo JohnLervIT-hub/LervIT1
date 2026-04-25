@@ -53,21 +53,6 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;  // When to fully trust database match
 
-/** Per-item breakdown entry in a multi-item scene result */
-export interface DetectedItemSummary {
-  itemName: string;
-  category: string;
-  subcategory: string;
-  quantity: number;
-  perItemVolumeFt3: number;
-  totalVolumeFt3: number;
-  perItemWeightKg: number;
-  totalWeightKg: number;
-  source: 'database_match' | 'vision_estimate';
-  matchedItem?: string;
-  confidence: number;
-}
-
 export interface VisionEngineResult {
   itemName: string;
   category: string;
@@ -80,8 +65,8 @@ export interface VisionEngineResult {
   };
   perItemVolumeFt3: number;  // Volume for a single item
   perItemWeightKg: number;   // Weight for a single item
-  volume_ft3: number;        // TOTAL volume across ALL detected items
-  weight_kg: number;         // TOTAL weight across ALL detected items
+  volume_ft3: number;        // TOTAL volume (perItemVolumeFt3 * quantity)
+  weight_kg: number;         // TOTAL weight (perItemWeightKg * quantity)
   load_size: LoadSizeCategory;  // Based on TOTAL volume
   vehicle: VehicleType;         // Based on TOTAL volume/weight
   movers_required: 1 | 2;
@@ -89,12 +74,9 @@ export interface VisionEngineResult {
   insurance_level: 'standard' | 'medium' | 'high' | 'premium';
   confidence: number;
   source: 'database_match' | 'vision_estimate' | 'fallback';
-  matchedItem?: string;  // Database item ID if matched (single-item path)
+  matchedItem?: string;  // Database item ID if matched
   corrections?: string[];  // Any corrections applied
   processingTime: number;
-  // Multi-item scene fields
-  isMultiItem?: boolean;          // True when multiple distinct items were detected
-  detectedItems?: DetectedItemSummary[];  // Per-item breakdown
 }
 
 /**
@@ -229,12 +211,6 @@ function enforceMinimumVolume(
 ): { volume: number; wasEnforced: boolean; minApplied?: number } {
   const categoryLower = category.toLowerCase();
   const nameLower = itemName.toLowerCase();
-
-  // Boxes are counted individually — never apply a category floor to them
-  // (a single small box is legitimately 1-2 ft³; the quantity multiplier handles the total)
-  if (nameLower.includes('box') || nameLower.includes('cardboard') || nameLower.includes('packing box')) {
-    return { volume: calculatedVolume, wasEnforced: false };
-  }
   
   // First, check subcategory-specific minimums
   for (const [subcat, minVol] of Object.entries(SUBCATEGORY_MIN_VOLUMES)) {
@@ -380,23 +356,6 @@ function detectQuantity(itemName: string): { quantity: number; singleItemName: s
     return { quantity: count, singleItemName: singleName };
   }
   
-  // Pattern: any explicit number 5 or above (e.g., "25 moving boxes", "approximately 30 boxes", "10 cardboard boxes")
-  const largeNumPattern = /^(?:approximately\s+)?(\d{1,3})\s+(?:of\s+)?(.+)/i;
-  const largeNumMatch = nameLower.match(largeNumPattern);
-  if (largeNumMatch) {
-    const count = parseInt(largeNumMatch[1], 10);
-    if (count >= 5) {
-      const singleName = largeNumMatch[2]
-        .replace(/boxes/i, 'box')
-        .replace(/chairs$/i, 'chair')
-        .replace(/tables$/i, 'table')
-        .replace(/items$/i, 'item')
-        .replace(/bags$/i, 'bag');
-      console.log(`[Vision Engine 2.0] Quantity detected: ${count} (numeric) - "${itemName}" → "${singleName}"`);
-      return { quantity: count, singleItemName: singleName };
-    }
-  }
-
   // Pattern: Plural form at end suggesting multiple (e.g., "upholstered accent chairs")
   // Only apply if no explicit quantity, but name ends in plural furniture
   const pluralEndings = [
@@ -423,7 +382,6 @@ interface VisionDetectionResult {
   category: string;
   subcategory: string;
   confidence: number;
-  quantity?: number;  // Optional explicit quantity from GPT-4o (for multi-item detection)
   estimatedDimensions?: {
     length_cm: number;
     width_cm: number;
@@ -432,63 +390,20 @@ interface VisionDetectionResult {
   estimatedWeight?: number;
 }
 
-/** Shared reference dimensions and instructions injected into the GPT-4o prompt */
-const VISION_PROMPT_INSTRUCTIONS = `
-CATEGORIES: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
-
-SECTIONAL SOFA SIZE (count seat cushions + compare to doorways ~200cm tall):
-• SMALL L-shaped (2-piece): 2-3 cushions. ~230×150×85cm, 70kg
-• MEDIUM L-shaped (3-piece): 4-5 cushions. ~300×180×85cm, 120kg
-• LARGE L-shaped (4-5 piece): 6+ cushions. ~370×220×90cm, 170kg
-• SMALL U-shaped (3-piece): 5-6 cushions. ~280×200×85cm, 130kg
-• MEDIUM U-shaped (4-5 piece): 7-8 cushions. ~350×250×85cm, 180kg
-• LARGE U-shaped (6+ piece): 9+ cushions. ~420×300×90cm, 240kg
-Name examples: "Small L-shaped sectional sofa", "Large U-shaped sectional sofa"
-
-SOFA BED — check for: pull handles/straps on seat front, seams between cushion/base, thick boxy base.
-• Twin sofa bed: ~170×90×85cm, 55kg
-• Full/Double sofa bed: ~200×95×85cm, 75kg
-• Queen sofa bed: ~230×100×90cm, 95kg
-• Small sectional sofa bed: ~250×170×85cm, 110kg
-• Medium sectional sofa bed: ~290×200×90cm, 145kg
-• Large sectional sofa bed: ~340×220×90cm, 180kg
-
-MOVING BOXES (CRITICAL):
-• COUNT every visible box including stacked/background ones. Use depth cues.
-• Use quantity field for the count (do NOT encode count in itemName).
-• itemName = "Moving box (small|medium|large)"
-• estimatedDimensions = single box dims. estimatedWeight = single box weight (5-12 kg).
-• SMALL (~40×30×30 cm), MEDIUM (~50×40×40 cm), LARGE (~60×50×50 cm)
-• Category: Storage, Subcategory: Boxes
-
-REFERENCE DIMENSIONS:
-• Twin bed: ~191×99×40cm, 35kg  | Queen bed: ~203×152×40cm, 55kg  | King bed: ~203×193×40cm, 70kg
-• Loveseat: ~150×85×85cm, 45kg  | 3-seater sofa: ~210×90×85cm, 70kg
-• 4-person dining table: ~120×75×75cm, 35kg  | 6-person dining table: ~180×90×75cm, 50kg
-• Coffee table: ~120×60×45cm, 25kg  | Office desk: ~150×75×75cm, 40kg
-• 6-drawer dresser: ~150×50×85cm, 70kg
-• Standard fridge: ~75×70×170cm, 90kg  | French door fridge: ~90×80×180cm, 130kg
-• 55" TV: ~125×8×72cm, 18kg  | 65" TV: ~145×10×85cm, 25kg
-• Washing machine: ~60×65×85cm, 75kg
-• Backpack: ~45×30×20cm, 1kg  | Carry-on suitcase: ~55×35×25cm, 3kg
-• Medium suitcase: ~65×45×30cm, 4kg  | Large suitcase: ~75×50×35cm, 5kg`;
-
 /**
- * STEP 1: Use GPT-4o Vision to detect ALL distinct items in the photo (multi-item scene analysis)
- * Returns an array — one entry per distinct item/group visible in the image.
+ * STEP 1-2: Use GPT-4o Vision to detect and categorize item
  */
-async function detectAllItemsWithVision(imageBase64: string): Promise<VisionDetectionResult[]> {
+async function detectItemWithVision(imageBase64: string): Promise<VisionDetectionResult> {
   if (!openai) {
     console.warn('[Vision Engine 2.0] OpenAI not available, using fallback detection');
-    return [{
+    return {
       itemName: 'Unidentified Item',
       category: 'Other',
       subcategory: 'Unknown',
       confidence: 0,
-      quantity: 1,
-    }];
+    };
   }
-
+  
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
@@ -497,34 +412,109 @@ async function detectAllItemsWithVision(imageBase64: string): Promise<VisionDete
         content: [
           {
             type: "text",
-            text: `You are the LervIT Vision Engine 2.0 — an expert at identifying furniture and household items for a moving company.
+            text: `You are the LervIT Vision Engine 2.0, an expert at identifying furniture and household items for a moving company.
 
-Analyze this image and identify EVERY distinct moveable item or group of identical items visible.
+Analyze this image and identify the item with maximum detail.
 
-RULES:
-1. List each distinct item type separately (sofa, bed, dresser = 3 entries).
-2. Group identical items using the "quantity" field (e.g., 4 dining chairs = 1 entry with quantity:4).
-3. Use "quantity" for moving boxes — count ALL boxes visible including stacked/background ones.
-4. Do NOT merge different item types. Do NOT list decorative/built-in fixtures (curtains, flooring, walls).
-5. Be specific in itemName: "Queen platform bed", "3-seater fabric sofa", "6-drawer dresser".
-6. For single unique items set quantity:1.
-7. Max 12 entries. Min confidence 0.3 to include an item.
-${VISION_PROMPT_INSTRUCTIONS}
+IDENTIFY:
+1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
+2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
+3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
+4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
+5. Material if visible (leather, fabric, wood, metal, glass)
+
+SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine size tier):
+For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
+• Count the number of seat cushions visible
+• Check seat depth (standard ~55cm vs deep-seat ~70cm+)
+• Look for a chaise or ottoman section
+• Compare to nearby objects (doors are ~200cm tall, standard doorways ~80cm wide)
+• Count how many separable pieces/sections you can identify
+
+L-SHAPED SECTIONAL TIERS:
+• SMALL (2-piece, apartment-size): 2-3 seat cushions, compact chaise, fits against one wall. ~230×150×85cm, 70kg
+• MEDIUM (3-piece, standard): 4-5 seat cushions, standard chaise, fills a corner. ~300×180×85cm, 120kg
+• LARGE (4-5 piece, oversized/deep-seat): 6+ seat cushions, wide/deep seats, oversized chaise or ottoman. ~370×220×90cm, 170kg
+
+U-SHAPED SECTIONAL TIERS:
+• SMALL (compact, 3-piece): 5-6 seat cushions, narrow arms. ~280×200×85cm, 130kg
+• MEDIUM (standard, 4-5 piece): 7-8 seat cushions, standard depth. ~350×250×85cm, 180kg
+• LARGE (oversized, 6+ piece): 9+ seat cushions, theater/pit style, deep seats. ~420×300×90cm, 240kg
+
+Include the size tier in the item name (e.g., "Small L-shaped sectional sofa", "Large U-shaped sectional sofa").
+
+SOFA BED / SLEEPER DETECTION (CRITICAL — check for these indicators):
+Before classifying any sofa, check for sofa bed / sleeper indicators:
+• Pull handles or straps on the seat front (used to pull out the bed mechanism)
+• Visible seams or gaps between seat cushions and base (where the bed folds out)
+• Thick, boxy base with storage compartments (heavier than standard sofas)
+• Visible metal frame or mechanism underneath
+• Storage chaise with a lid that lifts up
+• Unusually thick/heavy base panels compared to standard sofas
+
+If ANY sofa bed indicators are detected, classify as "Sofa Bed" NOT as regular "Sofa" or "Sectional":
+
+REGULAR SOFA BED TIERS:
+• TWIN (loveseat sleeper): 2 seat cushions, compact. ~170×90×85cm, 55kg
+• FULL/DOUBLE (3-seat sleeper): 3 seat cushions, standard size. ~200×95×85cm, 75kg
+• QUEEN (large sleeper): 3-4 seat cushions, wider/deeper frame. ~230×100×90cm, 95kg
+
+SECTIONAL SOFA BED TIERS:
+• SMALL (2-piece L-shaped with sleeper): 3-4 cushions, pull-out + chaise. ~250×170×85cm, 110kg
+• MEDIUM (3-piece L-shaped with sleeper + storage): 4-5 cushions, deep seats, storage chaise. ~290×200×90cm, 145kg
+• LARGE (4+ piece L/U-shaped with sleeper + storage): 6+ cushions, oversized. ~340×220×90cm, 180kg
+
+Include "sofa bed" in the item name (e.g., "Medium sectional sofa bed", "Queen sofa bed").
+
+PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
+- Use standard furniture dimensions for the identified type
+- Be consistent: same item type = same dimensions
+
+REFERENCE DIMENSIONS (use these):
+• Twin bed frame: ~191×99×40cm, 35kg
+• Queen bed frame: ~203×152×40cm, 55kg
+• King bed frame: ~203×193×40cm, 70kg
+• 2-seater loveseat: ~150×85×85cm, 45kg
+• 3-seater sofa: ~210×90×85cm, 70kg
+• Small L-shaped sectional (2-piece): ~230×150×85cm, 70kg
+• Medium L-shaped sectional (3-piece): ~300×180×85cm, 120kg
+• Large L-shaped sectional (4-5 piece): ~370×220×90cm, 170kg
+• Small U-shaped sectional (3-piece): ~280×200×85cm, 130kg
+• Medium U-shaped sectional (4-5 piece): ~350×250×85cm, 180kg
+• Large U-shaped sectional (6+ piece): ~420×300×90cm, 240kg
+• Twin sofa bed (loveseat sleeper): ~170×90×85cm, 55kg
+• Full/Double sofa bed (3-seat sleeper): ~200×95×85cm, 75kg
+• Queen sofa bed (large sleeper): ~230×100×90cm, 95kg
+• Small sectional sofa bed (2-piece, sleeper+chaise): ~250×170×85cm, 110kg
+• Medium sectional sofa bed (3-piece, sleeper+storage): ~290×200×90cm, 145kg
+• Large sectional sofa bed (4+ piece, sleeper+storage): ~340×220×90cm, 180kg
+• 4-person dining table: ~120×75×75cm, 35kg
+• 6-person dining table: ~180×90×75cm, 50kg
+• Coffee table: ~120×60×45cm, 25kg
+• Office desk: ~150×75×75cm, 40kg
+• 6-drawer dresser: ~150×50×85cm, 70kg
+• Standard refrigerator: ~75×70×170cm, 90kg
+• French door fridge: ~90×80×180cm, 130kg
+• 55" TV: ~125×8×72cm, 18kg
+• 65" TV: ~145×10×85cm, 25kg
+• Washing machine: ~60×65×85cm, 75kg
+• Small handbag/purse: ~30×15×20cm, 0.5kg
+• Backpack: ~45×30×20cm, 1kg
+• Duffel bag: ~60×35×30cm, 1.5kg
+• Carry-on suitcase: ~55×35×25cm, 3kg
+• Medium suitcase: ~65×45×30cm, 4kg
+• Large suitcase: ~75×50×35cm, 5kg
+• Travel bag: ~50×30×25cm, 1kg
 
 Return ONLY valid JSON (no markdown):
 {
-  "items": [
-    {
-      "itemName": "descriptive name",
-      "category": "from category list",
-      "subcategory": "specific subcategory",
-      "quantity": 1,
-      "confidence": 0.0-1.0,
-      "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
-      "estimatedWeight": number
-    }
-  ]
-}`,
+  "itemName": "detailed descriptive name",
+  "category": "category from list above",
+  "subcategory": "specific subcategory",
+  "confidence": 0.0-1.0,
+  "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
+  "estimatedWeight": number in kg
+}`
           },
           {
             type: "image_url",
@@ -533,69 +523,30 @@ Return ONLY valid JSON (no markdown):
         ],
       },
     ],
-    max_tokens: 1500,
+    max_tokens: 500,
   });
-
-  let content = response.choices[0]?.message?.content || '{"items":[]}';
+  
+  let content = response.choices[0]?.message?.content || "{}";
   content = content.trim();
   if (content.startsWith('```')) {
     content = content.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
   }
-
-  let parsed: { items?: any[] };
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    console.error('[Vision Engine 2.0] Failed to parse multi-item JSON, falling back to single-item');
-    // Attempt to recover a single item if the model returned old format
-    try {
-      const single = JSON.parse(content);
-      if (single.itemName) parsed = { items: [single] };
-      else parsed = { items: [] };
-    } catch {
-      parsed = { items: [] };
-    }
-  }
-
-  const items: VisionDetectionResult[] = (parsed.items || [])
-    .filter((it: any) => it && typeof it.itemName === 'string' && it.itemName.trim())
-    .slice(0, 12)
-    .map((it: any) => ({
-      itemName: String(it.itemName).trim(),
-      category: String(it.category || 'Other').trim(),
-      subcategory: String(it.subcategory || 'Unknown').trim(),
-      confidence: typeof it.confidence === 'number' ? it.confidence : 0.5,
-      quantity: typeof it.quantity === 'number' && it.quantity >= 1 ? Math.round(it.quantity) : 1,
-      estimatedDimensions: it.estimatedDimensions,
-      estimatedWeight: it.estimatedWeight,
-    }));
-
-  if (items.length === 0) {
-    console.warn('[Vision Engine 2.0] No items returned by multi-item detection, using fallback');
-    return [{
-      itemName: 'Unidentified Item',
-      category: 'Other',
-      subcategory: 'Unknown',
-      confidence: 0.3,
-      quantity: 1,
-    }];
-  }
-
-  console.log(`[Vision Engine 2.0] Detected ${items.length} item(s):`,
-    items.map(i => `${i.quantity}× ${i.itemName}`).join(', '));
-
-  return items;
+  
+  const result = JSON.parse(content);
+  
+  console.log('[Vision Engine 2.0] Vision detected:', result.itemName, 
+    `(${result.category}/${result.subcategory})`,
+    `confidence: ${result.confidence}`);
+  
+  return {
+    itemName: result.itemName || 'Unknown Item',
+    category: result.category || 'Other',
+    subcategory: result.subcategory || 'Unknown',
+    confidence: result.confidence || 0.5,
+    estimatedDimensions: result.estimatedDimensions,
+    estimatedWeight: result.estimatedWeight,
+  };
 }
-
-/**
- * COMPLEXITY ranking helper for aggregation
- */
-const COMPLEXITY_RANK: Record<string, number> = {
-  low: 0, medium: 1, high: 2, very_high: 3,
-};
-const INSURANCE_RANK: Record<string, number> = {
-  standard: 0, medium: 1, high: 2, premium: 3,
-};
 
 /**
  * STEP 3-4: Attempt to match with furniture database
@@ -657,249 +608,224 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
 }
 
 /**
- * Process a single detected item through database matching + dimension correction.
- * Returns a DetectedItemSummary with resolved volume and weight for aggregation.
- */
-function processSingleDetectedItem(visionResult: VisionDetectionResult): DetectedItemSummary & {
-  dimensions: { length_cm: number; width_cm: number; height_cm: number };
-  handling_complexity: 'low' | 'medium' | 'high' | 'very_high';
-  insurance_level: 'standard' | 'medium' | 'high' | 'premium';
-  movers_required: 1 | 2;
-  corrections?: string[];
-} {
-  // Apply category correction
-  const categoryCorrection = correctCategory(visionResult.itemName, visionResult.category);
-  const category = categoryCorrection.wasCorrected ? categoryCorrection.category : visionResult.category;
-
-  // Resolve quantity — prefer GPT-4o's explicit quantity field (multi-item path),
-  // fall back to name-parsing for legacy single-item path.
-  let quantity: number;
-  let matchName: string;
-
-  if (typeof visionResult.quantity === 'number' && visionResult.quantity >= 1) {
-    quantity = visionResult.quantity;
-    matchName = visionResult.itemName;
-  } else {
-    const qInfo = detectQuantity(visionResult.itemName);
-    quantity = qInfo.quantity;
-    matchName = quantity > 1 ? qInfo.singleItemName : visionResult.itemName;
-  }
-
-  // Database match attempt
-  const dbMatch = matchWithDatabase({ ...visionResult, category, itemName: matchName });
-
-  if (dbMatch.matched && dbMatch.item) {
-    const item = dbMatch.item;
-    const perItemVolume = item.volume_ft3;
-    const perItemWeight = item.weight_kg;
-    const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
-    const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
-    const confidence = Math.min(visionResult.confidence * dbMatch.similarity * 1.2, 0.99);
-
-    let movers: 1 | 2 = item.movers_required;
-    if (totalWeight > 50) movers = 2;
-
-    console.log(`[Vision Engine 2.0] ✓ DB match: ${visionResult.itemName} → ${item.name} (qty:${quantity}, vol:${totalVolume}ft³)`);
-
-    return {
-      itemName: visionResult.itemName,
-      category: item.category,
-      subcategory: item.subcategory,
-      quantity,
-      perItemVolumeFt3: perItemVolume,
-      totalVolumeFt3: totalVolume,
-      perItemWeightKg: perItemWeight,
-      totalWeightKg: totalWeight,
-      source: 'database_match',
-      matchedItem: item.item_id,
-      confidence,
-      dimensions: {
-        length_cm: item.dimensions_cm.length,
-        width_cm: item.dimensions_cm.width,
-        height_cm: item.dimensions_cm.height,
-      },
-      handling_complexity: item.handling_complexity,
-      insurance_level: item.insurance_level,
-      movers_required: movers,
-    };
-  }
-
-  // Vision estimate path — apply dimension corrections
-  const estimated = visionResult.estimatedDimensions || getTypicalDimensions(category);
-  const estimatedWeight = visionResult.estimatedWeight || 20;
-
-  const corrected = correctDimensions(
-    category,
-    visionResult.itemName,
-    estimated.length_cm || 100,
-    estimated.width_cm || 50,
-    estimated.height_cm || 50,
-    estimatedWeight
-  );
-
-  let volume = calculateVolumeFt3(corrected.length_cm, corrected.width_cm, corrected.height_cm);
-
-  const volumeEnforcement = enforceMinimumVolume(category, visionResult.itemName, volume);
-  if (volumeEnforcement.wasEnforced) {
-    volume = volumeEnforcement.volume;
-    corrected.corrections.push(`Volume increased to ${volume}ft³ (minimum for category)`);
-  }
-
-  const perItemVolume = volume;
-  const perItemWeight = corrected.weight_kg;
-  const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
-  const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
-
-  let handling: 'low' | 'medium' | 'high' | 'very_high' = 'low';
-  let movers: 1 | 2 = 1;
-  let insurance: 'standard' | 'medium' | 'high' | 'premium' = 'standard';
-
-  if (corrected.weight_kg > 100 || volume > 150) {
-    handling = 'very_high'; movers = 2; insurance = 'premium';
-  } else if (corrected.weight_kg > 50 || volume > 50) {
-    handling = 'high'; movers = 2; insurance = 'high';
-  } else if (corrected.weight_kg > 25 || volume > 10) {
-    handling = 'medium';
-    movers = corrected.weight_kg > 35 ? 2 : 1;
-    insurance = 'medium';
-  }
-  if (category === 'Electronics') insurance = insurance === 'standard' ? 'medium' : insurance;
-  if (totalWeight > 50) movers = 2;
-
-  console.log(`[Vision Engine 2.0] ~ Estimate: ${visionResult.itemName} (qty:${quantity}, vol:${totalVolume}ft³)`);
-
-  return {
-    itemName: visionResult.itemName,
-    category,
-    subcategory: visionResult.subcategory,
-    quantity,
-    perItemVolumeFt3: perItemVolume,
-    totalVolumeFt3: totalVolume,
-    perItemWeightKg: perItemWeight,
-    totalWeightKg: totalWeight,
-    source: 'vision_estimate',
-    confidence: visionResult.confidence * (corrected.wasCorrect ? 1 : 0.9),
-    dimensions: {
-      length_cm: corrected.length_cm,
-      width_cm: corrected.width_cm,
-      height_cm: corrected.height_cm,
-    },
-    handling_complexity: handling,
-    insurance_level: insurance,
-    movers_required: movers,
-    corrections: corrected.corrections.length > 0 ? corrected.corrections : undefined,
-  };
-}
-
-/**
- * MAIN PIPELINE: Vision Engine 2.0 — Multi-Item Scene Analysis
- *
- * Detects ALL distinct items in the photo, matches each against the
- * ground-truth database, sums volumes/weights, and returns a composite result.
+ * MAIN PIPELINE: Vision Engine 2.0 Item Identification
+ * 
+ * Processes an uploaded photo through the 3-layer system:
+ * 1. Vision detection
+ * 2. Database matching
+ * 3. Dimension correction (if estimation needed)
  */
 export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResult> {
   const startTime = Date.now();
-
+  
   try {
     // STEP 1: Convert image to base64
     const imageBase64 = await imageToBase64(photoUrl);
-
-    // STEP 2: Detect all items in the scene (multi-item GPT-4o call)
-    const detectedItems = await detectAllItemsWithVision(imageBase64);
-
-    // STEP 3: Process each item through DB matching + dimension correction
-    const processed = detectedItems.map(item => processSingleDetectedItem(item));
-
-    // STEP 4: Aggregate across all items
-    const totalVolume = Math.round(processed.reduce((s, i) => s + i.totalVolumeFt3, 0) * 100) / 100;
-    const totalWeight = Math.round(processed.reduce((s, i) => s + i.totalWeightKg, 0) * 10) / 10;
-    const avgConfidence = processed.reduce((s, i) => s + i.confidence, 0) / processed.length;
-
-    // Highest complexity and insurance across all items
-    const handling = processed.reduce((best, i) =>
-      COMPLEXITY_RANK[i.handling_complexity] > COMPLEXITY_RANK[best] ? i.handling_complexity : best,
-      'low' as 'low' | 'medium' | 'high' | 'very_high'
-    );
-    const insurance = processed.reduce((best, i) =>
-      INSURANCE_RANK[i.insurance_level] > INSURANCE_RANK[best] ? i.insurance_level : best,
-      'standard' as 'standard' | 'medium' | 'high' | 'premium'
-    );
-    const movers: 1 | 2 = totalWeight > 50 || processed.some(i => i.movers_required === 2) ? 2 : 1;
-
-    // Determine final load size and vehicle from TOTAL volume
-    const finalLoadSize = getLoadSizeFromVolume(totalVolume);
-    const finalVehicle = getVehicleRecommendationWithCategory(totalVolume, 'Other', totalWeight);
-
-    // Source: database_match if all items matched, vision_estimate if any needed estimation
-    const source = processed.every(i => i.source === 'database_match')
-      ? 'database_match'
-      : 'vision_estimate';
-
-    const isMultiItem = processed.length > 1;
-
-    // Build summary itemName
-    const itemName = isMultiItem
-      ? processed.map(i => i.quantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName).join(', ')
-      : (processed[0]?.itemName ?? 'Unidentified Item');
-
-    // Primary item (largest volume) for top-level dimensions
-    const primaryItem = processed.reduce((a, b) => a.totalVolumeFt3 >= b.totalVolumeFt3 ? a : b);
-
-    const detectedItemsSummary: DetectedItemSummary[] = processed.map(i => ({
-      itemName: i.itemName,
-      category: i.category,
-      subcategory: i.subcategory,
-      quantity: i.quantity,
-      perItemVolumeFt3: i.perItemVolumeFt3,
-      totalVolumeFt3: i.totalVolumeFt3,
-      perItemWeightKg: i.perItemWeightKg,
-      totalWeightKg: i.totalWeightKg,
-      source: i.source,
-      matchedItem: i.matchedItem,
-      confidence: i.confidence,
-    }));
-
-    const result: VisionEngineResult = {
-      itemName,
-      category: primaryItem.category,
-      subcategory: primaryItem.subcategory,
-      quantity: processed.reduce((s, i) => s + i.quantity, 0),
-      dimensions: primaryItem.dimensions,
-      perItemVolumeFt3: primaryItem.perItemVolumeFt3,
-      perItemWeightKg: primaryItem.perItemWeightKg,
-      volume_ft3: totalVolume,
-      weight_kg: totalWeight,
-      load_size: finalLoadSize,
-      vehicle: finalVehicle,
-      movers_required: movers,
-      handling_complexity: handling,
-      insurance_level: insurance,
-      confidence: Math.round(avgConfidence * 100) / 100,
-      source,
-      matchedItem: !isMultiItem ? processed[0]?.matchedItem : undefined,
-      corrections: processed.flatMap(i => i.corrections ?? []),
-      processingTime: Date.now() - startTime,
-      isMultiItem,
-      detectedItems: isMultiItem ? detectedItemsSummary : undefined,
-    };
-
-    logEvent.vision(isMultiItem ? 'multi_item_scene' : 'database_match', {
-      itemName: result.itemName,
-      itemCount: processed.length,
-      totalVolumeFt3: totalVolume,
-      totalWeightKg: totalWeight,
-      loadSize: result.load_size,
-      vehicle: result.vehicle,
-      source: result.source,
-      confidence: result.confidence,
-      processingTimeMs: result.processingTime,
-    });
-
+    
+    // STEP 2: Detect item using Vision API
+    const visionResult = await detectItemWithVision(imageBase64);
+    
+    // STEP 2.5: Apply category correction (fix AI misclassifications)
+    const categoryCorrection = correctCategory(visionResult.itemName, visionResult.category);
+    if (categoryCorrection.wasCorrected) {
+      visionResult.category = categoryCorrection.category;
+    }
+    
+    // STEP 2.6: Detect quantity (e.g., "pair of chairs" = 2)
+    const quantityInfo = detectQuantity(visionResult.itemName);
+    const quantity = quantityInfo.quantity;
+    
+    // Use single-item name for database matching if quantity > 1
+    const matchName = quantity > 1 ? quantityInfo.singleItemName : visionResult.itemName;
+    const modifiedVisionResult = { ...visionResult, itemName: matchName };
+    
+    // STEP 3: Attempt database match (using single-item name)
+    const dbMatch = matchWithDatabase(modifiedVisionResult);
+    
+    let result: VisionEngineResult;
+    
+    if (dbMatch.matched && dbMatch.item) {
+      // LAYER 1 PATH: Use ground-truth database values
+      const item = dbMatch.item;
+      const confidence = Math.min(
+        visionResult.confidence * dbMatch.similarity * 1.2,  // Boost for DB match
+        0.99
+      );
+      
+      // Calculate per-item and total values
+      const perItemVolume = item.volume_ft3;
+      const perItemWeight = item.weight_kg;
+      const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
+      const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
+      
+      // Use TOTAL volume for load size and vehicle with CATEGORY OVERRIDE
+      const loadSize = getLoadSizeFromVolume(totalVolume);
+      const maxDim = Math.max(item.dimensions_cm.length, item.dimensions_cm.width, item.dimensions_cm.height);
+      const vehicle = getVehicleRecommendationWithCategory(totalVolume, item.category, totalWeight, maxDim);
+      
+      // Adjust movers based on total weight
+      let movers: 1 | 2 = item.movers_required;
+      if (totalWeight > 50) movers = 2;
+      
+      result = {
+        itemName: visionResult.itemName,  // Keep original name with quantity
+        category: item.category,
+        subcategory: item.subcategory,
+        quantity,
+        dimensions: {
+          length_cm: item.dimensions_cm.length,  // Per-item dimensions
+          width_cm: item.dimensions_cm.width,
+          height_cm: item.dimensions_cm.height,
+        },
+        perItemVolumeFt3: perItemVolume,
+        perItemWeightKg: perItemWeight,
+        volume_ft3: totalVolume,  // TOTAL volume
+        weight_kg: totalWeight,   // TOTAL weight
+        load_size: loadSize,      // Based on TOTAL
+        vehicle: vehicle,         // Based on TOTAL
+        movers_required: movers,
+        handling_complexity: item.handling_complexity,
+        insurance_level: item.insurance_level,
+        confidence,
+        source: 'database_match',
+        matchedItem: item.item_id,
+        processingTime: Date.now() - startTime,
+      };
+      
+      logEvent.vision('database_match', {
+        itemName: result.itemName,
+        matchedItem: item.item_id,
+        quantity,
+        perItemWeightKg: perItemWeight,
+        totalWeightKg: totalWeight,
+        perItemVolumeFt3: perItemVolume,
+        totalVolumeFt3: totalVolume,
+        loadSize: result.load_size,
+        vehicle: result.vehicle,
+        confidence: confidence,
+        processingTimeMs: result.processingTime,
+      });
+    } else {
+      // LAYER 2-3 PATH: Use Vision estimates with dimension corrections
+      const estimated = visionResult.estimatedDimensions || getTypicalDimensions(visionResult.category);
+      const estimatedWeight = visionResult.estimatedWeight || 20;
+      
+      // Apply dimension corrections
+      const corrected = correctDimensions(
+        visionResult.category,
+        visionResult.itemName,
+        estimated.length_cm || 100,
+        estimated.width_cm || 50,
+        estimated.height_cm || 50,
+        estimatedWeight
+      );
+      
+      // Calculate volume
+      let volume = calculateVolumeFt3(
+        corrected.length_cm,
+        corrected.width_cm,
+        corrected.height_cm
+      );
+      
+      // Apply minimum volume enforcement to prevent unrealistic small values
+      const volumeEnforcement = enforceMinimumVolume(
+        visionResult.category,
+        visionResult.itemName,
+        volume
+      );
+      if (volumeEnforcement.wasEnforced) {
+        volume = volumeEnforcement.volume;
+        corrected.corrections.push(`Volume increased to ${volume}ft³ (minimum for category)`);
+      }
+      
+      // Determine load size and vehicle (used for per-item, will be recalculated with total)
+      const loadSize = getLoadSizeFromVolume(volume);
+      // Note: vehicle calculated per-item here, will be recalculated with totalVolume below
+      
+      // Determine handling complexity
+      let handling: 'low' | 'medium' | 'high' | 'very_high' = 'low';
+      let movers: 1 | 2 = 1;
+      let insurance: 'standard' | 'medium' | 'high' | 'premium' = 'standard';
+      
+      if (corrected.weight_kg > 100 || volume > 150) {
+        handling = 'very_high';
+        movers = 2;
+        insurance = 'premium';
+      } else if (corrected.weight_kg > 50 || volume > 50) {
+        handling = 'high';
+        movers = 2;
+        insurance = 'high';
+      } else if (corrected.weight_kg > 25 || volume > 10) {
+        handling = 'medium';
+        movers = corrected.weight_kg > 35 ? 2 : 1;
+        insurance = 'medium';
+      }
+      
+      // Fragile/electronics get higher insurance
+      if (visionResult.category === 'Electronics' || visionResult.category === 'Fragile') {
+        insurance = insurance === 'standard' ? 'medium' : insurance;
+      }
+      
+      // Calculate per-item and total values with quantity
+      const perItemVolume = volume;
+      const perItemWeight = corrected.weight_kg;
+      const totalVolume = Math.round(perItemVolume * quantity * 100) / 100;
+      const totalWeight = Math.round(perItemWeight * quantity * 10) / 10;
+      
+      // Re-calculate load size and vehicle based on TOTAL volume/weight with CATEGORY OVERRIDE
+      const finalLoadSize = getLoadSizeFromVolume(totalVolume);
+      const maxDimVision = Math.max(corrected.length_cm, corrected.width_cm, corrected.height_cm);
+      const finalVehicle = getVehicleRecommendationWithCategory(totalVolume, visionResult.category, totalWeight, maxDimVision);
+      
+      // Adjust movers based on total weight
+      if (totalWeight > 50) movers = 2;
+      
+      result = {
+        itemName: visionResult.itemName,
+        category: visionResult.category,
+        subcategory: visionResult.subcategory,
+        quantity,
+        dimensions: {
+          length_cm: corrected.length_cm,  // Per-item dimensions
+          width_cm: corrected.width_cm,
+          height_cm: corrected.height_cm,
+        },
+        perItemVolumeFt3: perItemVolume,
+        perItemWeightKg: perItemWeight,
+        volume_ft3: totalVolume,   // TOTAL volume
+        weight_kg: totalWeight,    // TOTAL weight
+        load_size: finalLoadSize,  // Based on TOTAL
+        vehicle: finalVehicle,     // Based on TOTAL
+        movers_required: movers,
+        handling_complexity: handling,
+        insurance_level: insurance,
+        confidence: visionResult.confidence * (corrected.wasCorrect ? 1 : 0.9),
+        source: 'vision_estimate',
+        corrections: corrected.corrections.length > 0 ? corrected.corrections : undefined,
+        processingTime: Date.now() - startTime,
+      };
+      
+      logEvent.vision('estimate_with_corrections', {
+        itemName: result.itemName,
+        quantity,
+        perItemWeightKg: perItemWeight,
+        totalWeightKg: totalWeight,
+        perItemVolumeFt3: perItemVolume,
+        totalVolumeFt3: totalVolume,
+        loadSize: result.load_size,
+        vehicle: result.vehicle,
+        confidence: result.confidence,
+        correctionsApplied: corrected.corrections.length,
+        processingTimeMs: result.processingTime,
+      });
+    }
+    
     return result;
-
+    
   } catch (error: any) {
     logEvent.error('vision_engine', error, { photoUrl });
-
+    
+    // Return fallback result
     const fallbackDims = getTypicalDimensions('Other');
     const fallbackVolume = calculateVolumeFt3(fallbackDims.length_cm, fallbackDims.width_cm, fallbackDims.height_cm);
     return {
