@@ -277,7 +277,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
               <h5 className="font-semibold text-lg">Recommendations</h5>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 sm:gap-6">
+            <div className="grid grid-cols-3 gap-4 sm:gap-6">
               {/* Total Volume */}
               <div className="space-y-1">
                 <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Total Volume</p>
@@ -305,17 +305,6 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                     Heavy items detected
                   </p>
                 )}
-              </div>
-              
-              {/* Estimated Price */}
-              <div className="space-y-1">
-                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Est. Price</p>
-                <div className="flex items-baseline gap-1">
-                  <p className="text-2xl sm:text-3xl font-bold tabular-nums text-green-600 dark:text-green-400" data-testid="text-total-estimated-price">
-                    ${totalEstimatedPrice.toFixed(2)}
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">$0.19/ft³</p>
               </div>
             </div>
             
