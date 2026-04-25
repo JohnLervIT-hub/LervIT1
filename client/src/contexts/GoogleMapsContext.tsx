@@ -31,8 +31,8 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (!loadStarted) return;
 
-    // Check if already loaded
-    if (window.google?.maps) {
+    // Check if already fully loaded (google.maps.Map must be a real constructor)
+    if (typeof window.google?.maps?.Map === "function") {
       setIsLoaded(true);
       return;
     }
@@ -43,18 +43,22 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    // Create script element with async loading parameter
+    // Use the official `callback` parameter so we know Maps is truly ready.
+    // This is more reliable than script.onload when combined with loading=async.
+    const callbackName = "__lervitMapsReady";
+    (window as Record<string, unknown>)[callbackName] = () => {
+      setIsLoaded(true);
+      delete (window as Record<string, unknown>)[callbackName];
+    };
+
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${GOOGLE_MAPS_LIBRARIES.join(",")}&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${GOOGLE_MAPS_LIBRARIES.join(",")}&callback=${callbackName}`;
     script.async = true;
     script.defer = true;
 
-    script.onload = () => {
-      setIsLoaded(true);
-    };
-
     script.onerror = () => {
       setLoadError(new Error("Failed to load Google Maps"));
+      delete (window as Record<string, unknown>)[callbackName];
     };
 
     document.head.appendChild(script);
