@@ -166,17 +166,17 @@ const PRICING_CONFIG = {
     elevator: 9.60,
   },
   // Load Size Fees (flat tier fees - used when no AI volume data)
+  // Aligned to $0.25/ft³ at representative midpoints for each tier
   LOAD_SIZE_FEES: {
-    boxes: 6.00,     // Class A (SUV) - $6 mandatory load fee for 0-20 ft³
-    small: 6.00,     // Alias for boxes - $6 mandatory load fee
-    medium: 18.00,   // Pickup Truck loads (21-80 ft³)
-    large: 36.00,    // Cargo Van loads (81-300 ft³)
-    apartment: 54.00, // Moving Truck loads - minimum for 300+ ft³
+    boxes: 6.00,      // Class A (SUV) - minimum load fee for 0-20 ft³
+    small: 6.00,      // Alias for boxes - minimum load fee
+    medium: 23.00,    // Pickup Truck loads — ~93 ft³ midpoint × $0.25
+    large: 58.00,     // Cargo Van loads — ~233 ft³ midpoint × $0.25
+    apartment: 75.00, // Moving Truck loads — 300 ft³ minimum × $0.25
   } as Record<string, number>,
   // Volume-based load fee rate (used when AI provides exact volume)
-  // $0.18/ft³ naturally matches tier minimums: 100ft³=$18, 200ft³=$36, 300ft³=$54
-  // Scales proportionally for larger loads: 335ft³=$60, 500ft³=$90, 600ft³=$108
-  VOLUME_LOAD_FEE_PER_CUFT: 0.18,
+  // $0.25/ft³: 100ft³=$25, 200ft³=$50, 300ft³=$75, 400ft³=$100
+  VOLUME_LOAD_FEE_PER_CUFT: 0.25,
   VOLUME_LOAD_FEE_MINIMUM: 6.00,  // Minimum load fee regardless of volume
   APARTMENT_MOVE_PREMIUM: 60.00, // $60 premium for 300+ ft³ loads (apartment moves)
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing
