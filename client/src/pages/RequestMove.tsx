@@ -2614,6 +2614,7 @@ export default function RequestMove() {
                   onClick={handleBack}
                   className="hover-elevate active-elevate-2 flex-1"
                   data-testid="button-back"
+                  disabled={createBookingMutation.isPending}
                 >
                   Back
                 </Button>
@@ -2621,8 +2622,14 @@ export default function RequestMove() {
                   onClick={handleNext}
                   className="flex-1"
                   data-testid="button-next"
+                  disabled={createBookingMutation.isPending}
                 >
-                  {step === 3 ? "Find Movers" : "Next"}
+                  {step === 3 && createBookingMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Finding Movers...
+                    </>
+                  ) : step === 3 ? "Find Movers" : "Next"}
                 </Button>
               </div>
             </div>
