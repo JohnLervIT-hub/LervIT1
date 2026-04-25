@@ -18,7 +18,7 @@ import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
-import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
+import { IdentifiedItemsList, type ConfirmedItemEntry } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
@@ -1066,61 +1066,9 @@ export default function RequestMove() {
       const completedItems = items.filter((item: IdentifiedItem) => item.processingStatus === 'completed');
       
       if (completedItems.length > 0) {
-        // AUTO-APPLY AI recommendations based on total volume
-        const totalVolume = completedItems.reduce((sum: number, item: IdentifiedItem) => 
-          sum + parseFloat(item.volumeCuft || '0'), 0);
-        setAiDetectedVolume(totalVolume);
-        
-        // Determine load size based on total volume thresholds (synced with shared/pricing.ts)
-        // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
-        const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-        const vehicleTiers = ['car', 'van', 'pickup', 'truck'] as const;
-        let tierIndex = 0;
-        if (totalVolume > 300) tierIndex = 3;
-        else if (totalVolume > 165) tierIndex = 2;
-        else if (totalVolume > 20) tierIndex = 1;
-        
-        // Get max recommended movers from all items
-        const maxMovers = Math.max(...completedItems.map((item: IdentifiedItem) => item.recommendedMovers || 1));
-        
-        // Check for heavy/complex items
-        const itemTotalWeight = completedItems.reduce((sum: number, item: IdentifiedItem) => sum + parseFloat(item.weightKg || '0'), 0);
-        const hasHeavyItems = completedItems.some((item: IdentifiedItem) => 
-          item.handlingComplexity === 'high' || 
-          item.handlingComplexity === 'very_high' ||
-          parseFloat(item.weightKg || '0') > 30
-        );
-        
-        // WEIGHT OVERRIDE (matching server getVehicleRecommendationWithCategory):
-        // >150kg → truck, >100kg → pickup, >50kg → van
-        if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
-        else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
-        else if (itemTotalWeight > 50 && tierIndex < 1) tierIndex = 1;
-        
-        // DIMENSION OVERRIDE: Check max dimension across all items
-        const maxDimension = Math.max(...completedItems.map((item: IdentifiedItem) => {
-          return Math.max(
-            parseFloat(String(item.dimensionsLcm || 0)),
-            parseFloat(String(item.dimensionsWcm || 0)),
-            parseFloat(String(item.dimensionsHcm || 0))
-          );
-        }));
-        if (maxDimension > 200 && tierIndex < 2) tierIndex = 2;
-        else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
-        if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
-        
-        const recommendedLoadSize = loadSizeTiers[tierIndex];
-        const recommendedVehicle = vehicleTiers[tierIndex];
-        
-        // Auto-apply all recommendations
-        setLoadSize(recommendedLoadSize);
-        setNumberOfMovers(maxMovers > 1 ? 2 : 1);
-        setHeavyItem(hasHeavyItems);
-        setHasAutoAnalyzed(true);
-        
         toast({
-          title: "AI Auto-Applied Recommendations!",
-          description: `Total: ${totalVolume.toFixed(1)} ft³ → ${capitalizeFirst(recommendedLoadSize)} load (${recommendedVehicle}), ${maxMovers} mover${maxMovers !== 1 ? 's' : ''}${hasHeavyItems ? ', Heavy items' : ''}`,
+          title: `${completedItems.length} item${completedItems.length !== 1 ? 's' : ''} detected`,
+          description: "Review the list below, uncheck anything you're not moving, then confirm.",
         });
       } else {
         toast({
@@ -1143,6 +1091,54 @@ export default function RequestMove() {
   // Auto-analyze callback for ImageUpload - runs in background after photo upload
   const handleAutoAnalyze = (photoUrls: string[]) => {
     handleIdentifyItems(photoUrls);
+  };
+
+  // Called when the customer confirms the detected items list
+  const handleConfirmItems = (confirmed: ConfirmedItemEntry[]) => {
+    if (confirmed.length === 0) return;
+
+    const totalVolume = confirmed.reduce((s, e) => s + e.totalVolumeFt3, 0);
+    const totalWeight = confirmed.reduce((s, e) => s + e.totalWeightKg, 0);
+    const maxMovers   = Math.max(...confirmed.map(e => e.item.recommendedMovers || 1));
+    const hasHeavy    = confirmed.some(e =>
+      e.item.handlingComplexity === 'high' ||
+      e.item.handlingComplexity === 'very_high' ||
+      e.totalWeightKg > 30
+    );
+
+    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    const vehicleTiers  = ['car', 'van', 'pickup', 'truck'] as const;
+    let tier = 0;
+    if (totalVolume > 300) tier = 3;
+    else if (totalVolume > 165) tier = 2;
+    else if (totalVolume > 20)  tier = 1;
+
+    if (totalWeight > 150 && tier < 3) tier = 3;
+    else if (totalWeight > 100 && tier < 2) tier = 2;
+    else if (totalWeight > 50  && tier < 1) tier = 1;
+
+    const maxDim = Math.max(...confirmed.flatMap(e => [
+      parseFloat(String(e.item.dimensionsLcm || 0)),
+      parseFloat(String(e.item.dimensionsWcm || 0)),
+      parseFloat(String(e.item.dimensionsHcm || 0)),
+    ]));
+    if (maxDim > 200 && tier < 2) tier = 2;
+    else if (maxDim > 150 && tier < 1) tier = 1;
+    if (hasHeavy && tier < 1) tier = 1;
+
+    const recommendedLoadSize = loadSizeTiers[tier];
+    const recommendedVehicle  = vehicleTiers[tier];
+
+    setAiDetectedVolume(totalVolume);
+    setLoadSize(recommendedLoadSize);
+    setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setHeavyItem(hasHeavy);
+    setHasAutoAnalyzed(true);
+
+    toast({
+      title: "Load estimate confirmed",
+      description: `${totalVolume.toFixed(1)} ft³ → ${capitalizeFirst(recommendedLoadSize)} load (${recommendedVehicle}), ${maxMovers > 1 ? 2 : 1} mover${maxMovers > 1 ? 's' : ''}${hasHeavy ? ', heavy items' : ''}`,
+    });
   };
 
   // Apply AI recommendations to booking form
@@ -2023,6 +2019,7 @@ export default function RequestMove() {
                           <IdentifiedItemsList
                             items={identifiedItems}
                             isLoading={false}
+                            onConfirm={handleConfirmItems}
                           />
                         </div>
                       )}

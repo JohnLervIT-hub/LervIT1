@@ -508,7 +508,10 @@ RULES:
 4. Do NOT merge different item types. Do NOT list decorative/built-in fixtures (curtains, flooring, walls).
 5. Be specific in itemName: "Queen platform bed", "3-seater fabric sofa", "6-drawer dresser".
 6. For single unique items set quantity:1.
-7. Max 12 entries. Min confidence 0.3 to include an item.
+7. Max 12 entries. Min confidence 0.5 to include an item (boxes: 0.3+).
+8. FOREGROUND FOCUS (CRITICAL): Only identify items that are clearly the PRIMARY subject(s) of the photo — items placed intentionally for a moving estimate.
+9. SKIP background/decor items: lamps, plants, picture frames, books on shelves, small accessories, rugs, clocks, remote controls, wall art — unless they are unmistakably the main subject of the photo.
+10. If an item appears to be a permanent room fixture or casual background decor, omit it entirely.
 ${VISION_PROMPT_INSTRUCTIONS}
 
 Return ONLY valid JSON (no markdown):
