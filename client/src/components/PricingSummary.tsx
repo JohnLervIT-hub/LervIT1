@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, Lock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { PriceBreakdown } from "@shared/pricing";
-import { VEHICLE_CLASSES, LOAD_SIZE_TO_CLASS, VOLUME_LOAD_FEE_PER_CUFT } from "@shared/pricing";
+import { VOLUME_LOAD_FEE_PER_CUFT } from "@shared/pricing";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface PromoState {
@@ -113,12 +113,8 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $${VOLUME_LOAD_FEE_PER_CUFT.toFixed(2)})`
     : "Load Size";
 
-  const vehicleClassKey = breakdown.vehicleClass ?? (breakdown.loadSize ? LOAD_SIZE_TO_CLASS[breakdown.loadSize] : undefined);
-  const vehicleConfig = vehicleClassKey ? VEHICLE_CLASSES[vehicleClassKey] : null;
-  const perKmRate = breakdown.perKmRate || vehicleConfig?.perKmRate || 0;
-
-  const distanceLabel = breakdown.distanceKm
-    ? `Distance (${breakdown.distanceKm} km × $${perKmRate.toFixed(2)}/km)`
+  const distanceLabel = breakdown.distanceKm 
+    ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
 
   const feeItems = [
@@ -196,17 +192,6 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
       </div>
 
       <CardContent className="pt-0 space-y-4">
-        {vehicleConfig && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg border border-border/50" data-testid="vehicle-class-badge">
-            <Truck className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs font-semibold text-foreground">
-              Class {vehicleConfig.class} — {vehicleConfig.name}
-            </span>
-            <span className="ml-auto text-xs font-medium text-muted-foreground tabular-nums">
-              ${vehicleConfig.baseFee.toFixed(2)} base · ${vehicleConfig.perKmRate.toFixed(2)}/km
-            </span>
-          </div>
-        )}
         <div className="space-y-2">
           {visibleFees.map((item) => (
             <div 
