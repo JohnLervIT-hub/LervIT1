@@ -257,6 +257,7 @@ export default function RequestMove() {
   // AI Product Identifier state
   const [isIdentifyingItems, setIsIdentifyingItems] = useState(false);
   const [identifiedItems, setIdentifiedItems] = useState<IdentifiedItem[]>([]);
+  const identifiedItemsRef = useRef<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
   
@@ -939,7 +940,7 @@ export default function RequestMove() {
   // Tracks which photo URLs have already been sent to the Vision Engine so that
   // adding new photos only analyzes the incremental batch, keeping existing
   // item prices stable.
-  const analyzedUrlsRef = useRef<Set<string>>(new Set());
+  const analyzedUrlsRef = useRef(new Set<string>());
 
   // Save AI-identified items to the database once the booking is created (runs once)
   const hasSavedItemsRef = useRef(false);
@@ -1031,14 +1032,14 @@ export default function RequestMove() {
       setIsAnalyzingPhoto(false);
     }
   };
+  ============================================================ */
 
   // AI Product Identifier - Identify items from uploaded photos.
-  // When called automatically after a new upload, only the NEW (unanalyzed) photos
-  // are sent to the Vision Engine and their results are MERGED with existing items so
-  // previously-analyzed item prices remain stable.
-  const handleIdentifyItems = async (photoUrls?: string[], forceAll = false) => {
+  // Only NEW (unanalyzed) photos are sent to the Vision Engine each time;
+  // results are merged with existing items so previously-analyzed prices stay stable.
+  const handleIdentifyItems = async (photoUrls?: string[], forceAll?: boolean) => {
     const allUrls = photoUrls || images;
-    
+
     if (allUrls.length === 0) {
       toast({
         title: "No photos to analyze",
@@ -1048,109 +1049,116 @@ export default function RequestMove() {
       return;
     }
 
-    // Only send URLs that have not been analyzed yet (incremental analysis).
-    // forceAll=true is used when the user explicitly requests a full re-scan.
     const newUrls = forceAll
       ? allUrls
-      : allUrls.filter(url => !analyzedUrlsRef.current.has(url));
+      : allUrls.filter(function(url) { return !analyzedUrlsRef.current.has(url); });
 
     if (newUrls.length === 0) {
-      // Nothing new to analyze — all photos were already processed.
       return;
     }
 
-    // Mark URLs as analyzed before the API call so duplicate triggers are ignored.
-    newUrls.forEach(url => analyzedUrlsRef.current.add(url));
+    newUrls.forEach(function(url) { analyzedUrlsRef.current.add(url); });
 
     if (forceAll) {
-      // Full re-scan: clear previous results and analyzed URL cache.
       analyzedUrlsRef.current = new Set(newUrls);
+      identifiedItemsRef.current = [];
       setIdentifiedItems([]);
     }
-    
+
     setIsIdentifyingItems(true);
-    
+
     try {
       const response = await apiRequest("POST", "/api/ai/items/identify", {
         photoUrls: newUrls,
       });
-      
+
       if (!response.ok) {
         throw new Error('Unable to analyze photos. Please try again.');
       }
-      
+
       const result = await response.json();
-      const newItems: IdentifiedItem[] = result.items || [];
+      const newItems = (result.items || []) as IdentifiedItem[];
 
-      // Merge new items with any already-identified items from previous batches.
-      setIdentifiedItems(prev => {
-        const merged = [...prev, ...newItems];
-        const completedAll = merged.filter(item => item.processingStatus === 'completed');
+      // Merge with the ref (always current, avoids stale closure from async gap).
+      const merged = [...identifiedItemsRef.current, ...newItems];
+      identifiedItemsRef.current = merged;
+      setIdentifiedItems(merged);
 
-        if (completedAll.length > 0) {
-          const totalVolume = completedAll.reduce((sum, item) =>
-            sum + parseFloat(item.volumeCuft || '0'), 0);
-          setAiDetectedVolume(totalVolume);
+      const completedAll = merged.filter(
+        function(item) { return item.processingStatus === 'completed'; }
+      );
 
-          // Determine load size / vehicle tier from the full combined volume.
-          const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-          const vehicleTiers = ['car', 'van', 'pickup', 'truck'] as const;
-          let tierIndex = 0;
-          if (totalVolume > 300) tierIndex = 3;
-          else if (totalVolume > 165) tierIndex = 2;
-          else if (totalVolume > 20) tierIndex = 1;
+      if (completedAll.length > 0) {
+        const totalVolume = completedAll.reduce(
+          function(sum, item) { return sum + parseFloat(item.volumeCuft || '0'); }, 0
+        );
+        setAiDetectedVolume(totalVolume);
 
-          const maxMovers = Math.max(...completedAll.map(item => item.recommendedMovers || 1));
+        const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+        const vehicleTiers  = ['car', 'van', 'pickup', 'truck'] as const;
+        let tierIndex = 0;
+        if (totalVolume > 300)      tierIndex = 3;
+        else if (totalVolume > 165) tierIndex = 2;
+        else if (totalVolume > 20)  tierIndex = 1;
 
-          const itemTotalWeight = completedAll.reduce((sum, item) =>
-            sum + parseFloat(item.weightKg || '0'), 0);
-          const hasHeavyItems = completedAll.some(item =>
+        const maxMovers = Math.max(
+          ...completedAll.map(function(item) { return item.recommendedMovers || 1; })
+        );
+
+        const itemTotalWeight = completedAll.reduce(
+          function(sum, item) { return sum + parseFloat(item.weightKg || '0'); }, 0
+        );
+        const hasHeavyItems = completedAll.some(function(item) {
+          return (
             item.handlingComplexity === 'high' ||
             item.handlingComplexity === 'very_high' ||
             parseFloat(item.weightKg || '0') > 30
           );
+        });
 
-          if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
-          else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
-          else if (itemTotalWeight > 50 && tierIndex < 1) tierIndex = 1;
+        if (itemTotalWeight > 150 && tierIndex < 3)      tierIndex = 3;
+        else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
+        else if (itemTotalWeight > 50 && tierIndex < 1)  tierIndex = 1;
 
-          const maxDimension = Math.max(...completedAll.map(item =>
-            Math.max(
+        const maxDimension = Math.max(
+          ...completedAll.map(function(item) {
+            return Math.max(
               parseFloat(String(item.dimensionsLcm || 0)),
               parseFloat(String(item.dimensionsWcm || 0)),
               parseFloat(String(item.dimensionsHcm || 0))
-            )
-          ));
-          if (maxDimension > 200 && tierIndex < 2) tierIndex = 2;
-          else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
-          if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
+            );
+          })
+        );
+        if (maxDimension > 200 && tierIndex < 2)      tierIndex = 2;
+        else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
+        if (hasHeavyItems && tierIndex < 1)           tierIndex = 1;
 
-          const recommendedLoadSize = loadSizeTiers[tierIndex];
-          const recommendedVehicle = vehicleTiers[tierIndex];
+        const recommendedLoadSize = loadSizeTiers[tierIndex];
+        const recommendedVehicle  = vehicleTiers[tierIndex];
 
-          setLoadSize(recommendedLoadSize);
-          setNumberOfMovers(maxMovers > 1 ? 2 : 1);
-          setHeavyItem(hasHeavyItems);
-          setHasAutoAnalyzed(true);
+        setLoadSize(recommendedLoadSize);
+        setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+        setHeavyItem(hasHeavyItems);
+        setHasAutoAnalyzed(true);
 
-          const isIncremental = !forceAll && prev.length > 0;
-          toast({
-            title: isIncremental ? "New Items Added" : "AI Auto-Applied Recommendations!",
-            description: `Total: ${totalVolume.toFixed(1)} ft³ → ${capitalizeFirst(recommendedLoadSize)} load (${recommendedVehicle}), ${maxMovers} mover${maxMovers !== 1 ? 's' : ''}${hasHeavyItems ? ', Heavy items' : ''}`,
-          });
-        } else if (newItems.length === 0) {
-          toast({
-            title: "Identification Complete",
-            description: "AI could not identify items. Please select load details manually.",
-            variant: "destructive",
-          });
-        }
-
-        return merged;
-      });
-    } catch {
-      // Remove the URLs from the analyzed set so the user can retry.
-      newUrls.forEach(url => analyzedUrlsRef.current.delete(url));
+        const isIncremental = !forceAll && identifiedItemsRef.current.length > newItems.length;
+        const toastTitle = isIncremental ? "New Items Added" : "AI Auto-Applied Recommendations!";
+        const ft3Label = totalVolume.toFixed(1) + " ft3";
+        const moversLabel = maxMovers + " mover" + (maxMovers !== 1 ? "s" : "");
+        const heavyLabel = hasHeavyItems ? ", Heavy items" : "";
+        toast({
+          title: toastTitle,
+          description: ft3Label + " - " + capitalizeFirst(recommendedLoadSize) + " load (" + recommendedVehicle + "), " + moversLabel + heavyLabel,
+        });
+      } else if (newItems.length === 0) {
+        toast({
+          title: "Identification Complete",
+          description: "AI could not identify items. Please select load details manually.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      newUrls.forEach(function(url) { analyzedUrlsRef.current.delete(url); });
       toast({
         title: "Analysis Unavailable",
         description: "We couldn't analyze your photos right now. Please select your load details manually below.",
@@ -1160,9 +1168,8 @@ export default function RequestMove() {
       setIsIdentifyingItems(false);
     }
   };
-  
-  // Auto-analyze callback for ImageUpload - runs in background after photo upload.
-  // Only new (unanalyzed) images are sent to the API; existing item prices are preserved.
+
+  // Auto-analyze callback for ImageUpload - only new images are sent to the API.
   const handleAutoAnalyze = (photoUrls: string[]) => {
     handleIdentifyItems(photoUrls);
   };
