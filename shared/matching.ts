@@ -121,11 +121,12 @@ export function findNearestMovers(
         return false;
       }
       
-      // Filter by compatible vehicle types if recommendation exists
-      // Use case-insensitive comparison to handle mixed case in database
+      // Filter by compatible vehicle types if recommendation exists.
+      // Normalize both sides so "Moving Truck", "Large Truck (26ft)" etc. all
+      // resolve to the canonical 'truck' tier before comparison.
       if (compatibleVehicles && m.vehicleType) {
-        const moverVehicleLower = m.vehicleType.toLowerCase();
-        return compatibleVehicles.some(cv => cv.toLowerCase() === moverVehicleLower);
+        const moverNormalized = normalizeVehicleType(m.vehicleType);
+        return compatibleVehicles.some(cv => normalizeVehicleType(cv) === moverNormalized);
       }
       
       return true;
