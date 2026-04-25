@@ -2445,102 +2445,83 @@ export default function RequestMove() {
 
                     {/* Promo Code Section */}
                     {!!user && (user.promoUsesCount ?? 0) < 2 && (
-                      <div className="relative bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-xl p-5">
-                        <div className="flex items-start gap-4 mb-4">
-                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <Tag className="w-5 h-5 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold">Promo Code</h3>
-                              <span className="text-[10px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">OPTIONAL</span>
+                      <div className="relative overflow-hidden bg-gradient-to-br from-green-500/20 via-green-500/10 to-transparent border border-green-500/40 rounded-xl p-5">
+                        <div className="absolute -right-6 -top-6 w-28 h-28 bg-green-500/15 rounded-full blur-2xl pointer-events-none" />
+                        <div className="relative">
+                          <div className="flex items-start gap-4 mb-4">
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-md shadow-green-500/30 flex-shrink-0">
+                              <Gift className="w-5 h-5 text-white" />
                             </div>
-                            <p className="text-sm text-muted-foreground mt-0.5">
-                              {appliedPromo?.valid
-                                ? `${appliedPromo.discountPercent}% discount applied`
-                                : "Enter a promo code to save on your move"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {appliedPromo?.valid ? (
-                          <div className="flex items-center justify-between py-2.5 px-4 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="step3-promo-applied">
-                            <div className="flex items-center gap-2">
-                              <Gift className="w-4 h-4 text-green-600 dark:text-green-400" />
-                              <span className="text-sm font-semibold text-green-700 dark:text-green-400">
-                                {appliedPromo.code}
-                              </span>
-                              <span className="text-sm text-green-600 dark:text-green-400">
-                                — {appliedPromo.discountPercent}% off
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => { setAppliedPromo(null); setPromoError(null); }}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                              data-testid="button-remove-promo-step3"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <div className="relative flex-1">
-                                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <Input
-                                  placeholder="Enter promo code (e.g. LERVIT20)"
-                                  value={promoInput}
-                                  onChange={(e) => {
-                                    setPromoInput(e.target.value.toUpperCase());
-                                    setPromoError(null);
-                                  }}
-                                  onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
-                                  className="pl-9 text-sm"
-                                  data-testid="input-promo-code-step3"
-                                />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-bold text-green-700 dark:text-green-400">Save 20% on this move</h3>
+                                <Badge className="bg-green-500 text-white text-[10px] px-2 shrink-0">
+                                  <Sparkles className="w-2.5 h-2.5 mr-1" />
+                                  LERVIT20
+                                </Badge>
                               </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleApplyPromo}
-                                disabled={!promoInput.trim() || promoLoading}
-                                data-testid="button-apply-promo-step3"
-                              >
-                                {promoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
-                              </Button>
+                              <p className="text-sm text-green-700/70 dark:text-green-500 mt-0.5">
+                                {appliedPromo?.valid
+                                  ? `${appliedPromo.discountPercent}% discount applied to your total`
+                                  : "Enter code LERVIT20 below — valid on your first 2 moves"}
+                              </p>
                             </div>
-                            {promoError && (
-                              <p className="text-xs text-destructive pl-1" data-testid="text-promo-error-step3">{promoError}</p>
-                            )}
                           </div>
-                        )}
 
-                        {appliedPromo?.valid && (
-                          <div className="flex items-center gap-1.5 mt-3">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                            <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                              You save {appliedPromo.discountPercent}% on this move with code {appliedPromo.code}
-                            </p>
-                          </div>
-                        )}
+                          {appliedPromo?.valid ? (
+                            <div className="flex items-center justify-between py-2.5 px-4 bg-white/40 dark:bg-green-900/20 rounded-lg border border-green-500/30" data-testid="step3-promo-applied">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                <span className="text-sm font-bold text-green-700 dark:text-green-400">
+                                  {appliedPromo.code}
+                                </span>
+                                <span className="text-sm text-green-600 dark:text-green-400">
+                                  — {appliedPromo.discountPercent}% off applied
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => { setAppliedPromo(null); setPromoError(null); }}
+                                className="text-green-600/60 hover:text-destructive transition-colors"
+                                data-testid="button-remove-promo-step3"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-600 dark:text-green-400" />
+                                  <Input
+                                    placeholder="e.g. LERVIT20"
+                                    value={promoInput}
+                                    onChange={(e) => {
+                                      setPromoInput(e.target.value.toUpperCase());
+                                      setPromoError(null);
+                                    }}
+                                    onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
+                                    className="pl-9 text-sm border-green-500/40 bg-white/50 dark:bg-green-950/20 focus-visible:ring-green-500/30"
+                                    data-testid="input-promo-code-step3"
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  onClick={handleApplyPromo}
+                                  disabled={!promoInput.trim() || promoLoading}
+                                  className="bg-green-600 hover:bg-green-700 text-white shrink-0"
+                                  data-testid="button-apply-promo-step3"
+                                >
+                                  {promoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+                                </Button>
+                              </div>
+                              {promoError && (
+                                <p className="text-xs text-destructive pl-1" data-testid="text-promo-error-step3">{promoError}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
-
-                    {/* Ready to Submit Summary */}
-                    <div className="relative overflow-hidden bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/20 rounded-xl p-5">
-                      <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-green-500/10 rounded-full blur-2xl" />
-                      <div className="relative flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center shadow-lg shadow-green-500/20">
-                          <CheckCircle className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-green-700 dark:text-green-400">Ready to Find Movers</h3>
-                          <p className="text-sm text-muted-foreground mt-0.5">
-                            Click "Find Movers" to see available professionals in your area
-                          </p>
-                        </div>
-                      </div>
-                    </div>
                   </>
                 )}
 
