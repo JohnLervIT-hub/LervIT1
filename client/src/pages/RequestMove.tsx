@@ -1174,6 +1174,60 @@ export default function RequestMove() {
     handleIdentifyItems(photoUrls);
   };
 
+  // Recalculates all AI-driven pricing state from a given list of completed items.
+  // Called after any removal so the Live Price Estimate card stays in sync.
+  const recalcFromItems = (remaining: IdentifiedItem[]) => {
+    const completedItems = remaining.filter(item => item.processingStatus === 'completed');
+    if (completedItems.length === 0) {
+      // Nothing left — reset to manual defaults
+      setAiDetectedVolume(undefined);
+      setLoadSize('medium');
+      setNumberOfMovers(1);
+      setHeavyItem(false);
+      return;
+    }
+
+    const totalVolume = completedItems.reduce(
+      (sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0
+    );
+    setAiDetectedVolume(totalVolume);
+
+    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    let tierIndex = 0;
+    if (totalVolume > 300)      tierIndex = 3;
+    else if (totalVolume > 165) tierIndex = 2;
+    else if (totalVolume > 20)  tierIndex = 1;
+
+    const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
+    const itemTotalWeight = completedItems.reduce(
+      (sum, item) => sum + parseFloat(item.weightKg || '0'), 0
+    );
+    const hasHeavyItems = completedItems.some(item =>
+      item.handlingComplexity === 'high' ||
+      item.handlingComplexity === 'very_high' ||
+      parseFloat(item.weightKg || '0') > 30
+    );
+
+    if (itemTotalWeight > 150 && tierIndex < 3)      tierIndex = 3;
+    else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
+    else if (itemTotalWeight > 50  && tierIndex < 1) tierIndex = 1;
+
+    const maxDim = Math.max(...completedItems.map(item =>
+      Math.max(
+        parseFloat(String(item.dimensionsLcm || 0)),
+        parseFloat(String(item.dimensionsWcm || 0)),
+        parseFloat(String(item.dimensionsHcm || 0))
+      )
+    ));
+    if (maxDim > 200 && tierIndex < 2)      tierIndex = 2;
+    else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
+    if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
+
+    setLoadSize(loadSizeTiers[tierIndex]);
+    setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setHeavyItem(hasHeavyItems);
+  };
+
   // Called by ImageUpload when images change (new uploads or grid removals)
   const handleImagesChange = (newUrls: string[]) => {
     // Detect removed URLs so we can clean up identified items
@@ -1183,6 +1237,7 @@ export default function RequestMove() {
       const filtered = identifiedItemsRef.current.filter(item => !removedUrls.includes(item.photoUrl));
       identifiedItemsRef.current = filtered;
       setIdentifiedItems(filtered);
+      recalcFromItems(filtered);
     }
     setImages(newUrls);
   };
@@ -1193,6 +1248,8 @@ export default function RequestMove() {
     const filtered = identifiedItemsRef.current.filter(item => item.photoUrl !== photoUrl);
     identifiedItemsRef.current = filtered;
     setIdentifiedItems(filtered);
+    // Recalculate pricing state immediately from the new item list
+    recalcFromItems(filtered);
     // Also remove the photo from the upload grid
     setImages(prev => prev.filter(url => url !== photoUrl));
   };
