@@ -53,6 +53,12 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;  // When to fully trust database match
 
+// In-memory result cache — two layers:
+//   1. By URL  → instant hit when the exact same URL is re-analyzed
+//   2. By content hash → same physical file uploaded twice (different URL) still hits cache
+const visionResultCache = new Map<string, VisionEngineResult>();
+const visionHashCache  = new Map<string, VisionEngineResult>();
+
 export interface VisionEngineResult {
   itemName: string;
   category: string;
@@ -550,6 +556,8 @@ Return ONLY valid JSON (no markdown):
       },
     ],
     max_tokens: 500,
+    temperature: 0,
+    seed: 42,
   });
   
   let content = response.choices[0]?.message?.content || "{}";
@@ -643,10 +651,27 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
  */
 export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResult> {
   const startTime = Date.now();
+
+  // Return cached result for the same URL to guarantee consistency
+  const cached = visionResultCache.get(photoUrl);
+  if (cached) {
+    console.log('[Vision Engine 2.0] Cache hit for:', photoUrl.slice(-40));
+    return cached;
+  }
   
   try {
     // STEP 1: Convert image to base64
     const imageBase64 = await imageToBase64(photoUrl);
+
+    // Content-hash check: same file uploaded under a different URL still hits cache
+    const { createHash } = await import('crypto');
+    const contentHash = createHash('sha256').update(imageBase64).digest('hex');
+    const hashCached = visionHashCache.get(contentHash);
+    if (hashCached) {
+      console.log('[Vision Engine 2.0] Content-hash cache hit for:', photoUrl.slice(-40));
+      visionResultCache.set(photoUrl, hashCached); // also populate URL cache
+      return hashCached;
+    }
     
     // STEP 2: Detect item using Vision API
     const visionResult = await detectItemWithVision(imageBase64);
@@ -846,6 +871,9 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       });
     }
     
+    // Store in both caches so the same photo always returns the same result
+    visionResultCache.set(photoUrl, result);
+    visionHashCache.set(contentHash, result);
     return result;
     
   } catch (error: any) {
