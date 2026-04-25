@@ -69,7 +69,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     volumeRangeMin: 21,
     volumeRangeMax: 165,
     baseFee: 20.00,
-    perKmRate: 0.19,
+    perKmRate: 1.92,
     loadType: 'Medium furniture, moderate loads',
     examples: 'Sofa, mattress, bedroom furniture, multiple boxes',
   },
@@ -166,7 +166,7 @@ const PRICING_CONFIG = {
     elevator: 9.60,
   },
   // Load Size Fees (flat tier fees - used when no AI volume data)
-  // Aligned to $0.25/ft³ at representative midpoints for each tier
+  // Aligned to $0.19/ft³ at representative midpoints for each tier
   LOAD_SIZE_FEES: {
     boxes: 6.00,      // Class A (SUV) - minimum load fee for 0-20 ft³
     small: 6.00,      // Alias for boxes - minimum load fee
@@ -175,8 +175,8 @@ const PRICING_CONFIG = {
     apartment: 75.00, // Moving Truck loads — 300 ft³ minimum × $0.25
   } as Record<string, number>,
   // Volume-based load fee rate (used when AI provides exact volume)
-  // $0.25/ft³: 100ft³=$25, 200ft³=$50, 300ft³=$75, 400ft³=$100
-  VOLUME_LOAD_FEE_PER_CUFT: 0.25,
+  // $0.19/ft³: 100ft³=$19, 200ft³=$38, 300ft³=$57, 400ft³=$76
+  VOLUME_LOAD_FEE_PER_CUFT: 0.19,
   VOLUME_LOAD_FEE_MINIMUM: 6.00,  // Minimum load fee regardless of volume
   APARTMENT_MOVE_PREMIUM: 60.00, // $60 premium for 300+ ft³ loads (apartment moves)
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility but not used in new pricing

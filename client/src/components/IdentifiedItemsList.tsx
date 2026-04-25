@@ -244,7 +244,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                             <span className="font-semibold text-green-700 dark:text-green-400">
                               Est. ${parseFloat(item.estimatedPrice).toFixed(2)}
                             </span>
-                            <span className="text-muted-foreground text-xs">($0.25/ft³)</span>
+                            <span className="text-muted-foreground text-xs">($0.19/ft³)</span>
                           </div>
                         )}
                       </div>
@@ -325,7 +325,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                     ${totalEstimatedPrice.toFixed(2)}
                   </p>
                 </div>
-                <p className="text-sm text-muted-foreground">$0.25/ft³</p>
+                <p className="text-sm text-muted-foreground">$0.19/ft³</p>
               </div>
             </div>
             
