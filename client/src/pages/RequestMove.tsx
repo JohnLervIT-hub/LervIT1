@@ -1132,10 +1132,9 @@ export default function RequestMove() {
         const totalVolume = completedAll.reduce(
           function(sum, item) { return sum + parseFloat(item.volumeCuft || '0'); }, 0
         );
-        setAiDetectedVolume(totalVolume);
 
         const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
-        const vehicleTiers  = ['car', 'van', 'pickup', 'truck'] as const;
+        const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
         let tierIndex = 0;
         if (totalVolume > 300)      tierIndex = 3;
         else if (totalVolume > 165) tierIndex = 2;
@@ -1175,6 +1174,12 @@ export default function RequestMove() {
 
         const recommendedLoadSize = loadSizeTiers[tierIndex];
         const recommendedVehicle  = vehicleTiers[tierIndex];
+
+        // Effective volume: if weight/dimension upgrades pushed us to a higher tier,
+        // ensure aiDetectedVolume reflects that tier's minimum so pricing class matches.
+        const tierMinVolumes = [0, 21, 166, 301];
+        const effectiveVolume = Math.max(totalVolume, tierMinVolumes[tierIndex]);
+        setAiDetectedVolume(effectiveVolume);
 
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
@@ -1230,7 +1235,6 @@ export default function RequestMove() {
     const totalVolume = completedItems.reduce(
       (sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0
     );
-    setAiDetectedVolume(totalVolume);
 
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
@@ -1262,6 +1266,11 @@ export default function RequestMove() {
     if (maxDim > 200 && tierIndex < 2)      tierIndex = 2;
     else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
+
+    // Effective volume: ensure the pricing vehicle class matches the final tier
+    const tierMinVolumes = [0, 21, 166, 301];
+    const effectiveVolume = Math.max(totalVolume, tierMinVolumes[tierIndex]);
+    setAiDetectedVolume(effectiveVolume);
 
     setLoadSize(loadSizeTiers[tierIndex]);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
@@ -1302,7 +1311,6 @@ export default function RequestMove() {
     // Calculate total volume and determine load size (synced with shared/pricing.ts)
     // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
-    setAiDetectedVolume(totalVolume);
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
     if (totalVolume > 300) tierIndex = 3;
@@ -1339,6 +1347,11 @@ export default function RequestMove() {
     if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
     
     const recommendedLoadSize = loadSizeTiers[tierIndex];
+
+    // Effective volume: ensure the pricing vehicle class matches the final tier
+    const tierMinVolumes = [0, 21, 166, 301];
+    const effectiveVolume = Math.max(totalVolume, tierMinVolumes[tierIndex]);
+    setAiDetectedVolume(effectiveVolume);
     
     // Apply recommendations
     setLoadSize(recommendedLoadSize);
