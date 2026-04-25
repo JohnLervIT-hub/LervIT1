@@ -155,6 +155,13 @@ export default function RequestMove() {
   const { toast } = useToast();
   const { track } = useAnalytics("booking_flow");
   const [step, setStep] = useState(1);
+  // Format a Date as YYYY-MM-DDTHH:MM in the user's LOCAL timezone
+  // (datetime-local inputs require local time, NOT UTC ISO strings)
+  const toLocalDT = (d: Date) => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
   const [pickupDifficulty, setPickupDifficulty] = useState("");
@@ -1824,7 +1831,7 @@ export default function RequestMove() {
         {/* ── STEP 1: Premium two-column layout ── */}
         <div className={step === 1
           ? "flex flex-col lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 lg:items-stretch"
-          : "grid gap-6"
+          : "grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start"
         }>
           {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
@@ -2338,7 +2345,7 @@ export default function RequestMove() {
                                 const tomorrow = new Date();
                                 tomorrow.setDate(tomorrow.getDate() + 1);
                                 tomorrow.setHours(9, 0, 0, 0);
-                                setDate(tomorrow.toISOString().slice(0, 16));
+                                setDate(toLocalDT(tomorrow));
                               }}
                               data-testid="button-quick-tomorrow-morning"
                               className="h-auto py-3 flex-col gap-1"
@@ -2355,7 +2362,7 @@ export default function RequestMove() {
                                 const tomorrow = new Date();
                                 tomorrow.setDate(tomorrow.getDate() + 1);
                                 tomorrow.setHours(14, 0, 0, 0);
-                                setDate(tomorrow.toISOString().slice(0, 16));
+                                setDate(toLocalDT(tomorrow));
                               }}
                               data-testid="button-quick-tomorrow-afternoon"
                               className="h-auto py-3 flex-col gap-1"
@@ -2372,7 +2379,7 @@ export default function RequestMove() {
                                 const nextWeek = new Date();
                                 nextWeek.setDate(nextWeek.getDate() + 7);
                                 nextWeek.setHours(9, 0, 0, 0);
-                                setDate(nextWeek.toISOString().slice(0, 16));
+                                setDate(toLocalDT(nextWeek));
                               }}
                               data-testid="button-quick-next-week"
                               className="h-auto py-3 flex-col gap-1"
@@ -2390,7 +2397,7 @@ export default function RequestMove() {
                                 const daysUntilSaturday = (6 - weekend.getDay() + 7) % 7 || 7;
                                 weekend.setDate(weekend.getDate() + daysUntilSaturday);
                                 weekend.setHours(10, 0, 0, 0);
-                                setDate(weekend.toISOString().slice(0, 16));
+                                setDate(toLocalDT(weekend));
                               }}
                               data-testid="button-quick-weekend"
                               className="h-auto py-3 flex-col gap-1"
@@ -2537,37 +2544,59 @@ export default function RequestMove() {
                   </>
                 )}
 
-                <div className="flex justify-between pt-5 border-t gap-4 mt-auto">
-                  <Button
-                    variant="outline"
-                    onClick={handleBack}
-                    disabled={step === 1}
-                    className="hover-elevate active-elevate-2"
-                    data-testid="button-back"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    onClick={handleNext}
-                    data-testid="button-next"
-                  >
-                    {step === 3 ? "Find Movers" : "Next"}
-                  </Button>
-                </div>
+                {/* Navigation buttons — only shown inside the card on Step 1 */}
+                {step === 1 && (
+                  <div className="flex justify-between pt-5 border-t gap-4 mt-auto">
+                    <Button
+                      variant="outline"
+                      onClick={handleBack}
+                      disabled={step === 1}
+                      className="hover-elevate active-elevate-2"
+                      data-testid="button-back"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      onClick={handleNext}
+                      data-testid="button-next"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Live Pricing Summary — hidden on Step 1 (no pricing until load details are set) */}
+          {/* Right column: Live Pricing Summary + nav buttons (steps 2 & 3) */}
           {step > 1 && (
-            <PricingSummary 
-              breakdown={priceBreakdown}
-              isCalculating={isCalculatingPrice}
-              error={pricingError}
-              showPromoInput={false}
-              appliedPromo={appliedPromo}
-              onPromoApplied={setAppliedPromo}
-            />
+            <div className="flex flex-col gap-4 lg:sticky lg:top-20">
+              <PricingSummary 
+                breakdown={priceBreakdown}
+                isCalculating={isCalculatingPrice}
+                error={pricingError}
+                showPromoInput={false}
+                appliedPromo={appliedPromo}
+                onPromoApplied={setAppliedPromo}
+              />
+              <div className="flex justify-between gap-4">
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  className="hover-elevate active-elevate-2 flex-1"
+                  data-testid="button-back"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleNext}
+                  className="flex-1"
+                  data-testid="button-next"
+                >
+                  {step === 3 ? "Find Movers" : "Next"}
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </div>
