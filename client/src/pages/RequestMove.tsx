@@ -1437,7 +1437,7 @@ export default function RequestMove() {
 
     if (step < 3) {
       setStep(step + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: "instant" });
     } else {
       console.log('[RequestMove] handleNext on Step 3 - checking conditions:', {
         step,
@@ -1529,7 +1529,7 @@ export default function RequestMove() {
   const handleBack = () => {
     if (step > 1) {
       setStep(step - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: "instant" });
     }
   };
 
