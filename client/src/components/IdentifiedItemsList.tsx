@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Weight, Ruler, Truck, Users, Shield, AlertCircle, Sparkles, CheckCircle2, Box } from "lucide-react";
+import { Loader2, Package, Weight, Ruler, Truck, Users, Shield, AlertCircle, Sparkles, CheckCircle2, Box, DollarSign } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { memo, useMemo } from "react";
 
@@ -39,6 +39,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   
   const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
   const totalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
+  const totalEstimatedPrice = completedItems.reduce((sum, item) => sum + parseFloat(item.estimatedPrice || '0'), 0);
   const maxRecommendedMovers = completedItems.length > 0 
     ? Math.max(...completedItems.map(item => item.recommendedMovers || 1))
     : 1;
@@ -200,7 +201,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                       </div>
                       
                       {/* Specs Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 mt-3">
                         <div className="flex items-center gap-1.5 text-sm" data-testid={`text-volume-${index}`}>
                           <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           <span className="font-medium">{item.volumeCuft ? `${parseFloat(item.volumeCuft).toFixed(1)} ft³` : '—'}</span>
@@ -209,18 +210,27 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                           <Weight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           <span className="font-medium">{item.weightKg ? `${parseFloat(item.weightKg).toFixed(0)} kg` : '—'}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-sm" data-testid={`text-dimensions-${index}`}>
-                          <Ruler className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="font-medium truncate">
-                            {item.dimensionsLcm && item.dimensionsWcm && item.dimensionsHcm
-                              ? `${parseFloat(item.dimensionsLcm).toFixed(0)}×${parseFloat(item.dimensionsWcm).toFixed(0)}×${parseFloat(item.dimensionsHcm).toFixed(0)}`
-                              : '—'}
-                          </span>
-                        </div>
                         <div className="flex items-center gap-1.5 text-sm" data-testid={`text-movers-${index}`}>
                           <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           <span className="font-medium">{item.recommendedMovers || 1} mover{(item.recommendedMovers || 1) !== 1 ? 's' : ''}</span>
                         </div>
+                        <div className="flex items-center gap-1.5 text-sm" data-testid={`text-dimensions-${index}`}>
+                          <Ruler className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium truncate">
+                            {item.dimensionsLcm && item.dimensionsWcm && item.dimensionsHcm
+                              ? `${parseFloat(item.dimensionsLcm).toFixed(0)}×${parseFloat(item.dimensionsWcm).toFixed(0)}×${parseFloat(item.dimensionsHcm).toFixed(0)} cm`
+                              : '—'}
+                          </span>
+                        </div>
+                        {item.estimatedPrice && parseFloat(item.estimatedPrice) > 0 && (
+                          <div className="flex items-center gap-1.5 text-sm col-span-2 sm:col-span-2" data-testid={`text-price-${index}`}>
+                            <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                            <span className="font-semibold text-green-700 dark:text-green-400">
+                              Est. ${parseFloat(item.estimatedPrice).toFixed(2)}
+                            </span>
+                            <span className="text-muted-foreground text-xs">($0.25/ft³)</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -291,28 +301,31 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                 )}
               </div>
               
-              {/* Accuracy */}
+              {/* Estimated Price */}
               <div className="space-y-1">
-                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Accuracy</p>
+                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Est. Price</p>
                 <div className="flex items-baseline gap-1">
-                  <p className="text-2xl sm:text-3xl font-bold tabular-nums text-green-600 dark:text-green-400">
-                    {avgConfidence.toFixed(0)}%
+                  <p className="text-2xl sm:text-3xl font-bold tabular-nums text-green-600 dark:text-green-400" data-testid="text-total-estimated-price">
+                    ${totalEstimatedPrice.toFixed(2)}
                   </p>
                 </div>
-                <p className="text-sm text-muted-foreground">confidence</p>
+                <p className="text-sm text-muted-foreground">$0.25/ft³</p>
               </div>
             </div>
             
-            {/* Total Weight Summary */}
-            {totalWeight > 0 && (
-              <div className="mt-5 pt-5 border-t border-border/50 flex items-center justify-between">
+            {/* Footer row: weight + confidence */}
+            <div className="mt-5 pt-5 border-t border-border/50 flex flex-wrap items-center justify-between gap-3">
+              {totalWeight > 0 && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Weight className="h-4 w-4" />
-                  <span>Estimated total weight</span>
+                  <span>Est. total weight: <span className="font-semibold text-foreground">{totalWeight.toFixed(0)} kg</span></span>
                 </div>
-                <p className="font-semibold">{totalWeight.toFixed(0)} kg</p>
+              )}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Sparkles className="h-4 w-4" />
+                <span>AI confidence: <span className="font-semibold text-foreground">{avgConfidence.toFixed(0)}%</span></span>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}

@@ -356,6 +356,19 @@ function detectQuantity(itemName: string): { quantity: number; singleItemName: s
     return { quantity: count, singleItemName: singleName };
   }
   
+  // Pattern: Leading integer "N item(s)" — e.g. "42 moving boxes (large)", "12 boxes"
+  const leadingNumberPattern = /^(\d+)\s+(.+)/;
+  const leadingNumberMatch = nameLower.match(leadingNumberPattern);
+  if (leadingNumberMatch) {
+    const count = parseInt(leadingNumberMatch[1]);
+    if (count >= 2 && count <= 500) {
+      // Strip the leading number to get the single-item name
+      const singleName = itemName.replace(/^\d+\s+/, '');
+      console.log(`[Vision Engine 2.0] Quantity detected: ${count} (leading number) - "${itemName}" → "${singleName}"`);
+      return { quantity: count, singleItemName: singleName };
+    }
+  }
+
   // Pattern: Plural form at end suggesting multiple (e.g., "upholstered accent chairs")
   // Only apply if no explicit quantity, but name ends in plural furniture
   const pluralEndings = [
@@ -505,6 +518,19 @@ REFERENCE DIMENSIONS (use these):
 • Medium suitcase: ~65×45×30cm, 4kg
 • Large suitcase: ~75×50×35cm, 5kg
 • Travel bag: ~50×30×25cm, 1kg
+
+BOX / STORAGE SCENE COUNTING (CRITICAL — read this if you see multiple boxes):
+If the image shows a scene with many cardboard moving boxes (not a single item):
+• Your PRIMARY job is to COUNT every box as accurately as possible.
+• Method: estimate (visible columns) × (visible rows/tiers per column) × (estimated depth layers front-to-back).
+• Use door frames, walls, or furniture as scale references to judge stack depth.
+• Return itemName as "N moving boxes (size)" — e.g. "42 moving boxes (large)".
+• Set category to "Storage", subcategory to "Boxes".
+• Set quantity to the total box count you estimated (this is the most important field).
+• Dimensions should describe ONE single box (choose: small≈40×30×30cm, medium≈50×40×40cm, large≈60×50×50cm).
+• If mixed sizes, use the dominant size and note it in itemName.
+• estimatedWeight = quantity × kg_per_box (small=15kg, medium=20kg, large=25kg when packed).
+• Example correct output: itemName="38 moving boxes (large)", quantity=38, dimensions=60×50×50, estimatedWeight=950
 
 Return ONLY valid JSON (no markdown):
 {
@@ -857,6 +883,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
 /**
  * Convert Vision Engine 2.0 result to legacy format for backward compatibility
  */
+const PRICE_PER_CUFT = 0.25; // $0.25 per cubic foot
+
 export function toIdentificationResult(v2Result: VisionEngineResult): {
   itemName: string;
   category: 'Furniture' | 'Appliance' | 'Fragile' | 'Oversized' | 'Bulky' | 'Electronics' | 'Other';
@@ -865,6 +893,7 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
   dimensionsWcm: number;
   dimensionsHcm: number;
   volumeCuft: number;
+  estimatedPrice: number;
   handlingComplexity: 'low' | 'medium' | 'high' | 'very_high';
   vehicleType: 'car' | 'van' | 'pickup' | 'truck';
   recommendedMovers: 1 | 2;
@@ -905,6 +934,7 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
     dimensionsWcm: v2Result.dimensions.width_cm,
     dimensionsHcm: v2Result.dimensions.height_cm,
     volumeCuft: v2Result.volume_ft3,
+    estimatedPrice: Math.round(v2Result.volume_ft3 * PRICE_PER_CUFT * 100) / 100,
     handlingComplexity: v2Result.handling_complexity,
     vehicleType: v2Result.vehicle,
     recommendedMovers: v2Result.movers_required,
