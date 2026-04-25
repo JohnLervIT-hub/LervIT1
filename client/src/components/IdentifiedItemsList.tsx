@@ -1,392 +1,320 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Loader2, Package, Weight, Truck, Users, AlertCircle, Sparkles, CheckCircle2, X, Plus, Minus, Check } from "lucide-react";
+import { Loader2, Package, Weight, Ruler, Truck, Users, Shield, AlertCircle, Sparkles, CheckCircle2, Box } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
-import { memo, useMemo, useState } from "react";
-
-export interface ConfirmedItemEntry {
-  item: IdentifiedItem;
-  quantity: number;
-  perItemVolumeFt3: number;
-  perItemWeightKg: number;
-  totalVolumeFt3: number;
-  totalWeightKg: number;
-}
+import { memo, useMemo } from "react";
 
 interface IdentifiedItemsListProps {
   items: IdentifiedItem[];
   isLoading?: boolean;
-  onConfirm?: (confirmed: ConfirmedItemEntry[]) => void;
 }
 
-function parseSourceMeta(raw: string | null | undefined): { perItemVolumeFt3?: number; perItemWeightKg?: number; quantity?: number } {
-  try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
-}
-
-function getVehicleLabel(vol: number): { vehicle: string; loadSize: string; colorClass: string } {
-  if (vol > 300) return { vehicle: 'Moving Truck',  loadSize: 'Apartment Move', colorClass: 'text-red-600 dark:text-red-400' };
-  if (vol > 165) return { vehicle: 'Cargo Van',     loadSize: 'Large Load',     colorClass: 'text-orange-600 dark:text-orange-400' };
-  if (vol > 20)  return { vehicle: 'Pickup Truck',  loadSize: 'Medium Load',    colorClass: 'text-blue-600 dark:text-blue-400' };
-  return           { vehicle: 'Car / SUV',      loadSize: 'Small Load',     colorClass: 'text-green-600 dark:text-green-400' };
-}
-
-export const IdentifiedItemsList = memo(function IdentifiedItemsList({
-  items,
-  isLoading,
-  onConfirm,
-}: IdentifiedItemsListProps) {
-  const completed = useMemo(() => items.filter(i => i.processingStatus === 'completed'), [items]);
-  const failed    = useMemo(() => items.filter(i => i.processingStatus === 'failed'), [items]);
-
-  // --- interactive state ---
-  const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [confirmed, setConfirmed] = useState(false);
-
-  // Resolve per-item volume / weight from sourceMetadata, falling back to total ÷ quantity
-  const metaMap = useMemo(() => {
-    const map: Record<string, { perItemVol: number; perItemWt: number; baseQty: number }> = {};
-    for (const item of completed) {
-      const meta = parseSourceMeta(item.sourceMetadata);
-      const baseQty = meta.quantity ?? 1;
-      const totalVol = parseFloat(item.volumeCuft || '0');
-      const totalWt  = parseFloat(item.weightKg   || '0');
-      const perItemVol = meta.perItemVolumeFt3 ?? (baseQty > 0 ? totalVol / baseQty : totalVol);
-      const perItemWt  = meta.perItemWeightKg  ?? (baseQty > 0 ? totalWt  / baseQty : totalWt);
-      map[item.id] = { perItemVol, perItemWt, baseQty };
-    }
-    return map;
-  }, [completed]);
-
-  function qtyFor(item: IdentifiedItem) {
-    return quantities[item.id] ?? metaMap[item.id]?.baseQty ?? 1;
-  }
-
-  function setQty(id: string, delta: number) {
-    setQuantities(prev => {
-      const base = prev[id] ?? metaMap[id]?.baseQty ?? 1;
-      return { ...prev, [id]: Math.max(1, base + delta) };
-    });
-  }
-
-  function toggleItem(id: string) {
-    setExcluded(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  const includedItems = useMemo(
-    () => completed.filter(i => !excluded.has(i.id)),
-    [completed, excluded]
-  );
-
-  const liveTotals = useMemo(() => {
-    let vol = 0, wt = 0, movers = 1;
-    let hasHeavy = false;
-    for (const item of includedItems) {
-      const qty = qtyFor(item);
-      const meta = metaMap[item.id];
-      vol += (meta?.perItemVol ?? 0) * qty;
-      wt  += (meta?.perItemWt  ?? 0) * qty;
-      if ((item.recommendedMovers ?? 1) > 1 || wt > 50) movers = 2;
-      if (item.handlingComplexity === 'high' || item.handlingComplexity === 'very_high') hasHeavy = true;
-    }
-    return { vol: Math.round(vol * 10) / 10, wt: Math.round(wt), movers, hasHeavy };
-  }, [includedItems, quantities, metaMap]);
-
-  const vehicleInfo = getVehicleLabel(liveTotals.vol);
-
-  function handleConfirm() {
-    if (!onConfirm) return;
-    const entries: ConfirmedItemEntry[] = includedItems.map(item => {
-      const qty = qtyFor(item);
-      const meta = metaMap[item.id];
-      const perItemVol = meta?.perItemVol ?? parseFloat(item.volumeCuft || '0');
-      const perItemWt  = meta?.perItemWt  ?? parseFloat(item.weightKg   || '0');
-      return {
-        item,
-        quantity: qty,
-        perItemVolumeFt3: perItemVol,
-        perItemWeightKg:  perItemWt,
-        totalVolumeFt3:   Math.round(perItemVol * qty * 100) / 100,
-        totalWeightKg:    Math.round(perItemWt  * qty * 10)  / 10,
-      };
-    });
-    onConfirm(entries);
-    setConfirmed(true);
-  }
-
-  // ── Loading state ──────────────────────────────────────────────────────────
+// Memoized component to prevent unnecessary re-renders
+export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, isLoading }: IdentifiedItemsListProps) {
   if (isLoading) {
     return (
-      <Card data-testid="card-identified-items-loading">
-        <CardContent className="py-10 flex flex-col items-center gap-4">
+      <Card className="overflow-hidden" data-testid="card-identified-items-loading">
+        <CardContent className="py-8 sm:py-12 flex flex-col items-center justify-center gap-4">
           <div className="relative">
             <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse" />
-            <div className="relative bg-primary/10 rounded-full p-4">
+            <div className="relative bg-gradient-to-br from-primary/10 to-primary/5 rounded-full p-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           </div>
-          <div className="text-center">
-            <p className="font-medium">Analyzing your items…</p>
-            <p className="text-sm text-muted-foreground mt-1">AI is identifying dimensions and weight</p>
+          <div className="text-center px-4">
+            <p className="font-medium text-foreground text-base">Analyzing your items...</p>
+            <p className="text-sm text-muted-foreground mt-1">Our AI is identifying dimensions and weight</p>
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  if (!items || items.length === 0) return null;
-
-  // ── Confirmed (read-only summary) ──────────────────────────────────────────
-  if (confirmed) {
-    return (
-      <Card data-testid="card-items-confirmed">
-        <CardContent className="p-5 flex items-start gap-4">
-          <div className="bg-green-500/10 rounded-xl p-2.5 flex-shrink-0 mt-0.5">
-            <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold">Items confirmed</p>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {includedItems.length} item{includedItems.length !== 1 ? 's' : ''} · {liveTotals.vol.toFixed(1)} ft³ · {liveTotals.wt} kg · {vehicleInfo.vehicle}
-            </p>
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {includedItems.map(item => (
-                <Badge key={item.id} variant="secondary" className="text-xs">
-                  {qtyFor(item) > 1 ? `${qtyFor(item)}× ` : ''}{item.itemName}
-                </Badge>
-              ))}
-            </div>
-          </div>
-          {onConfirm && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="flex-shrink-0 text-muted-foreground"
-              onClick={() => setConfirmed(false)}
-              data-testid="button-edit-items"
-            >
-              Edit
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    );
+  if (!items || items.length === 0) {
+    return null;
   }
 
-  // ── Interactive list ───────────────────────────────────────────────────────
-  const avgConf = completed.length > 0
-    ? completed.reduce((s, i) => s + parseFloat(i.confidence || '0'), 0) / completed.length * 100
+  const completedItems = items.filter(item => item.processingStatus === 'completed');
+  const failedItems = items.filter(item => item.processingStatus === 'failed');
+  
+  const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
+  const totalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
+  const maxRecommendedMovers = completedItems.length > 0 
+    ? Math.max(...completedItems.map(item => item.recommendedMovers || 1))
+    : 1;
+  const hasHighComplexity = completedItems.some(item => 
+    item.handlingComplexity === 'high' || item.handlingComplexity === 'very_high'
+  );
+  
+  // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
+  // CAR_MAX: 20, PICKUP_MAX: 165, VAN_MAX: 300, >300 → Truck
+  // WEIGHT OVERRIDES (matching server getVehicleRecommendationWithCategory):
+  // >150kg → at least Moving Truck, >100kg → at least Cargo Van
+  // COMPLEXITY OVERRIDE: high/very_high items in small loads → at least Pickup Truck
+  const getVehicleRecommendation = () => {
+    const truckRec = { 
+      vehicle: 'Moving Truck', 
+      loadSize: 'Apartment Move', 
+      description: '300+ ft³',
+      gradient: 'from-red-500 to-orange-500',
+      bgColor: 'bg-red-50 dark:bg-red-950/30',
+      textColor: 'text-red-700 dark:text-red-400',
+      borderColor: 'border-red-200 dark:border-red-800'
+    };
+    const vanRec = { 
+      vehicle: 'Cargo Van', 
+      loadSize: 'Large Load', 
+      description: '166-300 ft³',
+      gradient: 'from-orange-500 to-amber-500',
+      bgColor: 'bg-orange-50 dark:bg-orange-950/30',
+      textColor: 'text-orange-700 dark:text-orange-400',
+      borderColor: 'border-orange-200 dark:border-orange-800'
+    };
+    const pickupRec = { 
+      vehicle: 'Pickup Truck', 
+      loadSize: 'Medium Load', 
+      description: '21-165 ft³',
+      gradient: 'from-blue-500 to-cyan-500',
+      bgColor: 'bg-blue-50 dark:bg-blue-950/30',
+      textColor: 'text-blue-700 dark:text-blue-400',
+      borderColor: 'border-blue-200 dark:border-blue-800'
+    };
+    const carRec = { 
+      vehicle: 'Car/SUV', 
+      loadSize: 'Small Load', 
+      description: '0-20 ft³',
+      gradient: 'from-green-500 to-emerald-500',
+      bgColor: 'bg-green-50 dark:bg-green-950/30',
+      textColor: 'text-green-700 dark:text-green-400',
+      borderColor: 'border-green-200 dark:border-green-800'
+    };
+
+    let volumeRec = carRec;
+    if (totalVolume > 300) volumeRec = truckRec;
+    else if (totalVolume > 165) volumeRec = vanRec;
+    else if (totalVolume > 20) volumeRec = pickupRec;
+
+    const recOrder = [carRec, pickupRec, vanRec, truckRec];
+    let recIndex = recOrder.indexOf(volumeRec);
+
+    return recOrder[recIndex];
+  };
+  const vehicleRec = getVehicleRecommendation();
+
+  const getComplexityStyle = (complexity: string | null) => {
+    switch (complexity) {
+      case 'very_high':
+        return { label: 'Very Heavy', variant: 'destructive' as const, icon: AlertCircle };
+      case 'high':
+        return { label: 'Heavy', variant: 'default' as const, icon: Weight };
+      case 'medium':
+        return { label: 'Medium', variant: 'secondary' as const, icon: null };
+      default:
+        return { label: 'Standard', variant: 'outline' as const, icon: null };
+    }
+  };
+
+  const avgConfidence = completedItems.length > 0 
+    ? (completedItems.reduce((sum, item) => sum + parseFloat(item.confidence || '0'), 0) / completedItems.length * 100)
     : 0;
 
   return (
-    <div className="space-y-4" data-testid="container-identified-items">
-      {/* Header card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="space-y-6" data-testid="container-identified-items">
+      {/* Main Items Card */}
+      <Card className="overflow-hidden border-0 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-primary/5 via-primary/3 to-transparent pb-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 rounded-xl p-2.5">
                 <Sparkles className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-lg">Items Detected</CardTitle>
+                <CardTitle className="text-xl">Item Detection</CardTitle>
                 <CardDescription className="mt-0.5">
-                  Uncheck anything you're <strong>not</strong> moving
+                  {completedItems.length} item{completedItems.length !== 1 ? 's' : ''} analyzed
                 </CardDescription>
               </div>
             </div>
-            {avgConf > 0 && (
-              <div className="flex items-center gap-1.5 bg-muted rounded-full px-3 py-1.5 text-sm">
+            {avgConfidence > 0 && (
+              <div className="hidden sm:flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-full px-3 py-1.5 border">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <span className="font-medium">{avgConf.toFixed(0)}% accuracy</span>
+                <span className="text-sm font-medium">{avgConfidence.toFixed(0)}% Accuracy</span>
               </div>
             )}
           </div>
         </CardHeader>
-
+        
         <CardContent className="p-0">
+          {/* Items List */}
           <div className="divide-y">
-            {completed.map((item, idx) => {
-              const isExcluded = excluded.has(item.id);
-              const qty = qtyFor(item);
-              const meta = metaMap[item.id];
-              const lineVol = Math.round((meta?.perItemVol ?? 0) * qty * 10) / 10;
-              const isHeavy = item.handlingComplexity === 'high' || item.handlingComplexity === 'very_high';
-
+            {completedItems.map((item, index) => {
+              const complexityStyle = getComplexityStyle(item.handlingComplexity);
               return (
-                <div
-                  key={item.id}
-                  className={`p-4 flex gap-3 transition-colors ${isExcluded ? 'opacity-40' : ''}`}
-                  data-testid={`card-identified-item-${idx}`}
+                <div 
+                  key={item.id} 
+                  className="p-4 sm:p-5 hover:bg-muted/30 transition-colors"
+                  data-testid={`card-identified-item-${index}`}
                 >
-                  {/* Checkbox toggle */}
-                  <button
-                    type="button"
-                    onClick={() => toggleItem(item.id)}
-                    aria-label={isExcluded ? 'Include item' : 'Exclude item'}
-                    data-testid={`button-toggle-item-${idx}`}
-                    className={`flex-shrink-0 mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                      isExcluded
-                        ? 'border-border bg-background'
-                        : 'border-primary bg-primary'
-                    }`}
-                  >
-                    {!isExcluded && <Check className="h-3 w-3 text-primary-foreground" />}
-                  </button>
-
-                  {/* Photo */}
-                  <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden ring-1 ring-border">
-                    <img
-                      src={item.photoUrl}
-                      alt={item.itemName || 'Item'}
-                      className="w-full h-full object-cover"
-                      data-testid={`img-item-photo-${idx}`}
-                    />
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div>
-                        <p className="font-semibold leading-tight" data-testid={`text-item-name-${idx}`}>
-                          {item.itemName}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <Badge variant="secondary" className="text-xs">{item.category}</Badge>
-                          {isHeavy && (
-                            <Badge variant="default" className="text-xs">
-                              <Weight className="h-3 w-3 mr-1" />
-                              Heavy
-                            </Badge>
-                          )}
-                        </div>
+                  <div className="flex gap-4">
+                    {/* Image */}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden ring-1 ring-border">
+                        <img
+                          src={item.photoUrl}
+                          alt={item.itemName || 'Item'}
+                          className="w-full h-full object-cover"
+                          data-testid={`img-item-photo-${index}`}
+                        />
                       </div>
-                      {/* Volume pill */}
-                      {!isExcluded && (
-                        <span className="text-xs font-medium text-muted-foreground tabular-nums flex-shrink-0">
-                          {lineVol.toFixed(1)} ft³
-                        </span>
+                      {item.confidence && parseFloat(item.confidence) >= 0.8 && (
+                        <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1">
+                          <CheckCircle2 className="h-3 w-3 text-white" />
+                        </div>
                       )}
                     </div>
-
-                    {/* Quantity controls */}
-                    {!isExcluded && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-xs text-muted-foreground">Qty:</span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-6 w-6 min-w-0"
-                            onClick={() => setQty(item.id, -1)}
-                            disabled={qty <= 1}
-                            data-testid={`button-qty-minus-${idx}`}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="text-sm font-semibold w-5 text-center tabular-nums" data-testid={`text-qty-${idx}`}>
-                            {qty}
-                          </span>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-6 w-6 min-w-0"
-                            onClick={() => setQty(item.id, 1)}
-                            data-testid={`button-qty-plus-${idx}`}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
+                    
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-semibold text-base sm:text-lg leading-tight" data-testid={`text-item-name-${index}`}>
+                            {item.itemName}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <Badge variant="secondary" className="text-xs font-medium" data-testid={`badge-category-${index}`}>
+                              <Box className="h-3 w-3 mr-1" />
+                              {item.category}
+                            </Badge>
+                            {item.handlingComplexity && item.handlingComplexity !== 'standard' && (
+                              <Badge 
+                                variant={complexityStyle.variant}
+                                className="text-xs font-medium"
+                                data-testid={`badge-complexity-${index}`}
+                              >
+                                {complexityStyle.icon && <complexityStyle.icon className="h-3 w-3 mr-1" />}
+                                {complexityStyle.label}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    )}
+                      
+                      {/* Specs Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-3">
+                        <div className="flex items-center gap-1.5 text-sm" data-testid={`text-volume-${index}`}>
+                          <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium">{item.volumeCuft ? `${parseFloat(item.volumeCuft).toFixed(1)} ft³` : '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-sm" data-testid={`text-weight-${index}`}>
+                          <Weight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium">{item.weightKg ? `${parseFloat(item.weightKg).toFixed(0)} kg` : '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-sm" data-testid={`text-dimensions-${index}`}>
+                          <Ruler className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium truncate">
+                            {item.dimensionsLcm && item.dimensionsWcm && item.dimensionsHcm
+                              ? `${parseFloat(item.dimensionsLcm).toFixed(0)}×${parseFloat(item.dimensionsWcm).toFixed(0)}×${parseFloat(item.dimensionsHcm).toFixed(0)}`
+                              : '—'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-sm" data-testid={`text-movers-${index}`}>
+                          <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium">{item.recommendedMovers || 1} mover{(item.recommendedMovers || 1) !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-
-                  {/* Exclude × shortcut */}
-                  {!isExcluded && (
-                    <button
-                      type="button"
-                      onClick={() => toggleItem(item.id)}
-                      aria-label="Remove item"
-                      data-testid={`button-remove-item-${idx}`}
-                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors mt-0.5"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
                 </div>
               );
             })}
           </div>
-
-          {/* Failed items */}
-          {failed.length > 0 && (
-            <div className="p-4 bg-destructive/5 border-t border-destructive/20 flex items-start gap-3">
-              <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">
-                {failed.length} photo{failed.length !== 1 ? 's' : ''} couldn't be analyzed — try a clearer shot
-              </p>
+          
+          {/* Failed Items Alert */}
+          {failedItems.length > 0 && (
+            <div className="p-4 bg-destructive/5 border-t border-destructive/20">
+              <div className="flex items-start gap-3">
+                <div className="bg-destructive/10 rounded-lg p-2">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                </div>
+                <div>
+                  <p className="font-medium text-destructive">
+                    {failedItems.length} item{failedItems.length !== 1 ? 's' : ''} couldn't be analyzed
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Try uploading clearer photos for better results
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Live totals + confirm */}
-      {includedItems.length > 0 && (
-        <Card data-testid="card-live-totals">
-          <CardContent className="p-5">
-            <div className="grid grid-cols-3 gap-4 mb-5">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1">Volume</p>
-                <p className="text-2xl font-bold tabular-nums">{liveTotals.vol.toFixed(1)}</p>
-                <p className="text-xs text-muted-foreground">cubic feet</p>
+      
+      {/* Recommendations Card */}
+      {completedItems.length > 0 && (
+        <Card className={`overflow-hidden border ${vehicleRec.borderColor} ${vehicleRec.bgColor}`}>
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <div className={`bg-gradient-to-br ${vehicleRec.gradient} rounded-lg p-2`}>
+                <Truck className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1">Vehicle</p>
-                <p className={`text-base font-bold leading-tight ${vehicleInfo.colorClass}`}>{vehicleInfo.vehicle}</p>
-                <p className="text-xs text-muted-foreground">{vehicleInfo.loadSize}</p>
+              <h5 className="font-semibold text-lg">Recommendations</h5>
+            </div>
+            
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {/* Total Volume */}
+              <div className="space-y-1">
+                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Total Volume</p>
+                <p className="text-2xl sm:text-3xl font-bold tabular-nums">{totalVolume.toFixed(1)}</p>
+                <p className="text-sm text-muted-foreground">cubic feet</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1">Movers</p>
-                <p className="text-2xl font-bold tabular-nums">{liveTotals.movers}</p>
-                <p className="text-xs text-muted-foreground">needed</p>
+              
+              {/* Vehicle Required */}
+              <div className="space-y-1">
+                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Vehicle</p>
+                <p className={`text-xl sm:text-2xl font-bold ${vehicleRec.textColor}`}>{vehicleRec.vehicle}</p>
+                <p className="text-sm text-muted-foreground">{vehicleRec.loadSize}</p>
+              </div>
+              
+              {/* Movers Needed */}
+              <div className="space-y-1">
+                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Movers</p>
+                <div className="flex items-baseline gap-1">
+                  <p className="text-2xl sm:text-3xl font-bold tabular-nums">{maxRecommendedMovers}</p>
+                  <p className="text-sm text-muted-foreground">needed</p>
+                </div>
+                {hasHighComplexity && (
+                  <p className="text-xs text-orange-600 dark:text-orange-400 font-medium flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Heavy items detected
+                  </p>
+                )}
+              </div>
+              
+              {/* Accuracy */}
+              <div className="space-y-1">
+                <p className="text-xs sm:text-sm text-muted-foreground font-medium uppercase tracking-wide">Accuracy</p>
+                <div className="flex items-baseline gap-1">
+                  <p className="text-2xl sm:text-3xl font-bold tabular-nums text-green-600 dark:text-green-400">
+                    {avgConfidence.toFixed(0)}%
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">confidence</p>
               </div>
             </div>
-
-            <div className="flex items-center gap-2 pt-4 border-t">
-              <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <p className="text-sm text-muted-foreground flex-1">
-                {includedItems.length} item{includedItems.length !== 1 ? 's' : ''} · ~{liveTotals.wt} kg
-                {liveTotals.hasHeavy && <span className="text-orange-600 dark:text-orange-400 font-medium"> · Heavy items</span>}
-              </p>
-              {onConfirm && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleConfirm}
-                  data-testid="button-confirm-items"
-                  className="gap-2"
-                >
-                  <Truck className="h-4 w-4" />
-                  Confirm items
-                </Button>
-              )}
-            </div>
+            
+            {/* Total Weight Summary */}
+            {totalWeight > 0 && (
+              <div className="mt-5 pt-5 border-t border-border/50 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Weight className="h-4 w-4" />
+                  <span>Estimated total weight</span>
+                </div>
+                <p className="font-semibold">{totalWeight.toFixed(0)} kg</p>
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
-
-      {includedItems.length === 0 && (
-        <div className="text-center py-4 text-sm text-muted-foreground">
-          All items unchecked — please include at least one item.
-        </div>
       )}
     </div>
   );
