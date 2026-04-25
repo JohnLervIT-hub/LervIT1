@@ -46,6 +46,7 @@ import {
 } from "./dimension-corrector";
 import { ObjectStorageService } from "./objectStorage";
 import { logEvent } from "./logger";
+import { AI_FEATURES } from "@shared/ai";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
@@ -804,8 +805,14 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     // STEP 1: Convert image to base64
     const imageBase64 = await imageToBase64(photoUrl);
 
-    // STEP 2: Detect all items in the scene (multi-item GPT-4o call)
-    const detectedItems = await detectAllItemsWithVision(imageBase64);
+    // STEP 2: Detect items — multi-item if flag is on, single-item fallback otherwise
+    let detectedItems: VisionDetectionResult[];
+    if (AI_FEATURES.MULTI_ITEM_VISION) {
+      detectedItems = await detectAllItemsWithVision(imageBase64);
+    } else {
+      const single = await detectItemWithVision(imageBase64);
+      detectedItems = [single];
+    }
 
     // STEP 3: Process each item through DB matching + dimension correction
     const processed = detectedItems.map(item => processSingleDetectedItem(item));
