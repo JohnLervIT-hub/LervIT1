@@ -1840,7 +1840,7 @@ export default function RequestMove() {
       </Dialog>
 
       <div className="min-h-screen pt-16 pb-12 bg-background">
-        <div className={step === 1 ? "w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8" : "max-w-4xl mx-auto px-4 sm:px-6"}>
+        <div className={step === 1 ? "w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8" : "max-w-5xl mx-auto px-4 sm:px-6"}>
 
         {/* Page Header — hidden on mobile step 1 (map is the hero element there) */}
         <div className={step === 1 ? "py-4 mb-4 hidden md:block" : "py-6 mb-2"}>
