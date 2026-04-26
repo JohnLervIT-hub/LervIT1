@@ -100,6 +100,14 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const recOrder = [carRec, pickupRec, vanRec, truckRec];
     let recIndex = recOrder.indexOf(volumeRec);
 
+    // Apply weight overrides (matching server logic)
+    if (totalWeight > 150 && recIndex < 3) recIndex = 3;
+    else if (totalWeight > 100 && recIndex < 2) recIndex = 2;
+    else if (totalWeight > 50 && recIndex < 1) recIndex = 1;
+
+    // Apply complexity override: heavy items in small loads need at least a pickup
+    if (hasHighComplexity && recIndex < 1) recIndex = 1;
+
     return recOrder[recIndex];
   };
   const vehicleRec = getVehicleRecommendation();

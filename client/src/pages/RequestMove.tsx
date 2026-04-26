@@ -1175,11 +1175,10 @@ export default function RequestMove() {
         const recommendedLoadSize = loadSizeTiers[tierIndex];
         const recommendedVehicle  = vehicleTiers[tierIndex];
 
-        // Effective volume: if weight/dimension upgrades pushed us to a higher tier,
-        // ensure aiDetectedVolume reflects that tier's minimum so pricing class matches.
-        const tierMinVolumes = [0, 21, 166, 301];
-        const effectiveVolume = Math.max(totalVolume, tierMinVolumes[tierIndex]);
-        setAiDetectedVolume(effectiveVolume);
+        // Use the actual detected volume for display consistency.
+        // calculatePrice now takes the max of volume-based and loadSize-based vehicle class,
+        // so the correct van/truck class is used even when weight bumps the tier.
+        setAiDetectedVolume(totalVolume);
 
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
@@ -1267,10 +1266,8 @@ export default function RequestMove() {
     else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
 
-    // Effective volume: ensure the pricing vehicle class matches the final tier
-    const tierMinVolumes = [0, 21, 166, 301];
-    const effectiveVolume = Math.max(totalVolume, tierMinVolumes[tierIndex]);
-    setAiDetectedVolume(effectiveVolume);
+    // Use actual volume for display consistency; calculatePrice handles class via loadSize floor.
+    setAiDetectedVolume(totalVolume);
 
     setLoadSize(loadSizeTiers[tierIndex]);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
@@ -1348,10 +1345,8 @@ export default function RequestMove() {
     
     const recommendedLoadSize = loadSizeTiers[tierIndex];
 
-    // Effective volume: ensure the pricing vehicle class matches the final tier
-    const tierMinVolumes = [0, 21, 166, 301];
-    const effectiveVolume = Math.max(totalVolume, tierMinVolumes[tierIndex]);
-    setAiDetectedVolume(effectiveVolume);
+    // Use actual volume for display consistency; calculatePrice handles class via loadSize floor.
+    setAiDetectedVolume(totalVolume);
     
     // Apply recommendations
     setLoadSize(recommendedLoadSize);

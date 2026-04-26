@@ -208,10 +208,15 @@ export function calculatePrice(
   moverToPickupDistance?: number,
   volumeCuft?: number  // Optional: use volume directly for more accurate class determination
 ): PriceBreakdown {
-  // Determine vehicle class (prefer volume if provided, otherwise use loadSize)
-  const vehicleClass = volumeCuft 
-    ? getVehicleClassFromVolume(volumeCuft)
-    : getVehicleClassFromLoadSize(loadSize);
+  // Determine vehicle class: take the higher of volume-based and loadSize-based.
+  // This ensures weight-bumped tiers (e.g. 110 kg sofa forces 'large'/van even if
+  // the physical volume alone would only imply a pickup) get the right vehicle class.
+  const VEHICLE_CLASS_RANK: Record<string, number> = { A: 1, B: 2, C: 3, D: 3, E: 4 };
+  const classFromLoadSize = getVehicleClassFromLoadSize(loadSize);
+  const classFromVolume = volumeCuft ? getVehicleClassFromVolume(volumeCuft) : null;
+  const vehicleClass = classFromVolume && VEHICLE_CLASS_RANK[classFromVolume] >= VEHICLE_CLASS_RANK[classFromLoadSize]
+    ? classFromVolume
+    : classFromLoadSize;
   
   const classConfig = VEHICLE_CLASSES[vehicleClass];
   
