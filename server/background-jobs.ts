@@ -6,6 +6,7 @@ import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
 import { moverWebSocket } from './websocket';
+import { dispatchJobToMovers } from './dispatch';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -360,114 +361,19 @@ async function recoverOrphanedPayments() {
             }
           }
 
-          // Dispatch mover notifications (same logic as Stripe webhook path)
-          // This runs when the webhook didn't fire but orphan recovery picked up the payment.
-          try {
-            const { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } = await import('@shared/matching');
-            const { toDecimalString } = await import('@shared/utils');
-
-            const fullBooking = updatedBooking;
-            if (fullBooking && !fullBooking.preSelectedMoverId) {
-              const pickupCoords = {
-                lat: parseFloat(String(fullBooking.pickupLatitude || '0')),
-                lng: parseFloat(String(fullBooking.pickupLongitude || '0')),
-              };
-              const dropoffCoords = {
-                lat: parseFloat(String(fullBooking.dropoffLatitude || '0')),
-                lng: parseFloat(String(fullBooking.dropoffLongitude || '0')),
-              };
-
-              const allMovers = await db
-                .select()
-                .from(movers)
-                .where(and(eq(movers.isAvailable, true), isNotNull(movers.latitude), isNotNull(movers.longitude)));
-
-              const moversWithUserData = (await Promise.all(
-                allMovers.map(async (m) => {
-                  const [moverUser] = await db.select().from(users).where(eq(users.id, m.userId)).limit(1);
-                  if (!moverUser || m.latitude === null || m.longitude === null) return null;
-                  return {
-                    moverId: m.id,
-                    userId: m.userId,
-                    name: moverUser.name,
-                    vehicleType: m.vehicleType,
-                    rating: m.rating || '0',
-                    totalMoves: m.totalMoves,
-                    isAvailable: m.isAvailable,
-                    latitude: m.latitude as number,
-                    longitude: m.longitude as number,
-                  };
-                })
-              )).filter((m): m is NonNullable<typeof m> => m !== null);
-
-              const nearestMovers = findNearestMovers(
-                pickupCoords,
-                dropoffCoords,
-                (fullBooking.loadSize || 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
-                moversWithUserData,
-                {},
-                resolveVehicleForBooking(fullBooking.aiRecommendedVehicle, fullBooking.loadSize)
-              );
-
-              if (nearestMovers.length > 0) {
-                const expiresAt = calculateExpiryTime(10);
-
-                await Promise.all(
-                  nearestMovers.map((mover: any) =>
-                    db.insert(jobNotifications).values({
-                      bookingId: fullBooking.id,
-                      moverId: mover.moverId,
-                      distanceToPickup: toDecimalString(mover.distanceToPickup),
-                      estimatedEarnings: toDecimalString(mover.estimatedEarnings),
-                      status: 'pending',
-                      expiresAt,
-                    }).onConflictDoNothing()
-                  )
-                );
-
-                for (const mover of nearestMovers as any[]) {
-                  moverWebSocket.notifyMover(mover.userId, {
-                    type: 'job_notification',
-                    bookingId: fullBooking.id,
-                    pickupAddress: fullBooking.pickupAddress || '',
-                    dropoffAddress: fullBooking.dropoffAddress || '',
-                    price: toDecimalString(mover.estimatedEarnings),
-                    expiresAt,
-                  });
-
-                  try {
-                    const [moverUser] = await db.select().from(users).where(eq(users.id, mover.userId)).limit(1);
-                    if (moverUser) {
-                      await notificationService.sendJobAssignment(moverUser, fullBooking, toDecimalString(mover.estimatedEarnings));
-                      if (moverUser.phone) {
-                        await notificationService.sendSMS({
-                          to: moverUser.phone,
-                          message: `LervIT New Job! Earn $${toDecimalString(mover.estimatedEarnings)} CAD. Accept within 10 min: https://app.lervit.com/mover-dashboard`,
-                          type: 'job_alert',
-                        });
-                      }
-                    }
-                  } catch (notifErr) {
-                    logEvent.error('orphan_recovery_mover_notif', notifErr, { bookingId: fullBooking.id, moverId: mover.moverId });
-                  }
-                }
-
-                logEvent.notification('orphan_recovery_movers_notified', {
-                  bookingId: fullBooking.id,
-                  moversCount: nearestMovers.length,
-                  loadSize: fullBooking.loadSize,
-                  vehicleRequired: resolveVehicleForBooking(fullBooking.aiRecommendedVehicle, fullBooking.loadSize),
-                });
-              } else {
-                logEvent.notification('orphan_recovery_no_movers', {
-                  bookingId: fullBooking.id,
-                  loadSize: fullBooking.loadSize,
-                  vehicleRequired: resolveVehicleForBooking(fullBooking.aiRecommendedVehicle, fullBooking.loadSize),
-                });
-              }
+          // Dispatch mover notifications via shared pipeline (AC-1 through AC-10)
+          // Runs when Stripe webhook didn't fire but orphan recovery picked up the payment.
+          if (updatedBooking) {
+            try {
+              const result = await dispatchJobToMovers(updatedBooking);
+              logEvent.notification('orphan_recovery_movers_notified', {
+                bookingId: updatedBooking.id,
+                moversCount: result.dispatched,
+                requiredVehicle: result.requiredVehicle,
+              });
+            } catch (dispatchErr) {
+              logEvent.error('orphan_recovery_dispatch', dispatchErr, { bookingId: booking.id });
             }
-          } catch (dispatchErr) {
-            logEvent.error('orphan_recovery_dispatch', dispatchErr, { bookingId: booking.id });
           }
         }
       } catch (stripeErr) {
