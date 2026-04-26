@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, Component, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useMoverWebSocket } from '@/hooks/useMoverWebSocket';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -51,6 +52,9 @@ function JobNotificationSoundContent() {
   const [currentNotification, setCurrentNotification] = useState<JobNotification | null>(null);
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+
+  // Track which notification IDs have already been shown to avoid re-triggering
+  const shownNotificationIds = useRef<Set<string>>(new Set());
 
   // Only enable for movers
   const isMover = user?.role === 'mover';
@@ -152,9 +156,14 @@ function JobNotificationSoundContent() {
     }
   }, []);
 
-  // Handle incoming job notification
+  // Handle incoming job notification (from WebSocket push OR database polling)
   const handleJobNotification = useCallback((notification: JobNotification) => {
     console.log('[Notification] Received job notification:', notification);
+
+    // Mark as seen so polling doesn't re-trigger this same job
+    if (notification.bookingId) {
+      shownNotificationIds.current.add(notification.bookingId);
+    }
     
     // Play sound
     playNotificationSound();
@@ -185,6 +194,27 @@ function JobNotificationSoundContent() {
     onJobNotification: handleJobNotification,
     enabled: isMover,
   });
+
+  // Poll the database every 30 seconds for pending job notifications.
+  // This is the fallback for movers who were offline when a WebSocket push was sent.
+  const { data: polledNotifications } = useQuery<JobNotification[]>({
+    queryKey: ['/api/movers/me/pending-job-notifications'],
+    enabled: isMover,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  });
+
+  // Trigger the job dialog for any polled notification not already shown via WebSocket
+  useEffect(() => {
+    if (!polledNotifications || polledNotifications.length === 0) return;
+    for (const notif of polledNotifications) {
+      const id = notif.bookingId;
+      if (!id || shownNotificationIds.current.has(id)) continue;
+      shownNotificationIds.current.add(id);
+      handleJobNotification({ ...notif, type: 'job_notification' });
+    }
+  }, [polledNotifications, handleJobNotification]);
 
   // Request permission on first interaction
   useEffect(() => {

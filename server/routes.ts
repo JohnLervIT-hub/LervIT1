@@ -1512,6 +1512,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/movers/me/pending-job-notifications
+  // Returns active (pending, not yet expired) job notifications for the current mover.
+  // Polled by the frontend every 30s so movers who were offline when a push was sent still see the job.
+  app.get("/api/movers/me/pending-job-notifications", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      if (user.role !== 'mover') {
+        return res.status(403).json({ error: "Only movers can access job notifications" });
+      }
+
+      const movers = await storage.getMovers({});
+      const mover = movers.find((m: any) => m.userId === user.id);
+      if (!mover) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+
+      // Return notifications for this mover that are still pending and not expired
+      const pendingNotifs = await db
+        .select({
+          id: jobNotifications.id,
+          bookingId: jobNotifications.bookingId,
+          estimatedEarnings: jobNotifications.estimatedEarnings,
+          distanceToPickup: jobNotifications.distanceToPickup,
+          expiresAt: jobNotifications.expiresAt,
+          status: jobNotifications.status,
+        })
+        .from(jobNotifications)
+        .where(
+          and(
+            eq(jobNotifications.moverId, mover.id),
+            eq(jobNotifications.status, 'pending'),
+            sql`${jobNotifications.expiresAt} > NOW()`
+          )
+        );
+
+      // Enrich with booking details for display
+      const enriched = await Promise.all(
+        pendingNotifs.map(async (n) => {
+          const booking = await storage.getBooking(n.bookingId);
+          return {
+            ...n,
+            pickupAddress: booking?.pickupAddress || '',
+            dropoffAddress: booking?.dropoffAddress || '',
+            price: n.estimatedEarnings,
+          };
+        })
+      );
+
+      res.json(enriched);
+    } catch (error) {
+      console.error('Get pending job notifications error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/movers/:id", async (req: Request, res: Response) => {
     try {
       const mover = await storage.getMover(req.params.id);
