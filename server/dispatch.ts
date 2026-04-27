@@ -211,9 +211,20 @@ export async function dispatchJobToMovers(
 
   const expiresAt = calculateExpiryTime(10);
 
+  // Derive mover earnings from the actual booking price charged to the customer
+  // (not from findNearestMovers' recalculated estimate), matching the admin assign-mover logic.
+  const bookingPrice = parseFloat(booking.price ?? '0');
+  const feeBreakdown = calculatePlatformFee(bookingPrice);
+  const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
+
+  const moversWithActualEarnings = nearestMovers.map((mover) => ({
+    ...mover,
+    estimatedEarnings: moverNetAmount,
+  }));
+
   // Create DB notification records (AC-10: onConflictDoNothing prevents duplicates)
   await Promise.all(
-    nearestMovers.map((mover) =>
+    moversWithActualEarnings.map((mover) =>
       db.insert(jobNotifications).values({
         bookingId: booking.id,
         moverId: mover.moverId,
@@ -227,7 +238,7 @@ export async function dispatchJobToMovers(
 
   // Notify each mover on all channels (AC-4)
   await Promise.all(
-    nearestMovers.map((mover) => notifyMover(mover, booking, expiresAt))
+    moversWithActualEarnings.map((mover) => notifyMover(mover, booking, expiresAt))
   );
 
   logEvent.notification('dispatch_proximity_complete', {
