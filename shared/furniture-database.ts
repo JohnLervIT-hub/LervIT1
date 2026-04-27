@@ -42,8 +42,8 @@ export type FurnitureCategory =
  * Load size categories for pricing and display
  * NOTE: These map to vehicle classes in pricing.ts:
  *   - boxes/small: 0-20 ft³    → Class A (SUV) - boxes, small items, single chair
- *   - medium:      21-165 ft³  → Class B (Pickup Truck) - medium furniture, moderate loads
- *   - large:       166-300 ft³ → Class C (Cargo Van) - large furniture, multiple rooms
+ *   - medium:      21-180 ft³  → Class B (Pickup Truck) - medium furniture, moderate loads
+ *   - large:       181-300 ft³ → Class C (Cargo Van) - large furniture, multiple rooms
  *   - apartment:   >300 ft³    → Class E (Large Moving Truck) - full move
  */
 export type LoadSizeCategory = 'boxes' | 'small' | 'medium' | 'large' | 'apartment';

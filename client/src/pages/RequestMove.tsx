@@ -1137,7 +1137,7 @@ export default function RequestMove() {
         const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
         let tierIndex = 0;
         if (totalVolume > 300)      tierIndex = 3;
-        else if (totalVolume > 165) tierIndex = 2;
+        else if (totalVolume > 180) tierIndex = 2;
         else if (totalVolume > 20)  tierIndex = 1;
 
         const maxMovers = Math.max(
@@ -1238,7 +1238,7 @@ export default function RequestMove() {
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
     if (totalVolume > 300)      tierIndex = 3;
-    else if (totalVolume > 165) tierIndex = 2;
+    else if (totalVolume > 180) tierIndex = 2;
     else if (totalVolume > 20)  tierIndex = 1;
 
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
@@ -1306,12 +1306,12 @@ export default function RequestMove() {
     if (completedItems.length === 0) return;
     
     // Calculate total volume and determine load size (synced with shared/pricing.ts)
-    // Boxes: 0-20 ft³, Medium: 21-165 ft³, Large: 166-300 ft³, Apartment: >300 ft³
+    // Boxes: 0-20 ft³, Medium: 21-180 ft³, Large: 181-300 ft³, Apartment: >300 ft³
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
     if (totalVolume > 300) tierIndex = 3;
-    else if (totalVolume > 165) tierIndex = 2;
+    else if (totalVolume > 180) tierIndex = 2;
     else if (totalVolume > 20) tierIndex = 1;
     
     // Get max recommended movers

@@ -35,7 +35,7 @@ const loadSizes: LoadSize[] = [
   {
     id: "medium",
     label: "Medium",
-    volume: "21-165 ft³",
+    volume: "21-180 ft³",
     description: "Medium to large furniture",
     examples: ["Chairs", "Tables", "Sofas", "Beds", "Dressers"],
     image: mediumImage,
@@ -44,7 +44,7 @@ const loadSizes: LoadSize[] = [
   {
     id: "large",
     label: "Large",
-    volume: "166-300 ft³",
+    volume: "181-300 ft³",
     description: "Multiple rooms",
     examples: ["Bedroom + Living room", "Multiple large items"],
     image: largeImage,

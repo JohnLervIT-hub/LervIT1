@@ -12,6 +12,10 @@ const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
 const PAYMENT_REMINDER_MINUTES = 15; // Send reminder 15 mins before expiry
 
+// Max notifications across all waves (3 waves × 5 movers = 15).
+// When this count is reached, no further auto re-dispatch is triggered.
+const MAX_REDISPATCH_NOTIFICATIONS = 15;
+
 // Track sent reminders in memory (simple approach for MVP)
 const sentReminders = new Set<string>();
 
@@ -105,18 +109,89 @@ async function expireOldNotifications() {
           lt(jobNotifications.expiresAt, now)
         )
       )
-      .returning({ id: jobNotifications.id });
+      .returning({ id: jobNotifications.id, bookingId: jobNotifications.bookingId });
     
     const count = expiredNotifications.length;
     
     if (count > 0) {
       logEvent.cleanup('expire_notifications', { expiredNotifications: count });
+
+      // Auto re-dispatch: check each affected booking and send a new wave
+      // if all its notifications are now expired/declined and it's still pending.
+      const affectedBookingIds = [...new Set(expiredNotifications.map(n => n.bookingId))];
+      await redispatchIfAllExpired(affectedBookingIds);
     }
     
     return count;
   } catch (error) {
     logEvent.error('expireOldNotifications', error);
     return 0;
+  }
+}
+
+/**
+ * For each booking that just had notifications expire, check whether:
+ *   1. The booking is still in "pending" status (no mover accepted yet).
+ *   2. All notifications for this booking are now non-pending (expired / declined).
+ *   3. The total notification count hasn't hit the 3-wave cap (MAX_REDISPATCH_NOTIFICATIONS).
+ * If all three are true, fire a fresh dispatch wave.
+ * onConflictDoNothing in dispatchJobToMovers ensures already-notified movers are skipped,
+ * so the new wave naturally reaches fresh movers who weren't in earlier waves.
+ */
+async function redispatchIfAllExpired(bookingIds: string[]) {
+  for (const bookingId of bookingIds) {
+    try {
+      // 1. Booking must still be awaiting a mover
+      const [booking] = await db
+        .select()
+        .from(bookings)
+        .where(and(eq(bookings.id, bookingId), eq(bookings.status, BOOKING_STATUSES.PENDING)))
+        .limit(1);
+
+      if (!booking) continue;
+
+      // 2. Fetch all notification records for this booking
+      const allNotifs = await db
+        .select({ status: jobNotifications.status })
+        .from(jobNotifications)
+        .where(eq(jobNotifications.bookingId, bookingId));
+
+      if (allNotifs.length === 0) continue;
+
+      // Skip if any notification is still pending (someone hasn't responded yet)
+      const hasPending = allNotifs.some(n => n.status === 'pending');
+      if (hasPending) continue;
+
+      // 3. Respect the wave cap
+      if (allNotifs.length >= MAX_REDISPATCH_NOTIFICATIONS) {
+        logger.info(
+          { event: 'redispatch_cap_reached', bookingId, totalNotifs: allNotifs.length },
+          'Auto re-dispatch cap reached — admin manual assignment required'
+        );
+        continue;
+      }
+
+      // Fire the next wave
+      const wave = Math.floor(allNotifs.length / 5) + 1;
+      const result = await dispatchJobToMovers(booking);
+
+      logEvent.notification('auto_redispatch', {
+        bookingId,
+        wave,
+        dispatched: result.dispatched,
+        requiredVehicle: result.requiredVehicle,
+        previousNotifCount: allNotifs.length,
+      });
+
+      if (result.dispatched === 0) {
+        logger.warn(
+          { event: 'auto_redispatch_no_movers', bookingId, wave },
+          'Auto re-dispatch wave found no available movers'
+        );
+      }
+    } catch (err) {
+      logEvent.error('auto_redispatch', err, { bookingId });
+    }
   }
 }
 

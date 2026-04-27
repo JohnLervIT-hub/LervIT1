@@ -50,7 +50,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   );
   
   // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
-  // CAR_MAX: 20, PICKUP_MAX: 165, VAN_MAX: 300, >300 → Truck
+  // CAR_MAX: 20, PICKUP_MAX: 180, VAN_MAX: 300, >300 → Truck
   // WEIGHT OVERRIDES (matching server getVehicleRecommendationWithCategory):
   // >150kg → at least Moving Truck, >100kg → at least Cargo Van
   // COMPLEXITY OVERRIDE: high/very_high items in small loads → at least Pickup Truck
@@ -67,7 +67,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const vanRec = { 
       vehicle: 'Cargo Van', 
       loadSize: 'Large Load', 
-      description: '166-300 ft³',
+      description: '181-300 ft³',
       gradient: 'from-orange-500 to-amber-500',
       bgColor: 'bg-orange-50 dark:bg-orange-950/30',
       textColor: 'text-orange-700 dark:text-orange-400',
@@ -76,7 +76,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const pickupRec = { 
       vehicle: 'Pickup Truck', 
       loadSize: 'Medium Load', 
-      description: '21-165 ft³',
+      description: '21-180 ft³',
       gradient: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-50 dark:bg-blue-950/30',
       textColor: 'text-blue-700 dark:text-blue-400',
@@ -94,7 +94,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
 
     let volumeRec = carRec;
     if (totalVolume > 300) volumeRec = truckRec;
-    else if (totalVolume > 165) volumeRec = vanRec;
+    else if (totalVolume > 180) volumeRec = vanRec;
     else if (totalVolume > 20) volumeRec = pickupRec;
 
     const recOrder = [carRec, pickupRec, vanRec, truckRec];

@@ -668,10 +668,10 @@ export default function AdminDashboard() {
   const getLoadSizeLabel = (size?: string | null) => {
     if (!size) return "Unknown";
     const labels: Record<string, string> = {
-      boxes: "Boxes Only (1-10 ft³)",
-      medium: "Medium Load (11-50 ft³)",
-      large: "Large Load (50-170 ft³)",
-      apartment: "Full Apartment (170+ ft³)",
+      boxes: "Boxes Only (0-20 ft³)",
+      medium: "Medium Load (21-180 ft³)",
+      large: "Large Load (181-300 ft³)",
+      apartment: "Full Apartment (300+ ft³)",
     };
     return labels[size] || size;
   };
