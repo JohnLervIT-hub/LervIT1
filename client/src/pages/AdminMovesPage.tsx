@@ -84,10 +84,10 @@ export default function AdminMovesPage() {
     refetchInterval: 30000,
   });
 
-  // Fetch available movers for assignment
+  // Fetch available movers for assignment or reassignment
   const { data: availableMovers } = useQuery<AvailableMover[]>({
     queryKey: ["/api/admin/available-movers"],
-    enabled: !!editingBooking && !editingBooking.mover?.id,
+    enabled: !!editingBooking && editingBooking.status !== 'completed' && editingBooking.status !== 'cancelled',
   });
 
   const updateAddressMutation = useMutation({
