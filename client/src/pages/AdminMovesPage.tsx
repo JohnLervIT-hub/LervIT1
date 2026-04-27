@@ -494,26 +494,35 @@ export default function AdminMovesPage() {
               />
             </div>
 
-            {/* Mover Assignment Section - Only show if no mover assigned */}
-            {!editingBooking?.mover?.id && editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
+            {/* Mover Assignment / Reassignment Section */}
+            {editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
               <div className="space-y-2 pt-4 border-t">
                 <Label htmlFor="assign-mover" className="flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-green-600" />
-                  Assign Mover
+                  {editingBooking?.mover?.id ? 'Reassign Mover' : 'Assign Mover'}
                 </Label>
+                {editingBooking?.mover?.id && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm text-muted-foreground">Currently:</span>
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                      <Truck className="w-3 h-3 mr-1" />
+                      {editingBooking.mover.name} - {editingBooking.mover.vehicleType}
+                    </Badge>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Select value={selectedMoverId} onValueChange={setSelectedMoverId}>
                     <SelectTrigger className="flex-1" data-testid="select-assign-mover">
-                      <SelectValue placeholder="Select a mover..." />
+                      <SelectValue placeholder={editingBooking?.mover?.id ? 'Select replacement mover...' : 'Select a mover...'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableMovers?.map((mover) => (
+                      {availableMovers?.filter(m => m.id !== editingBooking?.mover?.id).map((mover) => (
                         <SelectItem key={mover.id} value={mover.id}>
                           {mover.name} - {mover.vehicleType} ({mover.totalMoves} moves)
                         </SelectItem>
                       ))}
-                      {(!availableMovers || availableMovers.length === 0) && (
-                        <SelectItem value="none" disabled>No available movers</SelectItem>
+                      {(!availableMovers || availableMovers.filter(m => m.id !== editingBooking?.mover?.id).length === 0) && (
+                        <SelectItem value="none" disabled>No other movers available</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -524,21 +533,8 @@ export default function AdminMovesPage() {
                     data-testid="button-assign-mover"
                   >
                     {assignMoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Assign
+                    {editingBooking?.mover?.id ? 'Reassign' : 'Assign'}
                   </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Show current mover if assigned */}
-            {editingBooking?.mover?.id && (
-              <div className="pt-4 border-t">
-                <Label className="text-muted-foreground">Assigned Mover</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                    <Truck className="w-3 h-3 mr-1" />
-                    {editingBooking.mover.name} - {editingBooking.mover.vehicleType}
-                  </Badge>
                 </div>
               </div>
             )}
