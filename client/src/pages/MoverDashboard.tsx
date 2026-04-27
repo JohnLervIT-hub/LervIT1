@@ -374,7 +374,17 @@ export default function MoverDashboard() {
       const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
       if (!isActiveStatus) return false;
       
-      // Hide jobs with past dates (before today)
+      // Always show jobs that are mid-trip (milestones must stay accessible regardless of date)
+      const midTrip = [
+        "in_transit",
+        "en_route_to_pickup",
+        "loading",
+        "en_route_to_dropoff",
+        "unloading",
+      ].includes(b.status);
+      if (midTrip) return true;
+      
+      // For confirmed-but-not-started jobs, hide if the scheduled date has passed
       const jobDate = new Date(b.preferredDate);
       jobDate.setHours(0, 0, 0, 0);
       if (jobDate < todayStart) return false;
