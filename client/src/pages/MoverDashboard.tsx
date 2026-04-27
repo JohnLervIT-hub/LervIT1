@@ -431,8 +431,10 @@ export default function MoverDashboard() {
     }) || [];
   
   // Check if mover already has a trip in progress (to block starting multiple trips)
+  // Only true when the mover is physically mid-trip (heading to pickup or beyond).
+  // A "confirmed" booking just means assigned — not yet a trip in progress.
   const hasActiveTrip = bookings.some((b) => 
-    b.status === "in_transit" || ACTIVE_STATUSES.includes(b.status as BookingStatus)
+    ["in_transit", "en_route_to_pickup", "loading", "en_route_to_dropoff", "unloading"].includes(b.status)
   );
   
   const shouldKeepScreenAwake = hasActiveTrip || (!!mover?.isAvailable && isLiveGpsActive && geoPermissionState === 'granted');
