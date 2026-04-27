@@ -4567,10 +4567,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const feeCalc = calculatePlatformFee(priceAmount, booking.loadSize);
         const { grossAmountCents, platformFeeCents, moverPayoutCents, platformFeePercent } = feeCalc;
         
-        // Use grossAmountCents in idempotency key for consistency
+        // Include charge type in key so it changes if mover account availability changes,
+        // preventing StripeIdempotencyError when the same booking is retried with different params.
+        const chargeSegment = moverAccount ? moverAccount.stripeAccountId : 'platform';
         const idempotencyKey = isRetry 
-          ? `payment_intent_${booking.id}_${grossAmountCents}_retry_${Date.now()}`
-          : `payment_intent_${booking.id}_${grossAmountCents}`;
+          ? `payment_intent_${booking.id}_${grossAmountCents}_${chargeSegment}_retry_${Date.now()}`
+          : `payment_intent_${booking.id}_${grossAmountCents}_${chargeSegment}`;
+        
+        // If there is an existing payment intent stored on the booking but the charge type has
+        // changed (e.g., mover now has a Stripe account when they didn't before), cancel the old
+        // intent so we don't lock a platform-charge payment that should be a destination charge.
+        if (booking.stripePaymentIntentId) {
+          try {
+            const existingIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId);
+            const existingIsDestination = !!(existingIntent.transfer_data?.destination);
+            const newIsDestination = !!moverAccount;
+            if (existingIsDestination !== newIsDestination && existingIntent.status !== 'succeeded') {
+              await stripe.paymentIntents.cancel(booking.stripePaymentIntentId).catch(() => {});
+              logEvent.payment('intent_canceled_charge_type_changed', { bookingId, oldType: existingIsDestination ? 'destination' : 'platform', newType: newIsDestination ? 'destination' : 'platform' });
+            }
+          } catch {
+            // Intent may already be gone - safe to proceed with creating a new one
+          }
+        }
         
         // Validate fee doesn't exceed amount (safety check)
         if (platformFeeCents > grossAmountCents) {
