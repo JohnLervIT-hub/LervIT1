@@ -13,6 +13,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import {
   Mail,
   Send,
   Users,
@@ -99,6 +107,19 @@ export default function AdminEmailCenter() {
   const [searchQuery, setSearchQuery] = useState("");
   const [fileAttachments, setFileAttachments] = useState<{filename: string; content: string; contentType: string; size: number}[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedCampaign, setSelectedCampaign] = useState<EmailCampaign | null>(null);
+
+  const handleEditResend = (campaign: EmailCampaign) => {
+    setSubject(campaign.subject);
+    setContent(campaign.content);
+    setEmailType(campaign.type || "");
+    setAudienceType(campaign.audienceType || "");
+    setSelectedRecipients([]);
+    setFileAttachments([]);
+    setSelectedCampaign(null);
+    setActiveTab("compose");
+    toast({ title: "Campaign loaded", description: "Edit the content and send again." });
+  };
 
   const { data: campaigns, isLoading: campaignsLoading } = useQuery<EmailCampaign[]>({
     queryKey: ["/api/admin/email/campaigns"],
@@ -707,10 +728,11 @@ export default function AdminEmailCenter() {
                     return (
                       <div
                         key={campaign.id}
-                        className="flex items-start gap-4 p-4 rounded-lg border"
+                        className="flex items-start gap-4 p-4 rounded-lg border cursor-pointer hover-elevate"
+                        onClick={() => setSelectedCampaign(campaign)}
                         data-testid={`campaign-${campaign.id}`}
                       >
-                        <div className={`p-2 rounded-lg ${typeInfo?.color || "bg-gray-500"}`}>
+                        <div className={`p-2 rounded-lg shrink-0 ${typeInfo?.color || "bg-gray-500"}`}>
                           {typeInfo ? <typeInfo.icon className="w-4 h-4 text-white" /> : <Mail className="w-4 h-4 text-white" />}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -745,6 +767,79 @@ export default function AdminEmailCenter() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Campaign detail dialog */}
+      <Dialog open={!!selectedCampaign} onOpenChange={(open) => { if (!open) setSelectedCampaign(null); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          {selectedCampaign && (() => {
+            const typeInfo = getTypeInfo(selectedCampaign.type);
+            const audienceInfo = getAudienceInfo(selectedCampaign.audienceType);
+            return (
+              <>
+                <DialogHeader>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg shrink-0 ${typeInfo?.color || "bg-gray-500"}`}>
+                      {typeInfo ? <typeInfo.icon className="w-4 h-4 text-white" /> : <Mail className="w-4 h-4 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <DialogTitle className="text-left">{selectedCampaign.subject}</DialogTitle>
+                      <DialogDescription className="text-left">
+                        {selectedCampaign.sentAt
+                          ? format(new Date(selectedCampaign.sentAt), "MMM d, yyyy h:mm a")
+                          : "Not sent"}
+                      </DialogDescription>
+                    </div>
+                    {getStatusBadge(selectedCampaign.status)}
+                  </div>
+                </DialogHeader>
+
+                <div className="flex items-center gap-4 text-sm text-muted-foreground py-1 flex-wrap gap-y-2">
+                  <span className="flex items-center gap-1.5">
+                    {audienceInfo && <audienceInfo.icon className="w-3.5 h-3.5" />}
+                    {audienceInfo?.label || selectedCampaign.audienceType}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" />
+                    {selectedCampaign.recipientCount} recipients
+                  </span>
+                  {typeInfo && (
+                    <Badge variant="secondary" className={`${typeInfo.color} text-white text-xs`}>
+                      {typeInfo.label}
+                    </Badge>
+                  )}
+                </div>
+
+                <Separator />
+
+                <ScrollArea className="flex-1 min-h-0">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed pr-2">
+                    {selectedCampaign.content}
+                  </div>
+                </ScrollArea>
+
+                <Separator />
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedCampaign(null)}
+                    data-testid="button-close-campaign"
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    onClick={() => handleEditResend(selectedCampaign)}
+                    data-testid="button-edit-resend"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Edit &amp; Re-send
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
