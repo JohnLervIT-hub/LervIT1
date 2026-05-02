@@ -61,7 +61,7 @@ export default function PartnerAudit() {
     <PartnerLayout>
       <div className="p-6 max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Audit Log</h1>
+          <h1 className="text-lg font-semibold">Audit Log</h1>
           <p className="text-sm text-muted-foreground mt-1">
             A complete record of actions taken in your partner portal
           </p>

@@ -185,6 +185,7 @@ function CoverageForm({ onSave }: { onSave: () => void }) {
       toast({ title: "Zone removed" });
       qc.invalidateQueries({ queryKey: ["/api/partner/coverage"] });
     },
+    onError: () => toast({ title: "Failed to remove zone", variant: "destructive" }),
   });
 
   return (
@@ -340,7 +341,7 @@ export default function PartnerOnboarding() {
     <PartnerLayout>
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Onboarding Checklist</h1>
+          <h1 className="text-lg font-semibold">Onboarding Checklist</h1>
           <p className="text-sm text-muted-foreground mt-1">Complete all steps to activate your partner account</p>
         </div>
 

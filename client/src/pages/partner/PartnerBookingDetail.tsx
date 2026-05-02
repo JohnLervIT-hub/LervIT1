@@ -160,7 +160,7 @@ export default function PartnerBookingDetail() {
           </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl font-bold">Booking #{booking.id.slice(-8).toUpperCase()}</h1>
+              <h1 className="text-lg font-semibold">Booking #{booking.id.slice(-8).toUpperCase()}</h1>
               <Badge className={STATUS_COLOR[enterpriseStatus] ?? ""} data-testid="status-badge">
                 {formatStatus(enterpriseStatus)}
               </Badge>

@@ -81,7 +81,7 @@ export default function PartnerCompliance() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold">Compliance Documents</h1>
+          <h1 className="text-lg font-semibold">Compliance Documents</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Upload required insurance certificates, business registration, and other compliance documents.
           </p>

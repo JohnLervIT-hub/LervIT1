@@ -337,7 +337,7 @@ export default function PartnerDashboard() {
                                   ${fmt(e.partnerNet)}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  of ${fmt(e.price)} · {parseFloat(e.platformFeePercent).toFixed(0)}% fee
+                                  of ${fmt(e.price)} · {parseFloat(e.platformFeePercent ?? "15").toFixed(0)}% fee
                                 </p>
                               </div>
                             </div>
