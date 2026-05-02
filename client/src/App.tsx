@@ -296,9 +296,17 @@ function AppContent({ children }: { children: ReactNode }) {
 }
 
 function AppShell() {
-  const [loc] = useLocation();
+  const [loc, setLocation] = useLocation();
+  const { user, isLoading } = useAuth();
   const isPartnerRoute =
     loc.startsWith("/partner") || loc === "/partner-activate";
+
+  // Redirect partner users away from consumer routes
+  useEffect(() => {
+    if (!isLoading && user?.role?.startsWith("partner_") && !isPartnerRoute) {
+      setLocation("/partner/dashboard");
+    }
+  }, [user, isLoading, isPartnerRoute, setLocation]);
 
   if (isPartnerRoute) {
     return (
@@ -307,6 +315,11 @@ function AppShell() {
         <PartnerRouter />
       </ErrorBoundary>
     );
+  }
+
+  // While a partner user's session is resolving, show nothing (they'll be redirected)
+  if (!isLoading && user?.role?.startsWith("partner_")) {
+    return null;
   }
 
   return (
