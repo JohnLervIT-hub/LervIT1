@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,27 +11,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import {
-  AlertTriangle,
-  Plus,
-  Search,
-  Loader2,
-  CheckCircle,
-} from "lucide-react";
+import { AlertTriangle, Plus, Search, Loader2, CheckCircle, Clock, ShieldAlert, Flame } from "lucide-react";
 import { format } from "date-fns";
 
-const SEVERITY_COLOR: Record<string, string> = {
-  low: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  critical: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+const SEVERITY_CONFIG: Record<string, { color: string; dot: string; label: string }> = {
+  low:      { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",     dot: "bg-blue-400",   label: "Low" },
+  medium:   { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", dot: "bg-yellow-400", label: "Medium" },
+  high:     { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", dot: "bg-orange-500", label: "High" },
+  critical: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",         dot: "bg-red-500",    label: "Critical" },
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  open: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  under_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  resolved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  escalated: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+const STATUS_CONFIG: Record<string, { color: string; label: string; icon: React.ElementType }> = {
+  open:         { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",       label: "Open",         icon: Flame },
+  under_review: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", label: "Under Review", icon: Clock },
+  resolved:     { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400", label: "Resolved",    icon: CheckCircle },
+  escalated:    { color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300", label: "Escalated",  icon: ShieldAlert },
 };
 
 const CATEGORIES = [
@@ -44,18 +38,20 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
+const TABS = [
+  { key: "all", label: "All" },
+  { key: "open", label: "Open" },
+  { key: "under_review", label: "Under Review" },
+  { key: "resolved", label: "Resolved" },
+  { key: "escalated", label: "Escalated" },
+];
+
 function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    bookingId: "",
-    category: "",
-    severity: "medium",
-    title: "",
-    notes: "",
-  });
+  const [form, setForm] = useState({ bookingId: "", category: "", severity: "medium", title: "", notes: "" });
   const [files, setFiles] = useState<File[]>([]);
 
   const report = useMutation({
@@ -67,14 +63,9 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
       fd.append("notes", form.notes);
       files.forEach(f => fd.append("files", f));
       const res = await fetch(`/api/partner/bookings/${form.bookingId}/incidents`, {
-        method: "POST",
-        credentials: "include",
-        body: fd,
+        method: "POST", credentials: "include", body: fd,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Failed");
-      }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Failed");
       return res.json();
     },
     onSuccess: () => {
@@ -87,12 +78,13 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
     onError: (e: any) => toast({ title: e?.message ?? "Failed", variant: "destructive" }),
   });
 
+  const activeBookings = bookings.filter((b: any) => !["completed", "cancelled", "rejected"].includes(b.enterpriseStatus ?? ""));
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button data-testid="button-report-incident">
-          <Plus className="w-4 h-4 mr-2" />
-          Report Incident
+          <Plus className="w-4 h-4 mr-2" /> Report Incident
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
@@ -103,9 +95,11 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
           <div className="space-y-1.5">
             <Label>Booking *</Label>
             <Select value={form.bookingId} onValueChange={v => setForm(f => ({ ...f, bookingId: v }))}>
-              <SelectTrigger data-testid="select-incident-booking"><SelectValue placeholder="Select booking…" /></SelectTrigger>
+              <SelectTrigger data-testid="select-incident-booking">
+                <SelectValue placeholder={activeBookings.length === 0 ? "No active bookings" : "Select booking…"} />
+              </SelectTrigger>
               <SelectContent>
-                {bookings.filter((b: any) => !["completed", "cancelled", "rejected"].includes(b.enterpriseStatus ?? "")).map((b: any) => (
+                {activeBookings.map((b: any) => (
                   <SelectItem key={b.id} value={b.id}>
                     #{b.id.slice(-8).toUpperCase()} — {b.pickupAddress?.slice(0, 30)}
                   </SelectItem>
@@ -146,15 +140,15 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
           </div>
           <div className="space-y-1.5">
             <Label>Attachments (optional)</Label>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} type="button">
                 Attach Photos/Docs
               </Button>
-              {files.length > 0 && <span className="text-xs text-muted-foreground self-center">{files.length} file(s)</span>}
+              {files.length > 0 && <span className="text-xs text-muted-foreground">{files.length} file(s) selected</span>}
             </div>
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" className="hidden" onChange={e => setFiles(Array.from(e.target.files ?? []))} />
           </div>
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-2 justify-end pt-1">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
             <Button
               onClick={() => report.mutate()}
@@ -172,128 +166,163 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
 
 export default function PartnerIncidents() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [tab, setTab] = useState("all");
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: incidents = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/partner/incidents"],
-  });
-
-  const { data: bookings = [] } = useQuery<any[]>({
-    queryKey: ["/api/partner/bookings"],
-  });
+  const { data: incidents = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/partner/incidents"] });
+  const { data: bookings = [] } = useQuery<any[]>({ queryKey: ["/api/partner/bookings"] });
 
   const resolve = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes: string }) =>
       apiRequest("PUT", `/api/partner/incidents/${id}`, { status: "resolved", resolutionNotes: notes }),
-    onSuccess: () => {
-      toast({ title: "Incident resolved" });
-      qc.invalidateQueries({ queryKey: ["/api/partner/incidents"] });
-    },
+    onSuccess: () => { toast({ title: "Incident resolved" }); qc.invalidateQueries({ queryKey: ["/api/partner/incidents"] }); },
     onError: () => toast({ title: "Failed to resolve", variant: "destructive" }),
   });
 
+  const counts = {
+    all: incidents.length,
+    open: incidents.filter((i: any) => i.status === "open").length,
+    under_review: incidents.filter((i: any) => i.status === "under_review").length,
+    resolved: incidents.filter((i: any) => i.status === "resolved").length,
+    escalated: incidents.filter((i: any) => i.status === "escalated").length,
+  } as Record<string, number>;
+
   const filtered = incidents.filter((inc: any) => {
-    const matchesStatus = statusFilter === "all" || inc.status === statusFilter;
+    const matchesTab = tab === "all" || inc.status === tab;
     const q = search.toLowerCase();
-    const matchesSearch = !q || inc.title?.toLowerCase().includes(q) || inc.notes?.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
+    return matchesTab && (!q || inc.title?.toLowerCase().includes(q) || inc.notes?.toLowerCase().includes(q));
   });
 
-  const openCount = incidents.filter((i: any) => ["open", "under_review"].includes(i.status)).length;
+  const openCount = counts.open + counts.under_review;
+  const criticalCount = incidents.filter((i: any) => i.severity === "critical" && i.status !== "resolved").length;
 
   return (
     <PartnerLayout>
       <div className="p-6 space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        {/* Header */}
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold">Incidents</h1>
-            {openCount > 0 && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                <span className="text-red-600 font-medium">{openCount} open</span> incident{openCount !== 1 ? "s" : ""}
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {openCount > 0 ? (
+                <><span className="text-red-600 dark:text-red-400 font-semibold">{openCount} open</span>
+                {criticalCount > 0 && <> · <span className="text-red-600 dark:text-red-400 font-semibold">{criticalCount} critical</span></>}</>
+              ) : (
+                "No open incidents"
+              )}
+            </p>
           </div>
           <ReportIncidentDialog bookings={bookings} />
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search incidents…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              data-testid="input-search-incidents"
-            />
+        {/* Summary pills */}
+        {!isLoading && incidents.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: "Open", count: counts.open, color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
+              { label: "Under Review", count: counts.under_review, color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" },
+              { label: "Resolved", count: counts.resolved, color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
+              { label: "Escalated", count: counts.escalated, color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
+            ].map(s => s.count > 0 && (
+              <span key={s.label} className={`text-xs px-2.5 py-1 rounded-full font-medium ${s.color}`}>
+                {s.count} {s.label}
+              </span>
+            ))}
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44" data-testid="select-status-filter">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="under_review">Under Review</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-              <SelectItem value="escalated">Escalated</SelectItem>
-            </SelectContent>
-          </Select>
+        )}
+
+        {/* Tab bar + search */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
+            {TABS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                data-testid={`tab-${t.key}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  tab === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+                {!isLoading && counts[t.key] > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                    tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20"
+                  }`}>{counts[t.key]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Search incidents…" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-incidents" />
+          </div>
         </div>
 
-        {/* Incidents list */}
+        {/* List */}
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => <div key={i} className="h-24 rounded-md bg-muted animate-pulse" />)}
-          </div>
+          <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-24 rounded-md bg-muted animate-pulse" />)}</div>
         ) : filtered.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center py-14 gap-3">
               <AlertTriangle className="w-10 h-10 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                {search || statusFilter !== "all" ? "No incidents match your filters" : "No incidents reported"}
+                {search ? "No incidents match your search" : `No ${tab === "all" ? "" : tab.replace("_", " ")} incidents`}
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((inc: any) => (
-              <Card key={inc.id} data-testid={`card-incident-${inc.id}`}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge className={`text-xs ${SEVERITY_COLOR[inc.severity] ?? ""}`} data-testid={`severity-${inc.id}`}>
-                          {inc.severity}
-                        </Badge>
-                        <Badge className={`text-xs ${STATUS_COLOR[inc.status] ?? ""}`} data-testid={`status-${inc.id}`}>
-                          {inc.status.replace("_", " ")}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground capitalize">{inc.category.replace("_", " ")}</span>
+          <div className="space-y-2">
+            {filtered.map((inc: any) => {
+              const sev = SEVERITY_CONFIG[inc.severity] ?? SEVERITY_CONFIG.medium;
+              const sta = STATUS_CONFIG[inc.status] ?? { color: "", label: inc.status, icon: Clock };
+              const StatusIcon = sta.icon;
+              return (
+                <Card key={inc.id} data-testid={`card-incident-${inc.id}`}>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className={`w-1 self-stretch rounded-full shrink-0 ${sev.dot}`} />
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge className={`text-xs ${sev.color}`} data-testid={`severity-${inc.id}`}>
+                              {sev.label}
+                            </Badge>
+                            <Badge className={`text-xs ${sta.color}`} data-testid={`status-${inc.id}`}>
+                              <StatusIcon className="w-3 h-3 mr-1" />
+                              {sta.label}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground capitalize">
+                              {inc.category.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-sm">{inc.title}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-2">{inc.notes}</p>
+                          <p className="text-xs text-muted-foreground">{format(new Date(inc.createdAt), "PPp")}</p>
+                          {inc.resolutionNotes && (
+                            <p className="text-xs text-green-700 dark:text-green-400 font-medium mt-1">
+                              Resolution: {inc.resolutionNotes}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <p className="font-medium text-sm">{inc.title}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{inc.notes}</p>
-                      <p className="text-xs text-muted-foreground">{format(new Date(inc.createdAt), "PPp")}</p>
+                      {inc.status !== "resolved" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resolve.mutate({ id: inc.id, notes: "Resolved by partner" })}
+                          disabled={resolve.isPending}
+                          data-testid={`button-resolve-${inc.id}`}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                          Resolve
+                        </Button>
+                      )}
                     </div>
-                    {inc.status !== "resolved" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => resolve.mutate({ id: inc.id, notes: "Resolved by partner" })}
-                        disabled={resolve.isPending}
-                        data-testid={`button-resolve-${inc.id}`}
-                      >
-                        <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                        Resolve
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

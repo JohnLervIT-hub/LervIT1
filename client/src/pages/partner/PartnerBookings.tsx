@@ -2,19 +2,12 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { PartnerLayout } from "./PartnerLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  MapPin,
-  Calendar,
-  ChevronRight,
-  Search,
-  Package,
-} from "lucide-react";
+import { MapPin, Calendar, ChevronRight, Search, Package, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -36,118 +29,139 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const LOAD_SIZE_LABEL: Record<string, string> = {
-  boxes: "Boxes / Small",
-  medium: "Medium",
-  large: "Large",
-  apartment: "Full Apartment",
+  boxes: "Boxes / Small", medium: "Medium", large: "Large", apartment: "Full Apartment",
 };
 
 function formatStatus(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
-const ALL_STATUSES = [
-  "new", "under_review", "accepted", "assigned",
-  "en_route_to_pickup", "arrived_at_pickup", "picked_up",
-  "in_transit", "arrived_at_dropoff", "delivered",
-  "completed", "delayed", "issue_reported", "cancelled", "rejected",
+const TABS = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "active", label: "Active" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
 ];
+
+const PENDING_STATUSES = ["new", "under_review"];
+const ACTIVE_STATUSES = ["accepted", "assigned", "en_route_to_pickup", "arrived_at_pickup", "picked_up", "in_transit", "arrived_at_dropoff", "delivered", "delayed", "issue_reported"];
+const COMPLETED_STATUSES = ["completed"];
+const CANCELLED_STATUSES = ["cancelled", "rejected"];
+
+function getTab(status: string): string {
+  if (PENDING_STATUSES.includes(status)) return "pending";
+  if (ACTIVE_STATUSES.includes(status)) return "active";
+  if (COMPLETED_STATUSES.includes(status)) return "completed";
+  if (CANCELLED_STATUSES.includes(status)) return "cancelled";
+  return "all";
+}
 
 export default function PartnerBookings() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [tab, setTab] = useState("all");
 
-  const { data: bookings = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/partner/bookings"],
-  });
+  const { data: bookings = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/partner/bookings"] });
+
+  const counts = {
+    all: bookings.length,
+    pending: bookings.filter((b: any) => PENDING_STATUSES.includes(b.enterpriseStatus ?? "")).length,
+    active: bookings.filter((b: any) => ACTIVE_STATUSES.includes(b.enterpriseStatus ?? "")).length,
+    completed: bookings.filter((b: any) => COMPLETED_STATUSES.includes(b.enterpriseStatus ?? "")).length,
+    cancelled: bookings.filter((b: any) => CANCELLED_STATUSES.includes(b.enterpriseStatus ?? "")).length,
+  } as Record<string, number>;
 
   const filtered = bookings.filter((b: any) => {
-    const matchesStatus = statusFilter === "all" || b.enterpriseStatus === statusFilter;
+    const status = b.enterpriseStatus ?? "new";
+    const matchesTab = tab === "all" || getTab(status) === tab;
     const q = search.toLowerCase();
     const matchesSearch = !q || (
       b.pickupAddress?.toLowerCase().includes(q) ||
       b.dropoffAddress?.toLowerCase().includes(q) ||
       b.id?.toLowerCase().includes(q)
     );
-    return matchesStatus && matchesSearch;
+    return matchesTab && matchesSearch;
   });
-
-  const pendingCount = bookings.filter((b: any) => ["new", "under_review"].includes(b.enterpriseStatus ?? "")).length;
 
   return (
     <PartnerLayout>
       <div className="p-6 space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">Bookings</h1>
-            {pendingCount > 0 && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                <span className="text-blue-600 font-medium">{pendingCount} new booking{pendingCount > 1 ? "s" : ""}</span> awaiting your response
-              </p>
-            )}
-          </div>
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold">Bookings</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {counts.pending > 0
+              ? <><span className="text-blue-600 dark:text-blue-400 font-semibold">{counts.pending} new</span> booking{counts.pending !== 1 ? "s" : ""} awaiting response</>
+              : `${bookings.length} total booking${bookings.length !== 1 ? "s" : ""}`}
+          </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-48">
+        {/* Tab bar + search */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
+            {TABS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                data-testid={`tab-${t.key}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  tab === t.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+                {!isLoading && counts[t.key] > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                    tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20"
+                  }`}>
+                    {counts[t.key]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               className="pl-9"
-              placeholder="Search by address or ID…"
+              placeholder="Search bookings…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               data-testid="input-search-bookings"
             />
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-52" data-testid="select-status-filter">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {ALL_STATUSES.map(s => (
-                <SelectItem key={s} value={s}>{formatStatus(s)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Booking list */}
         {isLoading ? (
           <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full" />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
               <Package className="w-10 h-10 text-muted-foreground" />
               <p className="text-muted-foreground text-sm">
-                {search || statusFilter !== "all" ? "No bookings match your filters" : "No bookings yet"}
+                {search ? "No bookings match your search" : tab !== "all" ? `No ${tab} bookings` : "No bookings yet"}
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filtered.map((b: any) => (
               <Link key={b.id} href={`/partner/bookings/${b.id}`}>
-                <Card
-                  className="hover-elevate cursor-pointer transition-none"
-                  data-testid={`card-booking-${b.id}`}
-                >
+                <Card className="hover-elevate cursor-pointer" data-testid={`card-booking-${b.id}`}>
                   <CardContent className="pt-4 pb-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-2">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge
-                            className={`text-xs ${STATUS_COLOR[b.enterpriseStatus ?? "new"] ?? ""}`}
-                            data-testid={`status-${b.id}`}
-                          >
+                          <Badge className={`text-xs ${STATUS_COLOR[b.enterpriseStatus ?? "new"] ?? ""}`} data-testid={`status-${b.id}`}>
                             {formatStatus(b.enterpriseStatus ?? "new")}
                           </Badge>
-                          <span className="text-xs text-muted-foreground font-mono">#{b.id.slice(-8).toUpperCase()}</span>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            #{b.id.slice(-8).toUpperCase()}
+                          </span>
                           {b.loadSize && (
                             <span className="text-xs text-muted-foreground">
                               · {LOAD_SIZE_LABEL[b.loadSize] ?? b.loadSize}
@@ -163,14 +177,14 @@ export default function PartnerBookings() {
                         </div>
                         {b.preferredDate && (
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Calendar className="w-3.5 h-3.5" />
+                            <Clock className="w-3 h-3" />
                             {format(new Date(b.preferredDate), "PPP")}
                           </div>
                         )}
                       </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className="flex flex-col items-end gap-2 shrink-0">
                         {b.price && (
-                          <span className="font-semibold text-sm">${parseFloat(b.price).toFixed(2)}</span>
+                          <span className="font-bold text-base">${parseFloat(b.price).toFixed(2)}</span>
                         )}
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       </div>

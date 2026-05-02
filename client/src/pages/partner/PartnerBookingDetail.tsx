@@ -9,24 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  ArrowLeft,
-  MapPin,
-  Calendar,
-  Package,
-  CheckCircle,
-  XCircle,
-  User,
-  Truck,
-  AlertTriangle,
-  Upload,
-  Clock,
-  ChevronRight,
-  Loader2,
+  ArrowLeft, MapPin, Calendar, Package, CheckCircle, XCircle,
+  User, Truck, AlertTriangle, Upload, Clock, ChevronRight,
+  Loader2, DollarSign, Users,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -63,6 +53,10 @@ const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
   issue_reported: ["en_route_to_pickup", "arrived_at_pickup", "in_transit", "completed", "cancelled"],
 };
 
+const LOAD_SIZE_LABEL: Record<string, string> = {
+  boxes: "Boxes / Small", medium: "Medium", large: "Large", apartment: "Full Apartment",
+};
+
 function formatStatus(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -76,7 +70,7 @@ export default function PartnerBookingDetail() {
 
   const { data, isLoading, error } = useQuery<any>({
     queryKey: ["/api/partner/bookings", bookingId],
-    queryFn: () => fetch(`/api/partner/bookings/${bookingId}`).then(r => r.ok ? r.json() : Promise.reject(r)),
+    queryFn: () => fetch(`/api/partner/bookings/${bookingId}`, { credentials: "include" }).then(r => r.ok ? r.json() : Promise.reject(r)),
     enabled: !!bookingId,
   });
 
@@ -89,38 +83,43 @@ export default function PartnerBookingDetail() {
   const [statusNotes, setStatusNotes] = useState("");
   const [nextStatus, setNextStatus] = useState("");
   const [assignData, setAssignData] = useState({
-    teamMemberId: "",
-    driverName: "",
-    driverPhone: "",
-    vehicleType: "",
-    vehiclePlate: "",
-    notes: "",
+    teamMemberId: "", driverName: "", driverPhone: "",
+    vehicleType: "", vehiclePlate: "", notes: "",
   });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["/api/partner/bookings", bookingId] });
+    qc.invalidateQueries({ queryKey: ["/api/partner/bookings"] });
+    qc.invalidateQueries({ queryKey: ["/api/partner/dashboard"] });
+  };
 
   const accept = useMutation({
     mutationFn: () => apiRequest("POST", `/api/partner/bookings/${bookingId}/accept`, {}),
-    onSuccess: () => { toast({ title: "Booking accepted" }); qc.invalidateQueries({ queryKey: ["/api/partner/bookings", bookingId] }); qc.invalidateQueries({ queryKey: ["/api/partner/bookings"] }); },
+    onSuccess: () => { toast({ title: "Booking accepted" }); invalidate(); },
     onError: (e: any) => toast({ title: e?.message ?? "Failed", variant: "destructive" }),
   });
 
   const reject = useMutation({
     mutationFn: () => apiRequest("POST", `/api/partner/bookings/${bookingId}/reject`, { reason: rejectReason }),
-    onSuccess: () => { toast({ title: "Booking rejected" }); setShowRejectForm(false); qc.invalidateQueries({ queryKey: ["/api/partner/bookings", bookingId] }); qc.invalidateQueries({ queryKey: ["/api/partner/bookings"] }); },
+    onSuccess: () => { toast({ title: "Booking rejected" }); setShowRejectForm(false); invalidate(); },
     onError: (e: any) => toast({ title: e?.message ?? "Failed", variant: "destructive" }),
   });
 
   const assign = useMutation({
     mutationFn: () => apiRequest("POST", `/api/partner/bookings/${bookingId}/assign`, {
-      ...assignData,
-      teamMemberId: assignData.teamMemberId || undefined,
+      ...assignData, teamMemberId: assignData.teamMemberId || undefined,
     }),
-    onSuccess: () => { toast({ title: "Booking assigned" }); setShowAssignForm(false); qc.invalidateQueries({ queryKey: ["/api/partner/bookings", bookingId] }); },
+    onSuccess: () => { toast({ title: "Booking assigned" }); setShowAssignForm(false); invalidate(); },
     onError: (e: any) => toast({ title: e?.message ?? "Failed", variant: "destructive" }),
   });
 
   const updateStatus = useMutation({
     mutationFn: () => apiRequest("POST", `/api/partner/bookings/${bookingId}/status`, { status: nextStatus, notes: statusNotes }),
-    onSuccess: () => { toast({ title: `Status updated to ${formatStatus(nextStatus)}` }); setShowStatusForm(false); setNextStatus(""); setStatusNotes(""); qc.invalidateQueries({ queryKey: ["/api/partner/bookings", bookingId] }); qc.invalidateQueries({ queryKey: ["/api/partner/bookings"] }); },
+    onSuccess: () => {
+      toast({ title: `Status updated to ${formatStatus(nextStatus)}` });
+      setShowStatusForm(false); setNextStatus(""); setStatusNotes("");
+      invalidate();
+    },
     onError: (e: any) => toast({ title: e?.message ?? "Failed", variant: "destructive" }),
   });
 
@@ -138,9 +137,7 @@ export default function PartnerBookingDetail() {
     return (
       <PartnerLayout>
         <div className="p-6">
-          <Alert variant="destructive">
-            <AlertDescription>Booking not found.</AlertDescription>
-          </Alert>
+          <Alert variant="destructive"><AlertDescription>Booking not found.</AlertDescription></Alert>
         </div>
       </PartnerLayout>
     );
@@ -155,18 +152,14 @@ export default function PartnerBookingDetail() {
   return (
     <PartnerLayout>
       <div className="p-6 max-w-4xl mx-auto space-y-5">
+
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/partner/bookings")}
-            data-testid="button-back"
-          >
+          <Button variant="ghost" size="icon" onClick={() => setLocation("/partner/bookings")} data-testid="button-back">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-bold">Booking #{booking.id.slice(-8).toUpperCase()}</h1>
               <Badge className={STATUS_COLOR[enterpriseStatus] ?? ""} data-testid="status-badge">
                 {formatStatus(enterpriseStatus)}
@@ -180,19 +173,83 @@ export default function PartnerBookingDetail() {
           </div>
         </div>
 
-        {/* Booking details */}
+        {/* Pending action alert */}
+        {isPending && (
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-start gap-3">
+                <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Action required</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                    This booking is awaiting your response. Accept or reject to proceed.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => accept.mutate()}
+                  disabled={accept.isPending}
+                  data-testid="button-accept-booking"
+                >
+                  {accept.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowRejectForm(!showRejectForm)}
+                  data-testid="button-show-reject"
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Reject
+                </Button>
+              </div>
+            </div>
+            {showRejectForm && (
+              <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700 space-y-3">
+                <Label>Rejection Reason *</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="Explain why you cannot fulfill this booking…"
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  data-testid="input-reject-reason"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive" size="sm"
+                    onClick={() => reject.mutate()}
+                    disabled={!rejectReason.trim() || reject.isPending}
+                    data-testid="button-confirm-reject"
+                  >
+                    {reject.isPending && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
+                    Confirm Rejection
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowRejectForm(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Details grid */}
         <div className="grid md:grid-cols-2 gap-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><MapPin className="w-4 h-4" /> Route</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-muted-foreground" /> Route
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="space-y-3 text-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Pickup</p>
+                <p className="text-xs font-medium text-muted-foreground mb-0.5">Pickup</p>
                 <p className="font-medium">{booking.pickupAddress}</p>
               </div>
+              <Separator />
               <div>
-                <p className="text-xs text-muted-foreground">Dropoff</p>
+                <p className="text-xs font-medium text-muted-foreground mb-0.5">Dropoff</p>
                 <p className="font-medium">{booking.dropoffAddress}</p>
               </div>
               {booking.distance && (
@@ -203,27 +260,33 @@ export default function PartnerBookingDetail() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><Package className="w-4 h-4" /> Job Details</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Package className="w-4 h-4 text-muted-foreground" /> Job Details
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="space-y-3 text-sm">
               {booking.preferredDate && (
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span>{format(new Date(booking.preferredDate), "PPP p")}</span>
                 </div>
               )}
-              <div className="flex items-center gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Load Size</p>
-                  <p className="font-medium capitalize">{booking.loadSize?.replace("_", " ")}</p>
+                  <p className="font-medium">{LOAD_SIZE_LABEL[booking.loadSize] ?? booking.loadSize?.replace("_", " ")}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Movers</p>
-                  <p className="font-medium">{booking.numberOfMovers}</p>
+                  <p className="font-medium flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" />{booking.numberOfMovers}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Price</p>
-                  <p className="font-medium">${parseFloat(booking.price ?? "0").toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">Value</p>
+                  <p className="font-bold text-base flex items-center gap-0.5">
+                    <DollarSign className="w-3.5 h-3.5" />{parseFloat(booking.price ?? "0").toFixed(2)}
+                  </p>
                 </div>
               </div>
               {booking.description && (
@@ -233,61 +296,13 @@ export default function PartnerBookingDetail() {
           </Card>
         </div>
 
-        {/* Actions */}
-        {!isTerminal && (
+        {/* Actions (non-pending) */}
+        {!isTerminal && !isPending && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Actions</CardTitle>
+              <CardTitle className="text-sm">Dispatch Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Accept / Reject for new bookings */}
-              {isPending && (
-                <div className="flex gap-3 flex-wrap">
-                  <Button
-                    onClick={() => accept.mutate()}
-                    disabled={accept.isPending}
-                    data-testid="button-accept-booking"
-                  >
-                    {accept.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                    Accept Booking
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRejectForm(!showRejectForm)}
-                    data-testid="button-show-reject"
-                  >
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Reject
-                  </Button>
-                </div>
-              )}
-
-              {showRejectForm && (
-                <div className="space-y-3 p-3 rounded-md bg-muted/40">
-                  <Label>Rejection Reason *</Label>
-                  <Textarea
-                    rows={2}
-                    placeholder="Explain why you cannot fulfill this booking…"
-                    value={rejectReason}
-                    onChange={e => setRejectReason(e.target.value)}
-                    data-testid="input-reject-reason"
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => reject.mutate()}
-                      disabled={!rejectReason.trim() || reject.isPending}
-                      data-testid="button-confirm-reject"
-                    >
-                      {reject.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                      Confirm Rejection
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowRejectForm(false)}>Cancel</Button>
-                  </div>
-                </div>
-              )}
-
               {/* Assign team */}
               {["accepted", "assigned"].includes(enterpriseStatus) && (
                 <div>
@@ -300,7 +315,7 @@ export default function PartnerBookingDetail() {
                     {assignment ? "Reassign Team" : "Assign Team / Driver"}
                   </Button>
                   {showAssignForm && (
-                    <div className="mt-3 space-y-3 p-3 rounded-md bg-muted/40">
+                    <div className="mt-3 space-y-3 p-4 rounded-md bg-muted/40">
                       {team.length > 0 && (
                         <div className="space-y-1.5">
                           <Label>Select Team Member</Label>
@@ -309,18 +324,19 @@ export default function PartnerBookingDetail() {
                             onValueChange={v => {
                               const m = team.find((t: any) => t.id === v);
                               setAssignData(d => ({
-                                ...d,
-                                teamMemberId: v,
+                                ...d, teamMemberId: v,
                                 driverName: m?.name ?? d.driverName,
                                 vehicleType: m?.vehicleType ?? d.vehicleType,
                                 vehiclePlate: m?.vehiclePlate ?? d.vehiclePlate,
                               }));
                             }}
                           >
-                            <SelectTrigger data-testid="select-team-member"><SelectValue placeholder="Select…" /></SelectTrigger>
+                            <SelectTrigger data-testid="select-team-member">
+                              <SelectValue placeholder="Select from team…" />
+                            </SelectTrigger>
                             <SelectContent>
                               {team.map((m: any) => (
-                                <SelectItem key={m.id} value={m.id}>{m.name} ({m.memberType})</SelectItem>
+                                <SelectItem key={m.id} value={m.id}>{m.name} — {m.memberType}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -345,12 +361,12 @@ export default function PartnerBookingDetail() {
                         </div>
                         <div className="space-y-1.5 col-span-2">
                           <Label>Notes</Label>
-                          <Textarea rows={1} value={assignData.notes} onChange={e => setAssignData(d => ({ ...d, notes: e.target.value }))} data-testid="input-assign-notes" />
+                          <Textarea rows={2} value={assignData.notes} onChange={e => setAssignData(d => ({ ...d, notes: e.target.value }))} data-testid="input-assign-notes" />
                         </div>
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => assign.mutate()} disabled={assign.isPending} data-testid="button-confirm-assign">
-                          {assign.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                          {assign.isPending && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
                           Confirm Assignment
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setShowAssignForm(false)}>Cancel</Button>
@@ -360,8 +376,8 @@ export default function PartnerBookingDetail() {
                 </div>
               )}
 
-              {/* Status transition */}
-              {validNext.length > 0 && !isPending && (
+              {/* Status update */}
+              {validNext.length > 0 && (
                 <div>
                   <Button
                     variant="outline"
@@ -372,7 +388,7 @@ export default function PartnerBookingDetail() {
                     Update Status
                   </Button>
                   {showStatusForm && (
-                    <div className="mt-3 space-y-3 p-3 rounded-md bg-muted/40">
+                    <div className="mt-3 space-y-3 p-4 rounded-md bg-muted/40">
                       <div className="space-y-1.5">
                         <Label>New Status</Label>
                         <Select value={nextStatus} onValueChange={setNextStatus}>
@@ -385,12 +401,12 @@ export default function PartnerBookingDetail() {
                         </Select>
                       </div>
                       <div className="space-y-1.5">
-                        <Label>Notes (optional)</Label>
+                        <Label>Notes <span className="text-muted-foreground">(optional)</span></Label>
                         <Textarea rows={2} value={statusNotes} onChange={e => setStatusNotes(e.target.value)} data-testid="input-status-notes" />
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => updateStatus.mutate()} disabled={!nextStatus || updateStatus.isPending} data-testid="button-confirm-status">
-                          {updateStatus.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                          {updateStatus.isPending && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
                           Update Status
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setShowStatusForm(false)}>Cancel</Button>
@@ -407,15 +423,31 @@ export default function PartnerBookingDetail() {
         {assignment && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><User className="w-4 h-4" /> Current Assignment</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <User className="w-4 h-4 text-muted-foreground" /> Assigned Driver
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm space-y-1.5">
-              {assignment.driverName && <p><span className="text-muted-foreground">Driver:</span> {assignment.driverName}</p>}
-              {assignment.driverPhone && <p><span className="text-muted-foreground">Phone:</span> {assignment.driverPhone}</p>}
-              {assignment.vehicleType && <p><span className="text-muted-foreground">Vehicle:</span> {assignment.vehicleType}</p>}
-              {assignment.vehiclePlate && <p><span className="text-muted-foreground">Plate:</span> {assignment.vehiclePlate}</p>}
-              {assignment.notes && <p><span className="text-muted-foreground">Notes:</span> {assignment.notes}</p>}
-              <p className="text-xs text-muted-foreground">Assigned {format(new Date(assignment.assignedAt), "PPp")}</p>
+            <CardContent>
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                {assignment.driverName && (
+                  <div><p className="text-xs text-muted-foreground">Driver</p><p className="font-medium">{assignment.driverName}</p></div>
+                )}
+                {assignment.driverPhone && (
+                  <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium">{assignment.driverPhone}</p></div>
+                )}
+                {assignment.vehicleType && (
+                  <div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{assignment.vehicleType}</p></div>
+                )}
+                {assignment.vehiclePlate && (
+                  <div><p className="text-xs text-muted-foreground">Plate</p><p className="font-medium">{assignment.vehiclePlate}</p></div>
+                )}
+                {assignment.notes && (
+                  <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Notes</p><p>{assignment.notes}</p></div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Assigned {format(new Date(assignment.assignedAt), "PPp")}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -424,25 +456,32 @@ export default function PartnerBookingDetail() {
         {events.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><Clock className="w-4 h-4" /> Status History</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" /> Status History
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {events.map((e: any) => (
-                  <div key={e.id} className="flex items-start gap-3 text-sm" data-testid={`event-${e.id}`}>
-                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{formatStatus(e.toStatus)}</span>
-                        {e.fromStatus && (
-                          <span className="text-muted-foreground text-xs">from {formatStatus(e.fromStatus)}</span>
-                        )}
+              <div className="relative">
+                <div className="absolute left-[7px] top-0 bottom-0 w-px bg-border" />
+                <div className="space-y-4">
+                  {events.map((e: any) => (
+                    <div key={e.id} className="relative flex items-start gap-4" data-testid={`event-${e.id}`}>
+                      <div className="w-3.5 h-3.5 rounded-full bg-primary border-2 border-background shrink-0 mt-0.5" />
+                      <div className="flex-1 pb-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div>
+                            <span className="text-sm font-medium">{formatStatus(e.toStatus)}</span>
+                            {e.fromStatus && (
+                              <span className="text-xs text-muted-foreground ml-2">from {formatStatus(e.fromStatus)}</span>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">{format(new Date(e.createdAt), "PPp")}</span>
+                        </div>
+                        {e.notes && <p className="text-xs text-muted-foreground mt-0.5">{e.notes}</p>}
                       </div>
-                      {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
-                      <p className="text-xs text-muted-foreground">{format(new Date(e.createdAt), "PPp")}</p>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -452,20 +491,22 @@ export default function PartnerBookingDetail() {
         {incidents.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Incidents ({incidents.length})</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" /> Incidents ({incidents.length})
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {incidents.map((inc: any) => (
                 <div key={inc.id} className="p-3 rounded-md bg-muted/50 text-sm" data-testid={`incident-${inc.id}`}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant={inc.severity === "critical" ? "destructive" : "secondary"} className="text-xs">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <Badge variant={inc.severity === "critical" ? "destructive" : "secondary"} className="text-xs capitalize">
                       {inc.severity}
                     </Badge>
                     <span className="font-medium">{inc.title}</span>
-                    <Badge variant="outline" className="text-xs capitalize">{inc.status}</Badge>
+                    <Badge variant="outline" className="text-xs capitalize">{inc.status.replace("_", " ")}</Badge>
                   </div>
-                  <p className="text-muted-foreground text-xs mt-1">{inc.notes}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{format(new Date(inc.createdAt), "PPp")}</p>
+                  <p className="text-muted-foreground text-xs">{inc.notes}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{format(new Date(inc.createdAt), "PPp")}</p>
                 </div>
               ))}
             </CardContent>
@@ -476,7 +517,9 @@ export default function PartnerBookingDetail() {
         {proofs.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2"><Upload className="w-4 h-4" /> Proof of Completion ({proofs.length})</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Upload className="w-4 h-4 text-muted-foreground" /> Proof of Completion ({proofs.length})
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {proofs.map((p: any) => (
@@ -484,11 +527,13 @@ export default function PartnerBookingDetail() {
                   <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm truncate">{p.fileName}</p>
-                    <p className="text-xs text-muted-foreground">{p.proofType} · {format(new Date(p.uploadedAt), "PPp")}</p>
+                    {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
                   </div>
-                  <a href={p.fileUrl} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm" variant="ghost">View</Button>
-                  </a>
+                  {p.fileUrl && (
+                    <a href={p.fileUrl} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="ghost">View</Button>
+                    </a>
+                  )}
                 </div>
               ))}
             </CardContent>
