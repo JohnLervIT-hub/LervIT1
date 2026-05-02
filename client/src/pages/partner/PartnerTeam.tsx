@@ -97,6 +97,19 @@ function VehiclePhotoUpload({ member }: { member: any }) {
   );
 }
 
+async function uploadVehiclePhoto(memberId: string, file: File): Promise<string | null> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`/api/partner/team/${memberId}/vehicle-photo`, {
+    method: "POST",
+    credentials: "include",
+    body: fd,
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.vehiclePhoto ?? null;
+}
+
 function TeamMemberDialog({
   member,
   onClose,
@@ -108,6 +121,9 @@ function TeamMemberDialog({
   const qc = useQueryClient();
   const isEdit = !!member;
   const [open, setOpen] = useState(!isEdit);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(member?.vehiclePhoto ?? null);
   const [form, setForm] = useState({
     name: member?.name ?? "",
     memberType: member?.memberType ?? "driver",
@@ -119,11 +135,22 @@ function TeamMemberDialog({
     notes: member?.notes ?? "",
   });
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
   const save = useMutation({
     mutationFn: () => isEdit
       ? apiRequest("PUT", `/api/partner/team/${member.id}`, form)
       : apiRequest("POST", "/api/partner/team", form),
-    onSuccess: () => {
+    onSuccess: async (saved: any) => {
+      const memberId = isEdit ? member.id : saved.id;
+      if (photoFile && memberId) {
+        await uploadVehiclePhoto(memberId, photoFile);
+      }
       toast({ title: isEdit ? "Member updated" : "Team member added" });
       qc.invalidateQueries({ queryKey: ["/api/partner/team"] });
       setOpen(false);
@@ -189,6 +216,46 @@ function TeamMemberDialog({
               <Input value={form.vehicleColor} onChange={e => setForm(f => ({ ...f, vehicleColor: e.target.value }))} data-testid="input-vehicle-color" />
             </div>
           </div>
+
+          {/* Vehicle photo upload */}
+          <div className="space-y-1.5">
+            <Label>Vehicle Photo</Label>
+            <div className="flex items-center gap-3">
+              {photoPreview ? (
+                <img
+                  src={photoPreview}
+                  alt="Vehicle preview"
+                  className="w-20 h-14 object-cover rounded-md border border-border shrink-0"
+                />
+              ) : (
+                <div className="flex items-center justify-center w-20 h-14 rounded-md border border-dashed border-border bg-muted/40 shrink-0">
+                  <Camera className="w-5 h-5 text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                  data-testid="button-pick-vehicle-photo"
+                >
+                  <Camera className="w-3.5 h-3.5 mr-1.5" />
+                  {photoPreview ? "Replace photo" : "Upload photo"}
+                </Button>
+                <p className="text-xs text-muted-foreground">JPG, PNG or WebP</p>
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+                data-testid="input-vehicle-photo-dialog"
+              />
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <Switch
               checked={form.isAvailable}
