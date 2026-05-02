@@ -19,13 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   LayoutDashboard,
   Package,
   ClipboardCheck,
@@ -33,7 +26,6 @@ import {
   AlertTriangle,
   Users,
   LogOut,
-  ChevronUp,
   Building2,
   History,
 } from "lucide-react";
@@ -136,48 +128,30 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
           </SidebarContent>
 
           <SidebarFooter className="border-t border-border p-3">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton
-                      size="lg"
-                      className="w-full"
-                      data-testid="button-user-menu"
-                    >
-                      <Avatar className="w-7 h-7 text-xs">
-                        <AvatarFallback className="text-xs">
-                          {user?.name?.charAt(0).toUpperCase() ?? "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col min-w-0 text-left">
-                        <span className="text-sm font-medium truncate leading-tight">
-                          {user?.name ?? "Partner User"}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate">
-                          {ctx?.partnerUser?.partnerRole?.replace("partner_", "").replace("_", " ") ?? ""}
-                        </span>
-                      </div>
-                      <ChevronUp className="ml-auto w-4 h-4" />
-                    </SidebarMenuButton>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent side="top" align="start" className="w-52">
-                    <DropdownMenuItem disabled>
-                      <span className="text-xs text-muted-foreground">{user?.email}</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={logout}
-                      data-testid="button-logout"
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <div className="flex items-center gap-2">
+              <Avatar className="w-7 h-7 shrink-0">
+                <AvatarFallback className="text-xs">
+                  {user?.name?.charAt(0).toUpperCase() ?? "U"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="text-sm font-medium truncate leading-tight">
+                  {user?.name ?? "Partner User"}
+                </span>
+                <span className="text-xs text-muted-foreground truncate">
+                  {ctx?.partnerUser?.partnerRole?.replace("partner_", "").replace(/_/g, " ") ?? ""}
+                </span>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={logout}
+                data-testid="button-logout"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </SidebarFooter>
         </Sidebar>
 
