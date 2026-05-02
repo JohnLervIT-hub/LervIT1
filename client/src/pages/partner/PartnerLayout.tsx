@@ -9,7 +9,6 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -17,7 +16,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
   Package,
@@ -26,9 +24,9 @@ import {
   AlertTriangle,
   Users,
   LogOut,
-  Building2,
   History,
   DollarSign,
+  Building2,
 } from "lucide-react";
 
 const navItems = [
@@ -46,49 +44,40 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
   const [loc] = useLocation();
   const { user, logout } = useAuth();
 
-  const { data: ctx } = useQuery<any>({
-    queryKey: ["/api/partner/me"],
-  });
-
-  const { data: dashboard } = useQuery<any>({
-    queryKey: ["/api/partner/dashboard"],
-  });
+  const { data: ctx } = useQuery<any>({ queryKey: ["/api/partner/me"] });
+  const { data: dashboard } = useQuery<any>({ queryKey: ["/api/partner/dashboard"] });
 
   const partner = ctx?.partner;
   const pendingBookings = dashboard?.stats?.pendingBookings ?? 0;
   const openIncidents = dashboard?.stats?.openIncidents ?? 0;
-  const isOnboarding = partner?.status !== "active";
 
   const sidebarStyle = {
-    "--sidebar-width": "17rem",
-    "--sidebar-width-icon": "3.5rem",
+    "--sidebar-width": "15rem",
+    "--sidebar-width-icon": "3rem",
   } as React.CSSProperties;
 
   return (
     <SidebarProvider style={sidebarStyle}>
       <div className="flex h-screen w-full overflow-hidden bg-background">
         <Sidebar>
-          <SidebarHeader className="px-4 py-4 border-b border-border">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-                <Building2 className="w-4 h-4 text-primary-foreground" />
+          {/* Brand header */}
+          <SidebarHeader className="px-4 py-3 border-b border-border">
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-center w-6 h-6 shrink-0">
+                <Building2 className="w-4 h-4 text-muted-foreground" />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold truncate leading-tight">
+                <span className="text-sm font-medium truncate leading-tight text-foreground">
                   {partner?.name ?? "Partner Portal"}
                 </span>
-                {partner?.status && (
-                  <Badge
-                    variant={partner.status === "active" ? "default" : "secondary"}
-                    className="text-[10px] h-4 px-1.5 mt-0.5 w-fit"
-                  >
-                    {partner.status.replace("_", " ")}
-                  </Badge>
-                )}
+                <span className="text-[11px] text-muted-foreground leading-tight">
+                  {partner?.status === "active" ? "Active" : partner?.status?.replace(/_/g, " ") ?? ""}
+                </span>
               </div>
             </div>
           </SidebarHeader>
 
+          {/* Nav */}
           <SidebarContent className="py-2">
             <SidebarGroup>
               <SidebarGroupContent>
@@ -96,7 +85,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                   {navItems.map((item) => {
                     const isActive = loc === item.path || loc.startsWith(item.path + "/");
                     const Icon = item.icon;
-                    const badge =
+                    const count =
                       item.path === "/partner/bookings" && pendingBookings > 0
                         ? pendingBookings
                         : item.path === "/partner/incidents" && openIncidents > 0
@@ -111,16 +100,21 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                           tooltip={item.label}
                           data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                         >
-                          <Link href={item.path}>
-                            <Icon className="w-4 h-4" />
-                            <span>{item.label}</span>
+                          <Link href={item.path} className="flex items-center justify-between w-full">
+                            <span className="flex items-center gap-2.5">
+                              <Icon className="w-4 h-4 shrink-0" />
+                              <span className="text-sm">{item.label}</span>
+                            </span>
+                            {count !== null && (
+                              <span
+                                className="text-[11px] font-medium tabular-nums text-muted-foreground ml-auto"
+                                data-testid={`badge-${item.label.toLowerCase()}`}
+                              >
+                                {count}
+                              </span>
+                            )}
                           </Link>
                         </SidebarMenuButton>
-                        {badge !== null && (
-                          <SidebarMenuBadge data-testid={`badge-${item.label.toLowerCase()}`}>
-                            {badge}
-                          </SidebarMenuBadge>
-                        )}
                       </SidebarMenuItem>
                     );
                   })}
@@ -129,18 +123,19 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-border p-3">
-            <div className="flex items-center gap-2">
-              <Avatar className="w-7 h-7 shrink-0">
-                <AvatarFallback className="text-xs">
+          {/* Footer */}
+          <SidebarFooter className="border-t border-border px-3 py-3">
+            <div className="flex items-center gap-2.5">
+              <Avatar className="w-6 h-6 shrink-0">
+                <AvatarFallback className="text-[10px] font-medium">
                   {user?.name?.charAt(0).toUpperCase() ?? "U"}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col min-w-0 flex-1">
-                <span className="text-sm font-medium truncate leading-tight">
+                <span className="text-xs font-medium truncate leading-tight">
                   {user?.name ?? "Partner User"}
                 </span>
-                <span className="text-xs text-muted-foreground truncate">
+                <span className="text-[11px] text-muted-foreground truncate capitalize leading-tight">
                   {ctx?.partnerUser?.partnerRole?.replace("partner_", "").replace(/_/g, " ") ?? ""}
                 </span>
               </div>
@@ -150,8 +145,9 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                 onClick={logout}
                 data-testid="button-logout"
                 title="Sign out"
+                className="h-7 w-7 shrink-0"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5 text-muted-foreground" />
               </Button>
             </div>
           </SidebarFooter>
@@ -159,20 +155,23 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
 
         {/* Main content */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <header className="flex items-center h-12 px-4 border-b border-border bg-background shrink-0">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            {isOnboarding && partner && (
-              <div className="ml-3 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span className="text-sm text-muted-foreground">
-                  Complete onboarding to go live
-                </span>
-                <Link href="/partner/onboarding">
-                  <Button size="sm" variant="outline" data-testid="button-complete-onboarding">
-                    Continue
-                  </Button>
-                </Link>
-              </div>
+          <header className="flex items-center h-11 px-4 border-b border-border bg-background shrink-0 gap-3">
+            <SidebarTrigger data-testid="button-sidebar-toggle" className="h-7 w-7" />
+            {partner && partner.status !== "active" && (
+              <>
+                <div className="h-4 w-px bg-border" />
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-xs text-muted-foreground">
+                    Onboarding incomplete
+                  </span>
+                  <Link href="/partner/onboarding">
+                    <Button size="sm" variant="ghost" className="h-6 text-xs px-2" data-testid="button-complete-onboarding">
+                      Continue →
+                    </Button>
+                  </Link>
+                </div>
+              </>
             )}
           </header>
           <main className="flex-1 overflow-y-auto">{children}</main>

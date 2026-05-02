@@ -1,31 +1,31 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { AlertTriangle, Plus, Search, Loader2, CheckCircle, Clock, ShieldAlert, Flame } from "lucide-react";
+import { AlertTriangle, Plus, Search, Loader2, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 
-const SEVERITY_CONFIG: Record<string, { color: string; dot: string; label: string }> = {
-  low:      { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",     dot: "bg-blue-400",   label: "Low" },
-  medium:   { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", dot: "bg-yellow-400", label: "Medium" },
-  high:     { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", dot: "bg-orange-500", label: "High" },
-  critical: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",         dot: "bg-red-500",    label: "Critical" },
+const SEVERITY_DOT: Record<string, string> = {
+  low: "bg-blue-400",
+  medium: "bg-amber-500",
+  high: "bg-orange-500",
+  critical: "bg-red-500",
 };
 
-const STATUS_CONFIG: Record<string, { color: string; label: string; icon: React.ElementType }> = {
-  open:         { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",       label: "Open",         icon: Flame },
-  under_review: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", label: "Under Review", icon: Clock },
-  resolved:     { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400", label: "Resolved",    icon: CheckCircle },
-  escalated:    { color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300", label: "Escalated",  icon: ShieldAlert },
+const STATUS_DOT: Record<string, string> = {
+  open: "bg-red-500",
+  under_review: "bg-amber-500",
+  resolved: "bg-green-500",
+  escalated: "bg-purple-500",
 };
 
 const CATEGORIES = [
@@ -83,17 +83,17 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button data-testid="button-report-incident">
-          <Plus className="w-4 h-4 mr-2" /> Report Incident
+        <Button size="sm" data-testid="button-report-incident">
+          <Plus className="w-3.5 h-3.5 mr-1.5" /> Report Incident
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Report an Incident</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 pt-1">
           <div className="space-y-1.5">
-            <Label>Booking *</Label>
+            <Label>Booking</Label>
             <Select value={form.bookingId} onValueChange={v => setForm(f => ({ ...f, bookingId: v }))}>
               <SelectTrigger data-testid="select-incident-booking">
                 <SelectValue placeholder={activeBookings.length === 0 ? "No active bookings" : "Select booking…"} />
@@ -109,7 +109,7 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Category *</Label>
+              <Label>Category</Label>
               <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
                 <SelectTrigger data-testid="select-category"><SelectValue placeholder="Select…" /></SelectTrigger>
                 <SelectContent>
@@ -118,7 +118,7 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Severity *</Label>
+              <Label>Severity</Label>
               <Select value={form.severity} onValueChange={v => setForm(f => ({ ...f, severity: v }))}>
                 <SelectTrigger data-testid="select-severity"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -131,31 +131,32 @@ function ReportIncidentDialog({ bookings }: { bookings: any[] }) {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Title *</Label>
+            <Label>Title</Label>
             <Input placeholder="Brief incident title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} data-testid="input-incident-title" />
           </div>
           <div className="space-y-1.5">
-            <Label>Details *</Label>
+            <Label>Details</Label>
             <Textarea rows={3} placeholder="Describe what happened…" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} data-testid="input-incident-notes" />
           </div>
           <div className="space-y-1.5">
-            <Label>Attachments (optional)</Label>
-            <div className="flex items-center gap-3">
+            <Label>Attachments <span className="text-muted-foreground">(optional)</span></Label>
+            <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} type="button">
-                Attach Photos/Docs
+                Attach files
               </Button>
-              {files.length > 0 && <span className="text-xs text-muted-foreground">{files.length} file(s) selected</span>}
+              {files.length > 0 && <span className="text-xs text-muted-foreground">{files.length} selected</span>}
             </div>
             <input ref={fileRef} type="file" multiple accept="image/*,.pdf" className="hidden" onChange={e => setFiles(Array.from(e.target.files ?? []))} />
           </div>
           <div className="flex gap-2 justify-end pt-1">
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
             <Button
+              size="sm"
               onClick={() => report.mutate()}
               disabled={report.isPending || !form.bookingId || !form.category || !form.title || !form.notes}
               data-testid="button-submit-incident"
             >
-              {report.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Submitting…</> : "Submit Report"}
+              {report.isPending ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Submitting…</> : "Submit Report"}
             </Button>
           </div>
         </div>
@@ -199,130 +200,111 @@ export default function PartnerIncidents() {
 
   return (
     <PartnerLayout>
-      <div className="p-6 space-y-5">
+      <div className="p-6 space-y-5 max-w-4xl">
         {/* Header */}
-        <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold">Incidents</h1>
+            <h1 className="text-xl font-semibold">Incidents</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {openCount > 0 ? (
-                <><span className="text-red-600 dark:text-red-400 font-semibold">{openCount} open</span>
-                {criticalCount > 0 && <> · <span className="text-red-600 dark:text-red-400 font-semibold">{criticalCount} critical</span></>}</>
-              ) : (
-                "No open incidents"
-              )}
+              {openCount > 0
+                ? <>{openCount} open{criticalCount > 0 ? ` · ${criticalCount} critical` : ""}</>
+                : "No open incidents"}
             </p>
           </div>
           <ReportIncidentDialog bookings={bookings} />
         </div>
 
-        {/* Summary pills */}
-        {!isLoading && incidents.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {[
-              { label: "Open", count: counts.open, color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
-              { label: "Under Review", count: counts.under_review, color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" },
-              { label: "Resolved", count: counts.resolved, color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
-              { label: "Escalated", count: counts.escalated, color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
-            ].map(s => s.count > 0 && (
-              <span key={s.label} className={`text-xs px-2.5 py-1 rounded-full font-medium ${s.color}`}>
-                {s.count} {s.label}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Tab bar + search */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
+        {/* Tabs + search */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="flex items-center gap-0">
             {TABS.map(t => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 data-testid={`tab-${t.key}`}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  tab === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                  tab === t.key
+                    ? "border-foreground text-foreground font-medium"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {t.label}
                 {!isLoading && counts[t.key] > 0 && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                    tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20"
-                  }`}>{counts[t.key]}</span>
+                  <span className={`text-xs tabular-nums ${tab === t.key ? "text-foreground" : "text-muted-foreground"}`}>
+                    {counts[t.key]}
+                  </span>
                 )}
               </button>
             ))}
           </div>
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search incidents…" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-incidents" />
+          <div className="relative sm:ml-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input className="pl-8 h-8 text-sm w-56" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-incidents" />
           </div>
         </div>
 
+        <Separator />
+
         {/* List */}
         {isLoading ? (
-          <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-24 rounded-md bg-muted animate-pulse" />)}</div>
+          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>
         ) : filtered.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center py-14 gap-3">
-              <AlertTriangle className="w-10 h-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                {search ? "No incidents match your search" : `No ${tab === "all" ? "" : tab.replace("_", " ")} incidents`}
-              </p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center py-16 gap-2 text-muted-foreground">
+            <AlertTriangle className="w-8 h-8" />
+            <p className="text-sm">{search ? "No incidents match your search" : `No ${tab === "all" ? "" : tab.replace("_", " ")} incidents`}</p>
+          </div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((inc: any) => {
-              const sev = SEVERITY_CONFIG[inc.severity] ?? SEVERITY_CONFIG.medium;
-              const sta = STATUS_CONFIG[inc.status] ?? { color: "", label: inc.status, icon: Clock };
-              const StatusIcon = sta.icon;
-              return (
-                <Card key={inc.id} data-testid={`card-incident-${inc.id}`}>
-                  <CardContent className="pt-4 pb-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className={`w-1 self-stretch rounded-full shrink-0 ${sev.dot}`} />
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge className={`text-xs ${sev.color}`} data-testid={`severity-${inc.id}`}>
-                              {sev.label}
-                            </Badge>
-                            <Badge className={`text-xs ${sta.color}`} data-testid={`status-${inc.id}`}>
-                              <StatusIcon className="w-3 h-3 mr-1" />
-                              {sta.label}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground capitalize">
-                              {inc.category.replace(/_/g, " ")}
-                            </span>
-                          </div>
-                          <p className="font-semibold text-sm">{inc.title}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-2">{inc.notes}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(inc.createdAt), "PPp")}</p>
-                          {inc.resolutionNotes && (
-                            <p className="text-xs text-green-700 dark:text-green-400 font-medium mt-1">
-                              Resolution: {inc.resolutionNotes}
-                            </p>
-                          )}
-                        </div>
+          <div className="space-y-px">
+            {filtered.map((inc: any, idx: number) => (
+              <div key={inc.id}>
+                <div
+                  className="flex items-start justify-between gap-4 py-4 px-2 rounded-md"
+                  data-testid={`card-incident-${inc.id}`}
+                >
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="flex flex-col items-center gap-1.5 mt-1 shrink-0">
+                      <span className={`w-2 h-2 rounded-full ${SEVERITY_DOT[inc.severity] ?? "bg-gray-400"}`} data-testid={`severity-${inc.id}`} />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">{inc.title}</p>
                       </div>
-                      {inc.status !== "resolved" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => resolve.mutate({ id: inc.id, notes: "Resolved by partner" })}
-                          disabled={resolve.isPending}
-                          data-testid={`button-resolve-${inc.id}`}
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
-                          Resolve
-                        </Button>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[inc.status] ?? "bg-gray-400"}`} />
+                          <span className="capitalize" data-testid={`status-${inc.id}`}>{inc.status.replace("_", " ")}</span>
+                        </span>
+                        <span className="capitalize">{inc.severity}</span>
+                        <span className="capitalize">{inc.category?.replace(/_/g, " ")}</span>
+                        <span>{format(new Date(inc.createdAt), "MMM d, yyyy")}</span>
+                      </div>
+                      {inc.notes && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{inc.notes}</p>
+                      )}
+                      {inc.resolutionNotes && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <span className="font-medium">Resolution:</span> {inc.resolutionNotes}
+                        </p>
                       )}
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                  </div>
+                  {inc.status !== "resolved" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs shrink-0"
+                      onClick={() => resolve.mutate({ id: inc.id, notes: "Resolved by partner" })}
+                      disabled={resolve.isPending}
+                      data-testid={`button-resolve-${inc.id}`}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                      Resolve
+                    </Button>
+                  )}
+                </div>
+                {idx < filtered.length - 1 && <Separator className="opacity-40" />}
+              </div>
+            ))}
           </div>
         )}
       </div>
