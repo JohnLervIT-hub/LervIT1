@@ -131,6 +131,8 @@ export default function Login() {
           setLocation("/mover-dashboard");
         } else if (user.role === "admin") {
           setLocation("/admin");
+        } else if (user.role?.startsWith("partner_")) {
+          setLocation("/partner/dashboard");
         }
       }
     }
