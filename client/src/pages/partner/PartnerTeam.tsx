@@ -299,29 +299,19 @@ export default function PartnerTeam() {
 
   return (
     <PartnerLayout>
-      {/* ── Gradient page header ─────────────────────── */}
-      <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-700 px-6 py-7">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 rounded-md p-2">
-                <Users className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">Team</h1>
-                <p className="text-sm text-white/75 mt-0.5">
-                  {team.filter((m: any) => m.isAvailable).length} available · {team.length} total members
-                </p>
-              </div>
-            </div>
-            <TeamMemberDialog onClose={() => {}} />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Body ─────────────────────────────────────── */}
       <div className="px-6 py-6">
       <div className="max-w-5xl mx-auto space-y-5">
+
+        {/* Page header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-lg font-semibold">Team</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {team.filter((m: any) => m.isAvailable).length} available · {team.length} total
+            </p>
+          </div>
+          <TeamMemberDialog onClose={() => {}} />
+        </div>
 
         {isLoading ? (
           <div className="space-y-3">

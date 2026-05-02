@@ -296,8 +296,8 @@ export default function PartnerBookingDetail() {
           </Card>
         </div>
 
-        {/* Actions (non-pending) */}
-        {!isTerminal && !isPending && (
+        {/* Actions (all non-terminal states) */}
+        {!isTerminal && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Dispatch Actions</CardTitle>

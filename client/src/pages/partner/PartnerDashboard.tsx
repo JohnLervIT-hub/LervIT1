@@ -105,31 +105,21 @@ export default function PartnerDashboard() {
 
   return (
     <PartnerLayout>
-      {/* ── Gradient page header ─────────────────────── */}
-      <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 px-6 py-7">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 rounded-md p-2">
-                <Activity className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">{partner?.name ?? "Partner Portal"}</h1>
-                <p className="text-sm text-white/75 mt-0.5">Operations &amp; Earnings Overview</p>
-              </div>
-            </div>
-            {partner?.status === "active" && (
-              <div className="flex items-center gap-1.5 bg-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-full">
-                <CheckCircle className="w-3 h-3" /> Active Partner
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Body ─────────────────────────────────────── */}
       <div className="px-6 py-6">
       <div className="space-y-6 max-w-6xl mx-auto">
+
+        {/* Page header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-lg font-semibold">{partner?.name ?? "Partner Portal"}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Operations &amp; Earnings Overview</p>
+          </div>
+          {partner?.status === "active" && (
+            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 text-xs">
+              Active Partner
+            </Badge>
+          )}
+        </div>
 
         {/* Onboarding banner */}
         {partner && partner.status !== "active" && (

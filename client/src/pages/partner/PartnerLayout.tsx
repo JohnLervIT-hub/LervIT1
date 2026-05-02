@@ -18,28 +18,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import {
-  LayoutDashboard,
-  Package,
-  ClipboardCheck,
-  FileCheck,
-  AlertTriangle,
-  Users,
-  LogOut,
-  Building2,
-  History,
-  DollarSign,
-} from "lucide-react";
+import { LogOut, Building2 } from "lucide-react";
+import { Icon as Iconify } from "@iconify/react";
 
 const navItems = [
-  { path: "/partner/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/partner/bookings", label: "Bookings", icon: Package },
-  { path: "/partner/earnings", label: "Earnings", icon: DollarSign },
-  { path: "/partner/onboarding", label: "Onboarding", icon: ClipboardCheck },
-  { path: "/partner/compliance", label: "Compliance", icon: FileCheck },
-  { path: "/partner/incidents", label: "Incidents", icon: AlertTriangle },
-  { path: "/partner/team", label: "Team", icon: Users },
-  { path: "/partner/audit", label: "Audit Log", icon: History },
+  { path: "/partner/dashboard", label: "Dashboard",  icon3d: "fluent-emoji-3d:bar-chart" },
+  { path: "/partner/bookings",  label: "Bookings",   icon3d: "fluent-emoji-3d:package" },
+  { path: "/partner/earnings",  label: "Earnings",   icon3d: "fluent-emoji-3d:money-bag" },
+  { path: "/partner/onboarding",label: "Onboarding", icon3d: "fluent-emoji-3d:rocket" },
+  { path: "/partner/compliance",label: "Compliance", icon3d: "fluent-emoji-3d:page-facing-up" },
+  { path: "/partner/incidents", label: "Incidents",  icon3d: "fluent-emoji-3d:warning" },
+  { path: "/partner/team",      label: "Team",       icon3d: "fluent-emoji-3d:busts-in-silhouette" },
+  { path: "/partner/audit",     label: "Audit Log",  icon3d: "fluent-emoji-3d:magnifying-glass-tilted-right" },
 ];
 
 export function PartnerLayout({ children }: { children: React.ReactNode }) {
@@ -95,7 +85,6 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenu>
                   {navItems.map((item) => {
                     const isActive = loc === item.path || loc.startsWith(item.path + "/");
-                    const Icon = item.icon;
                     const badge =
                       item.path === "/partner/bookings" && pendingBookings > 0
                         ? pendingBookings
@@ -112,7 +101,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                           data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                         >
                           <Link href={item.path}>
-                            <Icon className="w-4 h-4" />
+                            <Iconify icon={item.icon3d} className="w-5 h-5 shrink-0" />
                             <span>{item.label}</span>
                           </Link>
                         </SidebarMenuButton>
