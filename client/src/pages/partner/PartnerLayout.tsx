@@ -19,7 +19,18 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Building2 } from "lucide-react";
-import { Icon as Iconify } from "@iconify/react";
+import "iconify-icon";
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "iconify-icon": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & { icon: string; width?: string | number; height?: string | number },
+        HTMLElement
+      >;
+    }
+  }
+}
 
 const navItems = [
   { path: "/partner/dashboard", label: "Dashboard",  icon3d: "fluent-emoji-3d:bar-chart" },
@@ -101,7 +112,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                           data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                         >
                           <Link href={item.path}>
-                            <Iconify icon={item.icon3d} className="w-5 h-5 shrink-0" />
+                            <iconify-icon icon={item.icon3d} width="20" height="20" style={{ display: "block", flexShrink: 0 }} />
                             <span>{item.label}</span>
                           </Link>
                         </SidebarMenuButton>
