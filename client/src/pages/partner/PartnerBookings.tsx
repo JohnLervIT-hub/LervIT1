@@ -11,21 +11,39 @@ import { MapPin, Calendar, ChevronRight, Search, Package, Clock } from "lucide-r
 import { format } from "date-fns";
 
 const STATUS_COLOR: Record<string, string> = {
-  new: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  under_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  accepted: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  assigned: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  en_route_to_pickup: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  arrived_at_pickup: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
-  picked_up: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
-  in_transit: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  arrived_at_dropoff: "bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300",
-  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  delayed: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  issue_reported: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  cancelled: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  new:               "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  under_review:      "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  accepted:          "bg-green-500/10 text-green-600 border-green-500/20",
+  rejected:          "bg-red-500/10 text-red-600 border-red-500/20",
+  assigned:          "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  en_route_to_pickup:"bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  arrived_at_pickup: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+  picked_up:         "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  in_transit:        "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  arrived_at_dropoff:"bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  delivered:         "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  completed:         "bg-green-500/10 text-green-600 border-green-500/20",
+  delayed:           "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  issue_reported:    "bg-red-500/10 text-red-600 border-red-500/20",
+  cancelled:         "bg-slate-500/10 text-slate-500 border-slate-500/20",
+};
+
+const STATUS_BAR: Record<string, string> = {
+  new:               "bg-blue-500",
+  under_review:      "bg-amber-500",
+  accepted:          "bg-green-500",
+  rejected:          "bg-red-400",
+  assigned:          "bg-purple-500",
+  en_route_to_pickup:"bg-indigo-500",
+  arrived_at_pickup: "bg-cyan-500",
+  picked_up:         "bg-teal-500",
+  in_transit:        "bg-orange-500",
+  arrived_at_dropoff:"bg-emerald-500",
+  delivered:         "bg-emerald-500",
+  completed:         "bg-green-500",
+  delayed:           "bg-amber-500",
+  issue_reported:    "bg-red-500",
+  cancelled:         "bg-slate-400",
 };
 
 const LOAD_SIZE_LABEL: Record<string, string> = {
@@ -151,50 +169,57 @@ export default function PartnerBookings() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {filtered.map((b: any) => (
-              <Link key={b.id} href={`/partner/bookings/${b.id}`}>
-                <Card className="hover-elevate cursor-pointer" data-testid={`card-booking-${b.id}`}>
-                  <CardContent className="pt-4 pb-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge className={`text-xs ${STATUS_COLOR[b.enterpriseStatus ?? "new"] ?? ""}`} data-testid={`status-${b.id}`}>
-                            {formatStatus(b.enterpriseStatus ?? "new")}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground font-mono">
-                            #{b.id.slice(-8).toUpperCase()}
-                          </span>
-                          {b.loadSize && (
-                            <span className="text-xs text-muted-foreground">
-                              · {LOAD_SIZE_LABEL[b.loadSize] ?? b.loadSize}
+            {filtered.map((b: any) => {
+              const status = b.enterpriseStatus ?? "new";
+              return (
+                <Link key={b.id} href={`/partner/bookings/${b.id}`}>
+                  <Card className="hover-elevate cursor-pointer overflow-hidden" data-testid={`card-booking-${b.id}`}>
+                    <div className={`h-1 ${STATUS_BAR[status] ?? "bg-muted"}`} />
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline" className={`text-xs ${STATUS_COLOR[status] ?? ""}`} data-testid={`status-${b.id}`}>
+                              {formatStatus(status)}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              #{b.id.slice(-8).toUpperCase()}
                             </span>
+                            {b.loadSize && (
+                              <span className="text-xs text-muted-foreground">
+                                · {LOAD_SIZE_LABEL[b.loadSize] ?? b.loadSize}
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-start gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
+                              <p className="text-sm font-medium truncate">{b.pickupAddress}</p>
+                            </div>
+                            <div className="flex items-start gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                              <p className="text-sm text-muted-foreground truncate">{b.dropoffAddress}</p>
+                            </div>
+                          </div>
+                          {b.preferredDate && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Calendar className="w-3 h-3" />
+                              {format(new Date(b.preferredDate), "PPP")}
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-start gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                          <div className="text-sm min-w-0">
-                            <p className="font-medium truncate">{b.pickupAddress}</p>
-                            <p className="text-muted-foreground truncate">→ {b.dropoffAddress}</p>
-                          </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          {b.price && (
+                            <span className="font-bold text-base text-primary">${parseFloat(b.price).toFixed(2)}</span>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
                         </div>
-                        {b.preferredDate && (
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {format(new Date(b.preferredDate), "PPP")}
-                          </div>
-                        )}
                       </div>
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        {b.price && (
-                          <span className="font-bold text-base">${parseFloat(b.price).toFixed(2)}</span>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

@@ -16,26 +16,26 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, MapPin, Calendar, Package, CheckCircle, XCircle,
   User, Truck, AlertTriangle, Upload, Clock, ChevronRight,
-  Loader2, DollarSign, Users,
+  Loader2, DollarSign, Users, Route, Navigation,
 } from "lucide-react";
 import { format } from "date-fns";
 
 const STATUS_COLOR: Record<string, string> = {
-  new: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  under_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  accepted: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  assigned: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  en_route_to_pickup: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  arrived_at_pickup: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
-  picked_up: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
-  in_transit: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  arrived_at_dropoff: "bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300",
-  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  delayed: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  issue_reported: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  cancelled: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  new:               "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  under_review:      "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  accepted:          "bg-green-500/10 text-green-600 border-green-500/20",
+  rejected:          "bg-red-500/10 text-red-600 border-red-500/20",
+  assigned:          "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  en_route_to_pickup:"bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  arrived_at_pickup: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
+  picked_up:         "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  in_transit:        "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  arrived_at_dropoff:"bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  delivered:         "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  completed:         "bg-green-500/10 text-green-600 border-green-500/20",
+  delayed:           "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  issue_reported:    "bg-red-500/10 text-red-600 border-red-500/20",
+  cancelled:         "bg-slate-500/10 text-slate-500 border-slate-500/20",
 };
 
 const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -161,7 +161,7 @@ export default function PartnerBookingDetail() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-lg font-semibold">Booking #{booking.id.slice(-8).toUpperCase()}</h1>
-              <Badge className={STATUS_COLOR[enterpriseStatus] ?? ""} data-testid="status-badge">
+              <Badge variant="outline" className={STATUS_COLOR[enterpriseStatus] ?? ""} data-testid="status-badge">
                 {formatStatus(enterpriseStatus)}
               </Badge>
             </div>
@@ -237,60 +237,77 @@ export default function PartnerBookingDetail() {
         {/* Details grid */}
         <div className="grid md:grid-cols-2 gap-4">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-muted-foreground" /> Route
+                <Route className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Route</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Pickup</p>
-                <p className="font-medium">{booking.pickupAddress}</p>
-              </div>
-              <Separator />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Dropoff</p>
-                <p className="font-medium">{booking.dropoffAddress}</p>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center shrink-0 pt-0.5">
+                  <div className="w-8 h-8 rounded-full bg-green-500/10 border-2 border-green-500 flex items-center justify-center">
+                    <span className="text-xs font-bold text-green-600">A</span>
+                  </div>
+                  <div className="w-0.5 h-8 bg-gradient-to-b from-green-500 to-primary my-1 rounded-full" />
+                  <div className="w-8 h-8 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center">
+                    <span className="text-xs font-bold text-primary">B</span>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-5 pt-0.5">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Pickup</p>
+                    <p className="font-medium text-sm">{booking.pickupAddress}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Dropoff</p>
+                    <p className="font-medium text-sm">{booking.dropoffAddress}</p>
+                  </div>
+                </div>
               </div>
               {booking.distance && (
-                <p className="text-xs text-muted-foreground">{parseFloat(booking.distance).toFixed(1)} km</p>
+                <div className="bg-muted/30 rounded-lg p-3 flex items-center gap-2">
+                  <Navigation className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground">Distance</span>
+                  <span className="font-semibold text-sm ml-auto">{parseFloat(booking.distance).toFixed(1)} km</span>
+                </div>
               )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Package className="w-4 h-4 text-muted-foreground" /> Job Details
+                <Package className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Job Details</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-3">
               {booking.preferredDate && (
-                <div className="flex items-center gap-2">
+                <div className="bg-muted/30 rounded-lg p-3 flex items-center gap-2">
                   <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span>{format(new Date(booking.preferredDate), "PPP p")}</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Scheduled</span>
+                  <span className="text-sm font-medium ml-auto">{format(new Date(booking.preferredDate), "PPP p")}</span>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Load Size</p>
-                  <p className="font-medium">{LOAD_SIZE_LABEL[booking.loadSize] ?? booking.loadSize?.replace("_", " ")}</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Load</p>
+                  <p className="font-semibold text-sm">{LOAD_SIZE_LABEL[booking.loadSize] ?? booking.loadSize?.replace("_", " ") ?? "—"}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Movers</p>
-                  <p className="font-medium flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" />{booking.numberOfMovers}
+                <div className="bg-muted/30 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Movers</p>
+                  <p className="font-semibold text-sm flex items-center gap-1">
+                    <Users className="w-3 h-3" />{booking.numberOfMovers ?? "—"}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Value</p>
-                  <p className="font-bold text-base flex items-center gap-0.5">
-                    <DollarSign className="w-3.5 h-3.5" />{parseFloat(booking.price ?? "0").toFixed(2)}
-                  </p>
+                <div className="bg-primary/10 rounded-lg p-3 border border-primary/20">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Value</p>
+                  <p className="font-bold text-base text-primary">${parseFloat(booking.price ?? "0").toFixed(2)}</p>
                 </div>
               </div>
               {booking.description && (
-                <p className="text-xs text-muted-foreground">{booking.description}</p>
+                <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">{booking.description}</p>
               )}
             </CardContent>
           </Card>
@@ -299,8 +316,11 @@ export default function PartnerBookingDetail() {
         {/* Actions (all non-terminal states) */}
         {!isTerminal && (
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Dispatch Actions</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Truck className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Dispatch Actions</span>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Assign team */}
@@ -422,30 +442,46 @@ export default function PartnerBookingDetail() {
         {/* Current assignment */}
         {assignment && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <User className="w-4 h-4 text-muted-foreground" /> Assigned Driver
+                <User className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Assigned Driver</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            <CardContent className="space-y-3">
+              <div className="grid sm:grid-cols-2 gap-2">
                 {assignment.driverName && (
-                  <div><p className="text-xs text-muted-foreground">Driver</p><p className="font-medium">{assignment.driverName}</p></div>
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Driver</p>
+                    <p className="font-semibold text-sm">{assignment.driverName}</p>
+                  </div>
                 )}
                 {assignment.driverPhone && (
-                  <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium">{assignment.driverPhone}</p></div>
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Phone</p>
+                    <p className="font-semibold text-sm">{assignment.driverPhone}</p>
+                  </div>
                 )}
                 {assignment.vehicleType && (
-                  <div><p className="text-xs text-muted-foreground">Vehicle</p><p className="font-medium">{assignment.vehicleType}</p></div>
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Vehicle</p>
+                    <p className="font-semibold text-sm">{assignment.vehicleType}</p>
+                  </div>
                 )}
                 {assignment.vehiclePlate && (
-                  <div><p className="text-xs text-muted-foreground">Plate</p><p className="font-medium">{assignment.vehiclePlate}</p></div>
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Plate</p>
+                    <p className="font-semibold text-sm">{assignment.vehiclePlate}</p>
+                  </div>
                 )}
                 {assignment.notes && (
-                  <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Notes</p><p>{assignment.notes}</p></div>
+                  <div className="sm:col-span-2 bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+                    <p className="text-sm">{assignment.notes}</p>
+                  </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-3">
+              <p className="text-xs text-muted-foreground">
                 Assigned {format(new Date(assignment.assignedAt), "PPp")}
               </p>
             </CardContent>
@@ -455,9 +491,10 @@ export default function PartnerBookingDetail() {
         {/* Status timeline */}
         {events.length > 0 && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Clock className="w-4 h-4 text-muted-foreground" /> Status History
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Status History</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -490,9 +527,10 @@ export default function PartnerBookingDetail() {
         {/* Incidents */}
         {incidents.length > 0 && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" /> Incidents ({incidents.length})
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Incidents ({incidents.length})</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -516,9 +554,10 @@ export default function PartnerBookingDetail() {
         {/* Proof of completion */}
         {proofs.length > 0 && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Upload className="w-4 h-4 text-muted-foreground" /> Proof of Completion ({proofs.length})
+                <Upload className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Proof of Completion ({proofs.length})</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

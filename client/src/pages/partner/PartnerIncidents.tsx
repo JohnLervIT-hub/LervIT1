@@ -15,17 +15,17 @@ import { AlertTriangle, Plus, Search, Loader2, CheckCircle, Clock, ShieldAlert, 
 import { format } from "date-fns";
 
 const SEVERITY_CONFIG: Record<string, { color: string; dot: string; label: string }> = {
-  low:      { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",     dot: "bg-blue-400",   label: "Low" },
-  medium:   { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", dot: "bg-yellow-400", label: "Medium" },
-  high:     { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", dot: "bg-orange-500", label: "High" },
-  critical: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",         dot: "bg-red-500",    label: "Critical" },
+  low:      { color: "bg-blue-500/10 text-blue-600 border-blue-500/20",     dot: "bg-blue-400",   label: "Low" },
+  medium:   { color: "bg-amber-500/10 text-amber-600 border-amber-500/20",  dot: "bg-amber-400",  label: "Medium" },
+  high:     { color: "bg-orange-500/10 text-orange-600 border-orange-500/20", dot: "bg-orange-500", label: "High" },
+  critical: { color: "bg-red-500/10 text-red-600 border-red-500/20",        dot: "bg-red-500",    label: "Critical" },
 };
 
 const STATUS_CONFIG: Record<string, { color: string; label: string; icon: React.ElementType }> = {
-  open:         { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",       label: "Open",         icon: Flame },
-  under_review: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", label: "Under Review", icon: Clock },
-  resolved:     { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400", label: "Resolved",    icon: CheckCircle },
-  escalated:    { color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300", label: "Escalated",  icon: ShieldAlert },
+  open:         { color: "bg-red-500/10 text-red-600 border-red-500/20",       label: "Open",         icon: Flame },
+  under_review: { color: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Under Review",  icon: Clock },
+  resolved:     { color: "bg-green-500/10 text-green-600 border-green-500/20", label: "Resolved",      icon: CheckCircle },
+  escalated:    { color: "bg-purple-500/10 text-purple-600 border-purple-500/20", label: "Escalated",  icon: ShieldAlert },
 };
 
 const CATEGORIES = [
@@ -220,10 +220,10 @@ export default function PartnerIncidents() {
         {!isLoading && incidents.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {[
-              { label: "Open", count: counts.open, color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
-              { label: "Under Review", count: counts.under_review, color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" },
-              { label: "Resolved", count: counts.resolved, color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
-              { label: "Escalated", count: counts.escalated, color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
+              { label: "Open",         count: counts.open,         color: "bg-red-500/10 text-red-600 border border-red-500/20" },
+              { label: "Under Review", count: counts.under_review, color: "bg-amber-500/10 text-amber-600 border border-amber-500/20" },
+              { label: "Resolved",     count: counts.resolved,     color: "bg-green-500/10 text-green-600 border border-green-500/20" },
+              { label: "Escalated",    count: counts.escalated,    color: "bg-purple-500/10 text-purple-600 border border-purple-500/20" },
             ].map(s => s.count > 0 && (
               <span key={s.label} className={`text-xs px-2.5 py-1 rounded-full font-medium ${s.color}`}>
                 {s.count} {s.label}

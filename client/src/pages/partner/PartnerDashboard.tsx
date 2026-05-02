@@ -17,16 +17,19 @@ import {
 import { format } from "date-fns";
 
 const STATUS_COLOR: Record<string, string> = {
-  new: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  under_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  accepted: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  assigned: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  en_route_to_pickup: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  in_transit: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  cancelled: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  new:               "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  under_review:      "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  accepted:          "bg-green-500/10 text-green-600 border-green-500/20",
+  rejected:          "bg-red-500/10 text-red-600 border-red-500/20",
+  assigned:          "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  en_route_to_pickup:"bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  in_transit:        "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  arrived_at_dropoff:"bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  delivered:         "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  completed:         "bg-green-500/10 text-green-600 border-green-500/20",
+  delayed:           "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  issue_reported:    "bg-red-500/10 text-red-600 border-red-500/20",
+  cancelled:         "bg-slate-500/10 text-slate-500 border-slate-500/20",
 };
 
 function formatStatus(s: string) {
@@ -115,7 +118,7 @@ export default function PartnerDashboard() {
             <p className="text-sm text-muted-foreground mt-0.5">Operations &amp; Earnings Overview</p>
           </div>
           {partner?.status === "active" && (
-            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 text-xs">
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs">
               Active Partner
             </Badge>
           )}
@@ -395,7 +398,7 @@ export default function PartnerDashboard() {
                 <Truck className="w-4 h-4 text-indigo-500" />
                 Active Bookings
                 {hasPending && (
-                  <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 ml-1">
+                  <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/20 ml-1">
                     {stats.pendingBookings} new
                   </Badge>
                 )}
@@ -425,7 +428,7 @@ export default function PartnerDashboard() {
                         <p className="text-sm font-medium truncate">{b.pickupAddress}</p>
                         <p className="text-xs text-muted-foreground truncate">→ {b.dropoffAddress}</p>
                       </div>
-                      <Badge className={`text-xs shrink-0 ${STATUS_COLOR[b.enterpriseStatus] ?? ""}`} data-testid={`status-${b.id}`}>
+                      <Badge variant="outline" className={`text-xs shrink-0 ${STATUS_COLOR[b.enterpriseStatus] ?? ""}`} data-testid={`status-${b.id}`}>
                         {formatStatus(b.enterpriseStatus ?? "new")}
                       </Badge>
                     </div>
