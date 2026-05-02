@@ -164,7 +164,7 @@ export default function PartnerEarnings() {
 
           {/* Page header */}
           <div>
-            <h1 className="text-xl font-bold">Earnings</h1>
+            <h1 className="text-lg font-semibold">Earnings</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Revenue from completed bookings and payout settings</p>
           </div>
 

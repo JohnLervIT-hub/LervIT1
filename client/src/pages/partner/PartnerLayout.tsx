@@ -18,20 +18,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import {
-  LayoutDashboard, Package, DollarSign, ClipboardCheck,
-  FileCheck, AlertTriangle, Users, History, LogOut, Building2,
-} from "lucide-react";
+import { LogOut, Building2 } from "lucide-react";
+import "iconify-icon";
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "iconify-icon": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & { icon: string; width?: string | number; height?: string | number },
+        HTMLElement
+      >;
+    }
+  }
+}
 
 const navItems = [
-  { path: "/partner/dashboard", label: "Dashboard",  icon: LayoutDashboard, bg: "from-indigo-500 to-violet-600" },
-  { path: "/partner/bookings",  label: "Bookings",   icon: Package,          bg: "from-blue-500 to-blue-700" },
-  { path: "/partner/earnings",  label: "Earnings",   icon: DollarSign,       bg: "from-amber-500 to-orange-600" },
-  { path: "/partner/onboarding",label: "Onboarding", icon: ClipboardCheck,   bg: "from-violet-500 to-purple-700" },
-  { path: "/partner/compliance",label: "Compliance", icon: FileCheck,        bg: "from-teal-500 to-cyan-600" },
-  { path: "/partner/incidents", label: "Incidents",  icon: AlertTriangle,    bg: "from-red-500 to-rose-600" },
-  { path: "/partner/team",      label: "Team",       icon: Users,            bg: "from-emerald-500 to-green-600" },
-  { path: "/partner/audit",     label: "Audit Log",  icon: History,          bg: "from-slate-500 to-slate-700" },
+  { path: "/partner/dashboard", label: "Dashboard",  icon3d: "fluent-emoji-3d:bar-chart" },
+  { path: "/partner/bookings",  label: "Bookings",   icon3d: "fluent-emoji-3d:package" },
+  { path: "/partner/earnings",  label: "Earnings",   icon3d: "fluent-emoji-3d:money-bag" },
+  { path: "/partner/onboarding",label: "Onboarding", icon3d: "fluent-emoji-3d:rocket" },
+  { path: "/partner/compliance",label: "Compliance", icon3d: "fluent-emoji-3d:page-facing-up" },
+  { path: "/partner/incidents", label: "Incidents",  icon3d: "fluent-emoji-3d:warning" },
+  { path: "/partner/team",      label: "Team",       icon3d: "fluent-emoji-3d:busts-in-silhouette" },
+  { path: "/partner/audit",     label: "Audit Log",  icon3d: "fluent-emoji-3d:magnifying-glass-tilted-right" },
 ];
 
 export function PartnerLayout({ children }: { children: React.ReactNode }) {
@@ -87,7 +96,6 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenu>
                   {navItems.map((item) => {
                     const isActive = loc === item.path || loc.startsWith(item.path + "/");
-                    const Icon = item.icon;
                     const badge =
                       item.path === "/partner/bookings" && pendingBookings > 0
                         ? pendingBookings
@@ -104,9 +112,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                           data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                         >
                           <Link href={item.path}>
-                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md bg-gradient-to-br ${item.bg} shrink-0`}>
-                              <Icon className="w-3.5 h-3.5 text-white" />
-                            </span>
+                            <iconify-icon icon={item.icon3d} width="20" height="20" style={{ display: "block", flexShrink: 0 }} />
                             <span>{item.label}</span>
                           </Link>
                         </SidebarMenuButton>

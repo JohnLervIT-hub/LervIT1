@@ -205,7 +205,7 @@ export default function PartnerIncidents() {
         {/* Page header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-bold">Incidents</h1>
+            <h1 className="text-lg font-semibold">Incidents</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {openCount > 0 ? (
                 <><span className="text-red-600 dark:text-red-400 font-semibold">{openCount} open</span>

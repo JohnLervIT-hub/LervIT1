@@ -305,7 +305,7 @@ export default function PartnerTeam() {
         {/* Page header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-bold">Team</h1>
+            <h1 className="text-lg font-semibold">Team</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {team.filter((m: any) => m.isAvailable).length} available · {team.length} total
             </p>
