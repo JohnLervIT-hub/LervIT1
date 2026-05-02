@@ -9,6 +9,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Truck, Eye, EyeOff, Loader2, Lock, AlertTriangle, ShieldAlert } from "lucide-react";
 
+function redirectByRole(role: string, setLocation: (path: string) => void) {
+  if (role?.startsWith("partner_")) {
+    setLocation("/partner/dashboard");
+  } else if (role === "mover") {
+    setLocation("/mover-dashboard");
+  } else if (role === "admin") {
+    setLocation("/admin");
+  } else {
+    setLocation("/dashboard");
+  }
+}
+
 function Icon({ kind, className = "", glow = "blue" }: { kind: "truck" | "pin" | "box"; className?: string; glow?: "blue" | "pink" | "orange" }) {
   const glowClass =
     glow === "pink"
@@ -113,27 +125,10 @@ export default function Login() {
     if (user && !isLoading) {
       const params = new URLSearchParams(window.location.search);
       const redirectPath = params.get('redirect');
-      
-      console.log('[Login] Redirect check:', {
-        user: !!user,
-        isLoading,
-        redirectPath,
-        fullSearch: window.location.search
-      });
-      
       if (redirectPath) {
-        console.log('[Login] Redirecting to:', redirectPath);
         setLocation(redirectPath);
       } else {
-        if (user.role === "customer") {
-          setLocation("/dashboard");
-        } else if (user.role === "mover") {
-          setLocation("/mover-dashboard");
-        } else if (user.role === "admin") {
-          setLocation("/admin");
-        } else if (user.role?.startsWith("partner_")) {
-          setLocation("/partner/dashboard");
-        }
+        redirectByRole(user.role, setLocation);
       }
     }
   }, [user, isLoading, setLocation]);
@@ -145,7 +140,7 @@ export default function Login() {
     setRemainingAttempts(null);
 
     try {
-      await login(email, password);
+      const { role } = await login(email, password);
       // Mark that we just logged in to prevent false "Access Denied" toasts
       sessionStorage.setItem('justLoggedIn', 'true');
       setIsLoading(false);
@@ -153,6 +148,12 @@ export default function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
+      const redirectPath = new URLSearchParams(window.location.search).get('redirect');
+      if (redirectPath) {
+        setLocation(redirectPath);
+      } else {
+        redirectByRole(role, setLocation);
+      }
     } catch (error: any) {
       setIsLoading(false);
       

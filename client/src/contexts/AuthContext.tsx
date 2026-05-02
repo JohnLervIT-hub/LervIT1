@@ -41,7 +41,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ role: string }>;
   signup: (name: string, email: string, password: string, role?: string, phone?: string, phoneVerificationToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, [refreshUser]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<{ role: string }> => {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -171,6 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     // Clear all cached queries to ensure fresh data for the new user
     queryClient.clear();
+
+    return { role: userData.role || "customer" };
   };
 
   const signup = async (name: string, email: string, password: string, role: string = "customer", phone?: string, phoneVerificationToken?: string) => {
