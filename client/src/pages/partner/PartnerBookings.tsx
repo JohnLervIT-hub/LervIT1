@@ -90,7 +90,7 @@ export default function PartnerBookings() {
 
         {/* Page header */}
         <div>
-          <h1 className="text-lg font-semibold">Bookings</h1>
+          <h1 className="text-xl font-bold">Bookings</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {counts.pending > 0
               ? <><span className="text-blue-600 dark:text-blue-400 font-semibold">{counts.pending} new</span> booking{counts.pending !== 1 ? "s" : ""} awaiting response</>

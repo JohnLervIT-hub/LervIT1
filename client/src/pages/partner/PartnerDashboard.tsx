@@ -111,7 +111,7 @@ export default function PartnerDashboard() {
         {/* Page header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-lg font-semibold">{partner?.name ?? "Partner Portal"}</h1>
+            <h1 className="text-xl font-bold">{partner?.name ?? "Partner Portal"}</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Operations &amp; Earnings Overview</p>
           </div>
           {partner?.status === "active" && (
