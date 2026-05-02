@@ -199,22 +199,32 @@ export default function PartnerIncidents() {
 
   return (
     <PartnerLayout>
-      <div className="p-6 space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">Incidents</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {openCount > 0 ? (
-                <><span className="text-red-600 dark:text-red-400 font-semibold">{openCount} open</span>
-                {criticalCount > 0 && <> · <span className="text-red-600 dark:text-red-400 font-semibold">{criticalCount} critical</span></>}</>
-              ) : (
-                "No open incidents"
-              )}
-            </p>
+      {/* ── Gradient page header ─────────────────────── */}
+      <div className="bg-gradient-to-br from-red-600 via-rose-600 to-red-700 px-6 py-7">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 rounded-md p-2">
+                <AlertTriangle className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white">Incidents</h1>
+                <p className="text-sm text-white/75 mt-0.5">
+                  {openCount > 0 ? (
+                    <><span className="font-semibold text-white">{openCount} open</span>
+                    {criticalCount > 0 && <> · <span className="font-semibold text-white">{criticalCount} critical</span></>}</>
+                  ) : "No open incidents"}
+                </p>
+              </div>
+            </div>
+            <ReportIncidentDialog bookings={bookings} />
           </div>
-          <ReportIncidentDialog bookings={bookings} />
         </div>
+      </div>
+
+      {/* ── Body ─────────────────────────────────────── */}
+      <div className="px-6 py-6">
+      <div className="max-w-5xl mx-auto space-y-5">
 
         {/* Summary pills */}
         {!isLoading && incidents.length > 0 && (
@@ -325,6 +335,7 @@ export default function PartnerIncidents() {
             })}
           </div>
         )}
+      </div>
       </div>
     </PartnerLayout>
   );
