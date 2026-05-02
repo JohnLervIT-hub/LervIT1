@@ -171,7 +171,14 @@ function TeamMemberDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Vehicle Type</Label>
-              <Input placeholder="e.g. Cargo Van" value={form.vehicleType} onChange={e => setForm(f => ({ ...f, vehicleType: e.target.value }))} data-testid="input-vehicle-type" />
+              <Select value={form.vehicleType} onValueChange={v => setForm(f => ({ ...f, vehicleType: v }))}>
+                <SelectTrigger data-testid="select-vehicle-type"><SelectValue placeholder="Select class…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cargo Van">Cargo Van</SelectItem>
+                  <SelectItem value="Sprinter Van">Sprinter Van</SelectItem>
+                  <SelectItem value="Moving Truck">Moving Truck</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Plate</Label>
