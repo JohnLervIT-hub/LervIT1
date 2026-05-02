@@ -2,16 +2,39 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { PartnerLayout } from "./PartnerLayout";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { Search, Package, MapPin, ChevronRight } from "lucide-react";
+import { MapPin, Calendar, ChevronRight, Search, Package, Clock } from "lucide-react";
 import { format } from "date-fns";
 
-const PENDING_STATUSES = ["new", "under_review"];
-const ACTIVE_STATUSES = ["accepted", "assigned", "en_route_to_pickup", "arrived_at_pickup", "picked_up", "in_transit", "arrived_at_dropoff", "delivered", "delayed", "issue_reported"];
-const COMPLETED_STATUSES = ["completed"];
-const CANCELLED_STATUSES = ["cancelled", "rejected"];
+const STATUS_COLOR: Record<string, string> = {
+  new: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  under_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+  accepted: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  assigned: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  en_route_to_pickup: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
+  arrived_at_pickup: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
+  picked_up: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
+  in_transit: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  arrived_at_dropoff: "bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300",
+  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  delayed: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  issue_reported: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  cancelled: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+};
+
+const LOAD_SIZE_LABEL: Record<string, string> = {
+  boxes: "Boxes / Small", medium: "Medium", large: "Large", apartment: "Full Apartment",
+};
+
+function formatStatus(s: string) {
+  return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
 
 const TABS = [
   { key: "all", label: "All" },
@@ -21,30 +44,18 @@ const TABS = [
   { key: "cancelled", label: "Cancelled" },
 ];
 
-function getTab(status: string) {
+const PENDING_STATUSES = ["new", "under_review"];
+const ACTIVE_STATUSES = ["accepted", "assigned", "en_route_to_pickup", "arrived_at_pickup", "picked_up", "in_transit", "arrived_at_dropoff", "delivered", "delayed", "issue_reported"];
+const COMPLETED_STATUSES = ["completed"];
+const CANCELLED_STATUSES = ["cancelled", "rejected"];
+
+function getTab(status: string): string {
   if (PENDING_STATUSES.includes(status)) return "pending";
   if (ACTIVE_STATUSES.includes(status)) return "active";
   if (COMPLETED_STATUSES.includes(status)) return "completed";
   if (CANCELLED_STATUSES.includes(status)) return "cancelled";
   return "all";
 }
-
-function formatStatus(s: string) {
-  return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function StatusDot({ status }: { status: string }) {
-  const color =
-    PENDING_STATUSES.includes(status) ? "bg-amber-500" :
-    ACTIVE_STATUSES.includes(status) ? "bg-blue-500" :
-    COMPLETED_STATUSES.includes(status) ? "bg-green-500" :
-    "bg-gray-400";
-  return <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${color}`} />;
-}
-
-const LOAD_LABEL: Record<string, string> = {
-  boxes: "Small", medium: "Medium", large: "Large", apartment: "Apartment",
-};
 
 export default function PartnerBookings() {
   const [search, setSearch] = useState("");
@@ -64,52 +75,57 @@ export default function PartnerBookings() {
     const status = b.enterpriseStatus ?? "new";
     const matchesTab = tab === "all" || getTab(status) === tab;
     const q = search.toLowerCase();
-    return matchesTab && (!q || b.pickupAddress?.toLowerCase().includes(q) || b.dropoffAddress?.toLowerCase().includes(q) || b.id?.toLowerCase().includes(q));
+    const matchesSearch = !q || (
+      b.pickupAddress?.toLowerCase().includes(q) ||
+      b.dropoffAddress?.toLowerCase().includes(q) ||
+      b.id?.toLowerCase().includes(q)
+    );
+    return matchesTab && matchesSearch;
   });
 
   return (
     <PartnerLayout>
-      <div className="p-6 space-y-5 max-w-4xl">
+      <div className="p-6 space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-semibold">Bookings</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {counts.pending > 0
-                ? <>{counts.pending} new &middot; {bookings.length} total</>
-                : `${bookings.length} total`}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold">Bookings</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {counts.pending > 0
+              ? <><span className="text-blue-600 dark:text-blue-400 font-semibold">{counts.pending} new</span> booking{counts.pending !== 1 ? "s" : ""} awaiting response</>
+              : `${bookings.length} total booking${bookings.length !== 1 ? "s" : ""}`}
+          </p>
         </div>
 
-        {/* Tabs + search */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-          <div className="flex items-center gap-0 border-b border-transparent">
+        {/* Tab bar + search */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
             {TABS.map(t => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 data-testid={`tab-${t.key}`}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   tab === t.key
-                    ? "border-foreground text-foreground font-medium"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {t.label}
                 {!isLoading && counts[t.key] > 0 && (
-                  <span className={`text-xs tabular-nums ${tab === t.key ? "text-foreground" : "text-muted-foreground"}`}>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                    tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20"
+                  }`}>
                     {counts[t.key]}
                   </span>
                 )}
               </button>
             ))}
           </div>
-          <div className="relative sm:ml-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              className="pl-8 h-8 text-sm w-56"
-              placeholder="Search…"
+              className="pl-9"
+              placeholder="Search bookings…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               data-testid="input-search-bookings"
@@ -117,60 +133,65 @@ export default function PartnerBookings() {
           </div>
         </div>
 
-        <Separator />
-
-        {/* List */}
+        {/* Booking list */}
         {isLoading ? (
           <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center py-16 gap-2 text-muted-foreground">
-            <Package className="w-8 h-8" />
-            <p className="text-sm">{search ? "No bookings match your search" : `No ${tab === "all" ? "" : tab} bookings`}</p>
-          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
+              <Package className="w-10 h-10 text-muted-foreground" />
+              <p className="text-muted-foreground text-sm">
+                {search ? "No bookings match your search" : tab !== "all" ? `No ${tab} bookings` : "No bookings yet"}
+              </p>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="space-y-px">
-            {filtered.map((b: any, idx: number) => (
-              <div key={b.id}>
-                <Link href={`/partner/bookings/${b.id}`}>
-                  <div
-                    className="flex items-center justify-between py-3 px-2 rounded-md hover-elevate cursor-pointer gap-4"
-                    data-testid={`card-booking-${b.id}`}
-                  >
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="mt-1 shrink-0">
-                        <StatusDot status={b.enterpriseStatus ?? "new"} />
-                      </div>
-                      <div className="min-w-0 flex-1">
+          <div className="space-y-2">
+            {filtered.map((b: any) => (
+              <Link key={b.id} href={`/partner/bookings/${b.id}`}>
+                <Card className="hover-elevate cursor-pointer" data-testid={`card-booking-${b.id}`}>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-2">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium truncate">{b.pickupAddress}</p>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <p className="text-xs text-muted-foreground truncate">{b.dropoffAddress}</p>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-                          <span className="font-mono">{b.id.slice(-8).toUpperCase()}</span>
-                          <span>{formatStatus(b.enterpriseStatus ?? "new")}</span>
-                          {b.loadSize && <span>{LOAD_LABEL[b.loadSize] ?? b.loadSize}</span>}
-                          {b.preferredDate && (
-                            <span>{format(new Date(b.preferredDate), "MMM d")}</span>
+                          <Badge className={`text-xs ${STATUS_COLOR[b.enterpriseStatus ?? "new"] ?? ""}`} data-testid={`status-${b.id}`}>
+                            {formatStatus(b.enterpriseStatus ?? "new")}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            #{b.id.slice(-8).toUpperCase()}
+                          </span>
+                          {b.loadSize && (
+                            <span className="text-xs text-muted-foreground">
+                              · {LOAD_SIZE_LABEL[b.loadSize] ?? b.loadSize}
+                            </span>
                           )}
                         </div>
+                        <div className="flex items-start gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div className="text-sm min-w-0">
+                            <p className="font-medium truncate">{b.pickupAddress}</p>
+                            <p className="text-muted-foreground truncate">→ {b.dropoffAddress}</p>
+                          </div>
+                        </div>
+                        {b.preferredDate && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {format(new Date(b.preferredDate), "PPP")}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        {b.price && (
+                          <span className="font-bold text-base">${parseFloat(b.price).toFixed(2)}</span>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {b.price && (
-                        <span className="text-sm font-medium tabular-nums">
-                          ${parseFloat(b.price).toFixed(2)}
-                        </span>
-                      )}
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                </Link>
-                {idx < filtered.length - 1 && <Separator className="opacity-40" />}
-              </div>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         )}

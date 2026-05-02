@@ -1,41 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import {
   History, CheckCircle, XCircle, Upload, UserPlus, FileCheck,
   ScrollText, Settings, AlertTriangle, ArrowRight,
 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
 
-const ACTION_META: Record<string, { icon: React.ElementType; label: string }> = {
-  "booking.accepted":       { icon: CheckCircle,   label: "Booking Accepted" },
-  "booking.rejected":       { icon: XCircle,       label: "Booking Rejected" },
-  "booking.assigned":       { icon: ArrowRight,    label: "Booking Assigned" },
-  "booking.status_updated": { icon: ArrowRight,    label: "Status Updated" },
-  "incident.created":       { icon: AlertTriangle, label: "Incident Reported" },
-  "incident.resolved":      { icon: CheckCircle,   label: "Incident Resolved" },
-  "compliance.uploaded":    { icon: Upload,        label: "Document Uploaded" },
-  "compliance.approved":    { icon: FileCheck,     label: "Document Approved" },
-  "partner.activated":      { icon: CheckCircle,   label: "Partner Activated" },
-  "terms.accepted":         { icon: ScrollText,    label: "Terms Accepted" },
-  "team.created":           { icon: UserPlus,      label: "Team Member Added" },
-  "team.updated":           { icon: Settings,      label: "Team Member Updated" },
-  "team.deleted":           { icon: XCircle,       label: "Team Member Removed" },
-  "profile.updated":        { icon: Settings,      label: "Profile Updated" },
+const ACTION_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  "booking.accepted":       { icon: CheckCircle,  color: "text-green-500",  label: "Booking Accepted" },
+  "booking.rejected":       { icon: XCircle,      color: "text-red-500",    label: "Booking Rejected" },
+  "booking.assigned":       { icon: ArrowRight,   color: "text-purple-500", label: "Booking Assigned" },
+  "booking.status_updated": { icon: ArrowRight,   color: "text-blue-500",   label: "Status Updated" },
+  "incident.created":       { icon: AlertTriangle,color: "text-orange-500", label: "Incident Reported" },
+  "incident.resolved":      { icon: CheckCircle,  color: "text-green-500",  label: "Incident Resolved" },
+  "compliance.uploaded":    { icon: Upload,       color: "text-blue-500",   label: "Document Uploaded" },
+  "compliance.approved":    { icon: FileCheck,    color: "text-green-500",  label: "Document Approved" },
+  "partner.activated":      { icon: CheckCircle,  color: "text-green-500",  label: "Partner Activated" },
+  "terms.accepted":         { icon: ScrollText,   color: "text-teal-500",   label: "Terms Accepted" },
+  "team.created":           { icon: UserPlus,     color: "text-indigo-500", label: "Team Member Added" },
+  "team.updated":           { icon: Settings,     color: "text-slate-500",  label: "Team Member Updated" },
+  "team.deleted":           { icon: XCircle,      color: "text-red-400",    label: "Team Member Removed" },
+  "profile.updated":        { icon: Settings,     color: "text-slate-500",  label: "Profile Updated" },
 };
 
 function getActionMeta(action: string) {
   return ACTION_META[action] ?? {
     icon: History,
-    label: action.replace(/\./g, " · ").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+    color: "text-muted-foreground",
+    label: action.replace(/\./g, " › ").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
   };
 }
 
 function groupByDay(logs: any[]) {
   const groups: Record<string, any[]> = {};
   for (const log of logs) {
-    const key = format(new Date(log.createdAt), "yyyy-MM-dd");
+    const date = new Date(log.createdAt);
+    const key = format(date, "yyyy-MM-dd");
     if (!groups[key]) groups[key] = [];
     groups[key].push(log);
   }
@@ -51,67 +53,78 @@ function dayLabel(dateStr: string) {
 
 export default function PartnerAudit() {
   const { data: logs = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/partner/audit-log"] });
+
   const grouped = groupByDay(logs);
   const days = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
   return (
     <PartnerLayout>
-      <div className="p-6 max-w-2xl space-y-6">
+      <div className="p-6 max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-xl font-semibold">Audit Log</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Complete record of actions taken in your portal
+          <h1 className="text-2xl font-bold">Audit Log</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            A complete record of actions taken in your partner portal
           </p>
         </div>
 
-        <Separator />
-
         {isLoading ? (
           <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
           </div>
         ) : logs.length === 0 ? (
-          <div className="flex flex-col items-center py-16 gap-2 text-muted-foreground">
-            <History className="w-8 h-8" />
-            <p className="text-sm">No activity recorded yet</p>
-          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center py-16 gap-3">
+              <History className="w-10 h-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No activity recorded yet</p>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {days.map(day => (
               <div key={day}>
-                <p className="text-xs font-medium text-muted-foreground mb-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                   {dayLabel(day)}
                 </p>
-                <div className="space-y-px">
-                  {grouped[day].map((log: any, idx: number) => {
-                    const meta = getActionMeta(log.action);
-                    const Icon = meta.icon;
-                    return (
-                      <div key={log.id}>
+                <div className="relative">
+                  {/* Vertical line */}
+                  <div className="absolute left-[18px] top-0 bottom-0 w-px bg-border" />
+                  <div className="space-y-1">
+                    {grouped[day].map((log: any, idx: number) => {
+                      const meta = getActionMeta(log.action);
+                      const Icon = meta.icon;
+                      return (
                         <div
-                          className="flex items-start gap-3 py-2.5 px-2 rounded-md"
+                          key={log.id}
+                          className="relative flex items-start gap-4 pl-10"
                           data-testid={`row-log-${log.id}`}
                         >
-                          <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm">{meta.label}</p>
-                            {log.notes && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{log.notes}</p>
-                            )}
-                            {log.objectType && log.objectId && (
-                              <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                                {log.objectType} · {log.objectId.slice(-10)}
-                              </p>
-                            )}
+                          {/* Icon dot on the line */}
+                          <div className={`absolute left-0 flex items-center justify-center w-9 h-9 rounded-full bg-background border-2 border-border shrink-0`}>
+                            <Icon className={`w-4 h-4 ${meta.color}`} />
                           </div>
-                          <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                            {format(new Date(log.createdAt), "h:mm a")}
-                          </span>
+                          {/* Content */}
+                          <div className={`flex-1 pb-4 ${idx === grouped[day].length - 1 ? "" : ""}`}>
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <div>
+                                <p className="text-sm font-medium">{meta.label}</p>
+                                {log.notes && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">{log.notes}</p>
+                                )}
+                                {log.objectType && log.objectId && (
+                                  <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                                    {log.objectType} · {log.objectId.slice(-10)}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {format(new Date(log.createdAt), "h:mm a")}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        {idx < grouped[day].length - 1 && <Separator className="opacity-30" />}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ))}
