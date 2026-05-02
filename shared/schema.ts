@@ -1135,6 +1135,11 @@ export const partners = pgTable("partners", {
   activatedBy: varchar("activated_by").references(() => users.id),
   suspendedAt: timestamp("suspended_at"),
   suspendedReason: text("suspended_reason"),
+  // Stripe Connect for partner payouts
+  stripeAccountId: text("stripe_account_id"),
+  stripeConnectStatus: text("stripe_connect_status").default("not_connected"), // not_connected | pending | active | restricted
+  stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false),
+  stripeDetailsSubmitted: boolean("stripe_details_submitted").default(false),
   // Notes from Lervit admin
   adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

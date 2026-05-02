@@ -28,11 +28,13 @@ import {
   LogOut,
   Building2,
   History,
+  DollarSign,
 } from "lucide-react";
 
 const navItems = [
   { path: "/partner/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/partner/bookings", label: "Bookings", icon: Package },
+  { path: "/partner/earnings", label: "Earnings", icon: DollarSign },
   { path: "/partner/onboarding", label: "Onboarding", icon: ClipboardCheck },
   { path: "/partner/compliance", label: "Compliance", icon: FileCheck },
   { path: "/partner/incidents", label: "Incidents", icon: AlertTriangle },

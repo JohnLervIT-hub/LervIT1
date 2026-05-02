@@ -18,6 +18,7 @@ import { z } from "zod";
 import { eq, and, desc, inArray, or } from "drizzle-orm";
 import multer from "multer";
 import { randomBytes } from "crypto";
+import { stripe } from "./config/stripe";
 import {
   users,
   bookings,
@@ -1008,6 +1009,145 @@ export function registerPartnerRoutes(app: Express) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
       console.error("[Partner] proof upload error:", err);
       res.status(500).json({ error: "Proof upload failed" });
+    }
+  });
+
+  // =========================================================
+  // STRIPE CONNECT
+  // =========================================================
+
+  // POST /api/partner/stripe/connect — create or resume Stripe Connect Express onboarding
+  app.post("/api/partner/stripe/connect", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    const { user, partner } = (req as any).partnerCtx;
+    try {
+      let stripeAccountId = partner.stripeAccountId;
+
+      if (!stripeAccountId) {
+        // Create a new Stripe Express account for the partner company
+        const account = await stripe.accounts.create({
+          type: "express",
+          country: "CA",
+          email: partner.billingEmail ?? user.email,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+          business_type: "company",
+          business_profile: {
+            name: partner.legalName,
+            url: "https://lervit.com",
+            product_description: "Enterprise moving and delivery fulfillment services",
+            mcc: "4214",
+          },
+          metadata: {
+            partnerId: partner.id,
+            userId: user.id,
+          },
+        });
+        stripeAccountId = account.id;
+
+        await db.update(partners)
+          .set({ stripeAccountId, stripeConnectStatus: "pending", updatedAt: new Date() })
+          .where(eq(partners.id, partner.id));
+      }
+
+      const baseUrl = req.headers.origin || `https://${req.headers.host}`;
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: `${baseUrl}/partner/earnings?stripe_refresh=true`,
+        return_url: `${baseUrl}/partner/earnings?stripe_success=true`,
+        type: "account_onboarding",
+      });
+
+      res.json({ url: accountLink.url });
+    } catch (err: any) {
+      console.error("[Partner] Stripe connect error:", err);
+      res.status(500).json({ error: err.message ?? "Failed to start Stripe onboarding" });
+    }
+  });
+
+  // GET /api/partner/stripe/status — return current Stripe Connect status
+  app.get("/api/partner/stripe/status", requirePartnerAuth(), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+    try {
+      if (!partner.stripeAccountId) {
+        return res.json({ status: "not_connected", payoutsEnabled: false, chargesEnabled: false });
+      }
+
+      // Sync live status from Stripe
+      const acct = await stripe.accounts.retrieve(partner.stripeAccountId);
+      const status = acct.details_submitted
+        ? acct.payouts_enabled ? "active" : "restricted"
+        : "pending";
+
+      await db.update(partners)
+        .set({
+          stripeConnectStatus: status,
+          stripePayoutsEnabled: acct.payouts_enabled ?? false,
+          stripeDetailsSubmitted: acct.details_submitted ?? false,
+          updatedAt: new Date(),
+        })
+        .where(eq(partners.id, partner.id));
+
+      res.json({
+        status,
+        payoutsEnabled: acct.payouts_enabled,
+        chargesEnabled: acct.charges_enabled,
+        detailsSubmitted: acct.details_submitted,
+        currentlyDue: acct.requirements?.currently_due ?? [],
+      });
+    } catch (err: any) {
+      console.error("[Partner] Stripe status error:", err);
+      res.status(500).json({ error: "Failed to fetch Stripe status" });
+    }
+  });
+
+  // GET /api/partner/stripe/dashboard-link — Stripe Express dashboard link
+  app.get("/api/partner/stripe/dashboard-link", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+    try {
+      if (!partner.stripeAccountId) {
+        return res.status(400).json({ error: "No Stripe account connected" });
+      }
+      const loginLink = await stripe.accounts.createLoginLink(partner.stripeAccountId);
+      res.json({ url: loginLink.url });
+    } catch (err: any) {
+      console.error("[Partner] Stripe dashboard link error:", err);
+      res.status(500).json({ error: "Failed to generate Stripe dashboard link" });
+    }
+  });
+
+  // GET /api/partner/earnings — full earnings history (all completed bookings)
+  app.get("/api/partner/earnings", requirePartnerAuth(), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+    try {
+      const allBookings = await db.select().from(bookings)
+        .where(and(eq(bookings.enterprisePartnerId, partner.id), eq(bookings.enterpriseStatus, "completed")))
+        .orderBy(desc(bookings.updatedAt));
+
+      const partnerNet = (b: typeof allBookings[0]): number => {
+        const price = parseFloat(b.price ?? "0");
+        const fee = parseFloat((b as any).platformFeeAmount ?? "0");
+        if (fee > 0) return Math.max(0, price - fee);
+        const feePercent = parseFloat((b as any).platformFeePercent ?? "15");
+        return Math.max(0, price * (1 - feePercent / 100));
+      };
+
+      const earnings = allBookings.map(b => ({
+        id: b.id,
+        pickupAddress: b.pickupAddress,
+        dropoffAddress: b.dropoffAddress,
+        price: b.price,
+        partnerNet: partnerNet(b).toFixed(2),
+        platformFeePercent: (b as any).platformFeePercent ?? "15.00",
+        platformFeeAmount: (b as any).platformFeeAmount ?? null,
+        completedAt: b.updatedAt,
+      }));
+
+      res.json({ earnings });
+    } catch (err) {
+      console.error("[Partner] earnings history error:", err);
+      res.status(500).json({ error: "Failed to fetch earnings" });
     }
   });
 

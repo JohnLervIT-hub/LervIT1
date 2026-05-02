@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { PartnerLayout } from "./PartnerLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Package, AlertTriangle, Users, CheckCircle, Clock,
   ChevronRight, ArrowRight, Plus, FileCheck, Truck,
-  TrendingUp, Activity, DollarSign, MapPin,
+  TrendingUp, Activity, DollarSign, MapPin, ExternalLink, Shield,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -69,8 +71,22 @@ function ColorStatCard({
 }
 
 export default function PartnerDashboard() {
+  const { toast } = useToast();
   const { data, isLoading } = useQuery<any>({ queryKey: ["/api/partner/dashboard"] });
   const { data: ctx } = useQuery<any>({ queryKey: ["/api/partner/me"] });
+  const { data: stripeData } = useQuery<any>({ queryKey: ["/api/partner/stripe/status"] });
+
+  const connectMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/partner/stripe/connect"),
+    onSuccess: (data: any) => { if (data?.url) window.location.href = data.url; },
+    onError: () => toast({ title: "Failed to start Stripe onboarding", variant: "destructive" }),
+  });
+
+  const dashboardLinkMutation = useMutation({
+    mutationFn: () => apiRequest("GET", "/api/partner/stripe/dashboard-link"),
+    onSuccess: (data: any) => { if (data?.url) window.open(data.url, "_blank"); },
+    onError: () => toast({ title: "Could not open Stripe Dashboard", variant: "destructive" }),
+  });
 
   const stats = data?.stats;
   const partner = data?.partner ?? ctx?.partner;
@@ -82,6 +98,10 @@ export default function PartnerDashboard() {
   const pendingEarnings = stats?.pendingEarnings ?? "0.00";
   const recentEarnings: any[] = stats?.recentEarnings ?? [];
   const hasEarnings = parseFloat(totalEarnings) > 0;
+
+  const stripeConnected = stripeData?.status === "active";
+  const stripePending = stripeData?.status === "pending" || stripeData?.status === "restricted";
+  const totalPaidOut = stripeConnected ? totalEarnings : null;
 
   return (
     <PartnerLayout>
@@ -129,6 +149,77 @@ export default function PartnerDashboard() {
           </div>
         )}
 
+        {/* ── Stripe Connect banner ────────────────────── */}
+        {!stripeConnected && !stripePending && (
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-primary/10 rounded-md p-2 shrink-0">
+                <Shield className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm">Connect Stripe to receive payouts</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Set up your payout account to receive earnings from completed bookings automatically.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link href="/partner/earnings">
+                  <Button variant="outline" size="sm" data-testid="button-setup-payouts">
+                    Set Up Payouts
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {stripePending && (
+          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-100 dark:bg-amber-900/30 rounded-md p-2">
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Stripe onboarding in progress</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Complete setup to enable payouts</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => connectMutation.mutate()}
+                disabled={connectMutation.isPending}
+                data-testid="button-stripe-continue-dashboard"
+              >
+                {connectMutation.isPending ? "Loading..." : "Continue Setup"}
+                <ArrowRight className="w-3 h-3 ml-1.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {stripeConnected && (
+          <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Stripe payouts active</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => dashboardLinkMutation.mutate()}
+                disabled={dashboardLinkMutation.isPending}
+                data-testid="button-stripe-dashboard-link"
+                className="text-xs"
+              >
+                Open Stripe Dashboard <ExternalLink className="w-3 h-3 ml-1.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ── Top stat row ─────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <ColorStatCard
@@ -138,6 +229,7 @@ export default function PartnerDashboard() {
             icon={DollarSign}
             gradient="bg-gradient-to-br from-amber-500 to-orange-600"
             loading={isLoading}
+            href="/partner/earnings"
           />
           <ColorStatCard
             title="Active Bookings"
@@ -174,11 +266,11 @@ export default function PartnerDashboard() {
               <DollarSign className="w-4 h-4 text-amber-500" />
               Earnings Breakdown
             </CardTitle>
-            {hasPending && (
-              <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                ${fmt(pendingEarnings)} pending
-              </Badge>
-            )}
+            <Link href="/partner/earnings">
+              <Button variant="ghost" size="sm" className="text-xs" data-testid="link-full-earnings">
+                Full History <ChevronRight className="w-3 h-3 ml-1" />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -188,25 +280,34 @@ export default function PartnerDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Summary row */}
-                <div className="grid grid-cols-3 gap-4">
+                {/* Summary row — 4 columns */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Total Earned</p>
-                    <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5" data-testid="earnings-total">
+                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5" data-testid="earnings-total">
                       ${fmt(totalEarnings)}
                     </p>
                     <p className="text-xs text-muted-foreground">all time</p>
                   </div>
                   <div>
+                    <p className="text-xs text-muted-foreground">Total Paid Out</p>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5" data-testid="earnings-paidout">
+                      {totalPaidOut !== null ? `$${fmt(totalPaidOut)}` : "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {totalPaidOut !== null ? "via Stripe" : "connect Stripe"}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-xs text-muted-foreground">This Month</p>
-                    <p className="text-2xl font-bold mt-0.5" data-testid="earnings-month">
+                    <p className="text-xl font-bold mt-0.5" data-testid="earnings-month">
                       ${fmt(thisMonthEarnings)}
                     </p>
                     <p className="text-xs text-muted-foreground">{format(new Date(), "MMMM yyyy")}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Pending</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-0.5" data-testid="earnings-pending">
+                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-0.5" data-testid="earnings-pending">
                       ${fmt(pendingEarnings)}
                     </p>
                     <p className="text-xs text-muted-foreground">from active jobs</p>
