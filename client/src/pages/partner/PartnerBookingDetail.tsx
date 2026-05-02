@@ -11,12 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, MapPin, Calendar, Package, CheckCircle, XCircle,
-  User, Truck, AlertTriangle, Upload, Clock, ChevronRight,
-  Loader2, DollarSign, Users, Route, Navigation,
+  User, Truck, AlertTriangle, Upload, Clock, ChevronRight, ChevronLeft,
+  Loader2, DollarSign, Users, Route, Navigation, ZoomIn, Images,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -78,6 +79,9 @@ export default function PartnerBookingDetail() {
 
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [showImagePreview, setShowImagePreview] = useState(false);
   const [showAssignForm, setShowAssignForm] = useState(false);
   const [showStatusForm, setShowStatusForm] = useState(false);
   const [statusNotes, setStatusNotes] = useState("");
@@ -312,6 +316,56 @@ export default function PartnerBookingDetail() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Item Photos */}
+        {booking.images && booking.images.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Images className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">
+                  Item Photos ({booking.images.length})
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {booking.images.map((imageUrl: string, index: number) => (
+                  <div
+                    key={index}
+                    className="relative aspect-square rounded-md overflow-hidden border cursor-pointer group"
+                    onClick={() => {
+                      setPreviewImages(booking.images ?? []);
+                      setPreviewIndex(index);
+                      setShowImagePreview(true);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        setPreviewImages(booking.images ?? []);
+                        setPreviewIndex(index);
+                        setShowImagePreview(true);
+                      }
+                    }}
+                    aria-label={`View item photo ${index + 1} of ${booking.images.length}`}
+                    data-testid={`button-preview-image-${index}`}
+                  >
+                    <img
+                      src={imageUrl}
+                      alt={`Item ${index + 1}`}
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      data-testid={`image-item-${index}`}
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Actions (all non-terminal states) */}
         {!isTerminal && (
@@ -579,6 +633,55 @@ export default function PartnerBookingDetail() {
           </Card>
         )}
       </div>
+
+      {/* Image Lightbox */}
+      <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
+        <DialogContent className="max-w-4xl p-0 bg-black/95 border-none">
+          <DialogTitle className="sr-only">Image Preview</DialogTitle>
+          <DialogDescription className="sr-only">
+            Viewing image {previewIndex + 1} of {previewImages.length}
+          </DialogDescription>
+          <div className="relative flex items-center justify-center min-h-[60vh]">
+            {previewImages.length > 0 && (
+              <>
+                <img
+                  src={previewImages[previewIndex]}
+                  alt={`Preview ${previewIndex + 1}`}
+                  className="max-w-full max-h-[80vh] object-contain"
+                  data-testid="img-preview-full"
+                />
+                {previewImages.length > 1 && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full"
+                      onClick={() => setPreviewIndex(p => p > 0 ? p - 1 : previewImages.length - 1)}
+                      aria-label="Previous image"
+                      data-testid="button-prev-image"
+                    >
+                      <ChevronLeft className="w-6 h-6" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full"
+                      onClick={() => setPreviewIndex(p => p < previewImages.length - 1 ? p + 1 : 0)}
+                      aria-label="Next image"
+                      data-testid="button-next-image"
+                    >
+                      <ChevronRight className="w-6 h-6" />
+                    </Button>
+                  </>
+                )}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
+                  {previewIndex + 1} / {previewImages.length}
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </PartnerLayout>
   );
 }
