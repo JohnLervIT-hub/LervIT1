@@ -55,8 +55,26 @@ const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 const LOAD_SIZE_LABEL: Record<string, string> = {
-  boxes: "Boxes / Small", medium: "Medium", large: "Large", apartment: "Full Apartment",
+  boxes: "Boxes Only (0–20 ft³)",
+  medium: "Medium Load (21–180 ft³)",
+  large: "Large Load (181–300 ft³)",
+  apartment: "Full Apartment (300+ ft³)",
 };
+
+const VEHICLE_CLASS_LABEL: Record<string, string> = {
+  A: "Class A – Small Van",
+  B: "Class B – Cargo Van",
+  C: "Class C – Cargo Van",
+  D: "Class D – Large Van",
+  E: "Class E – Box Truck",
+};
+
+function getClassFromLoadSize(loadSize: string): string {
+  const map: Record<string, string> = {
+    boxes: "A", small: "B", medium: "C", large: "D", apartment: "E",
+  };
+  return map[loadSize] ?? "C";
+}
 
 function formatStatus(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -294,10 +312,19 @@ export default function PartnerBookingDetail() {
                   <span className="text-sm font-medium ml-auto">{format(new Date(booking.preferredDate), "PPP p")}</span>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <div className="bg-muted/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Load</p>
-                  <p className="font-semibold text-sm">{LOAD_SIZE_LABEL[booking.loadSize] ?? booking.loadSize?.replace("_", " ") ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Load Size</p>
+                  <p className="font-semibold text-sm leading-snug">{LOAD_SIZE_LABEL[booking.loadSize] ?? booking.loadSize?.replace("_", " ") ?? "—"}</p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-3 flex items-start gap-2">
+                  <Truck className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Vehicle Class</p>
+                    <p className="font-semibold text-sm leading-snug">
+                      {VEHICLE_CLASS_LABEL[getClassFromLoadSize(booking.loadSize)] ?? `Class ${getClassFromLoadSize(booking.loadSize)}`}
+                    </p>
+                  </div>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Movers</p>
