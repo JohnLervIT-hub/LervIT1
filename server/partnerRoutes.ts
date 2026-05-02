@@ -575,6 +575,34 @@ export function registerPartnerRoutes(app: Express) {
     res.json({ success: true });
   });
 
+  // POST /api/partner/team/:id/vehicle-photo
+  app.post("/api/partner/team/:id/vehicle-photo", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), upload.single("file"), async (req: Request, res: Response) => {
+    const { partner, user } = (req as any).partnerCtx;
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+    if (!allowed.includes(req.file.mimetype)) return res.status(400).json({ error: "Only image files are accepted" });
+
+    const [member] = await db.select().from(partnerTeamMembers)
+      .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
+      .limit(1);
+    if (!member) return res.status(404).json({ error: "Team member not found" });
+
+    try {
+      const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
+      const objectKey = `partner/${partner.id}/team/${member.id}/vehicle.${ext}`;
+      const url = await objectStorage.uploadFile(objectKey, req.file.buffer, req.file.mimetype);
+      const [updated] = await db.update(partnerTeamMembers)
+        .set({ vehiclePhoto: url })
+        .where(eq(partnerTeamMembers.id, member.id))
+        .returning();
+      await logAudit(partner.id, user.id, "team.vehicle_photo_uploaded", "partner_team_member", member.id);
+      res.json(updated);
+    } catch (err) {
+      console.error("[Partner] vehicle photo upload error:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   // =========================================================
   // BOOKING INBOX
   // =========================================================

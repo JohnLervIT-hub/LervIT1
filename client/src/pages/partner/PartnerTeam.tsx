@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +11,91 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Loader2, Truck, User, Pencil, Trash2 } from "lucide-react";
+import { Users, Plus, Loader2, Truck, User, Pencil, Trash2, Camera, ImageOff } from "lucide-react";
+
+function VehiclePhotoUpload({ member }: { member: any }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<string | null>(member.vehiclePhoto ?? null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Only image files accepted", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/partner/team/${member.id}/vehicle-photo`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Upload failed");
+      }
+      const updated = await res.json();
+      setPreview(updated.vehiclePhoto);
+      qc.invalidateQueries({ queryKey: ["/api/partner/team"] });
+      toast({ title: "Vehicle photo uploaded" });
+    } catch (err: any) {
+      toast({ title: err.message ?? "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {preview ? (
+        <div className="relative shrink-0 group">
+          <img
+            src={preview}
+            alt="Vehicle"
+            className="w-14 h-10 object-cover rounded-md border border-border"
+            data-testid={`img-vehicle-${member.id}`}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="absolute inset-0 flex items-center justify-center rounded-md bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Replace photo"
+          >
+            <Camera className="w-3.5 h-3.5 text-white" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center justify-center w-14 h-10 rounded-md border border-dashed border-border bg-muted/40 hover-elevate shrink-0"
+          title="Upload vehicle photo"
+          data-testid={`button-upload-vehicle-${member.id}`}
+        >
+          {uploading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+          ) : (
+            <Camera className="w-3.5 h-3.5 text-muted-foreground" />
+          )}
+        </button>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFile}
+        data-testid={`input-vehicle-photo-${member.id}`}
+      />
+    </div>
+  );
+}
 
 function TeamMemberDialog({
   member,
@@ -169,13 +253,10 @@ export default function PartnerTeam() {
               <Card key={member.id} data-testid={`card-member-${member.id}`}>
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center w-10 h-10 rounded-md shrink-0 ${member.isAvailable ? "bg-green-100 dark:bg-green-900/30" : "bg-muted"}`}>
-                      {member.memberType === "team" ? (
-                        <Users className={`w-5 h-5 ${member.isAvailable ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`} />
-                      ) : (
-                        <User className={`w-5 h-5 ${member.isAvailable ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`} />
-                      )}
-                    </div>
+                    {/* Vehicle photo / placeholder */}
+                    <VehiclePhotoUpload member={member} />
+
+                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium">{member.name}</p>
@@ -193,10 +274,13 @@ export default function PartnerTeam() {
                           <span className="flex items-center gap-1">
                             <Truck className="w-3 h-3" />{member.vehicleType}
                             {member.vehiclePlate && ` · ${member.vehiclePlate}`}
+                            {member.vehicleColor && ` · ${member.vehicleColor}`}
                           </span>
                         )}
                       </div>
                     </div>
+
+                    {/* Actions */}
                     <div className="flex items-center gap-1 shrink-0">
                       <Switch
                         checked={member.isAvailable}
