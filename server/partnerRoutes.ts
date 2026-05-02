@@ -1025,17 +1025,61 @@ export function registerPartnerRoutes(app: Express) {
 
       const activeStatuses = ["new", "under_review", "accepted", "assigned", "en_route_to_pickup", "arrived_at_pickup", "picked_up", "in_transit", "arrived_at_dropoff", "delivered", "delayed", "issue_reported"];
 
+      // Earnings helpers — partner net = price minus platform fee
+      const partnerNet = (b: typeof allBookings[0]): number => {
+        const price = parseFloat(b.price ?? "0");
+        const fee = parseFloat((b as any).platformFeeAmount ?? "0");
+        if (fee > 0) return Math.max(0, price - fee);
+        const feePercent = parseFloat((b as any).platformFeePercent ?? "15");
+        return Math.max(0, price * (1 - feePercent / 100));
+      };
+
+      const completedBookings = allBookings.filter(b => b.enterpriseStatus === "completed");
+      const activeBookingsList = allBookings.filter(b => activeStatuses.includes(b.enterpriseStatus || ""));
+
+      // Current calendar month boundaries
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+      const thisMonthCompleted = completedBookings.filter(b => {
+        const d = b.updatedAt ? new Date(b.updatedAt) : null;
+        return d && d >= monthStart && d <= monthEnd;
+      });
+
+      const totalEarnings = completedBookings.reduce((sum, b) => sum + partnerNet(b), 0);
+      const thisMonthEarnings = thisMonthCompleted.reduce((sum, b) => sum + partnerNet(b), 0);
+      const pendingEarnings = activeBookingsList.reduce((sum, b) => sum + partnerNet(b), 0);
+
+      // Last 5 completed bookings with their earnings for the earnings list
+      const recentEarnings = completedBookings
+        .sort((a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime())
+        .slice(0, 5)
+        .map(b => ({
+          id: b.id,
+          pickupAddress: b.pickupAddress,
+          dropoffAddress: b.dropoffAddress,
+          price: b.price,
+          partnerNet: partnerNet(b).toFixed(2),
+          platformFeePercent: (b as any).platformFeePercent ?? "15.00",
+          completedAt: b.updatedAt,
+        }));
+
       const stats = {
         totalBookings: allBookings.length,
-        activeBookings: allBookings.filter(b => activeStatuses.includes(b.enterpriseStatus || "")),
+        activeBookings: activeBookingsList,
         pendingBookings: allBookings.filter(b => ["new", "under_review"].includes(b.enterpriseStatus || "")).length,
-        completedBookings: allBookings.filter(b => b.enterpriseStatus === "completed").length,
+        completedBookings: completedBookings.length,
         cancelledBookings: allBookings.filter(b => b.enterpriseStatus === "cancelled").length,
         openIncidents: incidents.filter(i => ["open", "under_review"].includes(i.status)).length,
         criticalIncidents: incidents.filter(i => i.severity === "critical" && i.status !== "resolved").length,
         activeTeamMembers: team.filter(t => t.isAvailable).length,
         totalTeamMembers: team.length,
-        recentBookings: allBookings.slice(-5),
+        // Earnings
+        totalEarnings: totalEarnings.toFixed(2),
+        thisMonthEarnings: thisMonthEarnings.toFixed(2),
+        pendingEarnings: pendingEarnings.toFixed(2),
+        recentEarnings,
       };
 
       res.json({ partner, stats });

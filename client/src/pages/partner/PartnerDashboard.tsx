@@ -6,11 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import {
   Package, AlertTriangle, Users, CheckCircle, Clock,
   ChevronRight, ArrowRight, Plus, FileCheck, Truck,
-  TrendingUp, Activity,
+  TrendingUp, Activity, DollarSign, MapPin,
 } from "lucide-react";
+import { format } from "date-fns";
 
 const STATUS_COLOR: Record<string, string> = {
   new: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
@@ -29,25 +31,30 @@ function formatStatus(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function fmt(n: string | number | undefined) {
+  const val = parseFloat(String(n ?? "0"));
+  return val.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function ColorStatCard({
   title, value, sub, icon: Icon, gradient, loading, href,
 }: {
-  title: string; value: number | string; sub?: string;
+  title: string; value: string | number; sub?: string;
   icon: React.ElementType; gradient: string; loading?: boolean; href?: string;
 }) {
   const inner = (
-    <div className={`rounded-lg p-5 text-white ${gradient} cursor-pointer`} data-testid={`stat-${title.toLowerCase().replace(/\s/g, "-")}`}>
+    <div className={`rounded-lg p-5 text-white ${gradient}`} data-testid={`stat-${title.toLowerCase().replace(/\s/g, "-")}`}>
       <div className="flex items-start justify-between">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-white/80">{title}</p>
           {loading ? (
-            <div className="h-9 w-16 bg-white/20 rounded animate-pulse mt-1" />
+            <div className="h-9 w-24 bg-white/20 rounded animate-pulse mt-1" />
           ) : (
-            <p className="text-3xl font-bold mt-1">{value}</p>
+            <p className="text-3xl font-bold mt-1 leading-none">{value}</p>
           )}
-          {sub && <p className="text-xs text-white/70 mt-1">{sub}</p>}
+          {sub && <p className="text-xs text-white/70 mt-1.5">{sub}</p>}
         </div>
-        <div className="bg-white/20 rounded-md p-2">
+        <div className="bg-white/20 rounded-md p-2 shrink-0 ml-3">
           <Icon className="w-5 h-5 text-white" />
         </div>
       </div>
@@ -70,6 +77,12 @@ export default function PartnerDashboard() {
   const hasOpenIncidents = (stats?.openIncidents ?? 0) > 0;
   const hasPending = (stats?.pendingBookings ?? 0) > 0;
 
+  const totalEarnings = stats?.totalEarnings ?? "0.00";
+  const thisMonthEarnings = stats?.thisMonthEarnings ?? "0.00";
+  const pendingEarnings = stats?.pendingEarnings ?? "0.00";
+  const recentEarnings: any[] = stats?.recentEarnings ?? [];
+  const hasEarnings = parseFloat(totalEarnings) > 0;
+
   return (
     <PartnerLayout>
       <div className="p-6 space-y-6 max-w-6xl">
@@ -79,12 +92,10 @@ export default function PartnerDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-primary" />
-              <h1 className="text-2xl font-bold">
-                {partner?.name ?? "Partner Portal"}
-              </h1>
+              <h1 className="text-2xl font-bold">{partner?.name ?? "Partner Portal"}</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {partner?.name && `${partner.name} · `}Operations Overview
+              Operations &amp; Earnings Overview
             </p>
           </div>
           {partner?.status === "active" && (
@@ -118,16 +129,15 @@ export default function PartnerDashboard() {
           </div>
         )}
 
-        {/* Stat cards */}
+        {/* ── Top stat row ─────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <ColorStatCard
-            title="Pending Bookings"
-            value={stats?.pendingBookings ?? 0}
-            sub={hasPending ? "Awaiting your response" : "All caught up"}
-            icon={Clock}
-            gradient={hasPending ? "bg-gradient-to-br from-blue-500 to-blue-700" : "bg-gradient-to-br from-slate-500 to-slate-700"}
+            title="Total Earned"
+            value={`$${fmt(totalEarnings)}`}
+            sub="All completed bookings"
+            icon={DollarSign}
+            gradient="bg-gradient-to-br from-amber-500 to-orange-600"
             loading={isLoading}
-            href="/partner/bookings"
           />
           <ColorStatCard
             title="Active Bookings"
@@ -157,7 +167,102 @@ export default function PartnerDashboard() {
           />
         </div>
 
-        {/* Quick actions */}
+        {/* ── Earnings breakdown card ───────────────────── */}
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-amber-500" />
+              Earnings Breakdown
+            </CardTitle>
+            {hasPending && (
+              <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                ${fmt(pendingEarnings)} pending
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-8 w-48" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Summary row */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Earned</p>
+                    <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-0.5" data-testid="earnings-total">
+                      ${fmt(totalEarnings)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">all time</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">This Month</p>
+                    <p className="text-2xl font-bold mt-0.5" data-testid="earnings-month">
+                      ${fmt(thisMonthEarnings)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{format(new Date(), "MMMM yyyy")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pending</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-0.5" data-testid="earnings-pending">
+                      ${fmt(pendingEarnings)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">from active jobs</p>
+                  </div>
+                </div>
+
+                {/* Recent earnings list */}
+                {recentEarnings.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Recent Completed Jobs
+                      </p>
+                      <div className="space-y-1">
+                        {recentEarnings.map((e: any) => (
+                          <Link key={e.id} href={`/partner/bookings/${e.id}`}>
+                            <div
+                              className="flex items-center justify-between px-3 py-2.5 rounded-md hover-elevate cursor-pointer gap-3"
+                              data-testid={`row-earning-${e.id}`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm truncate">{e.pickupAddress}</p>
+                                  <p className="text-xs text-muted-foreground truncate">→ {e.dropoffAddress}</p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                  ${fmt(e.partnerNet)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  of ${fmt(e.price)} · {parseFloat(e.platformFeePercent).toFixed(0)}% fee
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {!hasEarnings && recentEarnings.length === 0 && (
+                  <div className="flex flex-col items-center py-6 gap-2 text-muted-foreground">
+                    <DollarSign className="w-8 h-8" />
+                    <p className="text-sm">Earnings will appear once bookings are completed</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Quick actions ─────────────────────────────── */}
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</p>
           <div className="flex flex-wrap gap-2">
@@ -184,14 +289,19 @@ export default function PartnerDashboard() {
           </div>
         </div>
 
-        {/* Main content grid */}
+        {/* ── Bottom grid ───────────────────────────────── */}
         <div className="grid lg:grid-cols-3 gap-5">
-          {/* Active bookings — 2 col */}
+          {/* Active bookings — 2 cols */}
           <Card className="lg:col-span-2">
             <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Truck className="w-4 h-4 text-indigo-500" />
                 Active Bookings
+                {hasPending && (
+                  <Badge className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 ml-1">
+                    {stats.pendingBookings} new
+                  </Badge>
+                )}
               </CardTitle>
               <Link href="/partner/bookings">
                 <Button variant="ghost" size="sm" data-testid="link-all-bookings" className="text-xs">
@@ -201,9 +311,7 @@ export default function PartnerDashboard() {
             </CardHeader>
             <CardContent className="space-y-1">
               {isLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
-                ))
+                Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)
               ) : (stats?.activeBookings?.length ?? 0) === 0 ? (
                 <div className="flex flex-col items-center py-10 gap-2 text-muted-foreground">
                   <Package className="w-8 h-8" />
@@ -252,7 +360,9 @@ export default function PartnerDashboard() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Available now</span>
-                      <span className="font-bold text-green-600 dark:text-green-400 text-lg">{stats?.activeTeamMembers ?? 0}</span>
+                      <span className="font-bold text-green-600 dark:text-green-400 text-lg">
+                        {stats?.activeTeamMembers ?? 0}
+                      </span>
                     </div>
                     <Progress
                       value={stats?.totalTeamMembers ? (stats.activeTeamMembers / stats.totalTeamMembers) * 100 : 0}
@@ -267,7 +377,7 @@ export default function PartnerDashboard() {
               </CardContent>
             </Card>
 
-            {/* Performance snapshot */}
+            {/* Performance */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -295,10 +405,8 @@ export default function PartnerDashboard() {
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Pending response</span>
-                      <span className={`font-semibold ${hasPending ? "text-amber-600 dark:text-amber-400" : ""}`}>
-                        {stats?.pendingBookings ?? 0}
-                      </span>
+                      <span className="text-muted-foreground">Platform fee</span>
+                      <span className="font-semibold text-muted-foreground">15%</span>
                     </div>
                   </>
                 )}
