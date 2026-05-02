@@ -56,6 +56,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
+import { registerPartnerRoutes } from "./partnerRoutes";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -10747,6 +10748,9 @@ Respond with VALID JSON only:
       res.status(500).json({ error: "Failed to fetch ops metrics" });
     }
   });
+
+  // Register enterprise partner portal routes
+  registerPartnerRoutes(app);
 
   const httpServer = createServer(app);
   

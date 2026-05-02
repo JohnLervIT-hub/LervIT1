@@ -1,0 +1,869 @@
+# Lervit Enterprise Partner Portal PRD — OOMovers Pilot (v1.0)
+
+## 1. Executive Summary
+
+Lervit is building an enterprise partner portal to operationalize pilot fulfillment with OOMovers and establish a scalable model for future enterprise logistics partners. The portal will allow partner organizations to onboard into Lervit, configure service coverage and dispatch readiness, receive and manage bookings, assign teams and vehicles, update fulfillment statuses, and report incidents — all while preserving Lervit as the customer-facing platform.
+
+This product matters now because Lervit has moved beyond informal partnership discussions into active pilot execution. Manual coordination through email, calls, or messaging may work for a few bookings, but it does not provide the consistency, auditability, visibility, or customer experience required for a reliable marketplace. At the same time, moving directly into a full API integration would be premature at this stage because workflow details, operational ownership, and partner technical readiness still need validation.
+
+A portal-first approach is the right move because it gives Lervit a fast and controlled way to launch the enterprise workflow, validate real operational requirements, and standardize backend processes before automating them more deeply. The portal will be built as a partner-generic interface on top of the same shared backend used by Lervit’s customer-facing product, ensuring compatibility with future native mobile apps and later API-based enterprise integrations.
+
+## 2. Background and Problem Statement
+
+### Background
+
+Lervit is an AI-powered micro-logistics platform focused on small-load and short-haul moving. The company has signed a term sheet with OOMovers, an enterprise moving partner, and needs a practical way to operationalize the relationship.
+
+### Problem Statement
+
+Lervit needs a structured enterprise operations layer that supports pilot fulfillment without creating fragmented workflows, technical debt, or customer confusion.
+
+Current challenges include:
+
+* Manual handoff methods such as phone, email, and messaging do not scale.
+* There is no standardized partner-side workflow for booking acceptance, dispatch readiness, status updates, or incident handling.
+* Lervit still needs visibility and control over enterprise-fulfilled jobs because customers book through Lervit, not directly through the partner.
+* Full direct API integration is too early because the exact workflow, data requirements, and partner technical capabilities still need to be validated in real pilot operations.
+* Without a structured portal, Lervit risks poor customer tracking, inconsistent status updates, weak accountability, and operational ambiguity.
+
+The partner portal must solve this by enabling enterprise onboarding, booking coordination, dispatch workflow management, status synchronization, and exception handling while preserving a clean architecture that supports future native apps and API-driven partner integrations.
+
+## 3. Goals and Objectives
+
+### Business Goals
+
+* Launch an enterprise-ready pilot workflow for OOMovers.
+* Reduce friction in the booking handoff process between Lervit and enterprise partners.
+* Preserve Lervit as the primary customer-facing brand and booking platform.
+* Establish a repeatable enterprise-partner model for future partners.
+* Improve customer confidence through visible enterprise booking statuses.
+
+### User Goals
+
+* Enable partners to onboard quickly with clear setup steps.
+* Enable dispatch and operations teams to manage Lervit jobs without email back-and-forth.
+* Give Lervit admins operational visibility over partner-handled jobs.
+* Give customers meaningful visibility into enterprise booking progress.
+
+### Technical Goals
+
+* Standardize booking states, operational events, and partner-side actions in the backend.
+* Build the portal on the same shared backend / API layer as the current Lervit system.
+* Avoid OOMovers-specific hardcoding and ensure future multi-partner reusability.
+* Create a foundation for future API integration and native app evolution.
+
+## 4. Non-Goals
+
+The following are explicitly out of scope for v1:
+
+* Full direct API integration with OOMovers at launch.
+* Complex GPS fleet telematics integration.
+* Enterprise ERP, invoicing, or accounting system integration.
+* Deep analytics or BI suite beyond basic operational dashboards.
+* Full driver-level HR, payroll, or compliance lifecycle management.
+* Customer-facing redesign of the main Lervit booking flow.
+* Full live map tracking for enterprise jobs in the first release.
+* Multi-language support unless legally or commercially required.
+
+## 5. Users and Roles
+
+| Role                       | Description                           | Key Permissions                                                                                                                   |
+| -------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Lervit Admin               | Internal Lervit operations/admin user | Invite partners, review onboarding, approve go-live, view all bookings, override statuses, view incidents, manage partner records |
+| Partner Admin              | Senior partner account owner          | Complete onboarding, manage company profile, add users, configure coverage, review bookings, assign dispatch responsibilities     |
+| Partner Dispatcher         | Day-to-day booking operator           | View booking queue, accept/reject jobs, assign drivers/teams/vehicles, update statuses, flag issues                               |
+| Partner Operations Manager | Oversight user at partner             | Monitor performance, view incidents, manage escalations, review assignments and status compliance                                 |
+| Partner Viewer             | Read-only partner-side user           | View bookings, status, assignments, and dashboards                                                                                |
+| Customer (Indirect User)   | Lervit customer affected by workflow  | View customer-facing status updates and ETA information inside Lervit                                                             |
+
+### Permissions Summary
+
+* **Lervit Admin**: Full read/write across partner, booking, incident, and onboarding objects.
+* **Partner Admin**: Full partner account configuration control, limited to their organization.
+* **Partner Dispatcher**: Operational control of assigned and available jobs.
+* **Partner Operations Manager**: Operational oversight plus escalation access.
+* **Partner Viewer**: Read-only access.
+
+## 6. Key Use Cases
+
+1. Lervit invites an enterprise partner into the portal.
+2. Partner activates account and completes onboarding.
+3. Partner uploads insurance and compliance documents.
+4. Partner configures service zones, hours, and capabilities.
+5. Partner sets dispatch contacts and preferred handling rules.
+6. Lervit routes a booking to the partner portal.
+7. Partner reviews and accepts or rejects the booking.
+8. Partner assigns a driver, team, or vehicle.
+9. Partner updates the job through operational statuses.
+10. Partner flags delay, complaint, or incident.
+11. Partner uploads proof of completion at end of job.
+12. Lervit syncs operational state back to the customer-facing product.
+13. Lervit and partner monitor basic performance and issue trends.
+14. Lervit later reuses the same portal structure for new enterprise partners.
+
+## 7. End-to-End Onboarding Flow
+
+### Step 1: Invitation
+
+**Purpose:** Initiate partner access.
+
+**Data collected:**
+
+* Company name
+* Primary admin contact name
+* Email
+* Phone number
+
+**Validation:**
+
+* Unique email required
+* Valid organization record required
+
+**Success Criteria:** Invitation email sent and pending activation created.
+
+### Step 2: Account Activation
+
+**Purpose:** Activate partner account.
+
+**Data collected:**
+
+* Password
+* Email verification
+
+**Validation:**
+
+* Password policy compliance
+* Invite token validity
+
+**Success Criteria:** Partner admin account becomes active.
+
+### Step 3: Welcome and Checklist
+
+**Purpose:** Orient partner to pilot process.
+
+**Displayed content:**
+
+* Pilot overview
+* Required setup steps
+* Support contact
+* Estimated setup time
+
+**Success Criteria:** User understands onboarding steps and proceeds.
+
+### Step 4: Company Profile Setup
+
+**Data collected:**
+
+* Legal business name
+* Operating name
+* Address
+* Billing email
+* Primary operations contact
+* Dispatch contact
+* Escalation contact
+* Service description
+
+**Validation:** Required fields complete.
+
+**Success Criteria:** Company profile marked complete.
+
+### Step 5: Service Coverage Setup
+
+**Data collected:**
+
+* Cities / zones
+* Service radius
+* Operating hours
+* Same-day availability
+* Vehicle classes supported
+* Job types accepted
+* Excluded job categories
+
+**Validation:** At least one active service zone.
+
+**Success Criteria:** Coverage model saved.
+
+### Step 6: Compliance Upload
+
+**Data collected / uploaded:**
+
+* Insurance certificate
+* Cargo / liability coverage proof
+* Business registration
+* Compliance attestation
+
+**Validation:** Document file type, expiry dates, required doc presence.
+
+**Success Criteria:** Docs submitted and moved to review state.
+
+### Step 7: Pilot Terms Acknowledgement
+
+**Purpose:** Confirm acceptance of operating summary and signed term sheet context.
+
+**Data collected:**
+
+* Checkbox acknowledgements
+* Named authorized user acceptance
+
+**Success Criteria:** Terms acknowledged.
+
+### Step 8: Dispatch Setup
+
+**Data collected:**
+
+* Dispatch contact(s)
+* Alert preferences
+* Response SLA target
+* User role assignments
+
+**Success Criteria:** Dispatch workflow configured.
+
+### Step 9: Team/Fleet Readiness
+
+**Data collected:**
+
+* Available vehicle categories
+* Crew count or capacity notes
+* Operating constraints
+* Special handling capabilities
+
+**Success Criteria:** Fulfillment readiness configured.
+
+### Step 10: Portal Tutorial
+
+**Purpose:** Show how to manage jobs.
+
+**Content:**
+
+* Booking inbox walkthrough
+* Accept/reject flow
+* Assignment flow
+* Status update flow
+* Incident flow
+
+**Success Criteria:** Tutorial completed or dismissed.
+
+### Step 11: Test Booking
+
+**Purpose:** Validate workflow before go-live.
+
+**Flow:**
+
+* Receive test booking
+* Accept or reject
+* Assign resource
+* Update statuses
+* Close test job
+
+**Success Criteria:** Test workflow completed successfully.
+
+### Step 12: Go-Live Approval
+
+**Action owner:** Lervit Admin
+
+**Checks:**
+
+* Onboarding complete
+* Required docs present
+* Test booking successful
+* Coverage and dispatch setup valid
+
+**Success Criteria:** Partner status set to Active.
+
+## 8. Booking Operations Workflow
+
+### Workflow Overview
+
+1. Booking is created in Lervit.
+2. Lervit determines that the booking should be routed to an enterprise partner.
+3. Booking appears in partner portal inbox.
+4. Partner reviews booking details.
+5. Partner accepts or rejects job.
+6. If accepted, partner assigns driver/team/vehicle.
+7. Partner updates operational statuses as fulfillment progresses.
+8. If something goes wrong, partner flags an incident or delay.
+9. On completion, partner uploads proof of completion.
+10. Booking state syncs back into Lervit for customer visibility and internal operations.
+
+### Recommended Booking Status Model
+
+| Status             | Meaning                                    | Customer Visible?            |
+| ------------------ | ------------------------------------------ | ---------------------------- |
+| New                | Booking routed to partner, awaiting action | No                           |
+| Under Review       | Partner reviewing booking details          | Optional                     |
+| Accepted           | Partner has accepted booking               | Yes                          |
+| Rejected           | Partner declined booking                   | No                           |
+| Assigned           | Driver/team/vehicle assigned               | Optional                     |
+| En Route to Pickup | Team is traveling to pickup                | Yes                          |
+| Arrived at Pickup  | Team has arrived                           | Yes                          |
+| Picked Up          | Items collected                            | Yes                          |
+| In Transit         | Delivery underway                          | Yes                          |
+| Arrived at Dropoff | Team reached destination                   | Yes                          |
+| Delivered          | Delivery completed                         | Yes                          |
+| Completed          | Booking fully closed with completion proof | Yes                          |
+| Delayed            | Booking impacted by delay                  | Yes                          |
+| Issue Reported     | Problem flagged requiring attention        | Yes, with simplified wording |
+| Cancelled          | Booking cancelled                          | Yes                          |
+
+### Assumption
+
+The first version will prioritize status-based tracking and ETA windows, not continuous live map GPS.
+
+## 9. Customer Tracking Experience
+
+Customers who book through Lervit should still experience the job as a Lervit booking, even when fulfillment is handled by an enterprise partner.
+
+### v1 Tracking Model
+
+* Status tracking plus ETA windows
+* Push/email/SMS notifications for major status changes
+* Delay notifications when partner marks job delayed
+* Simple issue notification when job needs support review
+
+### Customer-Visible Statuses
+
+* Booking confirmed
+* Partner assigned / team assigned
+* En route to pickup
+* Arrived at pickup
+* Picked up
+* In transit
+* Arrived at dropoff
+* Delivered
+* Delayed
+* Issue under review
+* Completed
+
+### Customer Notifications
+
+Trigger notifications for:
+
+* booking accepted
+* driver/team assigned (optional in v1)
+* en route to pickup
+* pickup completed
+* delayed status
+* issue reported
+* delivery completed
+
+### Incident Handling
+
+If a partner flags an issue:
+
+* customer sees a simplified support-oriented message
+* internal incident record created
+* Lervit support or ops reviews escalation path
+
+## 10. Functional Requirements
+
+### 10.1 Authentication and Account Activation
+
+**User Story:** As a partner admin, I want to activate my account securely so I can access the portal.
+
+**Requirements:**
+
+* Email invite token flow
+* Password creation
+* Email verification
+* Secure session management
+
+**Acceptance Criteria:**
+
+* User can activate account using valid invite.
+* Expired or invalid invites are blocked.
+* Only verified users can proceed.
+
+**Priority:** Must
+
+### 10.2 Role-Based Access Control
+
+**User Story:** As Lervit, I need role-based permissions so users only see and do what is appropriate.
+
+**Requirements:**
+
+* Support role scopes by organization and role
+* Restrict edit rights appropriately
+* Support future custom roles if needed
+
+**Acceptance Criteria:**
+
+* Each role sees only authorized modules and actions.
+
+**Priority:** Must
+
+### 10.3 Onboarding Checklist
+
+**User Story:** As a partner admin, I want a clear onboarding checklist so I know what is left before go-live.
+
+**Requirements:**
+
+* Step-by-step checklist
+* Progress state for each module
+* Blocking state for incomplete critical steps
+
+**Acceptance Criteria:**
+
+* Partner can see onboarding status and missing steps.
+
+**Priority:** Must
+
+### 10.4 Company Profile Management
+
+**User Story:** As a partner admin, I want to manage company information so Lervit has accurate operational and business data.
+
+**Acceptance Criteria:**
+
+* Required fields saved and editable.
+* Change history preserved.
+
+**Priority:** Must
+
+### 10.5 Compliance Document Upload and Review
+
+**User Story:** As Lervit, I want partners to upload required compliance documents so pilot operations have basic risk controls.
+
+**Requirements:**
+
+* File uploads
+* Expiry date fields
+* Review states: pending, approved, rejected
+* Lervit admin review notes
+
+**Acceptance Criteria:**
+
+* Partner can upload docs.
+* Lervit can approve or reject docs.
+
+**Priority:** Must
+
+### 10.6 Service Coverage Configuration
+
+**Requirements:**
+
+* Zones / cities
+* Service radius
+* Availability
+* Supported job types
+* Exclusions
+
+**Priority:** Must
+
+### 10.7 Booking Inbox
+
+**Requirements:**
+
+* Filterable booking queue
+* Status views
+* Search by booking ID / customer / area
+* Assigned vs unassigned views
+
+**Priority:** Must
+
+### 10.8 Booking Detail View
+
+**Requirements:**
+
+* Booking summary
+* Addresses
+* schedule
+* item/load notes
+* service notes
+* timeline / activity log
+* incident section
+
+**Priority:** Must
+
+### 10.9 Accept / Reject Actions
+
+**Requirements:**
+
+* Accept
+* Reject with reason
+* Optional request clarification
+
+**Priority:** Must
+
+### 10.10 Assignment Workflow
+
+**Requirements:**
+
+* Assign driver/team/vehicle fields
+* Editable assignment until locked stage
+* Assignment history log
+
+**Priority:** Must
+
+### 10.11 Status Update Workflow
+
+**Requirements:**
+
+* Controlled status transitions
+* Timestamped status events
+* Optional notes
+* Customer-visible mapping rules
+
+**Priority:** Must
+
+### 10.12 Incident and Complaint Flagging
+
+**Requirements:**
+
+* Incident category
+* Severity
+* notes
+* attachment support
+* escalation flag
+
+**Priority:** Must
+
+### 10.13 Document / Photo Uploads
+
+**Requirements:**
+
+* Upload proof of completion photos/documents
+* Incident evidence uploads
+* Size/type validation
+
+**Priority:** Should
+
+### 10.14 Partner Dashboard
+
+**Requirements:**
+
+* New bookings
+* Active jobs
+* Delayed jobs
+* Issues needing attention
+* Onboarding completion / compliance alerts
+
+**Priority:** Must
+
+### 10.15 Notifications and Alerts
+
+**Requirements:**
+
+* Email and in-app notifications
+* Booking alerts
+* delay alerts
+* issue alerts
+* compliance expiry alerts
+
+**Priority:** Must
+
+### 10.16 Audit Trail / Activity Log
+
+**Requirements:**
+
+* Log user action, timestamp, object changed
+* Surface history on booking and onboarding objects
+
+**Priority:** Must
+
+### 10.17 Multi-Partner Support
+
+**Requirements:**
+
+* Organization-scoped data
+* Reusable partner model
+* No hardcoded OOMovers-specific workflow in shared services
+
+**Priority:** Must
+
+## 11. Non-Functional Requirements
+
+### Security
+
+* Secure authentication and session handling
+* Role-based authorization
+* Protected file uploads
+* Organization data isolation
+
+### Performance
+
+* Booking queue should load quickly under moderate partner operations load
+* Status updates should sync near-real-time where possible
+
+### Reliability
+
+* Status changes must persist reliably
+* Failed notifications should be retryable
+
+### Auditability
+
+* All operational changes must be logged with user and timestamp
+
+### Scalability
+
+* Architecture must support multiple enterprise partners and growing booking volumes
+
+### Usability
+
+* Minimal training required
+* Dispatch-oriented UI
+* Clear calls to action
+
+### Responsiveness
+
+* Web portal must work across desktop and tablet
+* Mobile-responsive web acceptable for field reference, but not primary field app in v1
+
+### Extensibility
+
+* Support future APIs and webhooks
+* Support future native app integration via shared backend services
+
+## 12. Data Model / Core Objects
+
+### Partner
+
+Represents enterprise organization.
+**Key fields:** id, name, legal_name, status, onboarding_state, billing_email
+
+### Partner User
+
+Represents authenticated user tied to partner.
+**Key fields:** id, partner_id, name, email, role, status
+
+### Booking
+
+Represents Lervit customer booking.
+**Key fields:** id, customer_id, partner_id, status, schedule, addresses, notes
+
+### Booking Assignment
+
+Represents partner-side assignment.
+**Key fields:** id, booking_id, vehicle_type, driver_name, team_name, assigned_at
+
+### Vehicle
+
+Optional structured record for partner vehicle.
+**Key fields:** id, partner_id, class, plate_reference, status
+
+### Driver/Team
+
+Represents operational assignee.
+**Key fields:** id, partner_id, name, team_type, status
+
+### Coverage Zone
+
+Represents partner service area.
+**Key fields:** id, partner_id, zone_name, city, radius, supported_services
+
+### Compliance Document
+
+Represents uploaded document.
+**Key fields:** id, partner_id, doc_type, expiry_date, review_status, file_url
+
+### Incident
+
+Represents problem event.
+**Key fields:** id, booking_id, category, severity, status, notes
+
+### Status Event
+
+Represents booking state change.
+**Key fields:** id, booking_id, from_status, to_status, changed_by, changed_at
+
+### Proof of Completion
+
+Represents completion artifacts.
+**Key fields:** id, booking_id, file_url, uploaded_by, uploaded_at
+
+### Notification
+
+Represents system alert.
+**Key fields:** id, recipient_id, type, channel, status, sent_at
+
+### Reconciliation Record
+
+Future-facing commercial settlement artifact.
+**Key fields:** id, booking_id, partner_id, amount, status
+
+## 13. Architecture Requirements
+
+The partner portal must be implemented as a separate partner-facing interface on top of the same shared backend used by Lervit’s customer-facing product.
+
+### Architecture Principles
+
+* Customer web/PWA, partner portal, and future native apps must consume shared backend services.
+* Business rules such as booking status logic, assignment validation, notification mapping, and incident state handling must live in the backend.
+* The portal should only represent partner-facing workflows and UI actions, not duplicate domain logic.
+* Partner-specific configurations should live in data/configuration layers, not hardcoded application logic.
+* The architecture must support future addition of multiple enterprise partners without per-partner rewrites.
+
+### High-Level Architecture Narrative
+
+* **Frontend clients:** Lervit customer app/PWA, partner portal, future native apps
+* **Shared backend services:** auth, booking orchestration, partner management, status engine, incident management, notification service
+* **Persistence layer:** shared database with organization-scoped partner models
+* **Future integration layer:** APIs and webhooks for enterprise automation
+
+## 14. API and Integration Planning
+
+### Not in v1
+
+* Full direct OOMovers API integration
+* automated two-way dispatch sync from external systems
+
+### Future API Candidates
+
+* Create / push booking to partner
+* Accept / reject booking
+* Assign resource
+* Update booking status
+* Create incident
+* Upload proof of completion
+* Pull partner coverage capability
+
+### Future Webhook Candidates
+
+* Booking accepted
+* Booking rejected
+* Assignment created
+* Status changed
+* Incident created
+* Delivery completed
+
+### Evolution Path
+
+1. Portal-first pilot validates workflow.
+2. Repeated stable actions become API endpoints.
+3. High-frequency state changes become webhook-driven.
+4. Mature partners can move from portal operations to API automation.
+
+## 15. UX Requirements
+
+The portal must feel enterprise-grade, simple, and operational.
+
+### UX Principles
+
+* Clean, low-friction interface
+* Checklist-based onboarding
+* Dashboard-first navigation
+* Clear booking queue and status transitions
+* Minimal cognitive load for dispatch staff
+* Strong use of states, tags, and alerts
+* Responsive across desktop and tablet
+* Built for operations management, not consumer browsing
+
+### Recommended Primary Navigation
+
+* Dashboard
+* Onboarding / Setup
+* Bookings
+* Incidents
+* Compliance
+* Team / Dispatch Settings
+* Notifications
+
+## 16. Success Metrics
+
+### Onboarding Metrics
+
+* Partner onboarding completion rate
+* Time from invite to go-live
+* Compliance submission completion rate
+
+### Operations Metrics
+
+* Booking response time
+* Acceptance rate
+* Assignment completion rate
+* Status update compliance rate
+* Incident reporting rate
+* Incident resolution time
+
+### Customer Experience Metrics
+
+* Customer visibility coverage for enterprise bookings
+* Delayed notification timeliness
+* Enterprise booking complaint rate
+
+### Platform Readiness Metrics
+
+* Reduction in manual coordination events
+* Reduction in operational ambiguity
+* Readiness score for future API automation
+
+## 17. Risks and Mitigations
+
+| Risk                         | Description                                                | Mitigation                                                 |
+| ---------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| Overbuilding too early       | Portal becomes too complex for pilot needs                 | Strict MVP scope control                                   |
+| Partner technical immaturity | OOMovers may not have mature internal systems              | Portal-first approach, avoid dependency on partner APIs    |
+| Unclear dispatch ownership   | Ambiguity around who updates what                          | Define workflow ownership in ops playbook and UI roles     |
+| Inconsistent status updates  | Partner may fail to update statuses reliably               | Strong status prompts, SLA expectations, audit logs        |
+| Customer confusion           | Customer may not understand enterprise-fulfilled job state | Clear customer-facing status mapping and support messaging |
+| Hardcoded partner logic      | Build becomes OOMovers-specific                            | Use configuration and partner-scoped models                |
+| Native roadmap drift         | Portal evolves separately from core system                 | Shared backend and service architecture                    |
+
+## 18. MVP Scope vs Future Phases
+
+### MVP / Phase 1
+
+* Partner invitation and activation
+* Onboarding checklist
+* Company profile
+* Service coverage setup
+* Compliance upload
+* Dispatch setup
+* Booking inbox
+* Booking detail view
+* Accept/reject workflow
+* Assignment workflow
+* Status update workflow
+* Incident flagging
+* Basic proof-of-completion upload
+* Basic notifications and dashboard
+
+### Phase 2
+
+* Stronger ETA handling
+* Better dashboards and performance summaries
+* Enhanced incident workflows
+* Multi-partner improvements
+* Better partner-side operational tooling
+
+### Phase 3
+
+* Direct partner API integrations
+* Webhooks for status automation
+* Richer live tracking options
+* Reconciliation automation
+* Deeper enterprise workflow customization by configuration
+
+## 19. Open Questions
+
+1. Does OOMovers already operate dispatch software that may later support integration?
+2. Will assigned driver names be visible to customers in v1?
+3. What proof of completion is mandatory for a booking to close?
+4. What SLA is required for booking acceptance?
+5. Which statuses should be customer-visible versus internal only?
+6. Who handles first-line issue response: Lervit or the partner?
+7. What delay threshold triggers customer notification automatically?
+8. Should partner rejection reasons be structured or free text?
+9. Will vehicle records be lightweight or fully modeled in v1?
+10. What internal Lervit team owns go-live approval?
+
+## 20. Acceptance Summary for MVP
+
+The MVP will be considered successful if:
+
+* OOMovers can be invited, onboarded, and activated through the portal.
+* OOMovers can receive, accept/reject, assign, and update bookings without email-based primary workflow dependence.
+* Customer-facing status visibility is preserved inside Lervit.
+* Lervit can audit booking actions and incident events.
+* The portal runs on shared backend services without creating a separate business logic stack.
+* The system is reusable for future enterprise partners with minimal rework.
+
+## 21. Assumptions
+
+* OOMovers is willing to operate through a portal during the pilot.
+* Lervit remains the customer-facing booking platform throughout the pilot.
+* Full GPS tracking is not required for initial pilot launch.
+* The first version prioritizes operational control and visibility over deep automation.
+* Future native migration will reuse the same backend services rather than replace them.
+
+## 22. Implementation Recommendation
+
+Proceed with a lean but structured portal MVP focused on onboarding, booking operations, status control, and issue handling. Keep the product partner-generic, backend-centric, and configuration-driven. Use real pilot behavior to inform which workflows should later become APIs rather than prematurely engineering a deep integration.

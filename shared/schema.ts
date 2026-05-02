@@ -200,7 +200,15 @@ export const bookings = pgTable("bookings", {
   // Stripe Radar fraud detection
   flaggedForReview: boolean("flagged_for_review").notNull().default(false),
   flaggedReason: text("flagged_reason"),
-  
+
+  // Enterprise partner fulfillment fields
+  enterprisePartnerId: varchar("enterprise_partner_id"),
+  enterpriseStatus: text("enterprise_status"),
+  routedToPartnerAt: timestamp("routed_to_partner_at"),
+  enterpriseAcceptedAt: timestamp("enterprise_accepted_at"),
+  enterpriseRejectedAt: timestamp("enterprise_rejected_at"),
+  enterpriseRejectionReason: text("enterprise_rejection_reason"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -1089,3 +1097,369 @@ export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).om
 
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+
+// ============================================================
+// ENTERPRISE PARTNER PORTAL TABLES
+// ============================================================
+
+// Enterprise partner organizations (e.g. OOMovers)
+export const partners = pgTable("partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  legalName: text("legal_name").notNull(),
+  operatingName: text("operating_name"),
+  status: text("status").notNull().default("invited"), // invited | onboarding | pending_approval | active | suspended
+  onboardingStep: integer("onboarding_step").notNull().default(1),
+  billingEmail: text("billing_email"),
+  primaryOpsContact: text("primary_ops_contact"),
+  dispatchContact: text("dispatch_contact"),
+  escalationContact: text("escalation_contact"),
+  address: text("address"),
+  phone: text("phone"),
+  serviceDescription: text("service_description"),
+  // Dispatch configuration
+  dispatchMethod: text("dispatch_method").default("manual"), // manual | auto | hybrid
+  dispatchPhone: text("dispatch_phone"),
+  dispatchEmail: text("dispatch_email"),
+  dispatchNotes: text("dispatch_notes"),
+  // Onboarding completion flags
+  profileComplete: boolean("profile_complete").default(false).notNull(),
+  coverageComplete: boolean("coverage_complete").default(false).notNull(),
+  complianceComplete: boolean("compliance_complete").default(false).notNull(),
+  dispatchComplete: boolean("dispatch_complete").default(false).notNull(),
+  termsAccepted: boolean("terms_accepted").default(false).notNull(),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  testBookingComplete: boolean("test_booking_complete").default(false).notNull(),
+  // Go-live management
+  activatedAt: timestamp("activated_at"),
+  activatedBy: varchar("activated_by").references(() => users.id),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedReason: text("suspended_reason"),
+  // Notes from Lervit admin
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("partners_status_idx").on(table.status),
+}));
+
+// Links users to partner orgs (partner-scoped roles)
+export const partnerUsers = pgTable("partner_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  partnerRole: text("partner_role").notNull().default("partner_viewer"), // partner_admin | partner_dispatcher | partner_ops_manager | partner_viewer
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueUserPartner: unique().on(table.userId, table.partnerId),
+  partnerIdIdx: index("partner_users_partner_id_idx").on(table.partnerId),
+  userIdIdx: index("partner_users_user_id_idx").on(table.userId),
+}));
+
+// Invite tokens for onboarding new partner users
+export const partnerInvites = pgTable("partner_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("partner_admin"),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  invitedBy: varchar("invited_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("partner_invites_token_idx").on(table.token),
+  partnerIdIdx: index("partner_invites_partner_id_idx").on(table.partnerId),
+}));
+
+// Partner service coverage zones
+export const coverageZones = pgTable("coverage_zones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  zoneName: text("zone_name").notNull(),
+  city: text("city").notNull(),
+  province: text("province"),
+  postalCodePrefixes: text("postal_code_prefixes").array(),
+  serviceRadiusKm: integer("service_radius_km"),
+  operatingHoursStart: text("operating_hours_start").default("08:00"),
+  operatingHoursEnd: text("operating_hours_end").default("18:00"),
+  operatingDays: text("operating_days").array(), // ['mon','tue','wed','thu','fri','sat','sun']
+  sameDayAvailable: boolean("same_day_available").default(false).notNull(),
+  supportedVehicleClasses: text("supported_vehicle_classes").array(),
+  supportedLoadSizes: text("supported_load_sizes").array(),
+  excludedCategories: text("excluded_categories").array(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  partnerIdIdx: index("coverage_zones_partner_id_idx").on(table.partnerId),
+}));
+
+// Partner compliance documents
+export const complianceDocs = pgTable("compliance_docs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  docType: text("doc_type").notNull(), // insurance_certificate | cargo_liability | business_registration | compliance_attestation | vehicle_registration | drivers_abstract
+  fileUrl: text("file_url"),
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  expiryDate: timestamp("expiry_date"),
+  reviewStatus: text("review_status").notNull().default("pending"), // pending | under_review | approved | rejected
+  reviewNotes: text("review_notes"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  partnerIdIdx: index("compliance_docs_partner_id_idx").on(table.partnerId),
+  reviewStatusIdx: index("compliance_docs_review_status_idx").on(table.reviewStatus),
+}));
+
+// Partner drivers / teams (for assignment to bookings)
+export const partnerTeamMembers = pgTable("partner_team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  name: text("name").notNull(),
+  memberType: text("member_type").notNull().default("driver"), // driver | team
+  phone: text("phone"),
+  vehicleType: text("vehicle_type"),
+  vehiclePlate: text("vehicle_plate"),
+  vehicleColor: text("vehicle_color"),
+  isAvailable: boolean("is_available").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  partnerIdIdx: index("partner_team_members_partner_id_idx").on(table.partnerId),
+}));
+
+// Assignment of partner driver/team to a booking
+export const bookingAssignments = pgTable("booking_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  teamMemberId: varchar("team_member_id").references(() => partnerTeamMembers.id),
+  driverName: text("driver_name"),
+  driverPhone: text("driver_phone"),
+  teamName: text("team_name"),
+  vehicleType: text("vehicle_type"),
+  vehiclePlate: text("vehicle_plate"),
+  estimatedArrival: timestamp("estimated_arrival"),
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  notes: text("notes"),
+}, (table) => ({
+  bookingIdIdx: index("booking_assignments_booking_id_idx").on(table.bookingId),
+  partnerIdIdx: index("booking_assignments_partner_id_idx").on(table.partnerId),
+}));
+
+// Enterprise booking status event audit trail
+export const bookingStatusEvents = pgTable("booking_status_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  partnerId: varchar("partner_id").references(() => partners.id),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  changedBy: varchar("changed_by").references(() => users.id),
+  notes: text("notes"),
+  customerVisible: boolean("customer_visible").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("booking_status_events_booking_id_idx").on(table.bookingId),
+  partnerIdIdx: index("booking_status_events_partner_id_idx").on(table.partnerId),
+}));
+
+// Partner-reported incidents during a booking
+export const partnerIncidents = pgTable("partner_incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  category: text("category").notNull(), // delay | damage | access_issue | customer_complaint | vehicle_issue | weather | other
+  severity: text("severity").notNull().default("medium"), // low | medium | high | critical
+  status: text("status").notNull().default("open"), // open | under_review | resolved | escalated
+  title: text("title").notNull(),
+  notes: text("notes").notNull(),
+  fileUrls: text("file_urls").array(),
+  escalationFlag: boolean("escalation_flag").default(false).notNull(),
+  reportedBy: varchar("reported_by").references(() => users.id),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  resolutionNotes: text("resolution_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("partner_incidents_booking_id_idx").on(table.bookingId),
+  partnerIdIdx: index("partner_incidents_partner_id_idx").on(table.partnerId),
+  statusIdx: index("partner_incidents_status_idx").on(table.status),
+}));
+
+// Proof of delivery / completion uploads
+export const proofOfCompletion = pgTable("proof_of_completion", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name"),
+  fileType: text("file_type"),
+  proofType: text("proof_type").notNull().default("photo"), // photo | signature | document
+  notes: text("notes"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("proof_of_completion_booking_id_idx").on(table.bookingId),
+  partnerIdIdx: index("proof_of_completion_partner_id_idx").on(table.partnerId),
+}));
+
+// Partner action audit log
+export const partnerAuditLog = pgTable("partner_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").references(() => partners.id).notNull(),
+  actorId: varchar("actor_id").references(() => users.id),
+  action: text("action").notNull(), // e.g. booking.accepted, profile.updated, compliance.uploaded
+  objectType: text("object_type"), // booking | compliance_doc | incident | assignment | partner
+  objectId: text("object_id"),
+  notes: text("notes"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  partnerIdIdx: index("partner_audit_log_partner_id_idx").on(table.partnerId),
+  createdAtIdx: index("partner_audit_log_created_at_idx").on(table.createdAt),
+}));
+
+// === Insert schemas and types ===
+
+export const insertPartnerSchema = createInsertSchema(partners).omit({
+  id: true, createdAt: true, updatedAt: true, activatedAt: true, activatedBy: true, suspendedAt: true,
+}).extend({
+  status: z.enum(['invited', 'onboarding', 'pending_approval', 'active', 'suspended']).optional(),
+  dispatchMethod: z.enum(['manual', 'auto', 'hybrid']).optional(),
+});
+
+export const insertPartnerUserSchema = createInsertSchema(partnerUsers).omit({
+  id: true, createdAt: true,
+}).extend({
+  partnerRole: z.enum(['partner_admin', 'partner_dispatcher', 'partner_ops_manager', 'partner_viewer']).optional(),
+});
+
+export const insertPartnerInviteSchema = createInsertSchema(partnerInvites).omit({
+  id: true, createdAt: true, usedAt: true,
+}).extend({
+  role: z.enum(['partner_admin', 'partner_dispatcher', 'partner_ops_manager', 'partner_viewer']),
+});
+
+export const insertCoverageZoneSchema = createInsertSchema(coverageZones).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+
+export const insertComplianceDocSchema = createInsertSchema(complianceDocs).omit({
+  id: true, createdAt: true, updatedAt: true, reviewedAt: true, reviewedBy: true,
+}).extend({
+  docType: z.enum(['insurance_certificate', 'cargo_liability', 'business_registration', 'compliance_attestation', 'vehicle_registration', 'drivers_abstract']),
+});
+
+export const insertPartnerTeamMemberSchema = createInsertSchema(partnerTeamMembers).omit({
+  id: true, createdAt: true,
+}).extend({
+  memberType: z.enum(['driver', 'team']).optional(),
+});
+
+export const insertBookingAssignmentSchema = createInsertSchema(bookingAssignments).omit({
+  id: true, assignedAt: true,
+});
+
+export const insertBookingStatusEventSchema = createInsertSchema(bookingStatusEvents).omit({
+  id: true, createdAt: true,
+});
+
+export const insertPartnerIncidentSchema = createInsertSchema(partnerIncidents).omit({
+  id: true, createdAt: true, updatedAt: true, resolvedAt: true, resolvedBy: true,
+}).extend({
+  category: z.enum(['delay', 'damage', 'access_issue', 'customer_complaint', 'vehicle_issue', 'weather', 'other']),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+});
+
+export const insertProofOfCompletionSchema = createInsertSchema(proofOfCompletion).omit({
+  id: true, uploadedAt: true,
+}).extend({
+  proofType: z.enum(['photo', 'signature', 'document']).optional(),
+});
+
+export const insertPartnerAuditLogSchema = createInsertSchema(partnerAuditLog).omit({
+  id: true, createdAt: true,
+});
+
+export type Partner = typeof partners.$inferSelect;
+export type InsertPartner = z.infer<typeof insertPartnerSchema>;
+export type PartnerUser = typeof partnerUsers.$inferSelect;
+export type InsertPartnerUser = z.infer<typeof insertPartnerUserSchema>;
+export type PartnerInvite = typeof partnerInvites.$inferSelect;
+export type InsertPartnerInvite = z.infer<typeof insertPartnerInviteSchema>;
+export type CoverageZone = typeof coverageZones.$inferSelect;
+export type InsertCoverageZone = z.infer<typeof insertCoverageZoneSchema>;
+export type ComplianceDoc = typeof complianceDocs.$inferSelect;
+export type InsertComplianceDoc = z.infer<typeof insertComplianceDocSchema>;
+export type PartnerTeamMember = typeof partnerTeamMembers.$inferSelect;
+export type InsertPartnerTeamMember = z.infer<typeof insertPartnerTeamMemberSchema>;
+export type BookingAssignment = typeof bookingAssignments.$inferSelect;
+export type InsertBookingAssignment = z.infer<typeof insertBookingAssignmentSchema>;
+export type BookingStatusEvent = typeof bookingStatusEvents.$inferSelect;
+export type InsertBookingStatusEvent = z.infer<typeof insertBookingStatusEventSchema>;
+export type PartnerIncident = typeof partnerIncidents.$inferSelect;
+export type InsertPartnerIncident = z.infer<typeof insertPartnerIncidentSchema>;
+export type ProofOfCompletion = typeof proofOfCompletion.$inferSelect;
+export type InsertProofOfCompletion = z.infer<typeof insertProofOfCompletionSchema>;
+export type PartnerAuditLog = typeof partnerAuditLog.$inferSelect;
+export type InsertPartnerAuditLog = z.infer<typeof insertPartnerAuditLogSchema>;
+
+// Enterprise status model for partner-handled bookings
+export const ENTERPRISE_STATUSES = {
+  NEW: 'new',
+  UNDER_REVIEW: 'under_review',
+  ACCEPTED: 'accepted',
+  REJECTED: 'rejected',
+  ASSIGNED: 'assigned',
+  EN_ROUTE_TO_PICKUP: 'en_route_to_pickup',
+  ARRIVED_AT_PICKUP: 'arrived_at_pickup',
+  PICKED_UP: 'picked_up',
+  IN_TRANSIT: 'in_transit',
+  ARRIVED_AT_DROPOFF: 'arrived_at_dropoff',
+  DELIVERED: 'delivered',
+  COMPLETED: 'completed',
+  DELAYED: 'delayed',
+  ISSUE_REPORTED: 'issue_reported',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type EnterpriseStatus = typeof ENTERPRISE_STATUSES[keyof typeof ENTERPRISE_STATUSES];
+
+export const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
+  new: ['under_review', 'accepted', 'rejected', 'cancelled'],
+  under_review: ['accepted', 'rejected', 'cancelled'],
+  accepted: ['assigned', 'en_route_to_pickup', 'cancelled'],
+  assigned: ['en_route_to_pickup', 'delayed', 'issue_reported', 'cancelled'],
+  en_route_to_pickup: ['arrived_at_pickup', 'delayed', 'issue_reported', 'cancelled'],
+  arrived_at_pickup: ['picked_up', 'delayed', 'issue_reported'],
+  picked_up: ['in_transit', 'issue_reported'],
+  in_transit: ['arrived_at_dropoff', 'delayed', 'issue_reported'],
+  arrived_at_dropoff: ['delivered', 'issue_reported'],
+  delivered: ['completed'],
+  delayed: ['en_route_to_pickup', 'arrived_at_pickup', 'in_transit', 'arrived_at_dropoff', 'issue_reported', 'cancelled'],
+  issue_reported: ['en_route_to_pickup', 'arrived_at_pickup', 'in_transit', 'completed', 'cancelled'],
+};
+
+// Maps enterprise status → customer-visible booking status
+export const ENTERPRISE_TO_BOOKING_STATUS: Record<string, string> = {
+  new: 'confirmed',
+  under_review: 'confirmed',
+  accepted: 'confirmed',
+  assigned: 'confirmed',
+  en_route_to_pickup: 'en_route_to_pickup',
+  arrived_at_pickup: 'loading',
+  picked_up: 'loading',
+  in_transit: 'en_route_to_dropoff',
+  arrived_at_dropoff: 'unloading',
+  delivered: 'unloading',
+  completed: 'completed',
+  cancelled: 'cancelled',
+};

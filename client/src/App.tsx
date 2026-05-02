@@ -22,6 +22,17 @@ import { JobNotificationSound } from "@/components/JobNotificationSound";
 // Lazy load splash screen
 const SplashScreen = lazy(() => import("@/components/SplashScreen"));
 
+// Partner portal pages (lazy loaded, own layout)
+const PartnerActivate = lazy(() => import("@/pages/partner/PartnerActivate"));
+const PartnerDashboard = lazy(() => import("@/pages/partner/PartnerDashboard"));
+const PartnerOnboarding = lazy(() => import("@/pages/partner/PartnerOnboarding"));
+const PartnerBookings = lazy(() => import("@/pages/partner/PartnerBookings"));
+const PartnerBookingDetail = lazy(() => import("@/pages/partner/PartnerBookingDetail"));
+const PartnerCompliance = lazy(() => import("@/pages/partner/PartnerCompliance"));
+const PartnerIncidents = lazy(() => import("@/pages/partner/PartnerIncidents"));
+const PartnerTeam = lazy(() => import("@/pages/partner/PartnerTeam"));
+const PartnerAudit = lazy(() => import("@/pages/partner/PartnerAudit"));
+
 // Eagerly load critical public pages
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
@@ -68,6 +79,59 @@ const Inbox = lazy(() => import("@/pages/Inbox"));
 const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const MoverAgreement = lazy(() => import("@/pages/MoverAgreement"));
+
+const PARTNER_ROLES = ["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"] as const;
+
+function PartnerRouter() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/partner-activate" component={PartnerActivate} />
+        <Route path="/partner/dashboard">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerDashboard />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/onboarding">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerOnboarding />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/bookings/:id">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerBookingDetail />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/bookings">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerBookings />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/compliance">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerCompliance />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/incidents">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerIncidents />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/team">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerTeam />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/audit">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerAudit />
+          </ProtectedRoute>
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
+  );
+}
 
 function Router() {
   return (
@@ -231,6 +295,36 @@ function AppContent({ children }: { children: ReactNode }) {
   );
 }
 
+function AppShell() {
+  const [loc] = useLocation();
+  const isPartnerRoute =
+    loc.startsWith("/partner") || loc === "/partner-activate";
+
+  if (isPartnerRoute) {
+    return (
+      <ErrorBoundary>
+        <ScrollToTop />
+        <PartnerRouter />
+      </ErrorBoundary>
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <ScrollToTop />
+      <Header />
+      <AppContent>
+        <PageTransition>
+          <Router />
+        </PageTransition>
+      </AppContent>
+      <MobileBottomNav />
+      <JobNotificationSound />
+      <InstallPrompt />
+    </ErrorBoundary>
+  );
+}
+
 function App() {
   // Skip splash for returning users (visited within last 24 hours)
   const hasVisitedRecently = () => {
@@ -276,18 +370,7 @@ function App() {
           <GoogleMapsProvider>
             <LocationProvider>
               <TooltipProvider>
-                <ErrorBoundary>
-                  <ScrollToTop />
-                  <Header />
-                  <AppContent>
-                    <PageTransition>
-                      <Router />
-                    </PageTransition>
-                  </AppContent>
-                  <MobileBottomNav />
-                  <JobNotificationSound />
-                  <InstallPrompt />
-                </ErrorBoundary>
+                <AppShell />
                 <Toaster />
               </TooltipProvider>
             </LocationProvider>

@@ -37,6 +37,10 @@ export function ProtectedRoute({ children, allowedRoles, redirectTo, requireEmai
         customer: "/dashboard",
         mover: "/mover-dashboard",
         admin: "/admin",
+        partner_admin: "/partner/dashboard",
+        partner_dispatcher: "/partner/dashboard",
+        partner_ops_manager: "/partner/dashboard",
+        partner_viewer: "/partner/dashboard",
       };
 
       const targetRoute = redirectTo || roleRedirects[user.role] || "/";

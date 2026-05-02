@@ -2,6 +2,19 @@ import * as React from "react";
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { queryClient } from "@/lib/queryClient";
 
+export type UserRole =
+  | "customer"
+  | "mover"
+  | "admin"
+  | "partner_admin"
+  | "partner_dispatcher"
+  | "partner_ops_manager"
+  | "partner_viewer";
+
+export function isPartnerRole(role: string): boolean {
+  return role.startsWith("partner_");
+}
+
 interface User {
   id: string;
   email: string;
@@ -9,7 +22,7 @@ interface User {
   phone?: string | null;
   address?: string | null;
   avatarUrl?: string | null;
-  role: "customer" | "mover" | "admin";
+  role: UserRole;
   createdAt?: string | null;
   hasCompletedOnboarding?: boolean;
   hasUsedFirstMoveDiscount?: boolean;
