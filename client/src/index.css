@@ -247,6 +247,20 @@
     line-height: 1.6;
   }
 
+  /* Partner / admin portal heading reset — undo landing-page sizing so
+     Tailwind text-* utilities control sizes cleanly inside these shells */
+  .partner-portal h1,
+  .partner-portal h2,
+  .partner-portal h3,
+  .partner-portal h4,
+  .partner-portal h5,
+  .partner-portal h6 {
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+  }
+
   /* Bespoke helper classes for special tracking needs */
   .tracking-tight-headings {
     letter-spacing: -0.025em;

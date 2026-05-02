@@ -66,7 +66,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider style={sidebarStyle}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
+      <div className="partner-portal flex h-screen w-full overflow-hidden bg-background font-sans">
         <Sidebar>
           <SidebarHeader className="px-4 py-4 border-b border-border">
             <div className="flex items-center gap-2">
