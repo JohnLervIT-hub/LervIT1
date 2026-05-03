@@ -101,7 +101,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     vehicleType: 'truck',
     volumeRangeMin: 301,
     volumeRangeMax: 600,
-    baseFee: 48.00,
+    baseFee: 50.00,
     perKmRate: 2.40,
     loadType: 'Full apartment / home moves',
     examples: 'Full apartment, appliances, heavy loads',
