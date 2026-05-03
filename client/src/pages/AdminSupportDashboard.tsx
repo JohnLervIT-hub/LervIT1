@@ -78,6 +78,9 @@ export default function AdminSupportDashboard() {
   const [incidentSeverityFilter, setIncidentSeverityFilter] = useState<string>("all");
   const [expandedIncident, setExpandedIncident] = useState<string | null>(null);
   const [resolutionDraft, setResolutionDraft] = useState<Record<string, string>>({});
+  const [incidentAiInsight, setIncidentAiInsight] = useState<Record<string, any>>({});
+  const [incidentAiPanel, setIncidentAiPanel] = useState<Record<string, boolean>>({});
+  const [partnerCommCopied, setPartnerCommCopied] = useState<Record<string, boolean>>({});
 
   const { data: allTickets, isLoading } = useQuery<TicketWithUser[]>({
     queryKey: ["/api/support/tickets/all"],
@@ -96,6 +99,26 @@ export default function AdminSupportDashboard() {
       toast({ title: "Incident updated" });
     },
     onError: () => toast({ title: "Failed to update incident", variant: "destructive" }),
+  });
+
+  const analyzeIncidentMutation = useMutation({
+    mutationFn: async (incidentId: string) => {
+      const res = await fetch(`/api/admin/partner-incidents/${incidentId}/ai-analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to analyze incident");
+      return res.json();
+    },
+    onSuccess: (data, incidentId) => {
+      setIncidentAiInsight(prev => ({ ...prev, [incidentId]: data }));
+      toast({
+        title: data.cached ? "AI Insights Loaded" : "AI Analysis Complete",
+        description: data.cached ? "Showing cached analysis." : `Analysis completed with ${data.confidence}% confidence.`,
+      });
+    },
+    onError: () => toast({ variant: "destructive", title: "Analysis Failed", description: "Could not analyze this incident. Please try again." }),
   });
 
   const { data: ticketDetails } = useQuery<{ ticket: SupportTicket; replies: SupportTicketReply[] }>({
@@ -928,6 +951,7 @@ export default function AdminSupportDashboard() {
 
                               {isExpanded && (
                                 <div className="mt-4 pt-4 border-t space-y-4" onClick={e => e.stopPropagation()}>
+                                  {/* Incident notes */}
                                   <div>
                                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Incident Notes</p>
                                     <p className="text-sm">{incident.notes}</p>
@@ -938,6 +962,196 @@ export default function AdminSupportDashboard() {
                                       <p className="text-sm">{incident.resolutionNotes}</p>
                                     </div>
                                   )}
+
+                                  {/* ── AI SUPPORT COPILOT ── */}
+                                  {(() => {
+                                    const aiData = incidentAiInsight[incident.id];
+                                    const isPanelOpen = incidentAiPanel[incident.id] !== false;
+                                    const isAnalyzing = analyzeIncidentMutation.isPending && analyzeIncidentMutation.variables === incident.id;
+                                    return (
+                                      <Collapsible
+                                        open={isPanelOpen}
+                                        onOpenChange={v => setIncidentAiPanel(p => ({ ...p, [incident.id]: v }))}
+                                      >
+                                        <div className="border rounded-lg bg-gradient-to-br from-violet-50/50 to-indigo-50/50 dark:from-violet-950/20 dark:to-indigo-950/20">
+                                          <CollapsibleTrigger asChild>
+                                            <div className="flex items-center justify-between p-4 cursor-pointer hover-elevate rounded-t-lg">
+                                              <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
+                                                  <Brain className="w-4 h-4 text-white" />
+                                                </div>
+                                                <div>
+                                                  <h3 className="font-semibold text-sm flex items-center gap-2">
+                                                    AI Incident Copilot
+                                                    <Badge variant="secondary" className="text-xs font-normal">
+                                                      <Sparkles className="w-3 h-3 mr-1" />
+                                                      GPT-4o
+                                                    </Badge>
+                                                  </h3>
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {aiData ? "Analysis ready" : "Analyze incident with AI"}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <ArrowRight className={`w-4 h-4 transition-transform ${isPanelOpen ? "rotate-90" : ""}`} />
+                                            </div>
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent>
+                                            <div className="px-4 pb-4 space-y-4">
+                                              {!aiData && !isAnalyzing && (
+                                                <Button
+                                                  onClick={() => analyzeIncidentMutation.mutate(incident.id)}
+                                                  className="w-full bg-violet-600"
+                                                  data-testid={`button-ai-analyze-incident-${incident.id}`}
+                                                >
+                                                  <Sparkles className="w-4 h-4 mr-2" />
+                                                  Analyze with AI
+                                                </Button>
+                                              )}
+                                              {isAnalyzing && (
+                                                <div className="text-center py-6">
+                                                  <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-violet-600" />
+                                                  <p className="text-sm font-medium">Analyzing incident...</p>
+                                                  <p className="text-xs text-muted-foreground mt-1">
+                                                    Reviewing severity, root cause, and recommended actions
+                                                  </p>
+                                                </div>
+                                              )}
+                                              {aiData && (
+                                                <div className="space-y-3">
+                                                  {/* Confidence + refresh */}
+                                                  <div className="flex items-center justify-between gap-4">
+                                                    <div className="flex-1">
+                                                      <div className="flex items-center justify-between text-xs mb-1">
+                                                        <span className="text-muted-foreground">Confidence</span>
+                                                        <span className="font-medium">{aiData.confidence}%</span>
+                                                      </div>
+                                                      <Progress value={aiData.confidence} className="h-2" />
+                                                    </div>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="icon"
+                                                      onClick={() => analyzeIncidentMutation.mutate(incident.id)}
+                                                      disabled={isAnalyzing}
+                                                      data-testid={`button-ai-refresh-incident-${incident.id}`}
+                                                      aria-label="Refresh AI analysis"
+                                                    >
+                                                      <RefreshCw className="w-4 h-4" />
+                                                    </Button>
+                                                  </div>
+
+                                                  {/* Summary */}
+                                                  <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                                      <Target className="w-3 h-3" /> Summary
+                                                    </h4>
+                                                    <p className="text-sm">{aiData.summary}</p>
+                                                  </div>
+
+                                                  {/* Severity assessment */}
+                                                  <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                                      <ShieldAlert className="w-3 h-3" /> Severity Assessment
+                                                    </h4>
+                                                    <p className="text-sm">{aiData.severity_assessment}</p>
+                                                  </div>
+
+                                                  {/* Root Cause */}
+                                                  {aiData.rootCause && (
+                                                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                                        <Zap className="w-3 h-3" /> Root Cause
+                                                      </h4>
+                                                      <p className="text-sm">{aiData.rootCause}</p>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Recommendations */}
+                                                  {aiData.recommendations?.length > 0 && (
+                                                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                                        <Lightbulb className="w-3 h-3" /> Recommended Actions
+                                                      </h4>
+                                                      <ul className="space-y-2">
+                                                        {aiData.recommendations.map((rec: string, i: number) => (
+                                                          <li key={i} className="flex items-start gap-2 text-sm">
+                                                            <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                                                            <span>{rec}</span>
+                                                          </li>
+                                                        ))}
+                                                      </ul>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Escalation advice */}
+                                                  {aiData.escalationAdvice && (
+                                                    <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3">
+                                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                                                        <AlertTriangle className="w-3 h-3" /> Escalation Advice
+                                                      </h4>
+                                                      <p className="text-sm">{aiData.escalationAdvice}</p>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Partner communication draft */}
+                                                  {aiData.partnerCommunication && (
+                                                    <div className="bg-gradient-to-br from-green-100/50 to-emerald-100/50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-3 border border-green-200/50 dark:border-green-700/30">
+                                                      <div className="flex items-center justify-between mb-2">
+                                                        <h4 className="text-xs font-semibold text-green-700 dark:text-green-300 uppercase flex items-center gap-1">
+                                                          <MessageSquare className="w-3 h-3" /> Partner Communication Draft
+                                                          <Badge className="ml-2 bg-green-600 text-white text-[10px] px-1.5 py-0">OK TO SEND</Badge>
+                                                        </h4>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          className="h-7 text-xs"
+                                                          onClick={() => {
+                                                            navigator.clipboard.writeText(aiData.partnerCommunication);
+                                                            setPartnerCommCopied(p => ({ ...p, [incident.id]: true }));
+                                                            setTimeout(() => setPartnerCommCopied(p => ({ ...p, [incident.id]: false })), 2000);
+                                                          }}
+                                                          data-testid={`button-ai-copy-comm-${incident.id}`}
+                                                        >
+                                                          <Copy className="w-3 h-3 mr-1" />
+                                                          {partnerCommCopied[incident.id] ? "Copied!" : "Copy"}
+                                                        </Button>
+                                                      </div>
+                                                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                                                        {aiData.partnerCommunication}
+                                                      </p>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Internal notes */}
+                                                  {aiData.internalNotes && (
+                                                    <div className="bg-gradient-to-br from-amber-100/50 to-orange-100/50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-3 border border-amber-200/50 dark:border-amber-700/30">
+                                                      <div className="flex items-center gap-2 mb-2">
+                                                        <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase flex items-center gap-1">
+                                                          <AlertTriangle className="w-3 h-3" /> Internal Notes
+                                                        </h4>
+                                                        <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0">STAFF ONLY</Badge>
+                                                      </div>
+                                                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                                                        {aiData.internalNotes}
+                                                      </p>
+                                                    </div>
+                                                  )}
+
+                                                  {aiData.cached && (
+                                                    <p className="text-xs text-muted-foreground text-center">
+                                                      Cached analysis · Click refresh for new analysis
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </CollapsibleContent>
+                                        </div>
+                                      </Collapsible>
+                                    );
+                                  })()}
+
+                                  {/* Resolution notes */}
                                   <div>
                                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Resolution Notes (add / update)</p>
                                     <textarea

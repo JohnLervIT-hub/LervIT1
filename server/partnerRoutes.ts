@@ -41,7 +41,9 @@ import {
   messages,
   inAppNotifications,
   partnerDirectMessages,
+  aiIncidentInsights,
 } from "@shared/schema";
+import { analyzeIncident } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
 
@@ -2003,6 +2005,77 @@ export function registerPartnerRoutes(app: Express) {
       );
 
     res.json(rows);
+  });
+
+  // POST /api/admin/partner-incidents/:id/ai-analyze — AI copilot analysis for an incident
+  app.post("/api/admin/partner-incidents/:id/ai-analyze", requireAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const incidentId = req.params.id;
+
+      const rows = await db
+        .select({
+          incident: partnerIncidents,
+          partnerName: partners.name,
+          reporterName: users.name,
+        })
+        .from(partnerIncidents)
+        .innerJoin(partners, eq(partners.id, partnerIncidents.partnerId))
+        .leftJoin(users, eq(users.id, partnerIncidents.reportedBy))
+        .where(eq(partnerIncidents.id, incidentId))
+        .limit(1);
+
+      if (!rows.length) return res.status(404).json({ error: "Incident not found" });
+      const { incident, partnerName, reporterName } = rows[0];
+
+      // Return cached analysis if less than 1 hour old
+      const [cached] = await db
+        .select()
+        .from(aiIncidentInsights)
+        .where(eq(aiIncidentInsights.incidentId, incidentId))
+        .orderBy(desc(aiIncidentInsights.createdAt))
+        .limit(1);
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (cached && cached.createdAt > oneHourAgo) {
+        return res.json({ ...cached, cached: true });
+      }
+
+      const start = Date.now();
+      const analysis = await analyzeIncident({
+        incident: {
+          id: incident.id,
+          category: incident.category,
+          severity: incident.severity,
+          status: incident.status,
+          title: incident.title,
+          notes: incident.notes,
+          escalationFlag: incident.escalationFlag,
+          createdAt: incident.createdAt,
+        },
+        partnerName: partnerName ?? "Unknown Partner",
+        bookingId: incident.bookingId,
+        reporterName: reporterName ?? undefined,
+      });
+
+      const [saved] = await db.insert(aiIncidentInsights).values({
+        incidentId,
+        summary: analysis.summary,
+        severity_assessment: analysis.severity_assessment,
+        rootCause: analysis.rootCause,
+        recommendations: analysis.recommendations,
+        partnerCommunication: analysis.partnerCommunication,
+        internalNotes: analysis.internalNotes,
+        escalationAdvice: analysis.escalationAdvice,
+        confidence: analysis.confidence,
+        processingTimeMs: Date.now() - start,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }).returning();
+
+      res.json({ ...saved, cached: false });
+    } catch (err) {
+      console.error("[incident ai-analyze]", err);
+      res.status(500).json({ error: "Failed to analyze incident" });
+    }
   });
 
   // PUT /api/admin/partner-incidents/:id — admin updates status / adds resolution notes

@@ -1483,3 +1483,23 @@ export const ENTERPRISE_TO_BOOKING_STATUS: Record<string, string> = {
   completed: 'completed',
   cancelled: 'cancelled',
 };
+
+// AI-generated insights for partner incidents
+export const aiIncidentInsights = pgTable("ai_incident_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentId: varchar("incident_id").references(() => partnerIncidents.id).notNull(),
+  summary: text("summary").notNull(),
+  severity_assessment: text("severity_assessment").notNull(),
+  rootCause: text("root_cause"),
+  recommendations: text("recommendations").array().notNull(),
+  partnerCommunication: text("partner_communication"),
+  internalNotes: text("internal_notes"),
+  escalationAdvice: text("escalation_advice"),
+  confidence: integer("confidence").notNull().default(80),
+  processingTimeMs: integer("processing_time_ms"),
+  modelUsed: text("model_used").default("gpt-4o"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => ({
+  incidentIdIdx: index("ai_incident_insights_incident_id_idx").on(table.incidentId),
+}));

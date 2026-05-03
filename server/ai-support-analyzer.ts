@@ -201,6 +201,167 @@ function getFallbackAnalysis(ticket: SupportTicket): AiAnalysisResult {
   };
 }
 
+// ── PARTNER INCIDENT AI ANALYSIS ──────────────────────────────────────────────
+
+interface IncidentContext {
+  incident: {
+    id: string;
+    category: string;
+    severity: string;
+    status: string;
+    title: string;
+    notes: string;
+    escalationFlag: boolean;
+    createdAt: Date | string;
+  };
+  partnerName: string;
+  bookingId: string;
+  reporterName?: string;
+}
+
+interface IncidentAnalysisResult {
+  summary: string;
+  severity_assessment: string;
+  rootCause: string;
+  recommendations: string[];
+  partnerCommunication: string;
+  internalNotes: string;
+  escalationAdvice: string;
+  confidence: number;
+}
+
+const INCIDENT_SYSTEM_PROMPT = `You are an expert enterprise operations analyst for LervIT, a premium moving marketplace platform in Calgary, Alberta that partners with professional moving companies (like OOMovers Inc.).
+
+LervIT Partner Portal Context:
+- Enterprise partner moving companies dispatch crews to complete customer bookings
+- Incidents are filed by partners when something goes wrong during a move
+- Categories: delay | damage | access_issue | customer_complaint | vehicle_issue | weather | other
+- Severity: low (minor, no service impact) | medium (partial impact) | high (significant impact, potential claim) | critical (safety risk, major financial exposure)
+- Your role is to advise LervIT ADMIN staff on how to handle the incident
+
+Your analysis must produce:
+1. A clear assessment of severity and operational risk
+2. Root cause hypothesis based on the incident description
+3. Concrete recommended admin actions (in priority order)
+4. A professional communication draft to send to the partner
+5. Internal staff notes with liability, SLA, and escalation context
+6. Escalation advice (whether to escalate to enterprise account management)
+
+CRITICAL RULES for partnerCommunication (sent to partner):
+- Professional, empathetic B2B tone — not consumer-facing
+- Acknowledge the incident and confirm LervIT is reviewing it
+- State the next step and expected timeline
+- Do NOT include internal liability assessments or legal positions
+
+CRITICAL RULES for internalNotes (staff only):
+- Include liability exposure estimate
+- Flag any SLA breach potential
+- Note if insurance claim documentation is needed
+- Mention if enterprise account health is at risk
+
+Respond in JSON format only.`;
+
+const INCIDENT_ANALYSIS_PROMPT = `Analyze this partner incident and provide operational guidance for LervIT admin staff:
+
+INCIDENT DETAILS:
+- Title: {{title}}
+- Category: {{category}}
+- Severity: {{severity}} (partner-reported)
+- Current Status: {{status}}
+- Escalation Flagged by Partner: {{escalationFlag}}
+- Filed: {{createdAt}}
+
+PARTNER: {{partnerName}}
+BOOKING: {{bookingId}}
+{{#if reporter}}
+REPORTED BY: {{reporter}}
+{{/if}}
+
+INCIDENT DESCRIPTION:
+{{notes}}
+
+Provide your analysis in this exact JSON structure:
+{
+  "summary": "2-3 sentence operational summary of what happened and the business impact",
+  "severity_assessment": "Your independent severity assessment with rationale (may differ from partner-reported severity)",
+  "rootCause": "Most likely root cause based on the incident description",
+  "recommendations": ["Immediate action 1", "Short-term action 2", "Follow-up action 3"],
+  "partnerCommunication": "Professional B2B message to send to the partner acknowledging the incident and outlining next steps. Start with 'Hi [Partner Name] team,'",
+  "internalNotes": "Staff-only context: liability exposure, SLA considerations, insurance implications, enterprise account health notes, debugging checklist",
+  "escalationAdvice": "Whether to escalate to enterprise account management and why (or why not)",
+  "confidence": 85
+}`;
+
+export async function analyzeIncident(context: IncidentContext): Promise<IncidentAnalysisResult> {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("OpenAI API key not configured, returning fallback incident analysis");
+    return getFallbackIncidentAnalysis(context);
+  }
+
+  try {
+    const prompt = INCIDENT_ANALYSIS_PROMPT
+      .replace("{{title}}", context.incident.title)
+      .replace("{{category}}", context.incident.category)
+      .replace("{{severity}}", context.incident.severity)
+      .replace("{{status}}", context.incident.status)
+      .replace("{{escalationFlag}}", context.incident.escalationFlag ? "Yes" : "No")
+      .replace("{{createdAt}}", new Date(context.incident.createdAt).toISOString())
+      .replace("{{partnerName}}", context.partnerName)
+      .replace("{{bookingId}}", context.bookingId)
+      .replace("{{#if reporter}}", context.reporterName ? "" : "<!--")
+      .replace("{{reporter}}", context.reporterName || "")
+      .replace("{{/if}}", context.reporterName ? "" : "-->")
+      .replace("{{notes}}", context.incident.notes);
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: INCIDENT_SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 1200,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("Empty response from OpenAI");
+
+    const analysis = JSON.parse(content) as IncidentAnalysisResult;
+    return {
+      ...analysis,
+      confidence: Math.min(100, Math.max(0, analysis.confidence || 80)),
+    };
+  } catch (error) {
+    console.error("AI incident analysis error:", error);
+    return getFallbackIncidentAnalysis(context);
+  }
+}
+
+function getFallbackIncidentAnalysis(context: IncidentContext): IncidentAnalysisResult {
+  const sevMap: Record<string, string> = {
+    critical: "Critical severity — requires immediate escalation and potential insurance documentation.",
+    high: "High severity — significant operational impact; prioritize resolution within 4 hours.",
+    medium: "Medium severity — manageable impact; resolve within 24 hours.",
+    low: "Low severity — minimal impact; standard resolution timeline applies.",
+  };
+  return {
+    summary: `Partner ${context.partnerName} reported a ${context.incident.severity} ${context.incident.category.replace(/_/g, " ")} incident on booking ${context.bookingId}. Manual review by admin staff is required.`,
+    severity_assessment: sevMap[context.incident.severity] || "Severity review required.",
+    rootCause: "Manual investigation required to determine root cause.",
+    recommendations: [
+      "Review the full incident notes and any attached files",
+      "Contact partner directly to gather additional details",
+      "Check booking timeline for SLA compliance",
+      "Assess if customer needs to be notified or compensated",
+    ],
+    partnerCommunication: `Hi ${context.partnerName} team,\n\nThank you for reporting this incident. We've received your report regarding "${context.incident.title}" and our operations team is reviewing it now.\n\nWe'll be in touch with next steps within 2 business hours.\n\nBest regards,\nLervIT Partner Operations`,
+    internalNotes: "AI analysis unavailable — manual review required. Check partner SLA terms, booking financials, and any related customer complaints.",
+    escalationAdvice: "Escalate to enterprise account management if incident is critical or escalation flag is set.",
+    confidence: 35,
+  };
+}
+
 export function getQuickResponses(category: string): { label: string; template: string }[] {
   const responses: Record<string, { label: string; template: string }[]> = {
     booking: [
