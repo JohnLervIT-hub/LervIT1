@@ -3382,12 +3382,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
       
-      let bookings;
+      let userBookings;
       
       // SECURITY: Force filtering based on user role - ignore query parameters
       if (user.role === "customer") {
         // Customers can ONLY see their own bookings
-        bookings = await storage.getBookingsByCustomer(user.id);
+        userBookings = await storage.getBookingsByCustomer(user.id);
       } else if (user.role === "mover") {
         // Movers can see:
         // 1. Bookings assigned to them
@@ -3412,22 +3412,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Combine both sets (remove duplicates)
         const bookingMap = new Map();
         [...assignedBookings, ...availableBookings].forEach((b) => bookingMap.set(b.id, b));
-        bookings = Array.from(bookingMap.values());
+        userBookings = Array.from(bookingMap.values());
       } else if (user.role === "admin") {
         // Admins can filter by customerId or moverId or see all
         const customerId = req.query.customerId as string | undefined;
         const moverId = req.query.moverId as string | undefined;
         
         if (customerId) {
-          bookings = await storage.getBookingsByCustomer(customerId);
+          userBookings = await storage.getBookingsByCustomer(customerId);
         } else if (moverId) {
-          bookings = await storage.getBookingsByMover(moverId);
+          userBookings = await storage.getBookingsByMover(moverId);
         } else {
           // Support pagination for admin view
           const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
           const offset = parseInt(req.query.offset as string) || 0;
           const result = await storage.getAllBookings({ limit, offset });
-          bookings = result.data;
+          userBookings = result.data;
         }
       } else {
         return res.status(403).json({ error: "Access denied" });
@@ -3465,7 +3465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Enrich with customer and mover data
       const enrichedBookings = await Promise.all(
-        bookings.map(async (booking) => {
+        userBookings.map(async (booking) => {
           const customer = await storage.getUser(booking.customerId);
           const mover = booking.moverId ? await storage.getMover(booking.moverId) : null;
           const moverUser = mover ? await storage.getUser(mover.userId) : null;
@@ -3504,10 +3504,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .where(eq(bookingAssignments.teamMemberId, latestAssignment.teamMemberId));
               if (allAssigned.length > 0) {
                 const assignedIds = allAssigned.map(a => a.bookingId);
-                const completed = await db.select({ id: bookings.id })
+                const completedRows = await db.select({ id: bookings.id })
                   .from(bookings)
                   .where(and(inArray(bookings.id, assignedIds), eq(bookings.enterpriseStatus, 'completed')));
-                driverCompletedMoves = completed.length;
+                driverCompletedMoves = completedRows.length;
               } else {
                 driverCompletedMoves = 0;
               }
