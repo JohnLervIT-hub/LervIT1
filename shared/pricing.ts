@@ -175,8 +175,8 @@ const PRICING_CONFIG = {
     apartment: 75.00, // Moving Truck loads — 300 ft³ minimum × $0.25
   } as Record<string, number>,
   // Volume-based load fee rate (used when AI provides exact volume)
-  // $0.19/ft³: 100ft³=$19, 200ft³=$38, 300ft³=$57, 400ft³=$76
-  VOLUME_LOAD_FEE_PER_CUFT: 0.19,
+  // $0.20/ft³: 100ft³=$20, 200ft³=$40, 300ft³=$60, 400ft³=$80
+  VOLUME_LOAD_FEE_PER_CUFT: 0.20,
   VOLUME_LOAD_FEE_MINIMUM: 6.00,  // Minimum load fee regardless of volume
   APARTMENT_MOVE_PREMIUM: 60.00, // $60 premium for 300+ ft³ loads (apartment moves)
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility
