@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2 } from "lucide-react";
+import { LogOut, Building2, AlertTriangle } from "lucide-react";
 import "iconify-icon";
 
 declare global {

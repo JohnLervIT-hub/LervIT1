@@ -208,16 +208,14 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(invite.partnerId, existingUser.id, "user.activated", "partner", invite.partnerId);
 
-      // Destroy any existing session and create a fresh one for the newly activated user
-      req.session.destroy(() => {
-        req.session.regenerate((err) => {
-          if (err) {
-            return res.json({ success: true, autoLogin: false, message: "Account activated. Please log in." });
-          }
-          (req.session as any).userId = existingUser.id;
-          req.session.save(() => {
-            res.json({ success: true, autoLogin: true, partnerId: invite.partnerId });
-          });
+      // Regenerate session to clear any existing user, then log in the newly activated user
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.json({ success: true, autoLogin: false, message: "Account activated. Please log in." });
+        }
+        (req.session as any).userId = existingUser.id;
+        req.session.save(() => {
+          res.json({ success: true, autoLogin: true, partnerId: invite.partnerId });
         });
       });
     } catch (err: any) {
