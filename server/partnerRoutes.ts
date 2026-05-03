@@ -176,8 +176,9 @@ export function registerPartnerRoutes(app: Express) {
             isActive: true,
           });
         }
-        // Update role
-        await db.update(users).set({ role: invite.role }).where(eq(users.id, existingUser.id));
+        // Update role AND name — the name they entered during activation is their chosen display name
+        await db.update(users).set({ role: invite.role, name }).where(eq(users.id, existingUser.id));
+        existingUser = { ...existingUser, name };
       } else {
         // Create new user
         const hashed = await hashPassword(password);
@@ -233,6 +234,7 @@ export function registerPartnerRoutes(app: Express) {
       const [invite] = await db.select({
         id: partnerInvites.id,
         email: partnerInvites.email,
+        name: partnerInvites.name,
         role: partnerInvites.role,
         expiresAt: partnerInvites.expiresAt,
         usedAt: partnerInvites.usedAt,
@@ -1329,6 +1331,7 @@ export function registerPartnerRoutes(app: Express) {
       const [invite] = await db.insert(partnerInvites).values({
         partnerId: partner.id,
         email: data.email,
+        name: data.name,
         role: data.role,
         token,
         expiresAt,

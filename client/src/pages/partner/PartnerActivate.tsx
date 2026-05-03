@@ -46,6 +46,13 @@ export default function PartnerActivate() {
     defaultValues: { name: "", password: "", confirmPassword: "" },
   });
 
+  // Pre-fill name from invite once it loads
+  useEffect(() => {
+    if (inviteInfo?.name) {
+      form.setValue("name", inviteInfo.name);
+    }
+  }, [inviteInfo?.name]);
+
   const activate = useMutation({
     mutationFn: (data: ActivateForm) =>
       apiRequest("POST", "/api/partner/activate", { token, name: data.name, password: data.password }),

@@ -1167,6 +1167,7 @@ export const partnerInvites = pgTable("partner_invites", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   partnerId: varchar("partner_id").references(() => partners.id).notNull(),
   email: text("email").notNull(),
+  name: text("name"),
   role: text("role").notNull().default("partner_admin"),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
