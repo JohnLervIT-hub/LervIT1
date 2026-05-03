@@ -220,7 +220,7 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   );
   if (!data?.partner) return <div className="text-center py-16 text-muted-foreground">Partner not found.</div>;
 
-  const { partner, users, docs, team, recentBookings, earnings, invites } = data;
+  const { partner, users, docs, team, recentBookings, earnings, invites, zones = [] } = data;
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
@@ -407,6 +407,50 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                   </div>
                 </CardContent>
               </Card>
+
+              {zones.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Coverage Zones</CardTitle></CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    {zones.map((z: any) => (
+                      <div key={z.id} className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{z.zoneName}</span>
+                          {!z.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground w-32 shrink-0">Location</span>
+                          <span>{z.city}{z.province ? `, ${z.province}` : ""}</span>
+                        </div>
+                        {z.serviceRadiusKm && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-32 shrink-0">Radius</span>
+                            <span>{z.serviceRadiusKm} km</span>
+                          </div>
+                        )}
+                        {(z.operatingHoursStart || z.operatingHoursEnd) && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-32 shrink-0">Hours</span>
+                            <span>{z.operatingHoursStart ?? "—"} – {z.operatingHoursEnd ?? "—"}</span>
+                          </div>
+                        )}
+                        {z.postalCodePrefixes?.length > 0 && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-32 shrink-0">Postal Prefixes</span>
+                            <span>{z.postalCodePrefixes.join(", ")}</span>
+                          </div>
+                        )}
+                        {z.sameDayAvailable && (
+                          <div className="flex gap-2">
+                            <span className="text-muted-foreground w-32 shrink-0">Same-Day</span>
+                            <span className="text-green-600 font-medium">Available</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
 
