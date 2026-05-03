@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil, RotateCcw } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil, RotateCcw, ListChecks } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { format, isValid } from "date-fns";
@@ -57,6 +57,7 @@ type Booking = {
   createdAt: string;
   hasReview?: boolean;
   partnerAvgRating?: number | null;
+  enterprisePartnerId?: string | null;
   mover: {
     id: string;
     name: string;
@@ -97,6 +98,9 @@ export default function MyBookings() {
   
   // State for edit booking dialog
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+
+  // State for status timeline dialog (partner bookings)
+  const [timelineBookingId, setTimelineBookingId] = useState<string | null>(null);
   
   // State for countdown timer refresh
   const [countdownTick, setCountdownTick] = useState(0);
@@ -814,25 +818,41 @@ export default function MyBookings() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-4 border-t">
-                    {["en_route_to_pickup", "loading", "en_route_to_dropoff", "unloading", "in_transit"].includes(booking.status) && (
-                      <Button
-                        onClick={() => setLocation(`/track-trip/${booking.id}`)}
-                        data-testid={`button-track-trip-${booking.id}`}
-                      >
-                        <Navigation className="w-4 h-4 mr-2" />
-                        Track Trip Live
-                      </Button>
-                    )}
-                    {booking.status === "confirmed" && booking.moverId && (
-                      <Button
-                        variant="outline"
-                        disabled
-                        className="opacity-70"
-                        data-testid={`button-track-pending-${booking.id}`}
-                      >
-                        <Clock className="w-4 h-4 mr-2" />
-                        Tracking Available When Mover Starts
-                      </Button>
+                    {/* Partner bookings: show status timeline instead of GPS tracking */}
+                    {booking.enterprisePartnerId ? (
+                      ["new", "under_review", "accepted", "assigned", "en_route_to_pickup", "loading", "en_route_to_dropoff", "unloading", "in_transit", "arrived_at_dropoff", "delivered"].some(s => booking.status === s || (booking as any).enterpriseStatus === s) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setTimelineBookingId(booking.id)}
+                          data-testid={`button-move-status-${booking.id}`}
+                        >
+                          <ListChecks className="w-4 h-4 mr-2" />
+                          View Move Status
+                        </Button>
+                      )
+                    ) : (
+                      <>
+                        {["en_route_to_pickup", "loading", "en_route_to_dropoff", "unloading", "in_transit"].includes(booking.status) && (
+                          <Button
+                            onClick={() => setLocation(`/track-trip/${booking.id}`)}
+                            data-testid={`button-track-trip-${booking.id}`}
+                          >
+                            <Navigation className="w-4 h-4 mr-2" />
+                            Track Trip Live
+                          </Button>
+                        )}
+                        {booking.status === "confirmed" && booking.moverId && (
+                          <Button
+                            variant="outline"
+                            disabled
+                            className="opacity-70"
+                            data-testid={`button-track-pending-${booking.id}`}
+                          >
+                            <Clock className="w-4 h-4 mr-2" />
+                            Tracking Available When Mover Starts
+                          </Button>
+                        )}
+                      </>
                     )}
                     {(booking.status === "confirmed" || booking.status === "pending" || booking.status === "pending_payment") && booking.paymentStatus !== "succeeded" && booking.price && (
                       <Button
@@ -1008,6 +1028,110 @@ export default function MyBookings() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Move Status Timeline Dialog (partner bookings) */}
+      <MoveStatusDialog
+        bookingId={timelineBookingId}
+        onClose={() => setTimelineBookingId(null)}
+      />
     </div>
+  );
+}
+
+function formatStatusLabel(s: string) {
+  const map: Record<string, string> = {
+    new: "Booking Received",
+    under_review: "Under Review",
+    accepted: "Confirmed by Moving Company",
+    assigned: "Driver Assigned",
+    en_route_to_pickup: "Driver En Route to Pickup",
+    arrived_at_pickup: "Driver Arrived at Pickup",
+    picked_up: "Items Picked Up",
+    loading: "Loading Items",
+    in_transit: "Move In Progress",
+    en_route_to_dropoff: "En Route to Destination",
+    arrived_at_dropoff: "Arrived at Destination",
+    unloading: "Unloading Items",
+    delivered: "Items Delivered",
+    completed: "Move Completed",
+    delayed: "Delayed",
+    issue_reported: "Issue Reported",
+    cancelled: "Cancelled",
+  };
+  return map[s] ?? s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function statusIcon(s: string) {
+  if (["completed", "delivered", "arrived_at_dropoff"].includes(s)) return CheckCircle2;
+  if (["cancelled", "issue_reported"].includes(s)) return XCircle;
+  if (["in_transit", "en_route_to_pickup", "en_route_to_dropoff"].includes(s)) return Truck;
+  if (["delayed"].includes(s)) return AlertTriangle;
+  return Clock;
+}
+
+function MoveStatusDialog({ bookingId, onClose }: { bookingId: string | null; onClose: () => void }) {
+  const { data: events, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/bookings", bookingId, "status-events"],
+    queryFn: () => fetch(`/api/bookings/${bookingId}/status-events`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!bookingId,
+    refetchInterval: 15000,
+  });
+
+  return (
+    <Dialog open={!!bookingId} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ListChecks className="w-5 h-5 text-primary" />
+            Move Status
+          </DialogTitle>
+          <DialogDescription>
+            Live updates from your moving company
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !events || events.length === 0 ? (
+          <div className="flex flex-col items-center py-10 gap-3 text-center">
+            <Clock className="w-10 h-10 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground font-medium">No updates yet</p>
+            <p className="text-xs text-muted-foreground">Status updates will appear here as your moving company progresses through your move.</p>
+          </div>
+        ) : (
+          <div className="relative pl-6 space-y-0 max-h-[420px] overflow-y-auto pr-1">
+            {/* Vertical line */}
+            <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />
+            {events.map((ev, i) => {
+              const Icon = statusIcon(ev.toStatus);
+              const isLast = i === events.length - 1;
+              const isNegative = ["cancelled", "issue_reported", "delayed"].includes(ev.toStatus);
+              const isPositive = ["completed", "delivered", "arrived_at_dropoff", "accepted", "assigned"].includes(ev.toStatus);
+              return (
+                <div key={ev.id} className="relative flex gap-3 pb-5 last:pb-0" data-testid={`event-status-${ev.id}`}>
+                  {/* Dot */}
+                  <div className={`absolute -left-[25px] w-5 h-5 rounded-full flex items-center justify-center border-2 bg-background ${isLast ? "border-primary" : "border-border"}`}>
+                    <Icon className={`w-2.5 h-2.5 ${isNegative ? "text-destructive" : isPositive ? "text-primary" : "text-muted-foreground"}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold leading-snug ${isNegative ? "text-destructive" : isLast ? "text-foreground" : "text-muted-foreground"}`}>
+                      {formatStatusLabel(ev.toStatus)}
+                    </p>
+                    {ev.notes && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{ev.notes}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">
+                      {format(new Date(ev.createdAt), "MMM d, h:mm a")}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

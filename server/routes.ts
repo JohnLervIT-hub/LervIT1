@@ -40,7 +40,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, generateWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -3648,6 +3648,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         partnerAssignment,
       });
     } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Customer-facing status timeline for partner-routed bookings
+  app.get("/api/bookings/:id/status-events", async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+      const booking = await storage.getBooking(req.params.id);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
+      if (booking.customerId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const events = await db.select({
+        id: bookingStatusEvents.id,
+        toStatus: bookingStatusEvents.toStatus,
+        fromStatus: bookingStatusEvents.fromStatus,
+        notes: bookingStatusEvents.notes,
+        customerVisible: bookingStatusEvents.customerVisible,
+        createdAt: bookingStatusEvents.createdAt,
+      })
+        .from(bookingStatusEvents)
+        .where(and(
+          eq(bookingStatusEvents.bookingId, booking.id),
+          eq(bookingStatusEvents.customerVisible, true)
+        ))
+        .orderBy(bookingStatusEvents.createdAt);
+      res.json(events);
+    } catch (err) {
       res.status(500).json({ error: "Internal server error" });
     }
   });
