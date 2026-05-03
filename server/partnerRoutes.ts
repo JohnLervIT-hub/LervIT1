@@ -15,7 +15,7 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { z } from "zod";
-import { eq, and, desc, inArray, or, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, or, sql, isNull, gt, asc } from "drizzle-orm";
 import multer from "multer";
 import { randomBytes } from "crypto";
 import { stripe } from "./config/stripe";
@@ -1263,6 +1263,139 @@ export function registerPartnerRoutes(app: Express) {
     } catch (err) {
       console.error("[Partner] dashboard error:", err);
       res.status(500).json({ error: "Failed to fetch dashboard" });
+    }
+  });
+
+  // =========================================================
+  // PARTNER SELF-SERVICE USER MANAGEMENT
+  // =========================================================
+
+  // GET /api/partner/users — list all portal users for this partner
+  app.get("/api/partner/users", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
+      const { partner, user: me } = (req as any).partnerCtx;
+      const rows = await db
+        .select({
+          puId: partnerUsers.id,
+          partnerRole: partnerUsers.partnerRole,
+          isActive: partnerUsers.isActive,
+          createdAt: partnerUsers.createdAt,
+          userId: users.id,
+          name: users.name,
+          email: users.email,
+        })
+        .from(partnerUsers)
+        .innerJoin(users, eq(users.id, partnerUsers.userId))
+        .where(and(eq(partnerUsers.partnerId, partner.id), eq(partnerUsers.isActive, true)))
+        .orderBy(asc(partnerUsers.createdAt));
+
+      // Also include pending (unused) invites
+      const pendingInvites = await db.select().from(partnerInvites)
+        .where(and(
+          eq(partnerInvites.partnerId, partner.id),
+          isNull(partnerInvites.usedAt),
+          gt(partnerInvites.expiresAt, new Date()),
+        ));
+
+      res.json({ users: rows, pendingInvites, myUserId: me.id });
+    } catch (err) {
+      console.error("[Partner] list users error:", err);
+      res.status(500).json({ error: "Failed to list users" });
+    }
+  });
+
+  // POST /api/partner/users/invite — invite a new portal user
+  app.post("/api/partner/users/invite", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
+      const { partner, user: inviter } = (req as any).partnerCtx;
+      const data = z.object({
+        email: z.string().email(),
+        name: z.string().min(1),
+        role: z.enum(["partner_dispatcher", "partner_ops_manager", "partner_viewer"]),
+      }).parse(req.body);
+
+      // Check not already a user
+      const [existing] = await db
+        .select({ id: users.id })
+        .from(users)
+        .innerJoin(partnerUsers, eq(partnerUsers.userId, users.id))
+        .where(and(eq(users.email, data.email), eq(partnerUsers.partnerId, partner.id)))
+        .limit(1);
+      if (existing) return res.status(409).json({ error: "This email already has portal access." });
+
+      const token = randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const [invite] = await db.insert(partnerInvites).values({
+        partnerId: partner.id,
+        email: data.email,
+        role: data.role,
+        token,
+        expiresAt,
+        invitedBy: inviter.id,
+      }).returning();
+
+      await logAudit(partner.id, inviter.id, "user.invited", "partner_user", invite.id,
+        `Invited ${data.email} as ${data.role}`);
+
+      res.status(201).json({ invite: { ...invite, activationUrl: `/partner-activate?token=${token}` } });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Partner] invite user error:", err);
+      res.status(500).json({ error: "Failed to send invite" });
+    }
+  });
+
+  // PUT /api/partner/users/:id/role — change a portal user's role
+  app.put("/api/partner/users/:id/role", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
+      const { partner, user: me } = (req as any).partnerCtx;
+      const { role } = z.object({
+        role: z.enum(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]),
+      }).parse(req.body);
+
+      const [pu] = await db.select().from(partnerUsers)
+        .where(and(eq(partnerUsers.id, req.params.id), eq(partnerUsers.partnerId, partner.id)))
+        .limit(1);
+      if (!pu) return res.status(404).json({ error: "User not found" });
+      if (pu.userId === me.id) return res.status(400).json({ error: "Cannot change your own role" });
+
+      await db.update(partnerUsers).set({ partnerRole: role }).where(eq(partnerUsers.id, pu.id));
+      await logAudit(partner.id, me.id, "user.role_changed", "partner_user", pu.id,
+        `Role changed to ${role}`);
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  // DELETE /api/partner/users/:id — revoke a portal user's access
+  app.delete("/api/partner/users/:id", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
+      const { partner, user: me } = (req as any).partnerCtx;
+      const [pu] = await db.select().from(partnerUsers)
+        .where(and(eq(partnerUsers.id, req.params.id), eq(partnerUsers.partnerId, partner.id)))
+        .limit(1);
+      if (!pu) return res.status(404).json({ error: "User not found" });
+      if (pu.userId === me.id) return res.status(400).json({ error: "Cannot remove yourself" });
+
+      await db.update(partnerUsers).set({ isActive: false }).where(eq(partnerUsers.id, pu.id));
+      await logAudit(partner.id, me.id, "user.removed", "partner_user", pu.id, "Portal access revoked");
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to remove user" });
+    }
+  });
+
+  // DELETE /api/partner/invites/:id — cancel a pending invite
+  app.delete("/api/partner/invites/:id", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
+      const { partner } = (req as any).partnerCtx;
+      await db.delete(partnerInvites)
+        .where(and(eq(partnerInvites.id, req.params.id), eq(partnerInvites.partnerId, partner.id)));
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to cancel invite" });
     }
   });
 

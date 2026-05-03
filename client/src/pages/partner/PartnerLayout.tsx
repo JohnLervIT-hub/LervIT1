@@ -40,7 +40,8 @@ const navItems = [
   { path: "/partner/compliance",label: "Compliance", icon3d: "fluent-emoji-3d:page-facing-up" },
   { path: "/partner/incidents", label: "Incidents",  icon3d: "fluent-emoji-3d:warning" },
   { path: "/partner/team",      label: "Team",       icon3d: "fluent-emoji-3d:busts-in-silhouette" },
-  { path: "/partner/audit",     label: "Audit Log",  icon3d: "fluent-emoji-3d:magnifying-glass-tilted-right" },
+  { path: "/partner/users",     label: "Users",      icon3d: "fluent-emoji-3d:identification-card", adminOnly: true },
+  { path: "/partner/audit",     label: "Audit Log",  icon3d: "fluent-emoji-3d:magnifying-glass-tilted-right", adminOnly: true },
 ];
 
 export function PartnerLayout({ children }: { children: React.ReactNode }) {
@@ -94,7 +95,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navItems.map((item) => {
+                  {navItems.filter(item => !item.adminOnly || ctx?.partnerUser?.partnerRole === "partner_admin").map((item) => {
                     const isActive = loc === item.path || loc.startsWith(item.path + "/");
                     const badge =
                       item.path === "/partner/bookings" && pendingBookings > 0
