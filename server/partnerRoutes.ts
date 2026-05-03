@@ -589,9 +589,9 @@ export function registerPartnerRoutes(app: Express) {
     if (!member) return res.status(404).json({ error: "Team member not found" });
 
     try {
+      const objectStorage = new ObjectStorageService();
       const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
-      const objectKey = `partner/${partner.id}/team/${member.id}/driver.${ext}`;
-      const url = await objectStorage.uploadFile(objectKey, req.file.buffer, req.file.mimetype);
+      const url = await objectStorage.uploadBuffer(req.file.buffer, `driver.${ext}`, req.file.mimetype, partner.id);
       const [updated] = await db.update(partnerTeamMembers)
         .set({ driverPhoto: url })
         .where(eq(partnerTeamMembers.id, member.id))
@@ -617,9 +617,9 @@ export function registerPartnerRoutes(app: Express) {
     if (!member) return res.status(404).json({ error: "Team member not found" });
 
     try {
+      const objectStorage = new ObjectStorageService();
       const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
-      const objectKey = `partner/${partner.id}/team/${member.id}/vehicle.${ext}`;
-      const url = await objectStorage.uploadFile(objectKey, req.file.buffer, req.file.mimetype);
+      const url = await objectStorage.uploadBuffer(req.file.buffer, `vehicle.${ext}`, req.file.mimetype, partner.id);
       const [updated] = await db.update(partnerTeamMembers)
         .set({ vehiclePhoto: url })
         .where(eq(partnerTeamMembers.id, member.id))
