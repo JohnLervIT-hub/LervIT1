@@ -15,7 +15,7 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { z } from "zod";
-import { eq, and, desc, inArray, or, sql, isNull, gt, asc } from "drizzle-orm";
+import { eq, and, desc, inArray, or, sql, isNull, gt, asc, ne } from "drizzle-orm";
 import multer from "multer";
 import { randomBytes } from "crypto";
 import { stripe } from "./config/stripe";
@@ -38,6 +38,7 @@ import {
   insertCoverageZoneSchema,
   insertPartnerTeamMemberSchema,
   insertPartnerIncidentSchema,
+  messages,
 } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
@@ -1851,5 +1852,172 @@ export function registerPartnerRoutes(app: Express) {
       console.error("[Admin] route booking error:", err);
       res.status(500).json({ error: "Failed to route booking" });
     }
+  });
+
+  // ============================================================
+  // PARTNER MESSAGING ROUTES
+  // ============================================================
+
+  // GET /api/partner/messages — list all booking conversations for this partner
+  app.get("/api/partner/messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+
+    const partnerBookingRows = await db.select({
+      id: bookings.id,
+      pickupAddress: bookings.pickupAddress,
+      dropoffAddress: bookings.dropoffAddress,
+      preferredDate: bookings.preferredDate,
+      status: bookings.status,
+      enterpriseStatus: bookings.enterpriseStatus,
+      customerId: bookings.customerId,
+    }).from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
+
+    if (!partnerBookingRows.length) return res.json([]);
+
+    const bookingIds = partnerBookingRows.map(b => b.id);
+
+    const allMessages = await db.select().from(messages)
+      .where(inArray(messages.bookingId, bookingIds))
+      .orderBy(desc(messages.createdAt));
+
+    if (!allMessages.length) return res.json([]);
+
+    // Identify partner user IDs so we can flag incoming (customer) messages
+    const partnerUserRows = await db.select({ userId: partnerUsers.userId })
+      .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
+    const partnerUserIds = new Set(partnerUserRows.map(r => r.userId));
+
+    // Group messages by booking
+    type ConvEntry = { lastMessage: typeof allMessages[0]; unreadCount: number };
+    const convMap = new Map<string, ConvEntry>();
+    for (const msg of allMessages) {
+      if (!convMap.has(msg.bookingId)) {
+        convMap.set(msg.bookingId, { lastMessage: msg, unreadCount: 0 });
+      }
+      if (!partnerUserIds.has(msg.senderId) && !msg.readAt) {
+        convMap.get(msg.bookingId)!.unreadCount++;
+      }
+    }
+
+    // Fetch customer names
+    const customerIds = [...new Set(partnerBookingRows.map(b => b.customerId))];
+    const customerRows = await db.select({ id: users.id, name: users.name })
+      .from(users).where(inArray(users.id, customerIds));
+    const customerMap = Object.fromEntries(customerRows.map(u => [u.id, u.name]));
+
+    // Build conversation list (only bookings with messages)
+    const conversations = partnerBookingRows
+      .filter(b => convMap.has(b.id))
+      .map(b => ({
+        bookingId: b.id,
+        booking: b,
+        customerName: customerMap[b.customerId] || "Customer",
+        lastMessage: convMap.get(b.id)!.lastMessage,
+        unreadCount: convMap.get(b.id)!.unreadCount,
+      }))
+      .sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
+
+    res.json(conversations);
+  });
+
+  // GET /api/partner/messages/unread-count — total unread for badge
+  app.get("/api/partner/messages/unread-count", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+
+    const partnerBookingIds = await db.select({ id: bookings.id })
+      .from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
+    if (!partnerBookingIds.length) return res.json({ count: 0 });
+
+    const ids = partnerBookingIds.map(b => b.id);
+    const partnerUserRows = await db.select({ userId: partnerUsers.userId })
+      .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
+    const partnerUserIds = partnerUserRows.map(r => r.userId);
+
+    const unread = await db.select({ id: messages.id })
+      .from(messages)
+      .where(and(
+        inArray(messages.bookingId, ids),
+        isNull(messages.readAt),
+        partnerUserIds.length > 0 ? sql`${messages.senderId} NOT IN (${sql.join(partnerUserIds.map(id => sql`${id}`), sql`, `)})` : sql`true`,
+      ));
+
+    res.json({ count: unread.length });
+  });
+
+  // GET /api/partner/bookings/:id/messages — get thread for a booking
+  app.get("/api/partner/bookings/:id/messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+
+    const [booking] = await db.select().from(bookings)
+      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+      .limit(1);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    const msgs = await db.select().from(messages)
+      .where(eq(messages.bookingId, booking.id))
+      .orderBy(asc(messages.createdAt));
+
+    const userIds = [...new Set(msgs.map(m => m.senderId))];
+    const senderRows = userIds.length
+      ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, userIds))
+      : [];
+    const senderMap = Object.fromEntries(senderRows.map(u => [u.id, u.name]));
+
+    // Get partner user ids to label messages
+    const partnerUserRows = await db.select({ userId: partnerUsers.userId })
+      .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
+    const partnerUserIds = new Set(partnerUserRows.map(r => r.userId));
+
+    res.json(msgs.map(m => ({
+      ...m,
+      senderName: senderMap[m.senderId] || "Unknown",
+      isPartnerMessage: partnerUserIds.has(m.senderId),
+    })));
+  });
+
+  // POST /api/partner/bookings/:id/messages — send a message as partner
+  app.post("/api/partner/bookings/:id/messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
+    const { partner, user } = (req as any).partnerCtx;
+
+    const [booking] = await db.select().from(bookings)
+      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+      .limit(1);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    try {
+      const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+
+      const [msg] = await db.insert(messages).values({
+        bookingId: booking.id,
+        senderId: user.id,
+        text,
+      }).returning();
+
+      res.json({ ...msg, senderName: user.name, isPartnerMessage: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // POST /api/partner/messages/:bookingId/mark-read — mark incoming messages as read
+  app.post("/api/partner/messages/:bookingId/mark-read", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner, user } = (req as any).partnerCtx;
+
+    const [booking] = await db.select({ id: bookings.id })
+      .from(bookings)
+      .where(and(eq(bookings.id, req.params.bookingId), eq(bookings.enterprisePartnerId, partner.id)))
+      .limit(1);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    await db.update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(messages.bookingId, booking.id),
+        isNull(messages.readAt),
+        ne(messages.senderId, user.id),
+      ));
+
+    res.json({ ok: true });
   });
 }

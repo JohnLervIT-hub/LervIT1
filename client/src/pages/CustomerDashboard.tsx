@@ -451,6 +451,9 @@ export default function CustomerDashboard() {
         return { text: "We're finding nearby movers", icon: Clock, action: null };
       case "confirmed":
         return { text: "Message your mover", icon: MessageCircle, action: () => handleMessage(booking.id) };
+      case "accepted":
+      case "assigned":
+        return { text: "Message moving company", icon: MessageCircle, action: () => handleMessage(booking.id) };
       case "en_route_to_pickup":
       case "loading":
       case "en_route_to_dropoff":

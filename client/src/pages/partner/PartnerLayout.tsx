@@ -40,6 +40,7 @@ declare global {
 const navItems = [
   { path: "/partner/dashboard", label: "Dashboard",  icon3d: "fluent-emoji-3d:bar-chart" },
   { path: "/partner/bookings",  label: "Bookings",   icon3d: "fluent-emoji-3d:package" },
+  { path: "/partner/messages",  label: "Messages",   icon3d: "fluent-emoji-3d:speech-balloon" },
   { path: "/partner/earnings",  label: "Earnings",   icon3d: "fluent-emoji-3d:money-bag" },
   { path: "/partner/onboarding",label: "Onboarding", icon3d: "fluent-emoji-3d:rocket" },
   { path: "/partner/compliance",label: "Compliance", icon3d: "fluent-emoji-3d:page-facing-up" },
@@ -168,9 +169,15 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
     queryKey: ["/api/partner/dashboard"],
   });
 
+  const { data: msgUnread } = useQuery<{ count: number }>({
+    queryKey: ["/api/partner/messages/unread-count"],
+    refetchInterval: 20000,
+  });
+
   const partner = ctx?.partner;
   const pendingBookings = dashboard?.stats?.pendingBookings ?? 0;
   const openIncidents = dashboard?.stats?.openIncidents ?? 0;
+  const unreadMessages = msgUnread?.count ?? 0;
   const isOnboarding = partner?.status !== "active";
 
   const sidebarStyle = {
@@ -214,6 +221,8 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                         ? pendingBookings
                         : item.path === "/partner/incidents" && openIncidents > 0
                         ? openIncidents
+                        : item.path === "/partner/messages" && unreadMessages > 0
+                        ? unreadMessages
                         : null;
 
                     return (
