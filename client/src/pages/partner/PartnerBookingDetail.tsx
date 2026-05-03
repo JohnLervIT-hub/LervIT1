@@ -18,6 +18,7 @@ import {
   ArrowLeft, MapPin, Calendar, Package, CheckCircle, XCircle,
   User, Truck, AlertTriangle, Upload, Clock, ChevronRight, ChevronLeft,
   Loader2, DollarSign, Users, Route, Navigation, ZoomIn, Images,
+  Phone, Activity,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -222,6 +223,7 @@ export default function PartnerBookingDetail() {
               <div className="flex gap-2">
                 <Button
                   size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-700"
                   onClick={() => accept.mutate()}
                   disabled={accept.isPending}
                   data-testid="button-accept-booking"
@@ -231,7 +233,7 @@ export default function PartnerBookingDetail() {
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
+                  className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800"
                   onClick={() => setShowRejectForm(!showRejectForm)}
                   data-testid="button-show-reject"
                 >
@@ -407,11 +409,12 @@ export default function PartnerBookingDetail() {
 
         {/* Actions (all non-terminal states) */}
         {!isTerminal && (
-          <Card>
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-purple-500 via-blue-500 to-indigo-500" />
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Truck className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Dispatch Actions</span>
+                <Truck className="w-4 h-4 text-purple-500" />
+                <span className="text-xs uppercase tracking-wide font-semibold">Dispatch Actions</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -419,7 +422,7 @@ export default function PartnerBookingDetail() {
               {["accepted", "assigned"].includes(enterpriseStatus) && (
                 <div>
                   <Button
-                    variant="outline"
+                    className="bg-purple-600 hover:bg-purple-700 text-white border-purple-700"
                     onClick={() => setShowAssignForm(!showAssignForm)}
                     data-testid="button-show-assign"
                   >
@@ -520,7 +523,7 @@ export default function PartnerBookingDetail() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => assign.mutate()} disabled={assign.isPending} data-testid="button-confirm-assign">
+                        <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white" onClick={() => assign.mutate()} disabled={assign.isPending} data-testid="button-confirm-assign">
                           {assign.isPending && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
                           Confirm Assignment
                         </Button>
@@ -535,22 +538,35 @@ export default function PartnerBookingDetail() {
               {validNext.length > 0 && (
                 <div>
                   <Button
-                    variant="outline"
+                    className="bg-blue-600 hover:bg-blue-700 text-white border-blue-700"
                     onClick={() => setShowStatusForm(!showStatusForm)}
                     data-testid="button-show-status-update"
                   >
-                    <ChevronRight className="w-4 h-4 mr-2" />
+                    <Activity className="w-4 h-4 mr-2" />
                     Update Status
                   </Button>
                   {showStatusForm && (
-                    <div className="mt-3 space-y-3 p-4 rounded-md bg-muted/40">
+                    <div className="mt-3 space-y-3 p-4 rounded-md bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900">
                       <div className="space-y-1.5">
                         <Label>New Status</Label>
                         <Select value={nextStatus} onValueChange={setNextStatus}>
                           <SelectTrigger data-testid="select-next-status"><SelectValue placeholder="Select status…" /></SelectTrigger>
                           <SelectContent>
                             {validNext.map(s => (
-                              <SelectItem key={s} value={s}>{formatStatus(s)}</SelectItem>
+                              <SelectItem key={s} value={s}>
+                                <span className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 inline-block ${
+                                    s === "accepted" || s === "completed" ? "bg-green-500" :
+                                    s === "rejected" || s === "cancelled" ? "bg-red-400" :
+                                    s === "assigned" ? "bg-purple-500" :
+                                    s === "delayed" || s === "issue_reported" ? "bg-amber-500" :
+                                    s === "en_route_to_pickup" || s === "arrived_at_pickup" ? "bg-indigo-500" :
+                                    s === "in_transit" ? "bg-orange-500" :
+                                    "bg-teal-500"
+                                  }`} />
+                                  {formatStatus(s)}
+                                </span>
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -560,7 +576,7 @@ export default function PartnerBookingDetail() {
                         <Textarea rows={2} value={statusNotes} onChange={e => setStatusNotes(e.target.value)} data-testid="input-status-notes" />
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => updateStatus.mutate()} disabled={!nextStatus || updateStatus.isPending} data-testid="button-confirm-status">
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => updateStatus.mutate()} disabled={!nextStatus || updateStatus.isPending} data-testid="button-confirm-status">
                           {updateStatus.isPending && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
                           Update Status
                         </Button>
@@ -576,47 +592,73 @@ export default function PartnerBookingDetail() {
 
         {/* Current assignment */}
         {assignment && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <User className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Assigned Driver</span>
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-purple-500" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center justify-between gap-2 flex-wrap">
+                <span className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center shrink-0">
+                    <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <span className="text-xs uppercase tracking-wide font-semibold">Assigned Driver</span>
+                </span>
+                <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30">
+                  Active
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid sm:grid-cols-2 gap-2">
-                {assignment.driverName && (
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Driver</p>
+              {/* Driver name — hero row */}
+              {assignment.driverName && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900">
+                  <div className="w-9 h-9 rounded-full bg-purple-500 flex items-center justify-center shrink-0">
+                    <span className="text-white font-bold text-sm">
+                      {assignment.driverName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
                     <p className="font-semibold text-sm">{assignment.driverName}</p>
+                    {assignment.driverPhone && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Phone className="w-3 h-3" />{assignment.driverPhone}
+                      </p>
+                    )}
                   </div>
-                )}
-                {assignment.driverPhone && (
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Phone</p>
-                    <p className="font-semibold text-sm">{assignment.driverPhone}</p>
-                  </div>
-                )}
-                {assignment.vehicleType && (
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Vehicle</p>
-                    <p className="font-semibold text-sm">{assignment.vehicleType}</p>
-                  </div>
-                )}
-                {assignment.vehiclePlate && (
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Plate</p>
-                    <p className="font-semibold text-sm">{assignment.vehiclePlate}</p>
-                  </div>
-                )}
-                {assignment.notes && (
-                  <div className="sm:col-span-2 bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
-                    <p className="text-sm">{assignment.notes}</p>
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
+                </div>
+              )}
+              {/* Vehicle details */}
+              {(assignment.vehicleType || assignment.vehiclePlate) && (
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {assignment.vehicleType && (
+                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/60">
+                      <Truck className="w-4 h-4 text-indigo-500 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">Vehicle</p>
+                        <p className="font-semibold text-sm">{assignment.vehicleType}</p>
+                      </div>
+                    </div>
+                  )}
+                  {assignment.vehiclePlate && (
+                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/60">
+                      <div className="w-4 h-4 rounded bg-indigo-500/20 flex items-center justify-center shrink-0">
+                        <span className="text-indigo-600 dark:text-indigo-400 font-bold" style={{ fontSize: "8px" }}>ID</span>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">Plate</p>
+                        <p className="font-semibold text-sm font-mono tracking-wider">{assignment.vehiclePlate}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {assignment.notes && (
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+                  <p className="text-sm">{assignment.notes}</p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                <Clock className="w-3 h-3" />
                 Assigned {format(new Date(assignment.assignedAt), "PPp")}
               </p>
             </CardContent>
