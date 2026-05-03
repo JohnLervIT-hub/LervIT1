@@ -1622,6 +1622,120 @@ class NotificationService {
     });
   }
 
+  async sendPartnerJobAccepted(customer: User, booking: Partial<Booking>, partnerName: string): Promise<void> {
+    const subject = `Your Move Has Been Accepted — Move #${booking.id?.slice(0, 8)}`;
+    const formattedDate = formatCalgaryDate(booking.preferredDate, 'TBD');
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#1a56db;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">Great news, ${customer.name}!</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 24px 0;">
+                <strong>${partnerName}</strong> has accepted your booking and will be handling your move. A driver will be assigned to you shortly.
+              </p>
+              <h3 style="color:#333333;font-size:18px;margin:0 0 14px 0;">Move Summary:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Booking:</strong> #${booking.id?.slice(0, 8)}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Pickup:</strong> ${booking.pickupAddress || 'N/A'}</li>
+                <li><strong>Dropoff:</strong> ${booking.dropoffAddress || 'N/A'}</li>
+              </ul>
+              <p style="color:#888888;font-size:13px;margin:0;">We'll send you another update once a driver is assigned. You can track your booking at any time in your LervIT account.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: customer.email, subject, body, type: 'booking_confirmation' });
+  }
+
+  async sendPartnerDriverAssigned(opts: {
+    customer: User;
+    booking: Partial<Booking>;
+    partnerName: string;
+    driverName: string | null;
+    driverPhone: string | null;
+    vehicleType: string | null;
+    vehiclePlate: string | null;
+    teamName: string | null;
+  }): Promise<void> {
+    const subject = `Driver Assigned to Your Move — Move #${opts.booking.id?.slice(0, 8)}`;
+    const formattedDate = formatCalgaryDate(opts.booking.preferredDate, 'TBD');
+    const driverLabel = opts.driverName || opts.teamName || opts.partnerName;
+    const phoneRow = opts.driverPhone ? `<li><strong>Driver Phone:</strong> ${opts.driverPhone}</li>` : '';
+    const vehicleRow = opts.vehicleType ? `<li><strong>Vehicle:</strong> ${opts.vehicleType}${opts.vehiclePlate ? ` · ${opts.vehiclePlate}` : ''}</li>` : '';
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#4f46e5;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">Your Driver Is Confirmed!</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 24px 0;">
+                <strong>${opts.partnerName}</strong> has assigned a driver for your upcoming move on <strong>${formattedDate}</strong>.
+              </p>
+              <h3 style="color:#333333;font-size:18px;margin:0 0 14px 0;">Driver Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Driver / Team:</strong> ${driverLabel}</li>
+                ${phoneRow}
+                ${vehicleRow}
+              </ul>
+              <h3 style="color:#333333;font-size:18px;margin:0 0 14px 0;">Move Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Booking:</strong> #${opts.booking.id?.slice(0, 8)}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Pickup:</strong> ${opts.booking.pickupAddress || 'N/A'}</li>
+                <li><strong>Dropoff:</strong> ${opts.booking.dropoffAddress || 'N/A'}</li>
+              </ul>
+              <p style="color:#888888;font-size:13px;margin:0;">Your driver will be on the way on move day. If you have any questions, contact LervIT support.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.customer.email, subject, body, type: 'booking_confirmation' });
+  }
+
   async sendPartnerBookingRouted(opts: {
     toEmail: string;
     toName: string;

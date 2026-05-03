@@ -780,6 +780,15 @@ export function registerPartnerRoutes(app: Express) {
     });
 
     await logAudit(partner.id, user.id, "booking.accepted", "booking", booking.id);
+
+    // Notify customer that their booking has been accepted
+    db.select().from(users).where(eq(users.id, booking.customerId)).limit(1).then(([customer]) => {
+      if (customer?.email) {
+        notificationService.sendPartnerJobAccepted(customer, updated, partner.name)
+          .catch(e => console.error("[Customer notify] accept notification failed:", e));
+      }
+    }).catch(e => console.error("[Customer notify] fetch customer failed:", e));
+
     res.json(updated);
   });
 
@@ -888,7 +897,7 @@ export function registerPartnerRoutes(app: Express) {
 
       const fromStatus = booking.enterpriseStatus;
       const [updatedBooking] = await db.update(bookings)
-        .set({ enterpriseStatus: "assigned", updatedAt: new Date() })
+        .set({ enterpriseStatus: "assigned", status: "assigned", updatedAt: new Date() })
         .where(eq(bookings.id, booking.id))
         .returning();
 
@@ -899,10 +908,27 @@ export function registerPartnerRoutes(app: Express) {
         toStatus: "assigned",
         changedBy: user.id,
         notes: `Assigned to: ${data.driverName || data.teamName || "team member"}`,
-        customerVisible: false,
+        customerVisible: true,
       });
 
       await logAudit(partner.id, user.id, "booking.assigned", "booking", booking.id);
+
+      // Notify customer that a driver has been assigned
+      db.select().from(users).where(eq(users.id, booking.customerId)).limit(1).then(([customer]) => {
+        if (customer?.email) {
+          notificationService.sendPartnerDriverAssigned({
+            customer,
+            booking: updatedBooking,
+            partnerName: partner.name,
+            driverName: data.driverName ?? null,
+            driverPhone: data.driverPhone ?? null,
+            vehicleType: data.vehicleType ?? null,
+            vehiclePlate: data.vehiclePlate ?? null,
+            teamName: data.teamName ?? null,
+          }).catch(e => console.error("[Customer notify] driver assigned notification failed:", e));
+        }
+      }).catch(e => console.error("[Customer notify] fetch customer failed:", e));
+
       res.json({ booking: updatedBooking, assignment });
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });

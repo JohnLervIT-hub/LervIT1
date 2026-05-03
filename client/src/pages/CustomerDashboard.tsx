@@ -409,6 +409,8 @@ export default function CustomerDashboard() {
       case "payment_failed": return "Payment failed";
       case "pending": return "Finding your mover";
       case "confirmed": return "Mover confirmed";
+      case "accepted": return "Moving company confirmed";
+      case "assigned": return "Driver assigned";
       case "en_route_to_pickup": return "Mover on the way";
       case "loading": return "Loading items";
       case "en_route_to_dropoff": return "In transit";
@@ -426,6 +428,8 @@ export default function CustomerDashboard() {
       case "payment_failed": return "bg-red-500/10 text-red-600";
       case "pending": return "bg-amber-500/10 text-amber-600";
       case "confirmed": return "bg-blue-500/10 text-blue-600";
+      case "accepted": return "bg-blue-500/10 text-blue-600";
+      case "assigned": return "bg-indigo-500/10 text-indigo-600";
       case "en_route_to_pickup": return "bg-green-500/10 text-green-600";
       case "loading": return "bg-green-500/10 text-green-600";
       case "en_route_to_dropoff": return "bg-green-500/10 text-green-600";

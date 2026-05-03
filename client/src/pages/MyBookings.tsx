@@ -224,6 +224,8 @@ export default function MyBookings() {
       case "pending_payment": return <CreditCard className="w-4 h-4" />;
       case "pending": return <Clock className="w-4 h-4" />;
       case "confirmed": return <CheckCircle2 className="w-4 h-4" />;
+      case "accepted": return <CheckCircle2 className="w-4 h-4" />;
+      case "assigned": return <CheckCircle2 className="w-4 h-4" />;
       case "in_transit": return <TrendingUp className="w-4 h-4" />;
       case "completed": return <CheckCircle2 className="w-4 h-4" />;
       case "cancelled": return <XCircle className="w-4 h-4" />;
@@ -236,6 +238,8 @@ export default function MyBookings() {
       case "pending_payment": return "bg-orange-500/10 text-orange-600 border-orange-500/20";
       case "pending": return "bg-amber-500/10 text-amber-600 border-amber-500/20";
       case "confirmed": return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+      case "accepted": return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+      case "assigned": return "bg-indigo-500/10 text-indigo-600 border-indigo-500/20";
       case "in_transit": return "bg-primary/10 text-primary border-primary/20";
       case "completed": return "bg-green-500/10 text-green-600 border-green-500/20";
       case "cancelled": return "bg-red-500/10 text-red-600 border-red-500/20";
