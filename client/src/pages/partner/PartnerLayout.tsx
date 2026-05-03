@@ -51,6 +51,7 @@ const navItems = [
 
 function ProfileEditDialog({ user, onClose }: { user: any; onClose: () => void }) {
   const { toast } = useToast();
+  const { refreshUser } = useAuth();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user?.name ?? "");
@@ -90,8 +91,10 @@ function ProfileEditDialog({ user, onClose }: { user: any; onClose: () => void }
         throw new Error(err.error ?? "Failed to save");
       }
       toast({ title: "Profile updated" });
+      // refreshUser re-fetches /api/auth/me and updates the auth context state
+      // so the sidebar name/avatar updates immediately without a page reload
+      await refreshUser();
       qc.invalidateQueries({ queryKey: ["/api/partner/me"] });
-      qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       onClose();
     } catch (err: any) {
       toast({ title: err.message ?? "Failed to save", variant: "destructive" });
