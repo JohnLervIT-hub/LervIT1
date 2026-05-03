@@ -704,9 +704,23 @@ export function registerPartnerRoutes(app: Express) {
       .limit(1);
     if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    const [assignment] = await db.select().from(bookingAssignments)
+    const [rawAssignment] = await db.select().from(bookingAssignments)
       .where(and(eq(bookingAssignments.bookingId, booking.id), eq(bookingAssignments.partnerId, partner.id)))
       .orderBy(desc(bookingAssignments.assignedAt)).limit(1);
+
+    // Enrich assignment with driver photo from team member record
+    let assignment: typeof rawAssignment & { driverPhoto?: string | null } | null = null;
+    if (rawAssignment) {
+      let driverPhoto: string | null = null;
+      if (rawAssignment.teamMemberId) {
+        const [tm] = await db.select({ driverPhoto: partnerTeamMembers.driverPhoto })
+          .from(partnerTeamMembers)
+          .where(eq(partnerTeamMembers.id, rawAssignment.teamMemberId))
+          .limit(1);
+        driverPhoto = tm?.driverPhoto ?? null;
+      }
+      assignment = { ...rawAssignment, driverPhoto };
+    }
 
     const events = await db.select().from(bookingStatusEvents)
       .where(eq(bookingStatusEvents.bookingId, booking.id))
@@ -720,7 +734,7 @@ export function registerPartnerRoutes(app: Express) {
       .where(and(eq(proofOfCompletion.bookingId, booking.id), eq(proofOfCompletion.partnerId, partner.id)))
       .orderBy(desc(proofOfCompletion.uploadedAt));
 
-    res.json({ booking, assignment: assignment ?? null, events, incidents, proofs });
+    res.json({ booking, assignment, events, incidents, proofs });
   });
 
   // GET /api/partner/bookings/:id/events

@@ -5,6 +5,7 @@ import { PartnerLayout } from "./PartnerLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -611,11 +612,19 @@ export default function PartnerBookingDetail() {
               {/* Driver name — hero row */}
               {assignment.driverName && (
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900">
-                  <div className="w-9 h-9 rounded-full bg-purple-500 flex items-center justify-center shrink-0">
-                    <span className="text-white font-bold text-sm">
+                  <Avatar className="w-11 h-11 shrink-0 ring-2 ring-purple-300 dark:ring-purple-700">
+                    {assignment.driverPhoto && (
+                      <AvatarImage
+                        src={assignment.driverPhoto}
+                        alt={assignment.driverName}
+                        className="object-cover"
+                        data-testid="img-driver-avatar"
+                      />
+                    )}
+                    <AvatarFallback className="bg-purple-500 text-white font-bold text-sm">
                       {assignment.driverName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
-                    </span>
-                  </div>
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
                     <p className="font-semibold text-sm">{assignment.driverName}</p>
                     {assignment.driverPhone && (
