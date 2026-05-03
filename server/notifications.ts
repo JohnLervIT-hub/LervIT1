@@ -1621,6 +1621,131 @@ class NotificationService {
       type: 'booking_confirmation',
     });
   }
+
+  async sendPartnerBookingRouted(opts: {
+    toEmail: string;
+    toName: string;
+    partnerName: string;
+    booking: { id: string; pickupAddress?: string | null; dropoffAddress?: string | null; preferredDate?: Date | null; price?: string | null; loadSize?: string | null };
+    portalUrl: string;
+  }): Promise<void> {
+    const subject = `New Job Assigned — Move #${opts.booking.id.slice(0, 8)}`;
+    const formattedDate = formatCalgaryDate(opts.booking.preferredDate, 'TBD');
+    const price = opts.booking.price ? `$${parseFloat(opts.booking.price).toFixed(2)}` : 'TBD';
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#1a56db;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Partner Portal</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">New Job Ready for Review</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 28px 0;">
+                Hi ${opts.toName}, a new booking has been routed to <strong>${opts.partnerName}</strong> and is waiting for your action.
+              </p>
+              <h3 style="color:#333333;font-size:18px;margin:0 0 14px 0;">Job Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Job ID:</strong> #${opts.booking.id.slice(0, 8)}</li>
+                <li><strong>Pickup:</strong> ${opts.booking.pickupAddress || 'N/A'}</li>
+                <li><strong>Dropoff:</strong> ${opts.booking.dropoffAddress || 'N/A'}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Load Size:</strong> ${opts.booking.loadSize || 'N/A'}</li>
+                <li><strong>Value:</strong> ${price}</li>
+              </ul>
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 28px 0;">
+                <tr>
+                  <td style="background-color:#1a56db;border-radius:6px;padding:0;">
+                    <a href="${opts.portalUrl}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">
+                      Review Job in Portal
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#888888;font-size:13px;margin:0;">Please log in to accept or reject this job at your earliest convenience.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Partner Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.toEmail, subject, body, type: 'booking_confirmation' });
+  }
+
+  async sendAdminPartnerCancelledAlert(opts: {
+    adminEmail: string;
+    partnerName: string;
+    booking: { id: string; pickupAddress?: string | null; dropoffAddress?: string | null; preferredDate?: Date | null; price?: string | null };
+    newStatus: string;
+    reason?: string | null;
+  }): Promise<void> {
+    const label = opts.newStatus === 'cancelled' ? 'Cancelled' : 'Rejected';
+    const subject = `[Action Required] Partner ${label} Job — Move #${opts.booking.id.slice(0, 8)}`;
+    const formattedDate = formatCalgaryDate(opts.booking.preferredDate, 'TBD');
+    const price = opts.booking.price ? `$${parseFloat(opts.booking.price).toFixed(2)}` : 'TBD';
+    const reasonHtml = opts.reason ? `<li><strong>Reason:</strong> ${opts.reason}</li>` : '';
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#dc2626;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Admin Alert</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">Partner ${label} a Job</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 28px 0;">
+                <strong>${opts.partnerName}</strong> has <strong>${label.toLowerCase()}</strong> a job that requires re-routing or follow-up action.
+              </p>
+              <h3 style="color:#333333;font-size:18px;margin:0 0 14px 0;">Booking Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Job ID:</strong> #${opts.booking.id.slice(0, 8)}</li>
+                <li><strong>Pickup:</strong> ${opts.booking.pickupAddress || 'N/A'}</li>
+                <li><strong>Dropoff:</strong> ${opts.booking.dropoffAddress || 'N/A'}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Value:</strong> ${price}</li>
+                ${reasonHtml}
+              </ul>
+              <p style="color:#555555;font-size:14px;line-height:24px;margin:0;">Please log in to the admin dashboard to re-route this booking or take appropriate action.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Admin Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.adminEmail, subject, body, type: 'booking_confirmation' });
+  }
 }
 
 export const notificationService = new NotificationService();

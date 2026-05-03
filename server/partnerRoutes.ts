@@ -765,7 +765,7 @@ export function registerPartnerRoutes(app: Express) {
 
     const fromStatus = booking.enterpriseStatus;
     const [updated] = await db.update(bookings)
-      .set({ enterpriseStatus: "accepted", enterpriseAcceptedAt: new Date(), updatedAt: new Date() })
+      .set({ enterpriseStatus: "accepted", enterpriseAcceptedAt: new Date(), status: "accepted", updatedAt: new Date() })
       .where(eq(bookings.id, booking.id))
       .returning();
 
@@ -776,7 +776,7 @@ export function registerPartnerRoutes(app: Express) {
       toStatus: "accepted",
       changedBy: user.id,
       notes: req.body.notes ?? null,
-      customerVisible: false,
+      customerVisible: true,
     });
 
     await logAudit(partner.id, user.id, "booking.accepted", "booking", booking.id);
@@ -820,6 +820,22 @@ export function registerPartnerRoutes(app: Express) {
     });
 
     await logAudit(partner.id, user.id, "booking.rejected", "booking", booking.id, reason);
+
+    // Notify LervIT admins that partner rejected the job
+    db.select().from(users).where(eq(users.role, "admin")).then((admins) => {
+      for (const admin of admins) {
+        if (admin.email) {
+          notificationService.sendAdminPartnerCancelledAlert({
+            adminEmail: admin.email,
+            partnerName: partner.name,
+            booking: updated,
+            newStatus: "rejected",
+            reason,
+          }).catch(e => console.error("[Admin notify] partner reject alert failed:", e));
+        }
+      }
+    }).catch(e => console.error("[Admin notify] fetch admins failed:", e));
+
     res.json(updated);
   });
 
@@ -944,6 +960,24 @@ export function registerPartnerRoutes(app: Express) {
       });
 
       await logAudit(partner.id, user.id, `booking.status.${status}`, "booking", booking.id, notes);
+
+      // Notify LervIT admins when partner cancels a job
+      if (status === "cancelled") {
+        db.select().from(users).where(eq(users.role, "admin")).then((admins) => {
+          for (const admin of admins) {
+            if (admin.email) {
+              notificationService.sendAdminPartnerCancelledAlert({
+                adminEmail: admin.email,
+                partnerName: partner.name,
+                booking: updated,
+                newStatus: "cancelled",
+                reason: notes,
+              }).catch(e => console.error("[Admin notify] partner cancel alert failed:", e));
+            }
+          }
+        }).catch(e => console.error("[Admin notify] fetch admins failed:", e));
+      }
+
       res.json(updated);
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
@@ -1756,6 +1790,35 @@ export function registerPartnerRoutes(app: Express) {
       });
 
       await logAudit(partnerId, adminUser.id, "booking.routed", "booking", booking.id, `Routed by admin`);
+
+      // Notify partner admin/ops/dispatcher users about the new job
+      const baseUrl = process.env.BASE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      db.select({ userId: partnerUsers.userId })
+        .from(partnerUsers)
+        .where(and(
+          eq(partnerUsers.partnerId, partnerId),
+          eq(partnerUsers.isActive, true),
+          inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager", "partner_dispatcher"]),
+        ))
+        .then(async (puRows) => {
+          if (!puRows.length) return;
+          const userIds = puRows.map(r => r.userId);
+          const partnerAdminUsers = await db.select().from(users).where(inArray(users.id, userIds));
+          for (const pu of partnerAdminUsers) {
+            if (pu.email) {
+              notificationService.sendPartnerBookingRouted({
+                toEmail: pu.email,
+                toName: pu.name || 'Partner',
+                partnerName: partner.name,
+                booking: updated,
+                portalUrl: `${baseUrl}/partner/bookings/${booking.id}`,
+              }).catch(e => console.error("[Partner notify] routing email failed:", e));
+            }
+          }
+        })
+        .catch(e => console.error("[Partner notify] fetch partner users failed:", e));
+
       res.json(updated);
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });

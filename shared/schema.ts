@@ -1459,8 +1459,8 @@ export const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
 export const ENTERPRISE_TO_BOOKING_STATUS: Record<string, string> = {
   new: 'confirmed',
   under_review: 'confirmed',
-  accepted: 'confirmed',
-  assigned: 'confirmed',
+  accepted: 'accepted',
+  assigned: 'assigned',
   en_route_to_pickup: 'en_route_to_pickup',
   arrived_at_pickup: 'loading',
   picked_up: 'loading',
