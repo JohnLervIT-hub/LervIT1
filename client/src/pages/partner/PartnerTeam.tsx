@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Loader2, Truck, Pencil, Trash2, Camera } from "lucide-react";
+import { Users, Plus, Loader2, Truck, Pencil, Trash2, Camera, Search, X } from "lucide-react";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -183,13 +183,7 @@ async function uploadPhoto(memberId: string, file: File, kind: "driver" | "vehic
   return kind === "driver" ? (data.driverPhoto ?? null) : (data.vehiclePhoto ?? null);
 }
 
-function TeamMemberDialog({
-  member,
-  onClose,
-}: {
-  member?: any;
-  onClose: () => void;
-}) {
+function TeamMemberDialog({ member, onClose }: { member?: any; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const isEdit = !!member;
@@ -247,8 +241,6 @@ function TeamMemberDialog({
           <DialogTitle>{isEdit ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-
-          {/* Driver photo */}
           <div className="space-y-1.5">
             <Label>Driver Photo</Label>
             <div className="flex items-center gap-4">
@@ -267,23 +259,13 @@ function TeamMemberDialog({
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => driverPhotoRef.current?.click()}
-                  data-testid="button-pick-driver-photo"
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => driverPhotoRef.current?.click()} data-testid="button-pick-driver-photo">
                   <Camera className="w-3.5 h-3.5 mr-1.5" />
                   {driverPhotoPreview ? "Replace photo" : "Upload photo"}
                 </Button>
                 <p className="text-xs text-muted-foreground">JPG, PNG or WebP</p>
               </div>
-              <input
-                ref={driverPhotoRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
+              <input ref={driverPhotoRef} type="file" accept="image/*" className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -339,39 +321,24 @@ function TeamMemberDialog({
             </div>
           </div>
 
-          {/* Vehicle photo */}
           <div className="space-y-1.5">
             <Label>Vehicle Photo</Label>
             <div className="flex items-center gap-3">
               {vehiclePhotoPreview ? (
-                <img
-                  src={vehiclePhotoPreview}
-                  alt="Vehicle preview"
-                  className="w-20 h-14 object-cover rounded-md border border-border shrink-0"
-                />
+                <img src={vehiclePhotoPreview} alt="Vehicle preview" className="w-20 h-14 object-cover rounded-md border border-border shrink-0" />
               ) : (
                 <div className="flex items-center justify-center w-20 h-14 rounded-md border border-dashed border-border bg-muted/40 shrink-0">
                   <Camera className="w-5 h-5 text-muted-foreground" />
                 </div>
               )}
               <div className="flex flex-col gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => vehiclePhotoRef.current?.click()}
-                  data-testid="button-pick-vehicle-photo"
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => vehiclePhotoRef.current?.click()} data-testid="button-pick-vehicle-photo">
                   <Camera className="w-3.5 h-3.5 mr-1.5" />
                   {vehiclePhotoPreview ? "Replace photo" : "Upload photo"}
                 </Button>
                 <p className="text-xs text-muted-foreground">JPG, PNG or WebP</p>
               </div>
-              <input
-                ref={vehiclePhotoRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
+              <input ref={vehiclePhotoRef} type="file" accept="image/*" className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -384,11 +351,7 @@ function TeamMemberDialog({
           </div>
 
           <div className="flex items-center gap-3">
-            <Switch
-              checked={form.isAvailable}
-              onCheckedChange={v => setForm(f => ({ ...f, isAvailable: v }))}
-              data-testid="switch-availability"
-            />
+            <Switch checked={form.isAvailable} onCheckedChange={v => setForm(f => ({ ...f, isAvailable: v }))} data-testid="switch-availability" />
             <Label>Available for assignments</Label>
           </div>
           <div className="flex gap-2 justify-end">
@@ -403,11 +366,21 @@ function TeamMemberDialog({
   );
 }
 
+const VEHICLE_TYPES = [
+  "Cargo Van", "Cargo Van (Large)", "Cargo Truck",
+  "Box Truck", "Pickup Truck", "Sprinter Van", "Moving Truck",
+];
+
 export default function PartnerTeam() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
   const { data: team = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/partner/team"] });
+
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [availFilter, setAvailFilter] = useState("all");
+  const [vehicleFilter, setVehicleFilter] = useState("all");
 
   const deleteMember = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/partner/team/${id}`),
@@ -424,108 +397,215 @@ export default function PartnerTeam() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/partner/team"] }),
   });
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return team.filter((m: any) => {
+      if (typeFilter !== "all" && m.memberType !== typeFilter) return false;
+      if (availFilter === "available" && !m.isAvailable) return false;
+      if (availFilter === "unavailable" && m.isAvailable) return false;
+      if (vehicleFilter !== "all" && m.vehicleType !== vehicleFilter) return false;
+      if (q) {
+        const hay = [m.name, m.phone, m.vehicleType, m.vehiclePlate, m.vehicleColor, m.notes].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [team, search, typeFilter, availFilter, vehicleFilter]);
+
+  const hasFilters = search !== "" || typeFilter !== "all" || availFilter !== "all" || vehicleFilter !== "all";
+
+  function clearFilters() {
+    setSearch("");
+    setTypeFilter("all");
+    setAvailFilter("all");
+    setVehicleFilter("all");
+  }
+
+  const availableCount = team.filter((m: any) => m.isAvailable).length;
+
   return (
     <PartnerLayout>
       <div className="px-6 py-6">
-      <div className="max-w-5xl mx-auto space-y-5">
+        <div className="max-w-5xl mx-auto space-y-5">
 
-        {/* Page header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-lg font-semibold">Team</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {team.filter((m: any) => m.isAvailable).length} available · {team.length} total
-            </p>
+          {/* Page header */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h1 className="text-lg font-semibold">Team</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {availableCount} available · {team.length} total
+              </p>
+            </div>
+            <TeamMemberDialog onClose={() => {}} />
           </div>
-          <TeamMemberDialog onClose={() => {}} />
-        </div>
 
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-md bg-muted animate-pulse" />)}
+          {/* Filters */}
+          <div className="space-y-2">
+            <div className="flex gap-2 flex-wrap">
+              {/* Search */}
+              <div className="relative flex-1 min-w-48">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Search by name, plate, vehicle…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-8 h-9 text-sm"
+                  data-testid="input-team-search"
+                />
+              </div>
+
+              {/* Type */}
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-9 text-sm w-32" data-testid="select-team-type">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="driver">Driver</SelectItem>
+                  <SelectItem value="team">Team</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Availability */}
+              <Select value={availFilter} onValueChange={setAvailFilter}>
+                <SelectTrigger className="h-9 text-sm w-36" data-testid="select-team-availability">
+                  <SelectValue placeholder="Availability" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="unavailable">Unavailable</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Vehicle type */}
+              <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+                <SelectTrigger className="h-9 text-sm w-40" data-testid="select-team-vehicle">
+                  <SelectValue placeholder="Vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vehicles</SelectItem>
+                  {VEHICLE_TYPES.map(v => (
+                    <SelectItem key={v} value={v}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Clear */}
+              {hasFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="h-9 text-muted-foreground"
+                  data-testid="button-clear-team-filters"
+                >
+                  <X className="w-3.5 h-3.5 mr-1.5" />
+                  Clear
+                </Button>
+              )}
+            </div>
+
+            {/* Results count */}
+            {!isLoading && team.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {hasFilters
+                  ? `${filtered.length} of ${team.length} members`
+                  : `${team.length} members`}
+              </p>
+            )}
           </div>
-        ) : team.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center py-14 gap-3">
-              <Users className="w-10 h-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">No team members yet. Add your first driver or crew.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {team.map((member: any) => (
-              <Card key={member.id} data-testid={`card-member-${member.id}`}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center gap-4">
 
-                    {/* Driver avatar (clickable to upload) */}
-                    <DriverPhotoUpload member={member} />
+          {/* Content */}
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-md bg-muted animate-pulse" />)}
+            </div>
+          ) : team.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center py-14 gap-3">
+                <Users className="w-10 h-10 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No team members yet. Add your first driver or crew.</p>
+              </CardContent>
+            </Card>
+          ) : filtered.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center py-14 gap-3">
+                <Search className="w-8 h-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No members match your filters.</p>
+                <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((member: any) => (
+                <Card key={member.id} data-testid={`card-member-${member.id}`}>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-center gap-4">
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                        <p className="text-sm font-semibold">{member.name}</p>
-                        <Badge variant="outline" className="text-xs capitalize">{member.memberType}</Badge>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${member.isAvailable
-                            ? "bg-green-500/10 text-green-600 border-green-500/20"
-                            : "bg-slate-500/10 text-slate-500 border-slate-500/20"}`}
-                          data-testid={`availability-${member.id}`}
-                        >
-                          {member.isAvailable ? "Available" : "Unavailable"}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                        {member.phone && <span>{member.phone}</span>}
-                        {member.vehicleType && (
-                          <span className="flex items-center gap-1">
-                            <Truck className="w-3 h-3" />
-                            {member.vehicleType}
-                            {member.vehiclePlate && ` · ${member.vehiclePlate}`}
-                            {member.vehicleColor && ` · ${member.vehicleColor}`}
-                          </span>
+                      <DriverPhotoUpload member={member} />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <p className="text-sm font-semibold">{member.name}</p>
+                          <Badge variant="outline" className="text-xs capitalize">{member.memberType}</Badge>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${member.isAvailable
+                              ? "bg-green-500/10 text-green-600 border-green-500/20"
+                              : "bg-slate-500/10 text-slate-500 border-slate-500/20"}`}
+                            data-testid={`availability-${member.id}`}
+                          >
+                            {member.isAvailable ? "Available" : "Unavailable"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                          {member.phone && <span>{member.phone}</span>}
+                          {member.vehicleType && (
+                            <span className="flex items-center gap-1">
+                              <Truck className="w-3 h-3" />
+                              {member.vehicleType}
+                              {member.vehiclePlate && ` · ${member.vehiclePlate}`}
+                              {member.vehicleColor && ` · ${member.vehicleColor}`}
+                            </span>
+                          )}
+                        </div>
+                        {member.vehiclePhoto && (
+                          <div className="mt-2">
+                            <img
+                              src={member.vehiclePhoto}
+                              alt="Vehicle"
+                              className="w-16 h-10 object-cover rounded-md border border-border"
+                              data-testid={`img-vehicle-${member.id}`}
+                            />
+                          </div>
                         )}
                       </div>
 
-                      {/* Vehicle photo thumbnail (if present) */}
-                      {member.vehiclePhoto && (
-                        <div className="mt-2">
-                          <img
-                            src={member.vehiclePhoto}
-                            alt="Vehicle"
-                            className="w-16 h-10 object-cover rounded-md border border-border"
-                            data-testid={`img-vehicle-${member.id}`}
-                          />
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Switch
+                          checked={member.isAvailable}
+                          onCheckedChange={v => toggleAvailability.mutate({ id: member.id, isAvailable: v })}
+                          data-testid={`switch-available-${member.id}`}
+                        />
+                        <TeamMemberDialog member={member} onClose={() => {}} />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteMember.mutate(member.id)}
+                          disabled={deleteMember.isPending}
+                          data-testid={`button-delete-${member.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                      </div>
                     </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Switch
-                        checked={member.isAvailable}
-                        onCheckedChange={v => toggleAvailability.mutate({ id: member.id, isAvailable: v })}
-                        data-testid={`switch-available-${member.id}`}
-                      />
-                      <TeamMemberDialog member={member} onClose={() => {}} />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteMember.mutate(member.id)}
-                        disabled={deleteMember.isPending}
-                        data-testid={`button-delete-${member.id}`}
-                      >
-                        <Trash2 className="w-4 h-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </PartnerLayout>
   );
