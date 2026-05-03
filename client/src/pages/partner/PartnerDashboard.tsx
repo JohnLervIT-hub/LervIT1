@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   Package, AlertTriangle, Users, CheckCircle, Clock,
   ChevronRight, ArrowRight, Plus, FileCheck, Truck,
-  TrendingUp, Activity, DollarSign, MapPin, ExternalLink, Shield,
+  TrendingUp, Activity, DollarSign, MapPin, ExternalLink, Shield, Star,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -490,6 +490,17 @@ export default function PartnerDashboard() {
                   <Skeleton className="h-16 w-full" />
                 ) : (
                   <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Avg. customer rating</span>
+                      {stats?.avgRating != null ? (
+                        <span className="font-semibold flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                          {stats.avgRating.toFixed(1)} / 5
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">No ratings yet</span>
+                      )}
+                    </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Completion rate</span>
                       <span className="font-semibold">

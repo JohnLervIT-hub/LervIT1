@@ -42,6 +42,7 @@ import {
   inAppNotifications,
   partnerDirectMessages,
   aiIncidentInsights,
+  reviews,
 } from "@shared/schema";
 import { analyzeIncident } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
@@ -1393,6 +1394,19 @@ export function registerPartnerRoutes(app: Express) {
           completedAt: b.updatedAt,
         }));
 
+      // Average customer rating across all partner booking reviews
+      let avgRating: number | null = null;
+      if (allBookings.length > 0) {
+        const bookingIds = allBookings.map(b => b.id);
+        const partnerReviews = await db.select({ rating: reviews.rating })
+          .from(reviews)
+          .where(inArray(reviews.bookingId, bookingIds));
+        if (partnerReviews.length > 0) {
+          const sum = partnerReviews.reduce((acc, r) => acc + r.rating, 0);
+          avgRating = Math.round((sum / partnerReviews.length) * 10) / 10;
+        }
+      }
+
       const stats = {
         totalBookings: allBookings.length,
         activeBookings: activeBookingsList,
@@ -1403,6 +1417,7 @@ export function registerPartnerRoutes(app: Express) {
         criticalIncidents: incidents.filter(i => i.severity === "critical" && i.status !== "resolved").length,
         activeTeamMembers: team.filter(t => t.isAvailable).length,
         totalTeamMembers: team.length,
+        avgRating,
         // Earnings
         totalEarnings: totalEarnings.toFixed(2),
         thisMonthEarnings: thisMonthEarnings.toFixed(2),
