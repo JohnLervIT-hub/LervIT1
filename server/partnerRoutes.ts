@@ -255,6 +255,34 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // PATCH /api/partner/profile — update own name and/or avatar photo
+  app.patch("/api/partner/profile", requirePartnerAuth(), upload.single("photo"), async (req: Request, res: Response) => {
+    try {
+      const { user } = (req as any).partnerCtx;
+      const updates: Partial<typeof users.$inferSelect> = {};
+
+      if (req.body.name && typeof req.body.name === "string" && req.body.name.trim().length > 0) {
+        updates.name = req.body.name.trim();
+      }
+
+      if (req.file) {
+        const objectStorage = new ObjectStorageService();
+        const url = await objectStorage.uploadBuffer(req.file.buffer, req.file.originalname, req.file.mimetype, user.id);
+        updates.avatarUrl = url;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "Nothing to update" });
+      }
+
+      const [updated] = await db.update(users).set(updates).where(eq(users.id, user.id)).returning();
+      res.json({ user: updated });
+    } catch (err: any) {
+      console.error("[Partner] profile update error:", err);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
   // =========================================================
   // PARTNER CONTEXT
   // =========================================================

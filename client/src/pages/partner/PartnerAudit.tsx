@@ -246,7 +246,7 @@ export default function PartnerAudit() {
                           <div className="absolute left-0 flex items-center justify-center w-9 h-9 rounded-full bg-background border-2 border-border shrink-0">
                             <Icon className={`w-4 h-4 ${meta.color}`} />
                           </div>
-                          <div className={`flex-1 pb-4`}>
+                          <div className={`flex-1 ${idx < grouped[day].length - 1 ? "pb-4" : "pb-1"}`}>
                             <div className="flex items-start justify-between gap-2 flex-wrap">
                               <div>
                                 <p className="text-sm font-medium">{meta.label}</p>
