@@ -1608,15 +1608,31 @@ export function registerPartnerRoutes(app: Express) {
       const enriched = await Promise.all(allPartners.map(async (p) => {
         const [teamCount] = await db.select({ count: sql<number>`count(*)::int` })
           .from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, p.id));
-        const completedBookings = await db.select({ price: bookings.price })
+        const completedBookings = await db.select({
+          price: bookings.price,
+          platformFeeAmount: bookings.platformFeeAmount,
+          platformFeePercent: bookings.platformFeePercent,
+        })
           .from(bookings)
-          .where(and(eq(bookings.enterprisePartnerId, p.id), eq(bookings.status, "completed")));
+          .where(and(eq(bookings.enterprisePartnerId, p.id), eq(bookings.enterpriseStatus, "completed")));
+
+        const calcNet = (b: any): number => {
+          const price = parseFloat(b.price ?? "0");
+          const fee = parseFloat(b.platformFeeAmount ?? "0");
+          if (fee > 0) return Math.max(0, price - fee);
+          const feePercent = parseFloat(b.platformFeePercent ?? "15");
+          return Math.max(0, price * (1 - feePercent / 100));
+        };
+
         const totalEarned = completedBookings.reduce((sum, b) => sum + parseFloat(b.price ?? "0"), 0);
+        const totalPartnerNet = completedBookings.reduce((sum, b) => sum + calcNet(b), 0);
+
         return {
           ...p,
           teamMemberCount: teamCount?.count ?? 0,
           completedJobCount: completedBookings.length,
           totalEarned: totalEarned.toFixed(2),
+          partnerNet: totalPartnerNet.toFixed(2),
         };
       }));
 
@@ -1659,11 +1675,21 @@ export function registerPartnerRoutes(app: Express) {
         return { ...b, assignment: assignment ?? null };
       }));
 
-      // Earnings summary
-      const completedBookings = bookingsList.filter(b => b.status === "completed");
-      const totalEarned = completedBookings.reduce((s, b) => s + parseFloat(b.price ?? "0"), 0);
-      const platformFee = totalEarned * 0.15;
-      const partnerNet = totalEarned - platformFee;
+      // Earnings summary — separate unlimited query on enterpriseStatus, matching partner portal logic
+      const completedForEarnings = await db.select().from(bookings)
+        .where(and(eq(bookings.enterprisePartnerId, partner.id), eq(bookings.enterpriseStatus, "completed")));
+
+      const calcPartnerNet = (b: any): number => {
+        const price = parseFloat(b.price ?? "0");
+        const fee = parseFloat(b.platformFeeAmount ?? "0");
+        if (fee > 0) return Math.max(0, price - fee);
+        const feePercent = parseFloat(b.platformFeePercent ?? "15");
+        return Math.max(0, price * (1 - feePercent / 100));
+      };
+
+      const totalEarned = completedForEarnings.reduce((s, b) => s + parseFloat(b.price ?? "0"), 0);
+      const totalPartnerNet = completedForEarnings.reduce((s, b) => s + calcPartnerNet(b), 0);
+      const totalPlatformFee = totalEarned - totalPartnerNet;
 
       res.json({
         partner, users: pUsers, docs, zones, invites,
@@ -1671,9 +1697,9 @@ export function registerPartnerRoutes(app: Express) {
         team,
         earnings: {
           totalEarned: totalEarned.toFixed(2),
-          platformFee: platformFee.toFixed(2),
-          partnerNet: partnerNet.toFixed(2),
-          completedJobs: completedBookings.length,
+          platformFee: totalPlatformFee.toFixed(2),
+          partnerNet: totalPartnerNet.toFixed(2),
+          completedJobs: completedForEarnings.length,
           activeJobs: bookingsList.filter(b => ["confirmed","accepted","in_progress"].includes(b.status)).length,
         },
       });
