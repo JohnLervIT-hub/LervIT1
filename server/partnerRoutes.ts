@@ -208,7 +208,18 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(invite.partnerId, existingUser.id, "user.activated", "partner", invite.partnerId);
 
-      res.json({ success: true, message: "Account activated. Please log in." });
+      // Destroy any existing session and create a fresh one for the newly activated user
+      req.session.destroy(() => {
+        req.session.regenerate((err) => {
+          if (err) {
+            return res.json({ success: true, autoLogin: false, message: "Account activated. Please log in." });
+          }
+          (req.session as any).userId = existingUser.id;
+          req.session.save(() => {
+            res.json({ success: true, autoLogin: true, partnerId: invite.partnerId });
+          });
+        });
+      });
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
       console.error("[Partner] activate error:", err);

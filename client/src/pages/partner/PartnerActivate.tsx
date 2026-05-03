@@ -49,9 +49,11 @@ export default function PartnerActivate() {
   const activate = useMutation({
     mutationFn: (data: ActivateForm) =>
       apiRequest("POST", "/api/partner/activate", { token, name: data.name, password: data.password }),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       setActivated(true);
-      setTimeout(() => setLocation("/login"), 2500);
+      // Backend clears old session and auto-logs in new user — go straight to onboarding
+      const dest = res?.autoLogin === false ? "/login" : "/partner/onboarding";
+      setTimeout(() => setLocation(dest), 1500);
     },
   });
 
