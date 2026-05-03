@@ -15,7 +15,7 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { z } from "zod";
-import { eq, and, desc, inArray, or } from "drizzle-orm";
+import { eq, and, desc, inArray, or, sql } from "drizzle-orm";
 import multer from "multer";
 import { randomBytes } from "crypto";
 import { stripe } from "./config/stripe";
@@ -1321,8 +1321,26 @@ export function registerPartnerRoutes(app: Express) {
   app.get("/api/admin/partners", requireAdminAuth, async (_req: Request, res: Response) => {
     try {
       const allPartners = await db.select().from(partners).orderBy(desc(partners.createdAt));
-      res.json(allPartners);
+
+      // Enrich each partner with team member count + completed job stats
+      const enriched = await Promise.all(allPartners.map(async (p) => {
+        const [teamCount] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, p.id));
+        const completedBookings = await db.select({ price: bookings.price })
+          .from(bookings)
+          .where(and(eq(bookings.enterprisePartnerId, p.id), eq(bookings.status, "completed")));
+        const totalEarned = completedBookings.reduce((sum, b) => sum + parseFloat(b.price ?? "0"), 0);
+        return {
+          ...p,
+          teamMemberCount: teamCount?.count ?? 0,
+          completedJobCount: completedBookings.length,
+          totalEarned: totalEarned.toFixed(2),
+        };
+      }));
+
+      res.json(enriched);
     } catch (err) {
+      console.error("[Admin] partners list error:", err);
       res.status(500).json({ error: "Failed to fetch partners" });
     }
   });
@@ -1348,9 +1366,35 @@ export function registerPartnerRoutes(app: Express) {
       const docs = await db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id));
       const zones = await db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id));
       const invites = await db.select().from(partnerInvites).where(eq(partnerInvites.partnerId, partner.id));
-      const bookingsList = await db.select().from(bookings).where(eq(bookings.enterprisePartnerId, partner.id)).orderBy(desc(bookings.createdAt)).limit(20);
+      const bookingsList = await db.select().from(bookings).where(eq(bookings.enterprisePartnerId, partner.id)).orderBy(desc(bookings.createdAt)).limit(30);
+      const team = await db.select().from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, partner.id)).orderBy(partnerTeamMembers.name);
 
-      res.json({ partner, users: pUsers, docs, zones, invites, recentBookings: bookingsList });
+      // Enrich bookings with their latest assignment
+      const enrichedBookings = await Promise.all(bookingsList.map(async (b) => {
+        const [assignment] = await db.select().from(bookingAssignments)
+          .where(eq(bookingAssignments.bookingId, b.id))
+          .orderBy(desc(bookingAssignments.assignedAt)).limit(1);
+        return { ...b, assignment: assignment ?? null };
+      }));
+
+      // Earnings summary
+      const completedBookings = bookingsList.filter(b => b.status === "completed");
+      const totalEarned = completedBookings.reduce((s, b) => s + parseFloat(b.price ?? "0"), 0);
+      const platformFee = totalEarned * 0.15;
+      const partnerNet = totalEarned - platformFee;
+
+      res.json({
+        partner, users: pUsers, docs, zones, invites,
+        recentBookings: enrichedBookings,
+        team,
+        earnings: {
+          totalEarned: totalEarned.toFixed(2),
+          platformFee: platformFee.toFixed(2),
+          partnerNet: partnerNet.toFixed(2),
+          completedJobs: completedBookings.length,
+          activeJobs: bookingsList.filter(b => ["confirmed","accepted","in_progress"].includes(b.status)).length,
+        },
+      });
     } catch (err) {
       console.error("[Admin] partner detail error:", err);
       res.status(500).json({ error: "Failed to fetch partner" });

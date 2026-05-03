@@ -1,0 +1,720 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useParams, useLocation } from "wouter";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  ArrowLeft, Building2, Users, Truck, DollarSign, CheckCircle2,
+  XCircle, Clock, Search, ChevronRight, Shield, CreditCard,
+  Phone, Mail, MapPin, Loader2, AlertTriangle, FileText,
+  UserPlus, Package, Calendar, Activity, Ban, BadgeCheck
+} from "lucide-react";
+import { format, isValid } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+
+function fmt(d: string | null | undefined) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  return isValid(dt) ? format(dt, "MMM d, yyyy") : "—";
+}
+
+function money(v: string | number | null | undefined) {
+  const n = parseFloat(String(v ?? "0"));
+  return isNaN(n) ? "$0.00" : `$${n.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    active: "bg-green-500/10 text-green-600 border-green-500/20",
+    pending_approval: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    onboarding: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    invited: "bg-slate-500/10 text-slate-500 border-slate-500/20",
+    suspended: "bg-red-500/10 text-red-600 border-red-500/20",
+  };
+  const label: Record<string, string> = {
+    active: "Active", pending_approval: "Pending Approval",
+    onboarding: "Onboarding", invited: "Invited", suspended: "Suspended",
+  };
+  return (
+    <Badge variant="outline" className={`text-xs capitalize ${map[status] ?? "bg-muted text-muted-foreground"}`}>
+      {label[status] ?? status}
+    </Badge>
+  );
+}
+
+function OnboardingProgress({ p }: { p: any }) {
+  const steps = [
+    { key: "profileComplete", label: "Profile" },
+    { key: "coverageComplete", label: "Coverage" },
+    { key: "complianceComplete", label: "Compliance" },
+    { key: "dispatchComplete", label: "Dispatch" },
+    { key: "termsAccepted", label: "Terms" },
+  ];
+  const done = steps.filter(s => p[s.key]).length;
+  return (
+    <div className="flex items-center gap-1.5">
+      {steps.map(s => (
+        <div
+          key={s.key}
+          className={`h-1.5 rounded-full flex-1 ${p[s.key] ? "bg-green-500" : "bg-muted"}`}
+          title={`${s.label}: ${p[s.key] ? "✓" : "pending"}`}
+        />
+      ))}
+      <span className="text-xs text-muted-foreground ml-1">{done}/{steps.length}</span>
+    </div>
+  );
+}
+
+function BookingStatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    completed: "bg-green-500/10 text-green-600 border-green-500/20",
+    in_progress: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    accepted: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+    confirmed: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    cancelled: "bg-red-500/10 text-red-600 border-red-500/20",
+    pending: "bg-slate-500/10 text-slate-500 border-slate-500/20",
+  };
+  return (
+    <Badge variant="outline" className={`text-xs ${map[status] ?? "bg-muted text-muted-foreground"}`}>
+      {status.replace(/_/g, " ")}
+    </Badge>
+  );
+}
+
+// ─── PARTNER DETAIL VIEW ───────────────────────────────────────────────────
+function PartnerDetail({ partnerId }: { partnerId: string }) {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [suspendReason, setSuspendReason] = useState("");
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("partner_admin");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [adminNotes, setAdminNotes] = useState("");
+  const [editingNotes, setEditingNotes] = useState(false);
+
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/partners", partnerId],
+    queryFn: () => fetch(`/api/admin/partners/${partnerId}`, { credentials: "include" }).then(r => r.json()),
+    onSuccess: (d: any) => { if (d?.partner?.adminNotes) setAdminNotes(d.partner.adminNotes); },
+  } as any);
+
+  const activate = useMutation({
+    mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}/activate`, {}),
+    onSuccess: () => { toast({ title: "Partner activated" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners"] }); },
+    onError: () => toast({ title: "Failed to activate", variant: "destructive" }),
+  });
+
+  const suspend = useMutation({
+    mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}/suspend`, { reason: suspendReason }),
+    onSuccess: () => { toast({ title: "Partner suspended" }); setSuspendOpen(false); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners"] }); },
+    onError: () => toast({ title: "Failed to suspend", variant: "destructive" }),
+  });
+
+  const saveNotes = useMutation({
+    mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}`, { adminNotes }),
+    onSuccess: () => { toast({ title: "Notes saved" }); setEditingNotes(false); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); },
+    onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
+  });
+
+  const inviteUser = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/admin/partners/${partnerId}/invite-user`, { email: inviteEmail, role: inviteRole }),
+    onSuccess: () => { toast({ title: "Invite sent" }); setInviteOpen(false); setInviteEmail(""); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); },
+    onError: () => toast({ title: "Failed to send invite", variant: "destructive" }),
+  });
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+  if (!data?.partner) return <div className="text-center py-16 text-muted-foreground">Partner not found.</div>;
+
+  const { partner, users, docs, team, recentBookings, earnings, invites } = data;
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+
+      {/* Back + Header */}
+      <div className="flex items-start gap-4 flex-wrap">
+        <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/partners")} data-testid="button-back-partners">
+          <ArrowLeft className="w-4 h-4 mr-1" /> Partners
+        </Button>
+      </div>
+
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-3 flex-wrap mb-1">
+            <h1 className="text-xl font-bold">{partner.name}</h1>
+            <StatusBadge status={partner.status} />
+            {partner.stripeConnectStatus === "active" && (
+              <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <CreditCard className="w-3 h-3 mr-1" /> Stripe Active
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">{partner.legalName}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {partner.status !== "active" && partner.status !== "suspended" && (
+            <Button size="sm" onClick={() => activate.mutate()} disabled={activate.isPending} data-testid="button-activate-partner">
+              {activate.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <BadgeCheck className="w-4 h-4 mr-1" />}
+              Activate
+            </Button>
+          )}
+          {partner.status === "active" && (
+            <Dialog open={suspendOpen} onOpenChange={setSuspendOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="destructive" data-testid="button-suspend-partner">
+                  <Ban className="w-4 h-4 mr-1" /> Suspend
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Suspend Partner</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <Label>Reason for suspension</Label>
+                  <Textarea value={suspendReason} onChange={e => setSuspendReason(e.target.value)} placeholder="Required — explain why this partner is being suspended" data-testid="input-suspend-reason" />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setSuspendOpen(false)}>Cancel</Button>
+                    <Button variant="destructive" onClick={() => suspend.mutate()} disabled={suspend.isPending || !suspendReason.trim()}>
+                      {suspend.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Suspend"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+          {partner.status === "suspended" && (
+            <Button size="sm" onClick={() => activate.mutate()} disabled={activate.isPending}>
+              <BadgeCheck className="w-4 h-4 mr-1" /> Reinstate
+            </Button>
+          )}
+          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" data-testid="button-invite-user">
+                <UserPlus className="w-4 h-4 mr-1" /> Invite User
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Invite User to {partner.name}</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>Email</Label>
+                  <Input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="user@company.com" data-testid="input-invite-email" />
+                </div>
+                <div>
+                  <Label>Role</Label>
+                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                    <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="partner_admin">Admin</SelectItem>
+                      <SelectItem value="partner_ops_manager">Ops Manager</SelectItem>
+                      <SelectItem value="partner_dispatcher">Dispatcher</SelectItem>
+                      <SelectItem value="partner_viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                  <Button onClick={() => inviteUser.mutate()} disabled={inviteUser.isPending || !inviteEmail}>
+                    {inviteUser.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Invite"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Earnings KPI bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total Earned", value: money(earnings?.totalEarned), icon: DollarSign, color: "text-emerald-600" },
+          { label: "Platform Fee (15%)", value: money(earnings?.platformFee), icon: Activity, color: "text-amber-600" },
+          { label: "Partner Net", value: money(earnings?.partnerNet), icon: CreditCard, color: "text-blue-600" },
+          { label: "Completed Jobs", value: String(earnings?.completedJobs ?? 0), icon: CheckCircle2, color: "text-green-600" },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <Card key={label}>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Icon className={`w-3.5 h-3.5 ${color}`} />
+                <p className="text-xs text-muted-foreground">{label}</p>
+              </div>
+              <p className="text-lg font-bold tabular-nums">{value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="overview">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="bookings" data-testid="tab-bookings">Bookings ({recentBookings?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="team" data-testid="tab-team">Team ({team?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="compliance" data-testid="tab-compliance">Compliance ({docs?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users">Users ({users?.length ?? 0})</TabsTrigger>
+        </TabsList>
+
+        {/* OVERVIEW */}
+        <TabsContent value="overview" className="space-y-4 pt-3">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Company Info</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {[
+                  { label: "Legal Name", value: partner.legalName },
+                  { label: "Operating Name", value: partner.operatingName },
+                  { label: "Phone", value: partner.phone },
+                  { label: "Billing Email", value: partner.billingEmail },
+                  { label: "Address", value: partner.address },
+                  { label: "Service Description", value: partner.serviceDescription },
+                  { label: "Joined", value: fmt(partner.createdAt) },
+                  { label: "Activated", value: partner.activatedAt ? fmt(partner.activatedAt) : "—" },
+                ].map(({ label, value }) => value ? (
+                  <div key={label} className="flex gap-2">
+                    <span className="text-muted-foreground w-36 shrink-0">{label}</span>
+                    <span className="font-medium break-all">{value}</span>
+                  </div>
+                ) : null)}
+
+                {/* Onboarding progress */}
+                <Separator className="my-2" />
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Onboarding Progress</p>
+                  <OnboardingProgress p={partner} />
+                </div>
+
+                {partner.suspendedReason && (
+                  <>
+                    <Separator className="my-2" />
+                    <div className="flex gap-2 p-2 rounded-md bg-red-500/5 border border-red-500/20">
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-red-600">Suspension Reason</p>
+                        <p className="text-xs text-muted-foreground">{partner.suspendedReason}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Dispatch Config</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {[
+                    { label: "Method", value: partner.dispatchMethod },
+                    { label: "Dispatch Phone", value: partner.dispatchPhone },
+                    { label: "Dispatch Email", value: partner.dispatchEmail },
+                    { label: "Primary Ops", value: partner.primaryOpsContact },
+                    { label: "Escalation", value: partner.escalationContact },
+                  ].map(({ label, value }) => value ? (
+                    <div key={label} className="flex gap-2">
+                      <span className="text-muted-foreground w-32 shrink-0">{label}</span>
+                      <span className="font-medium break-all">{value}</span>
+                    </div>
+                  ) : null)}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Stripe Payouts</CardTitle></CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground w-32 shrink-0">Connect Status</span>
+                    <Badge variant="outline" className={`text-xs ${partner.stripeConnectStatus === "active" ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-muted text-muted-foreground"}`}>
+                      {partner.stripeConnectStatus ?? "not connected"}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground w-32 shrink-0">Payouts</span>
+                    <span>{partner.stripePayoutsEnabled ? "✓ Enabled" : "✗ Disabled"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground w-32 shrink-0">Details</span>
+                    <span>{partner.stripeDetailsSubmitted ? "✓ Submitted" : "Incomplete"}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Admin Notes */}
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Admin Notes</CardTitle>
+              {!editingNotes
+                ? <Button size="sm" variant="ghost" onClick={() => setEditingNotes(true)}>Edit</Button>
+                : <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setEditingNotes(false)}>Cancel</Button>
+                    <Button size="sm" onClick={() => saveNotes.mutate()} disabled={saveNotes.isPending}>
+                      {saveNotes.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                    </Button>
+                  </div>
+              }
+            </CardHeader>
+            <CardContent>
+              {editingNotes
+                ? <Textarea value={adminNotes} onChange={e => setAdminNotes(e.target.value)} rows={4} placeholder="Internal notes visible only to LervIT admin..." data-testid="textarea-admin-notes" />
+                : <p className="text-sm text-muted-foreground whitespace-pre-wrap">{partner.adminNotes || "No notes yet."}</p>
+              }
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* BOOKINGS */}
+        <TabsContent value="bookings" className="pt-3">
+          {!recentBookings?.length
+            ? <div className="text-center py-12 text-sm text-muted-foreground">No bookings routed to this partner yet.</div>
+            : (
+              <div className="space-y-3">
+                {recentBookings.map((b: any) => (
+                  <Card key={b.id} data-testid={`card-booking-${b.id}`}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <BookingStatusBadge status={b.status} />
+                          {b.enterpriseStatus && b.enterpriseStatus !== b.status && (
+                            <Badge variant="outline" className="text-xs bg-indigo-500/10 text-indigo-600 border-indigo-500/20">
+                              {b.enterpriseStatus.replace(/_/g, " ")}
+                            </Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground">{fmt(b.createdAt)}</span>
+                        </div>
+                        <span className="font-bold text-sm">{money(b.price)}</span>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm mb-2">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{b.pickupAddress}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <MapPin className="w-3.5 h-3.5 shrink-0 text-primary" />
+                          <span className="truncate">{b.dropoffAddress}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mb-2">
+                        <span className="flex items-center gap-1">
+                          <Package className="w-3 h-3" /> {b.loadSize ?? "—"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" /> {fmt(b.preferredDate)}
+                        </span>
+                        {b.description && (
+                          <span className="flex items-center gap-1 italic">"{b.description}"</span>
+                        )}
+                      </div>
+
+                      {/* Assignment */}
+                      {b.assignment && (
+                        <div className="flex items-center gap-2 mt-2 p-2.5 rounded-md bg-blue-500/5 border border-blue-500/15 text-xs">
+                          <Truck className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <span className="font-medium text-blue-700 dark:text-blue-300">
+                            {b.assignment.driverName ?? "Driver assigned"}
+                          </span>
+                          {b.assignment.vehicleType && <span className="text-muted-foreground">· {b.assignment.vehicleType}</span>}
+                          {b.assignment.vehiclePlate && <span className="text-muted-foreground">· {b.assignment.vehiclePlate}</span>}
+                          {b.assignment.driverPhone && <span className="text-muted-foreground">· {b.assignment.driverPhone}</span>}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
+          }
+        </TabsContent>
+
+        {/* TEAM */}
+        <TabsContent value="team" className="pt-3">
+          {!team?.length
+            ? <div className="text-center py-12 text-sm text-muted-foreground">No team members added yet.</div>
+            : (
+              <div className="space-y-2">
+                {team.map((m: any) => (
+                  <Card key={m.id} data-testid={`card-team-${m.id}`}>
+                    <CardContent className="pt-3 pb-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-10 h-10 border border-border shrink-0">
+                          <AvatarImage src={m.driverPhoto ?? undefined} alt={m.name} />
+                          <AvatarFallback className="bg-muted text-xs font-semibold">
+                            {m.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold">{m.name}</p>
+                            <Badge variant="outline" className="text-xs capitalize">{m.memberType}</Badge>
+                            <Badge variant="outline" className={`text-xs ${m.isAvailable ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-muted text-muted-foreground"}`}>
+                              {m.isAvailable ? "Available" : "Unavailable"}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mt-0.5">
+                            {m.phone && <span>{m.phone}</span>}
+                            {m.vehicleType && (
+                              <span className="flex items-center gap-1">
+                                <Truck className="w-3 h-3" />
+                                {m.vehicleType}{m.vehiclePlate && ` · ${m.vehiclePlate}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
+          }
+        </TabsContent>
+
+        {/* COMPLIANCE */}
+        <TabsContent value="compliance" className="pt-3">
+          {!docs?.length
+            ? <div className="text-center py-12 text-sm text-muted-foreground">No compliance documents uploaded.</div>
+            : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Document</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Uploaded</TableHead>
+                    <TableHead>Expiry</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {docs.map((d: any) => (
+                    <TableRow key={d.id} data-testid={`row-doc-${d.id}`}>
+                      <TableCell className="font-medium text-sm capitalize">{d.docType.replace(/_/g, " ")}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${d.reviewStatus === "approved" ? "bg-green-500/10 text-green-600 border-green-500/20" : d.reviewStatus === "rejected" ? "bg-red-500/10 text-red-600 border-red-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"}`}>
+                          {d.reviewStatus ?? "pending"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{fmt(d.createdAt)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{fmt(d.expiryDate)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )
+          }
+        </TabsContent>
+
+        {/* USERS */}
+        <TabsContent value="users" className="pt-3">
+          <div className="space-y-2">
+            {users?.map((u: any) => (
+              <Card key={u.id} data-testid={`card-user-${u.id}`}>
+                <CardContent className="pt-3 pb-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-9 h-9 border border-border shrink-0">
+                      <AvatarFallback className="bg-muted text-xs">
+                        {(u.userName ?? "?").split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold">{u.userName ?? "—"}</p>
+                        <Badge variant="outline" className="text-xs capitalize">{u.partnerRole?.replace("partner_", "")}</Badge>
+                        {!u.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{u.userEmail}</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">{fmt(u.createdAt)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {invites?.filter((i: any) => !i.acceptedAt).map((i: any) => (
+              <Card key={i.id} className="border-dashed opacity-70">
+                <CardContent className="pt-3 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full border border-dashed border-border flex items-center justify-center shrink-0">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm text-muted-foreground">{i.email}</p>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Invite pending</Badge>
+                        <Badge variant="outline" className="text-xs capitalize">{i.role?.replace("partner_", "")}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Expires {fmt(i.expiresAt)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {!users?.length && !invites?.length && (
+              <div className="text-center py-12 text-sm text-muted-foreground">No users yet.</div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── PARTNER LIST VIEW ─────────────────────────────────────────────────────
+function PartnerList() {
+  const [, setLocation] = useLocation();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const { data: partners = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/partners"],
+  });
+
+  const filtered = partners.filter((p: any) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.legalName.toLowerCase().includes(search.toLowerCase()) ||
+      (p.billingEmail ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const counts = {
+    total: partners.length,
+    active: partners.filter((p: any) => p.status === "active").length,
+    pending: partners.filter((p: any) => p.status === "pending_approval").length,
+    suspended: partners.filter((p: any) => p.status === "suspended").length,
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Enterprise Partners</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{counts.total} partner{counts.total !== 1 ? "s" : ""} · {counts.active} active</p>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total", value: counts.total, color: "text-foreground" },
+          { label: "Active", value: counts.active, color: "text-green-600" },
+          { label: "Pending Approval", value: counts.pending, color: "text-amber-600" },
+          { label: "Suspended", value: counts.suspended, color: "text-red-600" },
+        ].map(({ label, value, color }) => (
+          <Card key={label}>
+            <CardContent className="pt-4 pb-4">
+              <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search partners…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            data-testid="input-search-partners"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-44" data-testid="select-status-filter"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="pending_approval">Pending Approval</SelectItem>
+            <SelectItem value="onboarding">Onboarding</SelectItem>
+            <SelectItem value="invited">Invited</SelectItem>
+            <SelectItem value="suspended">Suspended</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-24 rounded-md bg-muted animate-pulse" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-sm text-muted-foreground">
+          {search || statusFilter !== "all" ? "No partners match your filters." : "No partners yet."}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((p: any) => (
+            <Card
+              key={p.id}
+              className="cursor-pointer hover-elevate"
+              onClick={() => setLocation(`/admin/partners/${p.id}`)}
+              data-testid={`card-partner-${p.id}`}
+            >
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <Building2 className="w-5 h-5 text-primary" />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="text-sm font-semibold">{p.name}</p>
+                      <StatusBadge status={p.status} />
+                      {p.stripeConnectStatus === "active" && (
+                        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                          <CreditCard className="w-3 h-3 mr-1" /> Stripe
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-1.5">{p.legalName} {p.billingEmail ? `· ${p.billingEmail}` : ""}</p>
+                    <OnboardingProgress p={p} />
+                  </div>
+
+                  <div className="hidden sm:flex items-center gap-6 shrink-0 text-right">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Team</p>
+                      <p className="text-sm font-semibold flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                        {p.teamMemberCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Jobs Done</p>
+                      <p className="text-sm font-semibold">{p.completedJobCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Earned</p>
+                      <p className="text-sm font-semibold text-emerald-600">{money(p.totalEarned)}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ROOT EXPORT ────────────────────────────────────────────────────────────
+export default function AdminPartnersPage() {
+  const params = useParams<{ id?: string }>();
+  return params.id ? <PartnerDetail partnerId={params.id} /> : <PartnerList />;
+}
