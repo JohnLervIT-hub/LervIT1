@@ -591,13 +591,10 @@ export default function MyBookings() {
                           )}
                           {booking.partnerAvgRating != null && (
                             <div className="flex items-center gap-1 mt-1" data-testid={`text-partner-rating-${booking.id}`}>
-                              {[1,2,3,4,5].map(s => (
-                                <Star
-                                  key={s}
-                                  className={`w-3.5 h-3.5 ${s <= Math.round(booking.partnerAvgRating!) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30"}`}
-                                />
-                              ))}
-                              <span className="text-xs text-muted-foreground ml-0.5">{booking.partnerAvgRating!.toFixed(1)}</span>
+                              <div className="flex items-center gap-1 bg-yellow-500/10 px-2 py-0.5 rounded-full">
+                                <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                                <span className="text-sm font-semibold">{booking.partnerAvgRating!.toFixed(1)}</span>
+                              </div>
                             </div>
                           )}
                           {booking.partnerAssignment.completedMoves != null && (
