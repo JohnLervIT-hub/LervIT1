@@ -1575,9 +1575,22 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(partner.id, adminUser.id, "partner.invited", "partner", partner.id, `Invited: ${data.adminEmail}`);
 
+      const baseUrl = process.env.BASE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const activationUrl = `${baseUrl}/partner/activate?token=${token}`;
+
+      notificationService.sendPartnerAdminInvite({
+        toEmail: data.adminEmail,
+        toName: data.adminName,
+        partnerName: data.name,
+        legalName: data.legalName,
+        inviterName: adminUser.name || adminUser.email || 'LervIT',
+        activationUrl,
+      }).catch(e => console.error("[Admin] partner invite email failed:", e));
+
       res.status(201).json({
         partner,
-        invite: { ...invite, activationUrl: `/partner/activate?token=${token}` },
+        invite: { ...invite, activationUrl },
       });
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
@@ -1752,7 +1765,20 @@ export function registerPartnerRoutes(app: Express) {
         invitedBy: adminUser.id,
       }).returning();
 
-      res.status(201).json({ invite, activationUrl: `/partner/activate?token=${token}` });
+      const baseUrl = process.env.BASE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const activationUrl = `${baseUrl}/partner/activate?token=${token}`;
+
+      notificationService.sendPartnerUserInvite({
+        toEmail: data.email,
+        toName: data.email.split('@')[0],
+        partnerName: partner.name,
+        inviterName: adminUser.name || adminUser.email || 'LervIT',
+        role: data.role,
+        activationUrl,
+      }).catch(e => console.error("[Admin] invite-user email failed:", e));
+
+      res.status(201).json({ invite, activationUrl });
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
       res.status(500).json({ error: "Failed to invite user" });

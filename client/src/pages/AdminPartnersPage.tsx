@@ -17,7 +17,7 @@ import {
   ArrowLeft, Building2, Users, Truck, DollarSign, CheckCircle2,
   XCircle, Clock, Search, ChevronRight, Shield, CreditCard,
   Phone, Mail, MapPin, Loader2, AlertTriangle, FileText,
-  UserPlus, Package, Calendar, Activity, Ban, BadgeCheck
+  UserPlus, Package, Calendar, Activity, Ban, BadgeCheck, Plus
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -573,13 +573,30 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
 }
 
 // ─── PARTNER LIST VIEW ─────────────────────────────────────────────────────
+const EMPTY_INVITE = { name: "", legalName: "", adminName: "", adminEmail: "" };
+
 function PartnerList() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState(EMPTY_INVITE);
 
   const { data: partners = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/partners"],
+  });
+
+  const createPartner = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/partners/invite", { ...inviteForm, role: "partner_admin" }),
+    onSuccess: (data: any) => {
+      toast({ title: "Partner invited", description: `Activation email sent to ${inviteForm.adminEmail}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partners"] });
+      setInviteOpen(false);
+      setInviteForm(EMPTY_INVITE);
+      if (data?.partner?.id) setLocation(`/admin/partners/${data.partner.id}`);
+    },
+    onError: (err: any) => toast({ title: "Failed to invite partner", description: err?.message ?? "Please check the fields and try again.", variant: "destructive" }),
   });
 
   const filtered = partners.filter((p: any) => {
@@ -598,6 +615,8 @@ function PartnerList() {
     suspended: partners.filter((p: any) => p.status === "suspended").length,
   };
 
+  const inviteReady = inviteForm.name.trim() && inviteForm.legalName.trim() && inviteForm.adminName.trim() && inviteForm.adminEmail.trim();
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -605,6 +624,78 @@ function PartnerList() {
           <h1 className="text-lg font-semibold">Enterprise Partners</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{counts.total} partner{counts.total !== 1 ? "s" : ""} · {counts.active} active</p>
         </div>
+        <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-invite-partner">
+              <Plus className="w-4 h-4 mr-1.5" /> Invite Partner
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Invite a New Partner</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-1">
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Company</p>
+                <div className="space-y-1.5">
+                  <Label>Operating Name *</Label>
+                  <Input
+                    placeholder="OOMovers Inc."
+                    data-testid="input-partner-name"
+                    value={inviteForm.name}
+                    onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Legal Name *</Label>
+                  <Input
+                    placeholder="OOMovers Holdings Ltd."
+                    data-testid="input-partner-legal-name"
+                    value={inviteForm.legalName}
+                    onChange={e => setInviteForm(f => ({ ...f, legalName: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Portal Admin Contact</p>
+                <p className="text-xs text-muted-foreground -mt-1">This person will receive the activation email and set up the partner portal.</p>
+                <div className="space-y-1.5">
+                  <Label>Full Name *</Label>
+                  <Input
+                    placeholder="Jane Smith"
+                    data-testid="input-admin-name"
+                    value={inviteForm.adminName}
+                    onChange={e => setInviteForm(f => ({ ...f, adminName: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email *</Label>
+                  <Input
+                    type="email"
+                    placeholder="jane@company.com"
+                    data-testid="input-admin-email"
+                    value={inviteForm.adminEmail}
+                    onChange={e => setInviteForm(f => ({ ...f, adminEmail: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" onClick={() => { setInviteOpen(false); setInviteForm(EMPTY_INVITE); }}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => createPartner.mutate()}
+                  disabled={createPartner.isPending || !inviteReady}
+                  data-testid="button-send-partner-invite"
+                >
+                  {createPartner.isPending
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending…</>
+                    : "Send Invite"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats strip */}
