@@ -24,6 +24,7 @@ type Booking = {
   id: string;
   customerId: string;
   moverId: string | null;
+  enterprisePartnerId: string | null;
   pickupAddress: string;
   dropoffAddress: string;
   status: string;
@@ -120,7 +121,13 @@ export default function Messages() {
     );
   }
 
-  const otherParty = booking?.customer?.id === user.id ? booking?.mover : booking?.customer;
+  // For enterprise bookings, always brand the other party as LervIT Support
+  // so the partner company is never exposed to the customer
+  const isEnterpriseBooking = !!booking?.enterprisePartnerId;
+  const otherPartyRaw = booking?.customer?.id === user.id ? booking?.mover : booking?.customer;
+  const otherParty = isEnterpriseBooking && booking?.customer?.id === user.id
+    ? { name: "LervIT Support" }
+    : otherPartyRaw;
 
   return (
     <div className="min-h-screen pt-24 pb-12">

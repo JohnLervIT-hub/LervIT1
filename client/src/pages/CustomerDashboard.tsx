@@ -453,7 +453,7 @@ export default function CustomerDashboard() {
         return { text: "Message your mover", icon: MessageCircle, action: () => handleMessage(booking.id) };
       case "accepted":
       case "assigned":
-        return { text: "Message moving company", icon: MessageCircle, action: () => handleMessage(booking.id) };
+        return { text: "Contact support", icon: MessageCircle, action: () => handleMessage(booking.id) };
       case "en_route_to_pickup":
       case "loading":
       case "en_route_to_dropoff":
