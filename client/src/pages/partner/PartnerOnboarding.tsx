@@ -392,7 +392,7 @@ function TermsForm({ accepted, onAccept }: { accepted: boolean; onAccept: () => 
         </div>
 
         <div className="border-t pt-4 border-border">
-          <p className="text-muted-foreground text-xs">LervIT Technologies Corporation · John Eki, Founder &amp; CEO · Effective 30 April 2026. By accepting below, you confirm you have read, understood, and agree to be bound by all terms above on behalf of your organization.</p>
+          <p className="text-muted-foreground text-xs">LervIT Technologies Corporation · Effective {new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}. By accepting below, you confirm you have read, understood, and agree to be bound by all terms above on behalf of your organization.</p>
         </div>
 
       </div>
