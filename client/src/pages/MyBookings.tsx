@@ -78,6 +78,7 @@ type Booking = {
     vehicleType: string | null;
     vehiclePlate: string | null;
     assignedAt: string;
+    completedMoves: number | null;
   } | null;
 };
 
@@ -594,6 +595,11 @@ export default function MyBookings() {
                               ))}
                               <span className="text-xs text-muted-foreground ml-0.5">{booking.partnerAvgRating!.toFixed(1)}</span>
                             </div>
+                          )}
+                          {booking.partnerAssignment.completedMoves != null && (
+                            <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-partner-completed-${booking.id}`}>
+                              {booking.partnerAssignment.completedMoves} completed moves
+                            </p>
                           )}
                         </div>
                       </div>
