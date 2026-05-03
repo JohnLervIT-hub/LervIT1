@@ -3594,9 +3594,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
 
+      // Compute partner avg rating if routed to an enterprise partner
+      let partnerAvgRating: number | null = null;
+      if (booking.enterprisePartnerId) {
+        const partnerBookings = await db.select({ id: bookings.id })
+          .from(bookings)
+          .where(eq(bookings.enterprisePartnerId, booking.enterprisePartnerId!));
+        if (partnerBookings.length > 0) {
+          const partnerBookingIds = partnerBookings.map(b => b.id);
+          const partnerReviews = await db.select({ rating: reviews.rating })
+            .from(reviews)
+            .where(inArray(reviews.bookingId, partnerBookingIds));
+          if (partnerReviews.length > 0) {
+            const sum = partnerReviews.reduce((acc, r) => acc + r.rating, 0);
+            partnerAvgRating = Math.round((sum / partnerReviews.length) * 10) / 10;
+          }
+        }
+      }
+
       res.json({
         ...booking,
         hasReview,
+        partnerAvgRating,
         customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
         mover: mover && moverUser ? {
           id: mover.id,

@@ -56,6 +56,7 @@ type Booking = {
   paymentStatus: string | null;
   createdAt: string;
   hasReview?: boolean;
+  partnerAvgRating?: number | null;
   mover: {
     id: string;
     name: string;
@@ -582,6 +583,17 @@ export default function MyBookings() {
                             <p className="text-sm text-muted-foreground" data-testid={`text-partner-team-${booking.id}`}>
                               {booking.partnerAssignment.teamName}
                             </p>
+                          )}
+                          {booking.partnerAvgRating != null && (
+                            <div className="flex items-center gap-1 mt-1" data-testid={`text-partner-rating-${booking.id}`}>
+                              {[1,2,3,4,5].map(s => (
+                                <Star
+                                  key={s}
+                                  className={`w-3.5 h-3.5 ${s <= Math.round(booking.partnerAvgRating!) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30"}`}
+                                />
+                              ))}
+                              <span className="text-xs text-muted-foreground ml-0.5">{booking.partnerAvgRating!.toFixed(1)}</span>
+                            </div>
                           )}
                         </div>
                       </div>
