@@ -1852,12 +1852,18 @@ export function registerPartnerRoutes(app: Express) {
         return res.status(400).json({ error: "Booking is already routed to a partner" });
       }
 
+      // If the booking is already completed, keep it completed on both fields;
+      // otherwise start the enterprise workflow fresh.
+      const alreadyCompleted = booking.status === "completed";
+      const initialEnterpriseStatus = alreadyCompleted ? "completed" : "new";
+      const newBookingStatus = alreadyCompleted ? "completed" : "confirmed";
+
       const [updated] = await db.update(bookings)
         .set({
           enterprisePartnerId: partnerId,
-          enterpriseStatus: "new",
+          enterpriseStatus: initialEnterpriseStatus,
           routedToPartnerAt: new Date(),
-          status: "confirmed",
+          status: newBookingStatus,
           updatedAt: new Date(),
         })
         .where(eq(bookings.id, booking.id))
@@ -1867,7 +1873,7 @@ export function registerPartnerRoutes(app: Express) {
         bookingId: booking.id,
         partnerId,
         fromStatus: null,
-        toStatus: "new",
+        toStatus: initialEnterpriseStatus,
         changedBy: adminUser.id,
         notes: `Routed to partner: ${partner.name}`,
         customerVisible: false,
