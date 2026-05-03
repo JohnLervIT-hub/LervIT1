@@ -17,7 +17,7 @@ import {
   ArrowLeft, Building2, Users, Truck, DollarSign, CheckCircle2,
   XCircle, Clock, Search, ChevronRight, Shield, CreditCard,
   Phone, Mail, MapPin, Loader2, AlertTriangle, FileText,
-  UserPlus, Package, Calendar, Activity, Ban, BadgeCheck, Plus
+  Package, Calendar, Activity, Ban, BadgeCheck, Plus
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -98,9 +98,6 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   const { toast } = useToast();
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendOpen, setSuspendOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("partner_admin");
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
   const [editingNotes, setEditingNotes] = useState(false);
 
@@ -126,12 +123,6 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
     mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}`, { adminNotes }),
     onSuccess: () => { toast({ title: "Notes saved" }); setEditingNotes(false); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); },
     onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
-  });
-
-  const inviteUser = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/admin/partners/${partnerId}/invite-user`, { email: inviteEmail, role: inviteRole }),
-    onSuccess: () => { toast({ title: "Invite sent" }); setInviteOpen(false); setInviteEmail(""); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); },
-    onError: () => toast({ title: "Failed to send invite", variant: "destructive" }),
   });
 
   if (isLoading) return (
@@ -200,40 +191,6 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
               <BadgeCheck className="w-4 h-4 mr-1" /> Reinstate
             </Button>
           )}
-          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" data-testid="button-invite-user">
-                <UserPlus className="w-4 h-4 mr-1" /> Invite User
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Invite User to {partner.name}</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <div>
-                  <Label>Email</Label>
-                  <Input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="user@company.com" data-testid="input-invite-email" />
-                </div>
-                <div>
-                  <Label>Role</Label>
-                  <Select value={inviteRole} onValueChange={setInviteRole}>
-                    <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="partner_admin">Admin</SelectItem>
-                      <SelectItem value="partner_ops_manager">Ops Manager</SelectItem>
-                      <SelectItem value="partner_dispatcher">Dispatcher</SelectItem>
-                      <SelectItem value="partner_viewer">Viewer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => setInviteOpen(false)}>Cancel</Button>
-                  <Button onClick={() => inviteUser.mutate()} disabled={inviteUser.isPending || !inviteEmail}>
-                    {inviteUser.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Invite"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
