@@ -135,14 +135,20 @@ function InviteDialog({ onDone }: { onDone: () => void }) {
           </form>
         ) : (
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">
-              Share this activation link with <strong>{form.email}</strong>. It expires in 7 days.
-            </p>
-            <div className="rounded-md border bg-muted/40 p-3 text-xs font-mono break-all text-muted-foreground select-all">
-              {inviteUrl}
+            <div className="flex items-start gap-3 rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 p-3">
+              <Mail className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <p className="text-sm text-emerald-800 dark:text-emerald-300">
+                Invite email sent to <strong>{form.email}</strong>. They'll receive a link to set their password and activate their account.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">Or share this link directly (expires in 7 days):</p>
+              <div className="rounded-md border bg-muted/40 p-3 text-xs font-mono break-all text-muted-foreground select-all">
+                {inviteUrl}
+              </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => handleClose(false)}>Close</Button>
+              <Button variant="outline" onClick={() => handleClose(false)}>Done</Button>
               <Button onClick={copyLink} data-testid="button-copy-invite-link">
                 <Link2 className="w-4 h-4 mr-2" />
                 Copy Link

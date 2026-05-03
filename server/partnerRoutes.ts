@@ -40,6 +40,7 @@ import {
   insertPartnerIncidentSchema,
 } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
+import { notificationService } from "./notifications";
 
 // ============================================================
 // Multer setup for file uploads
@@ -1336,6 +1337,21 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(partner.id, inviter.id, "user.invited", "partner_user", invite.id,
         `Invited ${data.email} as ${data.role}`);
+
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : (process.env.BASE_URL || 'https://app.lervit.com');
+      const activationUrl = `${baseUrl}/partner-activate?token=${token}`;
+
+      // Fire-and-forget — don't block response on email delivery
+      notificationService.sendPartnerUserInvite({
+        toEmail: data.email,
+        toName: data.name,
+        partnerName: partner.name,
+        inviterName: inviter.name ?? inviter.email,
+        role: data.role,
+        activationUrl,
+      }).catch(err => console.error("[Partner] invite email error:", err));
 
       res.status(201).json({ invite: { ...invite, activationUrl: `/partner-activate?token=${token}` } });
     } catch (err: any) {
