@@ -55,19 +55,30 @@ const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 const LOAD_SIZE_LABEL: Record<string, string> = {
-  boxes: "Boxes Only (0–20 ft³)",
-  medium: "Medium Load (21–180 ft³)",
-  large: "Large Load (181–300 ft³)",
-  apartment: "Full Apartment (300+ ft³)",
+  boxes: "Boxes Only",
+  medium: "Medium Load",
+  large: "Large Load",
+  apartment: "Full Apartment",
 };
 
 const VEHICLE_CLASS_LABEL: Record<string, string> = {
   A: "Class A – Small Van",
   B: "Class B – Cargo Van",
   C: "Class C – Cargo Van",
-  D: "Class D – Large Van",
+  D: "Class D – Cargo Truck",
   E: "Class E – Box Truck",
 };
+
+const VEHICLE_TYPE_OPTIONS = [
+  "Cargo Van",
+  "Cargo Van (Large)",
+  "Cargo Truck",
+  "Box Truck",
+  "Pickup Truck",
+  "Sprinter Van",
+  "Moving Truck",
+  "Other",
+];
 
 function getClassFromLoadSize(loadSize: string): string {
   const map: Record<string, string> = {
@@ -417,48 +428,91 @@ export default function PartnerBookingDetail() {
                   </Button>
                   {showAssignForm && (
                     <div className="mt-3 space-y-3 p-4 rounded-md bg-muted/40">
-                      {team.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
-                          <Label>Select Team Member</Label>
+                          <Label>Driver Name</Label>
+                          {team.length > 0 ? (
+                            <Select
+                              value={assignData.teamMemberId || "__manual__"}
+                              onValueChange={v => {
+                                if (v === "__manual__") {
+                                  setAssignData(d => ({ ...d, teamMemberId: "", driverName: "" }));
+                                  return;
+                                }
+                                const m = team.find((t: any) => t.id === v);
+                                setAssignData(d => ({
+                                  ...d,
+                                  teamMemberId: v,
+                                  driverName: m?.name ?? d.driverName,
+                                  driverPhone: m?.phone ?? d.driverPhone,
+                                  vehicleType: m?.vehicleType ?? d.vehicleType,
+                                  vehiclePlate: m?.vehiclePlate ?? d.vehiclePlate,
+                                }));
+                              }}
+                            >
+                              <SelectTrigger data-testid="select-team-member">
+                                <SelectValue placeholder="Select driver from team…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {team.map((m: any) => (
+                                  <SelectItem key={m.id} value={m.id}>
+                                    {m.name}{m.memberType ? ` — ${m.memberType}` : ""}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__manual__">Enter manually…</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              placeholder="Driver full name"
+                              value={assignData.driverName}
+                              onChange={e => setAssignData(d => ({ ...d, driverName: e.target.value }))}
+                              data-testid="input-driver-name"
+                            />
+                          )}
+                          {team.length > 0 && (assignData.teamMemberId === "" || assignData.teamMemberId === "__manual__") && (
+                            <Input
+                              placeholder="Driver full name"
+                              value={assignData.driverName}
+                              onChange={e => setAssignData(d => ({ ...d, driverName: e.target.value }))}
+                              data-testid="input-driver-name-manual"
+                              className="mt-1.5"
+                            />
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Driver Phone</Label>
+                          <Input
+                            placeholder="+1 (403) 000-0000"
+                            value={assignData.driverPhone}
+                            onChange={e => setAssignData(d => ({ ...d, driverPhone: e.target.value }))}
+                            data-testid="input-driver-phone"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Vehicle Type</Label>
                           <Select
-                            value={assignData.teamMemberId}
-                            onValueChange={v => {
-                              const m = team.find((t: any) => t.id === v);
-                              setAssignData(d => ({
-                                ...d, teamMemberId: v,
-                                driverName: m?.name ?? d.driverName,
-                                vehicleType: m?.vehicleType ?? d.vehicleType,
-                                vehiclePlate: m?.vehiclePlate ?? d.vehiclePlate,
-                              }));
-                            }}
+                            value={assignData.vehicleType}
+                            onValueChange={v => setAssignData(d => ({ ...d, vehicleType: v }))}
                           >
-                            <SelectTrigger data-testid="select-team-member">
-                              <SelectValue placeholder="Select from team…" />
+                            <SelectTrigger data-testid="select-vehicle-type">
+                              <SelectValue placeholder="Select vehicle type…" />
                             </SelectTrigger>
                             <SelectContent>
-                              {team.map((m: any) => (
-                                <SelectItem key={m.id} value={m.id}>{m.name} — {m.memberType}</SelectItem>
+                              {VEHICLE_TYPE_OPTIONS.map(opt => (
+                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
-                      )}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label>Driver Name</Label>
-                          <Input value={assignData.driverName} onChange={e => setAssignData(d => ({ ...d, driverName: e.target.value }))} data-testid="input-driver-name" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Driver Phone</Label>
-                          <Input value={assignData.driverPhone} onChange={e => setAssignData(d => ({ ...d, driverPhone: e.target.value }))} data-testid="input-driver-phone" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Vehicle Type</Label>
-                          <Input placeholder="e.g. Cargo Van" value={assignData.vehicleType} onChange={e => setAssignData(d => ({ ...d, vehicleType: e.target.value }))} data-testid="input-vehicle-type" />
-                        </div>
                         <div className="space-y-1.5">
                           <Label>Plate Number</Label>
-                          <Input value={assignData.vehiclePlate} onChange={e => setAssignData(d => ({ ...d, vehiclePlate: e.target.value }))} data-testid="input-vehicle-plate" />
+                          <Input
+                            placeholder="e.g. ABC 1234"
+                            value={assignData.vehiclePlate}
+                            onChange={e => setAssignData(d => ({ ...d, vehiclePlate: e.target.value }))}
+                            data-testid="input-vehicle-plate"
+                          />
                         </div>
                         <div className="space-y-1.5 col-span-2">
                           <Label>Notes</Label>
