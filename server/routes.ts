@@ -40,7 +40,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, generateWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -3484,6 +3484,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distanceToPickup = moverDistanceToPickupMap.get(booking.id) || null;
           }
 
+          // Fetch latest partner assignment for this booking (if any)
+          const [latestAssignment] = await db.select().from(bookingAssignments)
+            .where(eq(bookingAssignments.bookingId, booking.id))
+            .orderBy(desc(bookingAssignments.assignedAt))
+            .limit(1);
+          let partnerAssignment = null;
+          if (latestAssignment) {
+            let driverPhoto: string | null = null;
+            if (latestAssignment.teamMemberId) {
+              const [tm] = await db.select({ driverPhoto: partnerTeamMembers.driverPhoto })
+                .from(partnerTeamMembers).where(eq(partnerTeamMembers.id, latestAssignment.teamMemberId)).limit(1);
+              driverPhoto = tm?.driverPhoto ?? null;
+            }
+            partnerAssignment = {
+              driverName: latestAssignment.driverName,
+              driverPhone: latestAssignment.driverPhone,
+              driverPhoto,
+              teamName: latestAssignment.teamName,
+              vehicleType: latestAssignment.vehicleType,
+              vehiclePlate: latestAssignment.vehiclePlate,
+              assignedAt: latestAssignment.assignedAt,
+            };
+          }
+
           return {
             ...booking,
             distanceToPickup,
@@ -3502,7 +3526,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               rating: mover.rating,
               completedTrips: mover.completedTrips,
               isVerified: mover.isVerified
-            } : null
+            } : null,
+            partnerAssignment,
           };
         })
       );
@@ -3532,6 +3557,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
       const hasReview = existingReview.length > 0;
       
+      // Fetch latest partner assignment for this booking (if any)
+      const [latestAssignment] = await db.select().from(bookingAssignments)
+        .where(eq(bookingAssignments.bookingId, booking.id))
+        .orderBy(desc(bookingAssignments.assignedAt))
+        .limit(1);
+      let partnerAssignment = null;
+      if (latestAssignment) {
+        let driverPhoto: string | null = null;
+        if (latestAssignment.teamMemberId) {
+          const [tm] = await db.select({ driverPhoto: partnerTeamMembers.driverPhoto })
+            .from(partnerTeamMembers).where(eq(partnerTeamMembers.id, latestAssignment.teamMemberId)).limit(1);
+          driverPhoto = tm?.driverPhoto ?? null;
+        }
+        partnerAssignment = {
+          driverName: latestAssignment.driverName,
+          driverPhone: latestAssignment.driverPhone,
+          driverPhoto,
+          teamName: latestAssignment.teamName,
+          vehicleType: latestAssignment.vehicleType,
+          vehiclePlate: latestAssignment.vehiclePlate,
+          assignedAt: latestAssignment.assignedAt,
+        };
+      }
+
       res.json({
         ...booking,
         hasReview,
@@ -3548,7 +3597,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           rating: mover.rating,
           completedTrips: mover.completedTrips,
           isVerified: mover.isVerified
-        } : null
+        } : null,
+        partnerAssignment,
       });
     } catch (error) {
       res.status(500).json({ error: "Internal server error" });

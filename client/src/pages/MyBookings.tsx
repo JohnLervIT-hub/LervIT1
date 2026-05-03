@@ -69,6 +69,15 @@ type Booking = {
     completedTrips?: number;
     isVerified?: boolean;
   } | null;
+  partnerAssignment: {
+    driverName: string | null;
+    driverPhone: string | null;
+    driverPhoto: string | null;
+    teamName: string | null;
+    vehicleType: string | null;
+    vehiclePlate: string | null;
+    assignedAt: string;
+  } | null;
 };
 
 export default function MyBookings() {
@@ -537,6 +546,88 @@ export default function MyBookings() {
                           >
                             <Phone className="w-4 h-4 mr-2" />
                             Call {booking.mover.name?.split(' ')[0]}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Partner-Assigned Driver Card */}
+                  {booking.partnerAssignment && (
+                    <div className="bg-gradient-to-br from-blue-500/5 to-blue-500/10 rounded-xl p-5 mb-4 border border-blue-500/20" data-testid={`card-partner-driver-${booking.id}`}>
+                      <div className="flex items-center gap-1 mb-3">
+                        <Truck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <h4 className="font-semibold text-sm text-blue-600 dark:text-blue-400">Your Assigned Driver</h4>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <Avatar className="w-16 h-16 border-2 border-blue-500/30">
+                          <AvatarImage src={booking.partnerAssignment.driverPhoto ?? undefined} alt={booking.partnerAssignment.driverName ?? "Driver"} />
+                          <AvatarFallback className="bg-blue-500/20 text-blue-700 dark:text-blue-300 text-lg font-bold">
+                            {booking.partnerAssignment.driverName
+                              ? booking.partnerAssignment.driverName.split(" ").map(n => n[0]).join("").toUpperCase()
+                              : "D"}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-lg" data-testid={`text-partner-driver-name-${booking.id}`}>
+                            {booking.partnerAssignment.driverName ?? "Driver assigned"}
+                          </h3>
+                          {booking.partnerAssignment.teamName && (
+                            <p className="text-sm text-muted-foreground" data-testid={`text-partner-team-${booking.id}`}>
+                              {booking.partnerAssignment.teamName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {(booking.partnerAssignment.vehicleType || booking.partnerAssignment.vehiclePlate) && (
+                        <>
+                          <Separator className="my-4" />
+                          <div className="grid grid-cols-2 gap-4">
+                            {booking.partnerAssignment.vehicleType && (
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                  <Truck className="w-5 h-5 text-blue-500" />
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Vehicle</p>
+                                  <p className="font-medium text-sm" data-testid={`text-partner-vehicle-${booking.id}`}>
+                                    {booking.partnerAssignment.vehicleType}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            {booking.partnerAssignment.vehiclePlate && (
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center border-2 border-dashed">
+                                  <span className="text-xs font-bold">LP</span>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">License Plate</p>
+                                  <p className="font-bold text-sm tracking-wider" data-testid={`text-partner-plate-${booking.id}`}>
+                                    {booking.partnerAssignment.vehiclePlate}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {booking.partnerAssignment.driverPhone && booking.status !== "completed" && booking.status !== "cancelled" && (
+                        <>
+                          <Separator className="my-4" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => openTel(booking.partnerAssignment!.driverPhone!)}
+                            data-testid={`button-call-partner-driver-${booking.id}`}
+                          >
+                            <Phone className="w-4 h-4 mr-2" />
+                            Call {booking.partnerAssignment.driverName?.split(" ")[0] ?? "Driver"}
                           </Button>
                         </>
                       )}
