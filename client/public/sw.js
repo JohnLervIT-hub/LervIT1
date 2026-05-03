@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const STATIC_CACHE = `lervit-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `lervit-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `lervit-api-${CACHE_VERSION}`;
