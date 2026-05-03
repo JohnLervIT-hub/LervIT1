@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus } from "lucide-react";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus, Building2 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -44,6 +44,12 @@ type AvailableMover = {
   totalMoves: number;
 };
 
+type ActivePartner = {
+  id: string;
+  name: string;
+  status: string;
+};
+
 type Booking = {
   id: string;
   status: string;
@@ -52,6 +58,8 @@ type Booking = {
   dropoffAddress: string;
   scheduledDate: string;
   createdAt: string;
+  enterprisePartnerId?: string | null;
+  enterprisePartnerName?: string | null;
   customer: {
     id?: string;
     name?: string;
@@ -78,6 +86,7 @@ export default function AdminMovesPage() {
   const [editPickup, setEditPickup] = useState("");
   const [editDropoff, setEditDropoff] = useState("");
   const [selectedMoverId, setSelectedMoverId] = useState<string>("");
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
@@ -87,6 +96,13 @@ export default function AdminMovesPage() {
   // Fetch available movers for assignment or reassignment
   const { data: availableMovers } = useQuery<AvailableMover[]>({
     queryKey: ["/api/admin/available-movers"],
+    enabled: !!editingBooking && editingBooking.status !== 'completed' && editingBooking.status !== 'cancelled',
+  });
+
+  // Fetch active partners for routing
+  const { data: activePartners } = useQuery<ActivePartner[]>({
+    queryKey: ["/api/admin/partners"],
+    select: (data: any[]) => data.filter((p) => p.status === "active"),
     enabled: !!editingBooking && editingBooking.status !== 'completed' && editingBooking.status !== 'cancelled',
   });
 
@@ -202,11 +218,42 @@ export default function AdminMovesPage() {
     });
   };
 
+  const routeToPartnerMutation = useMutation({
+    mutationFn: async ({ bookingId, partnerId }: { bookingId: string; partnerId: string }) => {
+      return apiRequest("POST", `/api/admin/bookings/${bookingId}/route-to-partner`, { partnerId });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Job Routed",
+        description: data.message || "Booking has been routed to the partner. Notification emails sent.",
+      });
+      setEditingBooking(null);
+      setSelectedPartnerId("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Routing Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRouteToPartner = () => {
+    if (!editingBooking || !selectedPartnerId) return;
+    routeToPartnerMutation.mutate({
+      bookingId: editingBooking.id,
+      partnerId: selectedPartnerId,
+    });
+  };
+
   const openEditDialog = (booking: Booking) => {
     setEditingBooking(booking);
     setEditPickup(booking.pickupAddress);
     setEditDropoff(booking.dropoffAddress);
     setSelectedMoverId("");
+    setSelectedPartnerId("");
   };
 
   const handleSaveAddresses = () => {
@@ -416,6 +463,13 @@ export default function AdminMovesPage() {
                               <div className="text-sm">{b.mover.name}</div>
                               {b.mover.id && <div className="text-xs text-muted-foreground font-mono">#{b.mover.id.slice(0, 8)}</div>}
                             </div>
+                          ) : b.enterprisePartnerId ? (
+                            <div className="flex items-center gap-1.5 text-sm text-violet-700">
+                              <Building2 className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate max-w-[120px]" title={b.enterprisePartnerName ?? b.enterprisePartnerId}>
+                                {b.enterprisePartnerName ?? "Partner"}
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-xs text-muted-foreground italic">Unassigned</span>
                           )}
@@ -536,6 +590,52 @@ export default function AdminMovesPage() {
                     {editingBooking?.mover?.id ? 'Reassign' : 'Assign'}
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {/* Route to Partner Section */}
+            {editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
+              <div className="space-y-2 pt-4 border-t">
+                <Label className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-violet-600" />
+                  Route to Enterprise Partner
+                </Label>
+                {editingBooking?.enterprisePartnerId ? (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-300">
+                      <Building2 className="w-3 h-3 mr-1" />
+                      {editingBooking.enterprisePartnerName || editingBooking.enterprisePartnerId}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">Already routed — cannot reassign</span>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Select value={selectedPartnerId} onValueChange={setSelectedPartnerId}>
+                      <SelectTrigger className="flex-1" data-testid="select-route-partner">
+                        <SelectValue placeholder="Select an active partner..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activePartners?.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                        {(!activePartners || activePartners.length === 0) && (
+                          <SelectItem value="none" disabled>No active partners available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={handleRouteToPartner}
+                      disabled={!selectedPartnerId || routeToPartnerMutation.isPending}
+                      className="bg-violet-600"
+                      data-testid="button-route-partner"
+                    >
+                      {routeToPartnerMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      Route
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
