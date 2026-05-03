@@ -35,17 +35,20 @@ import singleMoverPoster from "@assets/generated_images/single_mover_poster_imag
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
 import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
 
-// Returns a flat item-type premium based on AI-identified items
-// Refrigerators: +$8, Beds: +$5
+// Returns the total heavy-item premium: $10 per item with high or very_high handling complexity
+const HEAVY_ITEM_PREMIUM = 10;
 function getItemTypePremium(items: IdentifiedItem[]): number {
-  let premium = 0;
+  let count = 0;
   for (const item of items) {
     if (item.processingStatus !== 'completed') continue;
-    const text = `${item.itemName || ''} ${item.category || ''}`.toLowerCase();
-    if (/refrigerator|fridge/.test(text)) premium += 8;
-    else if (/\bbed\b/.test(text)) premium += 5;
+    if (item.handlingComplexity === 'very_high' || item.handlingComplexity === 'high') count++;
   }
-  return premium;
+  return count * HEAVY_ITEM_PREMIUM;
+}
+
+// Returns the number of heavy items (for passing to the server)
+function countHeavyItems(items: IdentifiedItem[]): number {
+  return items.filter(i => i.processingStatus === 'completed' && (i.handlingComplexity === 'very_high' || i.handlingComplexity === 'high')).length;
 }
 
 // Calgary city center – default map position before addresses are entered
@@ -811,7 +814,8 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers as 1 | 2,
           undefined,
-          aiDetectedVolume
+          aiDetectedVolume,
+          countHeavyItems(identifiedItems)
         );
         if (step === 1) {
           const step1Preview: PriceBreakdown = {
@@ -832,13 +836,7 @@ export default function RequestMove() {
           };
           setPriceBreakdown(step1Preview);
         } else {
-          const itemPremium = getItemTypePremium(identifiedItems);
-          setPriceBreakdown({
-            ...breakdown,
-            heavyItemFee: itemPremium,
-            subtotal: breakdown.subtotal + itemPremium,
-            totalCost: breakdown.totalCost + itemPremium,
-          });
+          setPriceBreakdown(breakdown);
         }
         setPricingError(null);
       } catch (error) {
@@ -1561,6 +1559,7 @@ export default function RequestMove() {
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
+        heavyItemCount: countHeavyItems(identifiedItems),
         promoCode: appliedPromo?.code || undefined,
       };
       createBookingMutation.mutate(bookingData);
@@ -2232,7 +2231,7 @@ export default function RequestMove() {
                             </div>
                             {heavyItem && (
                               <div className="mt-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                                <p className="text-sm font-semibold text-primary">+$15 Heavy Item Fee</p>
+                                <p className="text-sm font-semibold text-primary">+$10 Heavy Item Premium</p>
                               </div>
                             )}
                           </div>

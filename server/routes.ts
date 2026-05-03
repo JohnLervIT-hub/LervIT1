@@ -3267,6 +3267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const distance = drivingDistanceResult.distanceKm;
       const aiDetectedVolumeCuft = typeof req.body.aiDetectedVolumeCuft === 'number' ? req.body.aiDetectedVolumeCuft : undefined;
+      const heavyItemCount = typeof req.body.heavyItemCount === 'number' ? req.body.heavyItemCount : undefined;
       const priceBreakdown = calculatePrice(
         distance,
         bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
@@ -3275,7 +3276,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bookingData.heavyItem || false,
         bookingData.numberOfMovers as 1 | 2,
         undefined,
-        aiDetectedVolumeCuft
+        aiDetectedVolumeCuft,
+        heavyItemCount
       );
       
       // Calculate promo code discount
