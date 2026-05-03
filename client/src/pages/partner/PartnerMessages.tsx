@@ -263,7 +263,7 @@ export default function PartnerMessages() {
                   data-testid="conv-lervit-admin"
                   className={cn(
                     "w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors",
-                    selectedId === ADMIN_THREAD_ID ? "bg-accent" : "hover-elevate"
+                    selectedId === ADMIN_THREAD_ID ? "bg-muted" : "hover-elevate"
                   )}
                 >
                   <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -305,7 +305,7 @@ export default function PartnerMessages() {
                           data-testid={`conv-${conv.bookingId}`}
                           className={cn(
                             "w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors",
-                            isSelected ? "bg-accent" : "hover-elevate"
+                            isSelected ? "bg-muted" : "hover-elevate"
                           )}
                         >
                           <Avatar className="w-9 h-9 shrink-0 mt-0.5">
