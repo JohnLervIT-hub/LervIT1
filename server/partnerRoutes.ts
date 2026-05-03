@@ -1857,6 +1857,81 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // POST /api/admin/partners/:id/compliance/upload — admin uploads a compliance doc on behalf of a partner
+  app.post("/api/admin/partners/:id/compliance/upload", requireAdminAuth, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const adminUser = (req as any).adminUser;
+      const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
+
+      const docType = z.enum([
+        "insurance_certificate", "cargo_liability", "business_registration",
+        "compliance_attestation", "vehicle_registration", "drivers_abstract"
+      ]).parse(req.body.docType);
+
+      const reviewStatus = z.enum(["approved", "pending", "under_review"]).default("approved").parse(req.body.reviewStatus ?? "approved");
+      const expiryDate = req.body.expiryDate ? new Date(req.body.expiryDate) : null;
+
+      let fileUrl: string | null = null;
+      let fileName: string | null = null;
+      let fileSize: number | null = null;
+
+      if (req.file) {
+        const objectStorage = new ObjectStorageService();
+        const ext = req.file.originalname.split(".").pop() || "bin";
+        const objectKey = `.private/compliance/${partner.id}/${Date.now()}-${docType}.${ext}`;
+        fileUrl = await objectStorage.uploadFile(objectKey, req.file.buffer, req.file.mimetype);
+        fileName = req.file.originalname;
+        fileSize = req.file.size;
+      } else if (req.body.fileName) {
+        // Admin can also record a doc without a file (manual entry)
+        fileName = req.body.fileName;
+      }
+
+      const [doc] = await db.insert(complianceDocs).values({
+        partnerId: partner.id,
+        docType,
+        fileUrl: fileUrl ?? undefined,
+        fileName: fileName ?? undefined,
+        fileSize: fileSize ?? undefined,
+        expiryDate: expiryDate ?? undefined,
+        reviewStatus,
+        reviewedBy: reviewStatus === "approved" ? adminUser.id : undefined,
+        reviewedAt: reviewStatus === "approved" ? new Date() : undefined,
+        uploadedBy: adminUser.id,
+      }).returning();
+
+      // Update partner compliance status if enough docs
+      const allDocs = await db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id));
+      if (allDocs.length >= 2) {
+        await db.update(partners).set({ complianceComplete: true, updatedAt: new Date() }).where(eq(partners.id, partner.id));
+      }
+
+      await logAudit(partner.id, adminUser.id, "compliance.uploaded", "compliance_doc", doc.id, `admin-upload:${docType}`);
+      res.status(201).json(doc);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Admin] compliance upload error:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
+  // DELETE /api/admin/partners/:partnerId/compliance/:docId — admin removes a compliance doc
+  app.delete("/api/admin/partners/:partnerId/compliance/:docId", requireAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const adminUser = (req as any).adminUser;
+      const [doc] = await db.select().from(complianceDocs)
+        .where(and(eq(complianceDocs.id, req.params.docId), eq(complianceDocs.partnerId, req.params.partnerId)))
+        .limit(1);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      await db.delete(complianceDocs).where(eq(complianceDocs.id, doc.id));
+      await logAudit(req.params.partnerId, adminUser.id, "compliance.deleted", "compliance_doc", doc.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
   // POST /api/admin/bookings/:id/route-to-partner
   app.post("/api/admin/bookings/:id/route-to-partner", requireAdminAuth, async (req: Request, res: Response) => {
     try {

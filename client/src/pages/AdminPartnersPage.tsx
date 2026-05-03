@@ -17,7 +17,8 @@ import {
   ArrowLeft, Building2, Users, Truck, DollarSign, CheckCircle2,
   XCircle, Clock, Search, ChevronRight, Shield, CreditCard,
   Phone, Mail, MapPin, Loader2, AlertTriangle, FileText,
-  Package, Calendar, Activity, Ban, BadgeCheck, Plus, MessageSquare, Send
+  Package, Calendar, Activity, Ban, BadgeCheck, Plus, MessageSquare, Send,
+  Upload, Trash2, CheckCheck, ShieldCheck, ExternalLink
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format, isValid, isToday, isYesterday } from "date-fns";
@@ -103,6 +104,12 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [msgDraft, setMsgDraft] = useState("");
   const msgEndRef = useRef<HTMLDivElement>(null);
+  const compFileRef = useRef<HTMLInputElement>(null);
+  const [compDocType, setCompDocType] = useState("");
+  const [compExpiry, setCompExpiry] = useState("");
+  const [compFile, setCompFile] = useState<File | null>(null);
+  const [compFileName, setCompFileName] = useState("");
+  const [reviewingDoc, setReviewingDoc] = useState<string | null>(null);
 
   const { data: directMsgs = [], isLoading: msgsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/partners", partnerId, "messages"],
@@ -157,6 +164,52 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
     mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}`, { adminNotes }),
     onSuccess: () => { toast({ title: "Notes saved" }); setEditingNotes(false); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); },
     onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
+  });
+
+  const uploadCompDoc = useMutation({
+    mutationFn: async () => {
+      if (!compDocType) throw new Error("Select a document type");
+      const fd = new FormData();
+      fd.append("docType", compDocType);
+      fd.append("reviewStatus", "approved");
+      if (compExpiry) fd.append("expiryDate", compExpiry);
+      if (compFile) {
+        fd.append("file", compFile);
+      } else if (compFileName.trim()) {
+        fd.append("fileName", compFileName.trim());
+      } else {
+        throw new Error("Provide a file or document name");
+      }
+      const res = await fetch(`/api/admin/partners/${partnerId}/compliance/upload`, {
+        method: "POST", credentials: "include", body: fd,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Document added" });
+      setCompDocType(""); setCompExpiry(""); setCompFile(null); setCompFileName("");
+      if (compFileRef.current) compFileRef.current.value = "";
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] });
+    },
+    onError: (e: any) => toast({ title: e?.message ?? "Upload failed", variant: "destructive" }),
+  });
+
+  const reviewCompDoc = useMutation({
+    mutationFn: ({ docId, reviewStatus, reviewNotes }: { docId: string; reviewStatus: string; reviewNotes?: string }) =>
+      apiRequest("PUT", `/api/admin/compliance/${docId}/review`, { reviewStatus, reviewNotes }),
+    onSuccess: () => {
+      toast({ title: "Document updated" });
+      setReviewingDoc(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] });
+    },
+    onError: () => toast({ title: "Failed to update document", variant: "destructive" }),
+  });
+
+  const deleteCompDoc = useMutation({
+    mutationFn: (docId: string) => fetch(`/api/admin/partners/${partnerId}/compliance/${docId}`, { method: "DELETE", credentials: "include" }),
+    onSuccess: () => { toast({ title: "Document removed" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); },
+    onError: () => toast({ title: "Failed to remove document", variant: "destructive" }),
   });
 
   if (isLoading) return (
@@ -488,36 +541,219 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
         </TabsContent>
 
         {/* COMPLIANCE */}
-        <TabsContent value="compliance" className="pt-3">
-          {!docs?.length
-            ? <div className="text-center py-12 text-sm text-muted-foreground">No compliance documents uploaded.</div>
-            : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Document</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Uploaded</TableHead>
-                    <TableHead>Expiry</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {docs.map((d: any) => (
-                    <TableRow key={d.id} data-testid={`row-doc-${d.id}`}>
-                      <TableCell className="font-medium text-sm capitalize">{d.docType.replace(/_/g, " ")}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={`text-xs ${d.reviewStatus === "approved" ? "bg-green-500/10 text-green-600 border-green-500/20" : d.reviewStatus === "rejected" ? "bg-red-500/10 text-red-600 border-red-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"}`}>
-                          {d.reviewStatus ?? "pending"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{fmt(d.createdAt)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{fmt(d.expiryDate)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )
-          }
+        <TabsContent value="compliance" className="pt-3 space-y-4">
+
+          {/* Required doc checklist */}
+          {(() => {
+            const REQUIRED = ["insurance_certificate", "cargo_liability", "business_registration"];
+            const LABELS: Record<string, string> = {
+              insurance_certificate: "Insurance Certificate",
+              cargo_liability: "Cargo Liability Insurance",
+              business_registration: "Business Registration",
+            };
+            const uploadedTypes = (docs ?? []).map((d: any) => d.docType);
+            const allDone = REQUIRED.every(t => uploadedTypes.includes(t));
+            return (
+              <Card>
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-blue-500" />
+                    Required Documents
+                    {allDone
+                      ? <Badge className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">All Submitted</Badge>
+                      : <Badge className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Incomplete</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <div className="space-y-1.5">
+                    {REQUIRED.map(type => {
+                      const doc = (docs ?? []).find((d: any) => d.docType === type);
+                      return (
+                        <div key={type} className="flex items-center gap-3 py-1.5">
+                          {doc
+                            ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                            : <Clock className="w-4 h-4 text-muted-foreground shrink-0" />}
+                          <span className={`text-sm flex-1 ${doc ? "text-foreground" : "text-muted-foreground"}`}>
+                            {LABELS[type]}
+                          </span>
+                          {doc && (
+                            <Badge variant="outline" className={`text-xs ${
+                              doc.reviewStatus === "approved" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                              doc.reviewStatus === "rejected" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                              "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            }`}>
+                              {doc.reviewStatus}
+                            </Badge>
+                          )}
+                          {!doc && <Badge variant="outline" className="text-xs text-muted-foreground">Missing</Badge>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Add document form */}
+          <Card>
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Upload className="w-4 h-4" /> Add Document
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Document Type *</Label>
+                  <Select value={compDocType} onValueChange={setCompDocType}>
+                    <SelectTrigger data-testid="select-comp-doc-type" className="text-sm">
+                      <SelectValue placeholder="Select type…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        { value: "insurance_certificate", label: "Insurance Certificate" },
+                        { value: "cargo_liability", label: "Cargo Liability" },
+                        { value: "business_registration", label: "Business Registration" },
+                        { value: "compliance_attestation", label: "Compliance Attestation" },
+                        { value: "vehicle_registration", label: "Vehicle Registration" },
+                        { value: "drivers_abstract", label: "Driver's Abstract" },
+                      ].map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Document Name / File</Label>
+                  <div className="flex gap-1.5">
+                    <Input
+                      placeholder="e.g. Insurance_2025.pdf"
+                      value={compFile ? compFile.name : compFileName}
+                      onChange={e => { setCompFileName(e.target.value); setCompFile(null); }}
+                      className="text-sm"
+                      data-testid="input-comp-filename"
+                      readOnly={!!compFile}
+                    />
+                    <Button
+                      size="icon" variant="outline"
+                      onClick={() => compFileRef.current?.click()}
+                      data-testid="button-comp-pick-file"
+                      title="Attach file"
+                    >
+                      <Upload className="w-4 h-4" />
+                    </Button>
+                    <input ref={compFileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" className="hidden"
+                      onChange={e => { setCompFile(e.target.files?.[0] ?? null); setCompFileName(""); }} />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Expiry Date <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input type="date" value={compExpiry} onChange={e => setCompExpiry(e.target.value)} className="text-sm" data-testid="input-comp-expiry" />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => uploadCompDoc.mutate()}
+                disabled={uploadCompDoc.isPending || !compDocType || (!compFile && !compFileName.trim())}
+                data-testid="button-add-comp-doc"
+              >
+                {uploadCompDoc.isPending
+                  ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Adding…</>
+                  : <><Plus className="w-3.5 h-3.5 mr-1.5" />Add Document</>}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Documents list */}
+          {!docs?.length ? (
+            <div className="text-center py-10 text-sm text-muted-foreground">No compliance documents yet. Add one above.</div>
+          ) : (
+            <div className="space-y-2">
+              {docs.map((d: any) => {
+                const statusCfg = {
+                  approved: { cls: "bg-green-500/10 text-green-600 border-green-500/20", label: "Approved" },
+                  rejected: { cls: "bg-red-500/10 text-red-600 border-red-500/20", label: "Rejected" },
+                  under_review: { cls: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "Under Review" },
+                  pending: { cls: "bg-amber-500/10 text-amber-600 border-amber-500/20", label: "Pending" },
+                }[d.reviewStatus as string] ?? { cls: "bg-muted text-muted-foreground", label: d.reviewStatus };
+                const isExpiring = d.expiryDate && new Date(d.expiryDate) < new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+                return (
+                  <Card key={d.id} data-testid={`row-doc-${d.id}`}>
+                    <CardContent className="py-3 px-4">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className={`flex items-center justify-center w-8 h-8 rounded-md shrink-0 ${
+                          d.reviewStatus === "approved" ? "bg-green-100 dark:bg-green-900/30" : "bg-muted"
+                        }`}>
+                          {d.reviewStatus === "approved"
+                            ? <CheckCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
+                            : <FileText className="w-4 h-4 text-muted-foreground" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium capitalize">{d.docType.replace(/_/g, " ")}</span>
+                            <Badge variant="outline" className={`text-xs ${statusCfg.cls}`}>{statusCfg.label}</Badge>
+                            {isExpiring && (
+                              <Badge variant="outline" className="text-xs bg-red-500/10 text-red-600 border-red-500/20">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> Expiring Soon
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {d.fileName ?? "—"}
+                            {d.expiryDate ? ` · Expires ${fmt(d.expiryDate)}` : ""}
+                            {` · Added ${fmt(d.createdAt)}`}
+                          </p>
+                          {d.reviewNotes && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{d.reviewNotes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {d.fileUrl && (
+                            <a href={d.fileUrl} target="_blank" rel="noopener noreferrer">
+                              <Button size="icon" variant="ghost" title="View file" data-testid={`button-view-doc-${d.id}`}>
+                                <ExternalLink className="w-4 h-4" />
+                              </Button>
+                            </a>
+                          )}
+                          {d.reviewStatus !== "approved" && (
+                            <Button
+                              size="sm" variant="ghost"
+                              className="text-green-600 dark:text-green-400 text-xs"
+                              onClick={() => reviewCompDoc.mutate({ docId: d.id, reviewStatus: "approved" })}
+                              disabled={reviewCompDoc.isPending && reviewingDoc === d.id}
+                              data-testid={`button-approve-doc-${d.id}`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Approve
+                            </Button>
+                          )}
+                          {d.reviewStatus !== "rejected" && d.reviewStatus !== "approved" && (
+                            <Button
+                              size="sm" variant="ghost"
+                              className="text-red-600 dark:text-red-400 text-xs"
+                              onClick={() => { setReviewingDoc(d.id); reviewCompDoc.mutate({ docId: d.id, reviewStatus: "rejected" }); }}
+                              disabled={reviewCompDoc.isPending && reviewingDoc === d.id}
+                              data-testid={`button-reject-doc-${d.id}`}
+                            >
+                              <XCircle className="w-3.5 h-3.5 mr-1" />Reject
+                            </Button>
+                          )}
+                          {d.reviewStatus !== "approved" && (
+                            <Button
+                              size="icon" variant="ghost"
+                              onClick={() => deleteCompDoc.mutate(d.id)}
+                              disabled={deleteCompDoc.isPending}
+                              data-testid={`button-delete-doc-${d.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* MESSAGES */}
