@@ -1003,6 +1003,11 @@ export default function AdminDashboard() {
                                 <Truck className="w-3 h-3 text-primary" />
                                 {booking.mover.user?.name || booking.mover.name || "Assigned"}
                               </span>
+                            ) : (booking as any).partnerAssignment?.driverName ? (
+                              <span className="flex items-center gap-1">
+                                <Truck className="w-3 h-3 text-primary" />
+                                {(booking as any).partnerAssignment.driverName}
+                              </span>
                             ) : booking.status === "pending" ? (
                               <span className="flex items-center gap-1 text-blue-500">
                                 <Clock className="w-3 h-3" />
