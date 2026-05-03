@@ -30,7 +30,12 @@ import {
   User as UserIcon,
   Mail,
   Phone,
+  Building2,
+  ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { Link as WouterLink } from "wouter";
 import type { SupportTicket, SupportTicketReply, User, AiSupportInsight } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -41,6 +46,25 @@ type ReplyWithUser = SupportTicketReply & { userName?: string };
 
 type AiInsightWithCached = AiSupportInsight & { cached?: boolean };
 
+type PartnerIncident = {
+  id: string;
+  bookingId: string;
+  partnerId: string;
+  category: string;
+  severity: string;
+  status: string;
+  title: string;
+  notes: string;
+  escalationFlag: boolean;
+  fileUrls: string[] | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  partnerName: string;
+  reporterName: string | null;
+};
+
 export default function AdminSupportDashboard() {
   const { toast } = useToast();
   const [selectedTicket, setSelectedTicket] = useState<TicketWithUser | null>(null);
@@ -50,9 +74,28 @@ export default function AdminSupportDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [aiInsight, setAiInsight] = useState<AiInsightWithCached | null>(null);
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(true);
+  const [incidentStatusFilter, setIncidentStatusFilter] = useState<string>("all");
+  const [incidentSeverityFilter, setIncidentSeverityFilter] = useState<string>("all");
+  const [expandedIncident, setExpandedIncident] = useState<string | null>(null);
+  const [resolutionDraft, setResolutionDraft] = useState<Record<string, string>>({});
 
   const { data: allTickets, isLoading } = useQuery<TicketWithUser[]>({
     queryKey: ["/api/support/tickets/all"],
+  });
+
+  const { data: partnerIncidentList = [], isLoading: incidentsLoading } = useQuery<PartnerIncident[]>({
+    queryKey: ["/api/admin/partner-incidents"],
+    refetchInterval: 30000,
+  });
+
+  const updateIncident = useMutation({
+    mutationFn: ({ id, status, resolutionNotes }: { id: string; status?: string; resolutionNotes?: string }) =>
+      apiRequest("PUT", `/api/admin/partner-incidents/${id}`, { status, resolutionNotes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partner-incidents"] });
+      toast({ title: "Incident updated" });
+    },
+    onError: () => toast({ title: "Failed to update incident", variant: "destructive" }),
   });
 
   const { data: ticketDetails } = useQuery<{ ticket: SupportTicket; replies: SupportTicketReply[] }>({
@@ -226,7 +269,7 @@ export default function AdminSupportDashboard() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-support-title">Support Center</h1>
-              <p className="text-sm text-muted-foreground">Manage and respond to user support tickets</p>
+              <p className="text-sm text-muted-foreground">Manage customer tickets and partner incidents</p>
             </div>
           </div>
 
@@ -270,7 +313,27 @@ export default function AdminSupportDashboard() {
           </div>
         </div>
 
-        <div>
+        <Tabs defaultValue="tickets" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="tickets" data-testid="tab-support-tickets">
+              Customer Tickets
+              {ticketStats.open > 0 && (
+                <span className="ml-2 text-xs bg-blue-500/15 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                  {ticketStats.open}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="incidents" data-testid="tab-partner-incidents">
+              Partner Incidents
+              {partnerIncidentList.filter(i => i.status !== "resolved").length > 0 && (
+                <span className="ml-2 text-xs bg-orange-500/15 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded">
+                  {partnerIncidentList.filter(i => i.status !== "resolved").length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="tickets">
         {/* Filters */}
         <Card className="mb-6 shadow-sm">
           <CardContent className="p-4">
@@ -734,7 +797,209 @@ export default function AdminSupportDashboard() {
           )}
         </CardContent>
       </Card>
-      </div>
+          </TabsContent>
+
+          {/* ─────────────── PARTNER INCIDENTS TAB ─────────────── */}
+          <TabsContent value="incidents">
+            {/* Incident filters */}
+            <Card className="mb-6 shadow-sm">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Select value={incidentStatusFilter} onValueChange={setIncidentStatusFilter}>
+                    <SelectTrigger data-testid="select-incident-status">
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="under_review">Under Review</SelectItem>
+                      <SelectItem value="escalated">Escalated</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={incidentSeverityFilter} onValueChange={setIncidentSeverityFilter}>
+                    <SelectTrigger data-testid="select-incident-severity">
+                      <SelectValue placeholder="Filter by severity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Severities</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Partner Incidents</CardTitle>
+                <CardDescription>
+                  {partnerIncidentList.filter(i =>
+                    (incidentStatusFilter === "all" || i.status === incidentStatusFilter) &&
+                    (incidentSeverityFilter === "all" || i.severity === incidentSeverityFilter)
+                  ).length} incidents found — sorted by severity
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {incidentsLoading ? (
+                  <div className="text-center py-12 text-muted-foreground">Loading incidents...</div>
+                ) : partnerIncidentList.filter(i =>
+                    (incidentStatusFilter === "all" || i.status === incidentStatusFilter) &&
+                    (incidentSeverityFilter === "all" || i.severity === incidentSeverityFilter)
+                  ).length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <ShieldAlert className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No incidents found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {partnerIncidentList
+                      .filter(i =>
+                        (incidentStatusFilter === "all" || i.status === incidentStatusFilter) &&
+                        (incidentSeverityFilter === "all" || i.severity === incidentSeverityFilter)
+                      )
+                      .map(incident => {
+                        const sevColor = incident.severity === "critical"
+                          ? "bg-red-500/10 text-red-700 dark:text-red-400"
+                          : incident.severity === "high"
+                          ? "bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                          : incident.severity === "medium"
+                          ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                          : "bg-gray-500/10 text-gray-600 dark:text-gray-400";
+                        const statusColor = incident.status === "resolved"
+                          ? "bg-green-500/10 text-green-700 dark:text-green-400"
+                          : incident.status === "escalated"
+                          ? "bg-red-500/10 text-red-700 dark:text-red-400"
+                          : incident.status === "under_review"
+                          ? "bg-blue-500/10 text-blue-700 dark:text-blue-400"
+                          : "bg-muted text-muted-foreground";
+                        const isExpanded = expandedIncident === incident.id;
+                        return (
+                          <Card
+                            key={incident.id}
+                            className="cursor-pointer"
+                            data-testid={`card-incident-${incident.id}`}
+                            onClick={() => setExpandedIncident(isExpanded ? null : incident.id)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                    {incident.escalationFlag && (
+                                      <span className="text-xs font-semibold bg-red-500/10 text-red-700 dark:text-red-400 px-2 py-0.5 rounded">
+                                        ESCALATED
+                                      </span>
+                                    )}
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${sevColor}`}>
+                                      {incident.severity.toUpperCase()}
+                                    </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded ${statusColor}`}>
+                                      {incident.status.replace(/_/g, " ")}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {incident.category.replace(/_/g, " ")}
+                                    </span>
+                                  </div>
+                                  <p className="font-medium text-sm leading-snug mb-1" data-testid={`text-incident-title-${incident.id}`}>
+                                    {incident.title}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <Building2 className="w-3 h-3" />
+                                      {incident.partnerName}
+                                    </span>
+                                    <span>Booking: {incident.bookingId.slice(0, 8)}</span>
+                                    <span>{new Date(incident.createdAt).toLocaleDateString()}</span>
+                                    {incident.reporterName && (
+                                      <span className="flex items-center gap-1">
+                                        <UserIcon className="w-3 h-3" />
+                                        {incident.reporterName}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <Button size="icon" variant="ghost" className="shrink-0" data-testid={`button-incident-expand-${incident.id}`}>
+                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </Button>
+                              </div>
+
+                              {isExpanded && (
+                                <div className="mt-4 pt-4 border-t space-y-4" onClick={e => e.stopPropagation()}>
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Incident Notes</p>
+                                    <p className="text-sm">{incident.notes}</p>
+                                  </div>
+                                  {incident.resolutionNotes && (
+                                    <div>
+                                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Resolution Notes</p>
+                                      <p className="text-sm">{incident.resolutionNotes}</p>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Resolution Notes (add / update)</p>
+                                    <textarea
+                                      className="w-full min-h-[80px] text-sm border rounded-md p-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                      placeholder="Add resolution notes..."
+                                      value={resolutionDraft[incident.id] ?? (incident.resolutionNotes ?? "")}
+                                      onChange={e => setResolutionDraft(d => ({ ...d, [incident.id]: e.target.value }))}
+                                      data-testid={`textarea-resolution-${incident.id}`}
+                                    />
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => updateIncident.mutate({ id: incident.id, status: "under_review" })}
+                                      disabled={incident.status === "under_review" || updateIncident.isPending}
+                                      data-testid={`button-incident-review-${incident.id}`}
+                                    >
+                                      Mark Under Review
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => updateIncident.mutate({ id: incident.id, status: "escalated" })}
+                                      disabled={incident.status === "escalated" || updateIncident.isPending}
+                                      data-testid={`button-incident-escalate-${incident.id}`}
+                                    >
+                                      Escalate
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => updateIncident.mutate({
+                                        id: incident.id,
+                                        status: "resolved",
+                                        resolutionNotes: resolutionDraft[incident.id] ?? incident.resolutionNotes ?? undefined,
+                                      })}
+                                      disabled={incident.status === "resolved" || updateIncident.isPending}
+                                      data-testid={`button-incident-resolve-${incident.id}`}
+                                    >
+                                      <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                      Resolve
+                                    </Button>
+                                    <WouterLink href={`/admin/partners/${incident.partnerId}`}>
+                                      <Button size="sm" variant="ghost" data-testid={`button-incident-view-partner-${incident.id}`}>
+                                        <Building2 className="w-4 h-4 mr-1.5" />
+                                        View Partner
+                                      </Button>
+                                    </WouterLink>
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })
+                    }
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
     </div>
   </div>
   );

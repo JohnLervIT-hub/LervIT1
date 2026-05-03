@@ -1083,6 +1083,23 @@ export function registerPartnerRoutes(app: Express) {
       }
 
       await logAudit(partner.id, user.id, "incident.created", "partner_incident", incident.id, data.title);
+
+      // Notify all admin users so the incident appears in their support queue
+      const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
+      const severityLabel = data.severity === "critical" ? "CRITICAL" : data.severity.charAt(0).toUpperCase() + data.severity.slice(1);
+      const preview = `[${severityLabel}] ${partner.name} — ${data.title}`;
+      for (const admin of adminUsers) {
+        db.insert(inAppNotifications).values({
+          userId: admin.id,
+          type: "new_message",
+          title: `Partner Incident: ${data.category.replace(/_/g, " ")}`,
+          message: preview.length > 100 ? preview.slice(0, 100) + "..." : preview,
+          bookingId: booking.id,
+          actionUrl: `/admin/support`,
+          isRead: false,
+        }).catch(e => console.error("[incident notify admin]", e));
+      }
+
       res.status(201).json(incident);
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
@@ -1946,6 +1963,92 @@ export function registerPartnerRoutes(app: Express) {
       console.error("[Admin] route booking error:", err);
       res.status(500).json({ error: "Failed to route booking" });
     }
+  });
+
+  // ============================================================
+  // ADMIN — PARTNER INCIDENTS VIEW & MANAGEMENT
+  // ============================================================
+
+  // GET /api/admin/partner-incidents — all incidents across all partners
+  app.get("/api/admin/partner-incidents", requireAdminAuth, async (_req: Request, res: Response) => {
+    const rows = await db
+      .select({
+        id: partnerIncidents.id,
+        bookingId: partnerIncidents.bookingId,
+        partnerId: partnerIncidents.partnerId,
+        category: partnerIncidents.category,
+        severity: partnerIncidents.severity,
+        status: partnerIncidents.status,
+        title: partnerIncidents.title,
+        notes: partnerIncidents.notes,
+        escalationFlag: partnerIncidents.escalationFlag,
+        fileUrls: partnerIncidents.fileUrls,
+        resolutionNotes: partnerIncidents.resolutionNotes,
+        resolvedAt: partnerIncidents.resolvedAt,
+        createdAt: partnerIncidents.createdAt,
+        updatedAt: partnerIncidents.updatedAt,
+        partnerName: partners.name,
+        reporterName: users.name,
+      })
+      .from(partnerIncidents)
+      .innerJoin(partners, eq(partners.id, partnerIncidents.partnerId))
+      .leftJoin(users, eq(users.id, partnerIncidents.reportedBy))
+      .orderBy(
+        // critical + escalated first, then by date
+        sql`CASE WHEN ${partnerIncidents.severity} = 'critical' THEN 0
+                 WHEN ${partnerIncidents.severity} = 'high' THEN 1
+                 WHEN ${partnerIncidents.severity} = 'medium' THEN 2
+                 ELSE 3 END`,
+        desc(partnerIncidents.createdAt),
+      );
+
+    res.json(rows);
+  });
+
+  // PUT /api/admin/partner-incidents/:id — admin updates status / adds resolution notes
+  app.put("/api/admin/partner-incidents/:id", requireAdminAuth, async (req: Request, res: Response) => {
+    const adminUser = (req as any).adminUser;
+    const { status, resolutionNotes } = z.object({
+      status: z.enum(["open", "under_review", "resolved", "escalated"]).optional(),
+      resolutionNotes: z.string().max(2000).optional(),
+    }).parse(req.body);
+
+    const [existing] = await db.select().from(partnerIncidents).where(eq(partnerIncidents.id, req.params.id)).limit(1);
+    if (!existing) return res.status(404).json({ error: "Incident not found" });
+
+    const update: Record<string, any> = { updatedAt: new Date() };
+    if (status) update.status = status;
+    if (resolutionNotes !== undefined) update.resolutionNotes = resolutionNotes;
+    if (status === "resolved" && !existing.resolvedAt) {
+      update.resolvedAt = new Date();
+      update.resolvedBy = adminUser.id;
+    }
+
+    const [updated] = await db.update(partnerIncidents).set(update).where(eq(partnerIncidents.id, req.params.id)).returning();
+
+    // Notify the partner that the incident status changed
+    const partnerUserRows = await db
+      .select({ userId: partnerUsers.userId })
+      .from(partnerUsers)
+      .where(and(
+        eq(partnerUsers.partnerId, existing.partnerId),
+        eq(partnerUsers.isActive, true),
+        inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager"]),
+      ));
+    for (const pu of partnerUserRows) {
+      db.insert(inAppNotifications).values({
+        userId: pu.userId,
+        type: "new_message",
+        title: `Incident Update: ${existing.title.slice(0, 50)}`,
+        message: `Status changed to ${status ?? existing.status}`,
+        bookingId: existing.bookingId,
+        actionUrl: `/partner/incidents`,
+        isRead: false,
+      }).catch(() => {});
+    }
+
+    await logAudit(existing.partnerId, adminUser.id, "incident.status_updated", "partner_incident", existing.id, status);
+    res.json(updated);
   });
 
   // ============================================================
