@@ -485,7 +485,8 @@ export function registerPartnerRoutes(app: Express) {
 
       const objectStorage = new ObjectStorageService();
       const ext = req.file.originalname.split(".").pop() || "bin";
-      const objectKey = `.private/compliance/${partner.id}/${Date.now()}-${docType}.${ext}`;
+      const privateDir = objectStorage.getPrivateObjectDir();
+      const objectKey = `${privateDir}/compliance/${partner.id}/${Date.now()}-${docType}.${ext}`;
       const fileUrl = await objectStorage.uploadFile(objectKey, req.file.buffer, req.file.mimetype);
 
       const [doc] = await db.insert(complianceDocs).values({
@@ -1914,7 +1915,8 @@ export function registerPartnerRoutes(app: Express) {
       if (req.file) {
         const objectStorage = new ObjectStorageService();
         const ext = req.file.originalname.split(".").pop() || "bin";
-        const objectKey = `.private/compliance/${partner.id}/${Date.now()}-${docType}.${ext}`;
+        const privateDir = objectStorage.getPrivateObjectDir();
+        const objectKey = `${privateDir}/compliance/${partner.id}/${Date.now()}-${docType}.${ext}`;
         fileUrl = await objectStorage.uploadFile(objectKey, req.file.buffer, req.file.mimetype);
         fileName = req.file.originalname;
         fileSize = req.file.size;

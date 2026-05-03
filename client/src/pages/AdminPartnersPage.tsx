@@ -111,11 +111,12 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   const [compFileName, setCompFileName] = useState("");
   const [reviewingDoc, setReviewingDoc] = useState<string | null>(null);
 
-  const { data: directMsgs = [], isLoading: msgsLoading } = useQuery<any[]>({
+  const { data: _rawMsgs, isLoading: msgsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/partners", partnerId, "messages"],
     queryFn: () => fetch(`/api/admin/partners/${partnerId}/messages`, { credentials: "include" }).then(r => r.json()),
     refetchInterval: 10000,
   });
+  const directMsgs: any[] = Array.isArray(_rawMsgs) ? _rawMsgs : [];
 
   const sendMsg = useMutation({
     mutationFn: (text: string) => apiRequest("POST", `/api/admin/partners/${partnerId}/messages`, { text }),
@@ -736,16 +737,14 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                               <XCircle className="w-3.5 h-3.5 mr-1" />Reject
                             </Button>
                           )}
-                          {d.reviewStatus !== "approved" && (
-                            <Button
-                              size="icon" variant="ghost"
-                              onClick={() => deleteCompDoc.mutate(d.id)}
-                              disabled={deleteCompDoc.isPending}
-                              data-testid={`button-delete-doc-${d.id}`}
-                            >
-                              <Trash2 className="w-4 h-4 text-muted-foreground" />
-                            </Button>
-                          )}
+                          <Button
+                            size="icon" variant="ghost"
+                            onClick={() => deleteCompDoc.mutate(d.id)}
+                            disabled={deleteCompDoc.isPending}
+                            data-testid={`button-delete-doc-${d.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-muted-foreground" />
+                          </Button>
                         </div>
                       </div>
                     </CardContent>
