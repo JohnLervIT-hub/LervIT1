@@ -299,11 +299,102 @@ function TermsForm({ accepted, onAccept }: { accepted: boolean; onAccept: () => 
 
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-md bg-muted/50 text-sm space-y-2 max-h-48 overflow-y-auto">
-        <p className="font-medium">LervIT Enterprise Partner Agreement</p>
-        <p className="text-muted-foreground">By accepting this agreement, you confirm that your organization will fulfill bookings assigned through the LervIT platform in accordance with our service standards, including: timely response to booking offers (within 30 minutes), accurate real-time status updates, professional service delivery, and prompt incident reporting.</p>
-        <p className="text-muted-foreground">You agree to maintain current compliance documentation, hold appropriate insurance, and adhere to all applicable laws and regulations governing moving services in your operating area.</p>
-        <p className="text-muted-foreground">LervIT reserves the right to suspend or terminate partner access for non-compliance, repeated incidents, or failure to meet service level expectations.</p>
+      <div className="p-4 rounded-md bg-muted/50 text-sm space-y-5 max-h-96 overflow-y-auto leading-relaxed">
+
+        <div>
+          <p className="font-semibold text-foreground text-base">LervIT Platform Fulfillment Partner Agreement</p>
+          <p className="text-muted-foreground mt-1">Effective upon acceptance. This agreement governs the platform fulfillment partnership between LervIT Technologies Corporation ("LervIT") and your organization ("Partner"). By accepting, you confirm you are authorized to bind your organization to these terms.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">1. Partnership Model</p>
+          <p className="text-muted-foreground mt-1">LervIT operates as the customer-facing platform, booking layer, pricing and dispatch system, and payment orchestration layer. The Partner operates as an approved fulfillment partner responsible for performing eligible bookings routed through the LervIT platform. This is a platform fulfillment partnership — not an employment, agency, or joint-venture relationship.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">2. Role of LervIT</p>
+          <p className="text-muted-foreground mt-1">LervIT is responsible for: customer acquisition and booking intake; customer-facing platform experience; pricing presentation; dispatch logic and routing; booking notifications; payment collection and payout orchestration; customer support coordination at the platform level; and performance monitoring and reporting.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">3. Role of Partner</p>
+          <p className="text-muted-foreground mt-1">The Partner is responsible for: accepting and fulfilling eligible routed bookings; maintaining vehicle and crew availability; complying with agreed service levels; ensuring all drivers and operators are properly licensed, insured, and qualified; performing transport and job execution professionally and safely; notifying LervIT promptly of any service issues, delays, damages, or incidents; and providing all documentation reasonably required for onboarding and compliance.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">4. Territory</p>
+          <p className="text-muted-foreground mt-1">The initial service territory is Calgary, Alberta. Future expansion to Edmonton, Vancouver, Victoria, or other territories is subject to successful performance and mutual written agreement. The Partner shall not accept platform bookings outside approved territories without prior written consent from LervIT.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">5. Eligible Service Categories</p>
+          <p className="text-muted-foreground mt-1">Eligible services include: small moves, furniture pickups, short-haul delivery, bulky item transport, selected apartment and residential moves, and selected commercial and local logistics jobs. Excluded during the pilot unless otherwise approved in writing: specialized fragile freight, highly regulated goods, jobs outside approved zones, and categories not yet supported by platform logic.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">6. Vehicle Classes</p>
+          <p className="text-muted-foreground mt-1">The Partner may be configured on the platform for one or more approved vehicle classes: pickup truck, cargo van, cube van, moving truck, and larger truck classes as applicable. Final mapped classes and job eligibility rules are determined during onboarding and may be updated by LervIT with notice.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">7. Dispatch Model</p>
+          <p className="text-muted-foreground mt-1">Bookings originate through LervIT. LervIT determines eligibility and routes jobs based on service rules, vehicle fit, geography, and availability. The Partner receives booking opportunities through the portal or agreed communication channels and must accept or decline within the agreed response window. Unaccepted bookings may be reassigned at LervIT's discretion. LervIT retains final authority over all dispatch logic.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">8. Commercial Structure &amp; Payouts</p>
+          <p className="text-muted-foreground mt-1">The default structure is a marketplace commission model: the customer pays LervIT through the platform; LervIT retains a platform fee or commission; and the Partner receives the agreed fulfillment payout. Payouts will be made on a daily or weekly cycle, traceable to specific booking IDs. For selected large, regional, or non-standard jobs, a negotiated payout schedule may apply — such exceptions require prior written approval. Disputed amounts, refunds, chargebacks, or incident-based deductions will follow agreed dispute rules.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">9. Pricing Authority</p>
+          <p className="text-muted-foreground mt-1">Customer-facing pricing is set by LervIT based on vehicle class, service zone, distance band, labor and crew requirements, complexity factors, urgency, and approved exceptions. The Partner may provide acceptable payout thresholds and operational pricing inputs. Final customer-facing pricing authority rests with LervIT, subject to agreed commercial guardrails.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">10. Service Level Expectations</p>
+          <p className="text-muted-foreground mt-1">The Partner must meet service standards including: timely response to booking offers within the agreed response window; pickup punctuality; booking completion reliability; low cancellation rates; professional conduct at all times; and appropriate handling of customer property. Specific metrics will be documented in the Pilot Scope or SLA. Repeated failures to meet service levels may result in suspension or termination.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">11. Non-Circumvention</p>
+          <p className="text-muted-foreground mt-1">The Partner shall not: divert LervIT-sourced customers off-platform; solicit direct repeat business from customers introduced through LervIT using platform-sourced information; bypass LervIT payment workflows for platform-originated bookings; or otherwise circumvent LervIT's role as platform operator. Breach of this clause is grounds for immediate suspension and may result in financial liability.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">12. Data and Confidentiality</p>
+          <p className="text-muted-foreground mt-1">All confidential business, pricing, customer, operational, and technical information exchanged in connection with this partnership must be treated as confidential. Use of shared data is limited to evaluating, onboarding, operating, and improving the partnership. Customer data collected through the LervIT platform remains the property of LervIT. The Partner shall not use, sell, or share such data for any other purpose.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">13. Compliance and Insurance</p>
+          <p className="text-muted-foreground mt-1">Before activation and at all times during the partnership, the Partner must maintain and provide upon request: legal entity and business registration details; proof of applicable liability insurance; proof of vehicle and transport insurance; dispatcher and operational contacts; valid driver licensing for all operators; and any additional compliance materials reasonably requested by LervIT. Failure to maintain current compliance documentation may result in suspension.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">14. Pilot Duration and Review</p>
+          <p className="text-muted-foreground mt-1">The initial pilot term is 90 days from the activation date. At the end of the pilot, both parties will review booking volume, acceptance rate, completion performance, customer experience, commercial viability, and operational fit before deciding on continuation or expansion.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">15. Exclusivity</p>
+          <p className="text-muted-foreground mt-1">This partnership is non-exclusive. Either party may engage with other partners or platforms. Exclusivity discussions may be initiated only after successful pilot completion demonstrating strong commercial and operational performance, and must be agreed to in writing.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">16. Termination</p>
+          <p className="text-muted-foreground mt-1">Either party may terminate this partnership with 30 days' written notice if the partnership is not commercially viable, service levels are not met, compliance or trust issues arise, or there is material breach of agreed terms. Immediate suspension rights apply in the event of fraud, safety risk, repeated customer harm, off-platform diversion, or failure to maintain required insurance or licensing.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">17. Platform Control</p>
+          <p className="text-muted-foreground mt-1">LervIT owns the booking environment, payment workflow, platform data, and dispatch layer. All platform-originated bookings must be handled through approved LervIT workflows. Customer relationships established through the LervIT platform belong to LervIT.</p>
+        </div>
+
+        <div className="border-t pt-4 border-border">
+          <p className="text-muted-foreground text-xs">LervIT Technologies Corporation · John Eki, Founder &amp; CEO · Effective 30 April 2026. By accepting below, you confirm you have read, understood, and agree to be bound by all terms above on behalf of your organization.</p>
+        </div>
+
       </div>
       {accepted ? (
         <div className="flex items-center gap-2 text-green-600">
