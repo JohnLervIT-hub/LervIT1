@@ -220,6 +220,34 @@ export class ObjectStorageService {
    * @param ownerId - User ID who owns the file
    * @returns The path to access the uploaded object (e.g., /objects/uploads/uuid)
    */
+  /**
+   * Upload a buffer to a specific object key path (used for compliance docs,
+   * profile photos, etc. that need a deterministic storage path).
+   * Returns the internal path string (e.g. ".private/compliance/...") which
+   * is persisted in the DB — admins obtain a signed GET URL on demand via
+   * the /api/admin/compliance/:docId/file endpoint.
+   */
+  async uploadFile(
+    objectKey: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<string> {
+    const { bucketName, objectName } = parseObjectPath(objectKey);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    await file.save(buffer, { contentType });
+    return objectKey;
+  }
+
+  /**
+   * Generate a short-lived signed GET URL for a stored object key.
+   * Default TTL is 15 minutes — suitable for admin "View" clicks.
+   */
+  async getSignedDownloadUrl(objectKey: string, ttlSec = 900): Promise<string> {
+    const { bucketName, objectName } = parseObjectPath(objectKey);
+    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
   async uploadBuffer(
     buffer: Buffer,
     filename: string,

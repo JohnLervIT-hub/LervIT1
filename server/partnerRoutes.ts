@@ -514,6 +514,24 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // GET /api/partner/compliance/:id/file — generate a 15-min signed download URL for the partner's own compliance doc
+  app.get("/api/partner/compliance/:id/file", requirePartnerAuth(), async (req: Request, res: Response) => {
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const [doc] = await db.select().from(complianceDocs)
+        .where(and(eq(complianceDocs.id, req.params.id), eq(complianceDocs.partnerId, partner.id)))
+        .limit(1);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      if (!doc.fileUrl) return res.status(404).json({ error: "No file attached to this document" });
+      const objectStorage = new ObjectStorageService();
+      const signedUrl = await objectStorage.getSignedDownloadUrl(doc.fileUrl, 900);
+      res.redirect(302, signedUrl);
+    } catch (err) {
+      console.error("[Partner] compliance file download error:", err);
+      res.status(500).json({ error: "Could not generate download link" });
+    }
+  });
+
   // DELETE /api/partner/compliance/:id
   app.delete("/api/partner/compliance/:id", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
     const { partner, user } = (req as any).partnerCtx;
@@ -1854,6 +1872,23 @@ export function registerPartnerRoutes(app: Express) {
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
       res.status(500).json({ error: "Failed to review document" });
+    }
+  });
+
+  // GET /api/admin/compliance/:docId/file — generate a 15-min signed download URL for a compliance doc
+  app.get("/api/admin/compliance/:docId/file", requireAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const [doc] = await db.select().from(complianceDocs).where(eq(complianceDocs.id, req.params.docId)).limit(1);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      if (!doc.fileUrl) return res.status(404).json({ error: "No file attached to this document" });
+
+      const objectStorage = new ObjectStorageService();
+      const signedUrl = await objectStorage.getSignedDownloadUrl(doc.fileUrl, 900); // 15 min
+      // Redirect the browser directly to the signed GCS URL
+      res.redirect(302, signedUrl);
+    } catch (err) {
+      console.error("[Admin] compliance file download error:", err);
+      res.status(500).json({ error: "Could not generate download link" });
     }
   });
 

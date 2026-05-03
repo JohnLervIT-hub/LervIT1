@@ -265,7 +265,7 @@ export default function PartnerCompliance() {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {doc.fileUrl && (
-                          <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                          <a href={`/api/partner/compliance/${doc.id}/file`} target="_blank" rel="noopener noreferrer">
                             <Button size="sm" variant="ghost" data-testid={`button-view-doc-${doc.id}`}>View</Button>
                           </a>
                         )}

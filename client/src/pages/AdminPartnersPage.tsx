@@ -708,7 +708,7 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {d.fileUrl && (
-                            <a href={d.fileUrl} target="_blank" rel="noopener noreferrer">
+                            <a href={`/api/admin/compliance/${d.id}/file`} target="_blank" rel="noopener noreferrer">
                               <Button size="icon" variant="ghost" title="View file" data-testid={`button-view-doc-${d.id}`}>
                                 <ExternalLink className="w-4 h-4" />
                               </Button>
