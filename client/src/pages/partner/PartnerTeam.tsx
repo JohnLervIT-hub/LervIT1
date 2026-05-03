@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,79 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Loader2, Truck, User, Pencil, Trash2, Camera, ImageOff } from "lucide-react";
+import { Users, Plus, Loader2, Truck, Pencil, Trash2, Camera } from "lucide-react";
+
+function initials(name: string) {
+  return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function DriverPhotoUpload({ member }: { member: any }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<string | null>(member.driverPhoto ?? null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Only image files accepted", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/partner/team/${member.id}/driver-photo`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Upload failed");
+      }
+      const updated = await res.json();
+      setPreview(updated.driverPhoto);
+      qc.invalidateQueries({ queryKey: ["/api/partner/team"] });
+      toast({ title: "Driver photo updated" });
+    } catch (err: any) {
+      toast({ title: err.message ?? "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="relative shrink-0 group">
+      <Avatar className="w-14 h-14 border-2 border-border cursor-pointer" onClick={() => fileRef.current?.click()} data-testid={`avatar-driver-${member.id}`}>
+        <AvatarImage src={preview ?? undefined} alt={member.name} />
+        <AvatarFallback className="bg-muted text-muted-foreground text-sm font-semibold">
+          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : initials(member.name)}
+        </AvatarFallback>
+      </Avatar>
+      <button
+        onClick={() => fileRef.current?.click()}
+        className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+        title={preview ? "Replace photo" : "Add driver photo"}
+        aria-label="Upload driver photo"
+        data-testid={`button-upload-driver-photo-${member.id}`}
+      >
+        <Camera className="w-4 h-4 text-white" />
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFile}
+        data-testid={`input-driver-photo-${member.id}`}
+      />
+    </div>
+  );
+}
 
 function VehiclePhotoUpload({ member }: { member: any }) {
   const { toast } = useToast();
@@ -97,17 +170,17 @@ function VehiclePhotoUpload({ member }: { member: any }) {
   );
 }
 
-async function uploadVehiclePhoto(memberId: string, file: File): Promise<string | null> {
+async function uploadPhoto(memberId: string, file: File, kind: "driver" | "vehicle"): Promise<string | null> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`/api/partner/team/${memberId}/vehicle-photo`, {
+  const res = await fetch(`/api/partner/team/${memberId}/${kind}-photo`, {
     method: "POST",
     credentials: "include",
     body: fd,
   });
   if (!res.ok) return null;
   const data = await res.json();
-  return data.vehiclePhoto ?? null;
+  return kind === "driver" ? (data.driverPhoto ?? null) : (data.vehiclePhoto ?? null);
 }
 
 function TeamMemberDialog({
@@ -121,9 +194,14 @@ function TeamMemberDialog({
   const qc = useQueryClient();
   const isEdit = !!member;
   const [open, setOpen] = useState(!isEdit);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(member?.vehiclePhoto ?? null);
+
+  const driverPhotoRef = useRef<HTMLInputElement>(null);
+  const vehiclePhotoRef = useRef<HTMLInputElement>(null);
+  const [driverPhotoFile, setDriverPhotoFile] = useState<File | null>(null);
+  const [driverPhotoPreview, setDriverPhotoPreview] = useState<string | null>(member?.driverPhoto ?? null);
+  const [vehiclePhotoFile, setVehiclePhotoFile] = useState<File | null>(null);
+  const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(member?.vehiclePhoto ?? null);
+
   const [form, setForm] = useState({
     name: member?.name ?? "",
     memberType: member?.memberType ?? "driver",
@@ -135,22 +213,14 @@ function TeamMemberDialog({
     notes: member?.notes ?? "",
   });
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-  };
-
   const save = useMutation({
     mutationFn: () => isEdit
       ? apiRequest("PUT", `/api/partner/team/${member.id}`, form)
       : apiRequest("POST", "/api/partner/team", form),
     onSuccess: async (saved: any) => {
       const memberId = isEdit ? member.id : saved.id;
-      if (photoFile && memberId) {
-        await uploadVehiclePhoto(memberId, photoFile);
-      }
+      if (driverPhotoFile && memberId) await uploadPhoto(memberId, driverPhotoFile, "driver");
+      if (vehiclePhotoFile && memberId) await uploadPhoto(memberId, vehiclePhotoFile, "vehicle");
       toast({ title: isEdit ? "Member updated" : "Team member added" });
       qc.invalidateQueries({ queryKey: ["/api/partner/team"] });
       setOpen(false);
@@ -177,6 +247,54 @@ function TeamMemberDialog({
           <DialogTitle>{isEdit ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+
+          {/* Driver photo */}
+          <div className="space-y-1.5">
+            <Label>Driver Photo</Label>
+            <div className="flex items-center gap-4">
+              <div className="relative group shrink-0">
+                <Avatar className="w-16 h-16 border-2 border-border cursor-pointer" onClick={() => driverPhotoRef.current?.click()}>
+                  <AvatarImage src={driverPhotoPreview ?? undefined} alt={form.name || "Driver"} />
+                  <AvatarFallback className="bg-muted text-muted-foreground text-base font-semibold">
+                    {form.name ? initials(form.name) : <Camera className="w-5 h-5" />}
+                  </AvatarFallback>
+                </Avatar>
+                <div
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  onClick={() => driverPhotoRef.current?.click()}
+                >
+                  <Camera className="w-4 h-4 text-white" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => driverPhotoRef.current?.click()}
+                  data-testid="button-pick-driver-photo"
+                >
+                  <Camera className="w-3.5 h-3.5 mr-1.5" />
+                  {driverPhotoPreview ? "Replace photo" : "Upload photo"}
+                </Button>
+                <p className="text-xs text-muted-foreground">JPG, PNG or WebP</p>
+              </div>
+              <input
+                ref={driverPhotoRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setDriverPhotoFile(file);
+                  setDriverPhotoPreview(URL.createObjectURL(file));
+                }}
+                data-testid="input-driver-photo-dialog"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Name *</Label>
@@ -199,9 +317,13 @@ function TeamMemberDialog({
             <div className="space-y-1.5">
               <Label>Vehicle Type</Label>
               <Select value={form.vehicleType} onValueChange={v => setForm(f => ({ ...f, vehicleType: v }))}>
-                <SelectTrigger data-testid="select-vehicle-type"><SelectValue placeholder="Select class…" /></SelectTrigger>
+                <SelectTrigger data-testid="select-vehicle-type"><SelectValue placeholder="Select type…" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Cargo Van">Cargo Van</SelectItem>
+                  <SelectItem value="Cargo Van (Large)">Cargo Van (Large)</SelectItem>
+                  <SelectItem value="Cargo Truck">Cargo Truck</SelectItem>
+                  <SelectItem value="Box Truck">Box Truck</SelectItem>
+                  <SelectItem value="Pickup Truck">Pickup Truck</SelectItem>
                   <SelectItem value="Sprinter Van">Sprinter Van</SelectItem>
                   <SelectItem value="Moving Truck">Moving Truck</SelectItem>
                 </SelectContent>
@@ -217,13 +339,13 @@ function TeamMemberDialog({
             </div>
           </div>
 
-          {/* Vehicle photo upload */}
+          {/* Vehicle photo */}
           <div className="space-y-1.5">
             <Label>Vehicle Photo</Label>
             <div className="flex items-center gap-3">
-              {photoPreview ? (
+              {vehiclePhotoPreview ? (
                 <img
-                  src={photoPreview}
+                  src={vehiclePhotoPreview}
                   alt="Vehicle preview"
                   className="w-20 h-14 object-cover rounded-md border border-border shrink-0"
                 />
@@ -237,20 +359,25 @@ function TeamMemberDialog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => fileRef.current?.click()}
+                  onClick={() => vehiclePhotoRef.current?.click()}
                   data-testid="button-pick-vehicle-photo"
                 >
                   <Camera className="w-3.5 h-3.5 mr-1.5" />
-                  {photoPreview ? "Replace photo" : "Upload photo"}
+                  {vehiclePhotoPreview ? "Replace photo" : "Upload photo"}
                 </Button>
                 <p className="text-xs text-muted-foreground">JPG, PNG or WebP</p>
               </div>
               <input
-                ref={fileRef}
+                ref={vehiclePhotoRef}
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={handlePhotoChange}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setVehiclePhotoFile(file);
+                  setVehiclePhotoPreview(URL.createObjectURL(file));
+                }}
                 data-testid="input-vehicle-photo-dialog"
               />
             </div>
@@ -329,32 +456,49 @@ export default function PartnerTeam() {
             {team.map((member: any) => (
               <Card key={member.id} data-testid={`card-member-${member.id}`}>
                 <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center gap-3">
-                    {/* Vehicle photo / placeholder */}
-                    <VehiclePhotoUpload member={member} />
+                  <div className="flex items-center gap-4">
+
+                    {/* Driver avatar (clickable to upload) */}
+                    <DriverPhotoUpload member={member} />
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium">{member.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <p className="text-sm font-semibold">{member.name}</p>
                         <Badge variant="outline" className="text-xs capitalize">{member.memberType}</Badge>
                         <Badge
-                          className={`text-xs ${member.isAvailable ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}
+                          variant="outline"
+                          className={`text-xs ${member.isAvailable
+                            ? "bg-green-500/10 text-green-600 border-green-500/20"
+                            : "bg-slate-500/10 text-slate-500 border-slate-500/20"}`}
                           data-testid={`availability-${member.id}`}
                         >
                           {member.isAvailable ? "Available" : "Unavailable"}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                         {member.phone && <span>{member.phone}</span>}
                         {member.vehicleType && (
                           <span className="flex items-center gap-1">
-                            <Truck className="w-3 h-3" />{member.vehicleType}
+                            <Truck className="w-3 h-3" />
+                            {member.vehicleType}
                             {member.vehiclePlate && ` · ${member.vehiclePlate}`}
                             {member.vehicleColor && ` · ${member.vehicleColor}`}
                           </span>
                         )}
                       </div>
+
+                      {/* Vehicle photo thumbnail (if present) */}
+                      {member.vehiclePhoto && (
+                        <div className="mt-2">
+                          <img
+                            src={member.vehiclePhoto}
+                            alt="Vehicle"
+                            className="w-16 h-10 object-cover rounded-md border border-border"
+                            data-testid={`img-vehicle-${member.id}`}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
