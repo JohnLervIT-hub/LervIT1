@@ -1442,6 +1442,17 @@ export const ENTERPRISE_STATUSES = {
 
 export type EnterpriseStatus = typeof ENTERPRISE_STATUSES[keyof typeof ENTERPRISE_STATUSES];
 
+// ─── Admin ↔ Partner Direct Messages ────────────────────────────────────────
+export const partnerDirectMessages = pgTable("partner_direct_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  senderRole: text("sender_role").notNull(), // 'admin' | 'partner'
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  readAt: timestamp("read_at"),
+});
+
 export const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
   new: ['under_review', 'accepted', 'rejected', 'cancelled'],
   under_review: ['accepted', 'rejected', 'cancelled'],

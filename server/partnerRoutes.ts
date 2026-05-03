@@ -40,6 +40,7 @@ import {
   insertPartnerIncidentSchema,
   messages,
   inAppNotifications,
+  partnerDirectMessages,
 } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
@@ -1948,6 +1949,89 @@ export function registerPartnerRoutes(app: Express) {
   });
 
   // ============================================================
+  // ADMIN ↔ PARTNER DIRECT MESSAGING
+  // ============================================================
+
+  // GET /api/admin/partners/:id/messages — fetch full thread
+  app.get("/api/admin/partners/:id/messages", requireAdminAuth, async (req: Request, res: Response) => {
+    const adminUser = (req as any).adminUser;
+    const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
+    if (!partner) return res.status(404).json({ error: "Partner not found" });
+
+    const msgs = await db
+      .select({
+        id: partnerDirectMessages.id,
+        partnerId: partnerDirectMessages.partnerId,
+        senderId: partnerDirectMessages.senderId,
+        senderRole: partnerDirectMessages.senderRole,
+        text: partnerDirectMessages.text,
+        createdAt: partnerDirectMessages.createdAt,
+        readAt: partnerDirectMessages.readAt,
+        senderName: users.name,
+      })
+      .from(partnerDirectMessages)
+      .innerJoin(users, eq(users.id, partnerDirectMessages.senderId))
+      .where(eq(partnerDirectMessages.partnerId, partner.id))
+      .orderBy(asc(partnerDirectMessages.createdAt));
+
+    res.json(msgs);
+  });
+
+  // POST /api/admin/partners/:id/messages — admin sends a message to partner
+  app.post("/api/admin/partners/:id/messages", requireAdminAuth, async (req: Request, res: Response) => {
+    const adminUser = (req as any).adminUser;
+    const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
+    if (!partner) return res.status(404).json({ error: "Partner not found" });
+
+    const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+
+    const [msg] = await db.insert(partnerDirectMessages).values({
+      partnerId: partner.id,
+      senderId: adminUser.id,
+      senderRole: "admin",
+      text,
+    }).returning();
+
+    // Notify all active partner portal users
+    const puRows = await db
+      .select({ userId: partnerUsers.userId })
+      .from(partnerUsers)
+      .where(and(
+        eq(partnerUsers.partnerId, partner.id),
+        eq(partnerUsers.isActive, true),
+        inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager", "partner_dispatcher"]),
+      ));
+
+    const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
+    for (const pu of puRows) {
+      db.insert(inAppNotifications).values({
+        userId: pu.userId,
+        type: "new_message",
+        title: `Message from LervIT Admin`,
+        message: preview,
+        actionUrl: `/partner/messages`,
+        isRead: false,
+      }).catch(e => console.error("[admin→partner notify]", e));
+    }
+
+    res.json({ ...msg, senderName: adminUser.name });
+  });
+
+  // POST /api/admin/partners/:id/messages/mark-read — admin marks partner replies as read
+  app.post("/api/admin/partners/:id/messages/mark-read", requireAdminAuth, async (req: Request, res: Response) => {
+    const adminUser = (req as any).adminUser;
+    await db
+      .update(partnerDirectMessages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(partnerDirectMessages.partnerId, req.params.id),
+        isNull(partnerDirectMessages.readAt),
+        ne(partnerDirectMessages.senderId, adminUser.id),
+      ));
+    res.json({ ok: true });
+  });
+
+  // ============================================================
   // PARTNER MESSAGING ROUTES
   // ============================================================
 
@@ -2105,6 +2189,95 @@ export function registerPartnerRoutes(app: Express) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
       res.status(500).json({ error: "Failed to send message" });
     }
+  });
+
+  // GET /api/partner/direct-messages — LervIT admin thread for this partner
+  app.get("/api/partner/direct-messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+
+    const msgs = await db
+      .select({
+        id: partnerDirectMessages.id,
+        partnerId: partnerDirectMessages.partnerId,
+        senderId: partnerDirectMessages.senderId,
+        senderRole: partnerDirectMessages.senderRole,
+        text: partnerDirectMessages.text,
+        createdAt: partnerDirectMessages.createdAt,
+        readAt: partnerDirectMessages.readAt,
+        senderName: users.name,
+      })
+      .from(partnerDirectMessages)
+      .innerJoin(users, eq(users.id, partnerDirectMessages.senderId))
+      .where(eq(partnerDirectMessages.partnerId, partner.id))
+      .orderBy(asc(partnerDirectMessages.createdAt));
+
+    res.json(msgs);
+  });
+
+  // GET /api/partner/direct-messages/unread-count
+  app.get("/api/partner/direct-messages/unread-count", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner, user } = (req as any).partnerCtx;
+
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(partnerDirectMessages)
+      .where(and(
+        eq(partnerDirectMessages.partnerId, partner.id),
+        eq(partnerDirectMessages.senderRole, "admin"),
+        isNull(partnerDirectMessages.readAt),
+      ));
+
+    res.json({ count: row?.count ?? 0 });
+  });
+
+  // POST /api/partner/direct-messages — partner sends a reply to admin
+  app.post("/api/partner/direct-messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
+    const { partner, user } = (req as any).partnerCtx;
+
+    const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+
+    const [msg] = await db.insert(partnerDirectMessages).values({
+      partnerId: partner.id,
+      senderId: user.id,
+      senderRole: "partner",
+      text,
+    }).returning();
+
+    // Notify all admin users
+    const adminRows = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.role, "admin"));
+
+    const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
+    for (const admin of adminRows) {
+      db.insert(inAppNotifications).values({
+        userId: admin.id,
+        type: "new_message",
+        title: `Reply from ${partner.name}`,
+        message: preview,
+        actionUrl: `/admin/partners/${partner.id}`,
+        isRead: false,
+      }).catch(e => console.error("[partner→admin notify]", e));
+    }
+
+    res.json({ ...msg, senderName: user.name });
+  });
+
+  // POST /api/partner/direct-messages/mark-read — partner marks admin messages as read
+  app.post("/api/partner/direct-messages/mark-read", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
+    const { partner } = (req as any).partnerCtx;
+
+    await db
+      .update(partnerDirectMessages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(partnerDirectMessages.partnerId, partner.id),
+        eq(partnerDirectMessages.senderRole, "admin"),
+        isNull(partnerDirectMessages.readAt),
+      ));
+
+    res.json({ ok: true });
   });
 
   // POST /api/partner/messages/:bookingId/mark-read — mark incoming messages as read

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,9 +17,10 @@ import {
   ArrowLeft, Building2, Users, Truck, DollarSign, CheckCircle2,
   XCircle, Clock, Search, ChevronRight, Shield, CreditCard,
   Phone, Mail, MapPin, Loader2, AlertTriangle, FileText,
-  Package, Calendar, Activity, Ban, BadgeCheck, Plus
+  Package, Calendar, Activity, Ban, BadgeCheck, Plus, MessageSquare, Send
 } from "lucide-react";
-import { format, isValid } from "date-fns";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format, isValid, isToday, isYesterday } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -100,6 +101,39 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
   const [editingNotes, setEditingNotes] = useState(false);
+  const [msgDraft, setMsgDraft] = useState("");
+  const msgEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: directMsgs = [], isLoading: msgsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/partners", partnerId, "messages"],
+    queryFn: () => fetch(`/api/admin/partners/${partnerId}/messages`, { credentials: "include" }).then(r => r.json()),
+    refetchInterval: 10000,
+  });
+
+  const sendMsg = useMutation({
+    mutationFn: (text: string) => apiRequest("POST", `/api/admin/partners/${partnerId}/messages`, { text }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId, "messages"] });
+      setMsgDraft("");
+    },
+    onError: () => toast({ title: "Failed to send message", variant: "destructive" }),
+  });
+
+  const markAdminMsgsRead = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/admin/partners/${partnerId}/messages/mark-read`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId, "messages"] }),
+  });
+
+  useEffect(() => {
+    msgEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [directMsgs]);
+
+  function fmtMsgTime(d: string) {
+    const dt = new Date(d);
+    if (isToday(dt)) return format(dt, "h:mm a");
+    if (isYesterday(dt)) return `Yesterday ${format(dt, "h:mm a")}`;
+    return format(dt, "MMM d, h:mm a");
+  }
 
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/partners", partnerId],
@@ -222,6 +256,17 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
           <TabsTrigger value="team" data-testid="tab-team">Team ({team?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="compliance" data-testid="tab-compliance">Compliance ({docs?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users ({users?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="messages" data-testid="tab-messages" onClick={() => markAdminMsgsRead.mutate()}>
+            <span className="flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5" />
+              Messages
+              {directMsgs.filter((m: any) => m.senderRole === "partner" && !m.readAt).length > 0 && (
+                <Badge className="text-[10px] h-4 min-w-[16px] px-1">
+                  {directMsgs.filter((m: any) => m.senderRole === "partner" && !m.readAt).length}
+                </Badge>
+              )}
+            </span>
+          </TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW */}
@@ -473,6 +518,91 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
               </Table>
             )
           }
+        </TabsContent>
+
+        {/* MESSAGES */}
+        <TabsContent value="messages" className="pt-3">
+          <Card>
+            <CardContent className="p-0 flex flex-col" style={{ height: "520px" }}>
+              {/* thread */}
+              <ScrollArea className="flex-1 px-5 py-4">
+                {msgsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className={`flex gap-2 ${i % 2 === 0 ? "flex-row-reverse" : ""}`}>
+                        <div className="w-6 h-6 rounded-full bg-muted animate-pulse shrink-0" />
+                        <div className={`h-8 rounded-2xl bg-muted animate-pulse ${i % 2 === 0 ? "w-40" : "w-56"}`} />
+                      </div>
+                    ))}
+                  </div>
+                ) : directMsgs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                    <MessageSquare className="w-8 h-8 text-muted-foreground/40 mb-3" />
+                    <p className="text-sm text-muted-foreground">No messages yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Send a message to {partner.name} below</p>
+                  </div>
+                ) : (
+                  <>
+                    {directMsgs.map((msg: any) => {
+                      const isOwn = msg.senderRole === "admin";
+                      return (
+                        <div key={msg.id} className={`flex items-end gap-2 mb-3 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+                          {!isOwn && (
+                            <Avatar className="w-7 h-7 shrink-0 mb-0.5">
+                              <AvatarFallback className="text-xs bg-green-500/10 text-green-600">
+                                {(msg.senderName ?? "P").charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                          <div className={`max-w-[70%] space-y-1 ${isOwn ? "items-end" : "items-start"} flex flex-col`}>
+                            {!isOwn && (
+                              <span className="text-xs text-muted-foreground ml-1">{msg.senderName}</span>
+                            )}
+                            <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${isOwn ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"}`}>
+                              {msg.text}
+                            </div>
+                            <span className={`text-[11px] text-muted-foreground px-1 ${isOwn ? "text-right self-end" : "text-left"}`}>
+                              {fmtMsgTime(msg.createdAt)}
+                              {!isOwn && msg.readAt && <span className="ml-1 text-muted-foreground/50">· seen</span>}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={msgEndRef} />
+                  </>
+                )}
+              </ScrollArea>
+
+              {/* compose */}
+              <div className="px-4 py-3 border-t border-border">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={msgDraft}
+                    onChange={e => setMsgDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (msgDraft.trim() && !sendMsg.isPending) sendMsg.mutate(msgDraft.trim());
+                      }
+                    }}
+                    placeholder={`Message ${partner.name}…`}
+                    disabled={sendMsg.isPending}
+                    data-testid="input-direct-message"
+                  />
+                  <Button
+                    size="icon"
+                    onClick={() => { if (msgDraft.trim() && !sendMsg.isPending) sendMsg.mutate(msgDraft.trim()); }}
+                    disabled={!msgDraft.trim() || sendMsg.isPending}
+                    data-testid="button-send-direct-message"
+                  >
+                    {sendMsg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5">Enter to send · messages are visible to all portal admins at {partner.name}</p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* USERS */}
