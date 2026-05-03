@@ -99,11 +99,17 @@ function ProfileForm({ partner, onSave }: { partner: any; onSave: () => void }) 
     name: partner?.name ?? "",
     legalName: partner?.legalName ?? "",
     billingEmail: partner?.billingEmail ?? "",
+    phone: partner?.phone ?? "",
+    // Primary Ops structured fields
     primaryOpsContact: partner?.primaryOpsContact ?? "",
+    primaryOpsEmail: partner?.primaryOpsEmail ?? "",
+    primaryOpsPhone: partner?.primaryOpsPhone ?? "",
+    // Dispatch contact structured fields (also feeds dispatch config)
     dispatchContact: partner?.dispatchContact ?? "",
+    dispatchEmail: partner?.dispatchEmail ?? "",
+    dispatchPhone: partner?.dispatchPhone ?? "",
     escalationContact: partner?.escalationContact ?? "",
     address: partner?.address ?? "",
-    phone: partner?.phone ?? "",
     serviceDescription: partner?.serviceDescription ?? "",
   });
 
@@ -118,42 +124,79 @@ function ProfileForm({ partner, onSave }: { partner: any; onSave: () => void }) 
     onError: () => toast({ title: "Save failed", variant: "destructive" }),
   });
 
+  const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [field]: e.target.value }));
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Business info */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Operating Name *</Label>
-          <Input data-testid="input-name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          <Input data-testid="input-name" value={form.name} onChange={set("name")} />
         </div>
         <div className="space-y-1.5">
           <Label>Legal Name *</Label>
-          <Input data-testid="input-legal-name" value={form.legalName} onChange={e => setForm(f => ({ ...f, legalName: e.target.value }))} />
+          <Input data-testid="input-legal-name" value={form.legalName} onChange={set("legalName")} />
         </div>
         <div className="space-y-1.5">
           <Label>Billing Email *</Label>
-          <Input type="email" data-testid="input-billing-email" value={form.billingEmail} onChange={e => setForm(f => ({ ...f, billingEmail: e.target.value }))} />
+          <Input type="email" data-testid="input-billing-email" value={form.billingEmail} onChange={set("billingEmail")} />
         </div>
         <div className="space-y-1.5">
-          <Label>Phone</Label>
-          <Input data-testid="input-phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Primary Ops Contact *</Label>
-          <Input placeholder="Name & phone" data-testid="input-ops-contact" value={form.primaryOpsContact} onChange={e => setForm(f => ({ ...f, primaryOpsContact: e.target.value }))} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Dispatch Contact</Label>
-          <Input placeholder="Name & phone" data-testid="input-dispatch-contact" value={form.dispatchContact} onChange={e => setForm(f => ({ ...f, dispatchContact: e.target.value }))} />
+          <Label>Company Phone</Label>
+          <Input data-testid="input-phone" value={form.phone} onChange={set("phone")} />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Business Address *</Label>
-          <Input data-testid="input-address" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+          <Input data-testid="input-address" value={form.address} onChange={set("address")} />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Service Description</Label>
-          <Textarea rows={3} placeholder="Briefly describe your moving services…" data-testid="input-service-description" value={form.serviceDescription} onChange={e => setForm(f => ({ ...f, serviceDescription: e.target.value }))} />
+          <Textarea rows={3} placeholder="Briefly describe your moving services…" data-testid="input-service-description" value={form.serviceDescription} onChange={set("serviceDescription")} />
         </div>
       </div>
+
+      {/* Primary Ops Contact */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Primary Ops Contact *</p>
+        <p className="text-xs text-muted-foreground -mt-1">This person receives booking routing alerts and urgent notifications directly.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Full Name</Label>
+            <Input placeholder="Jane Smith" data-testid="input-ops-contact" value={form.primaryOpsContact} onChange={set("primaryOpsContact")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Email</Label>
+            <Input type="email" placeholder="jane@company.com" data-testid="input-ops-email" value={form.primaryOpsEmail} onChange={set("primaryOpsEmail")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Phone</Label>
+            <Input placeholder="+1 403 555 0100" data-testid="input-ops-phone" value={form.primaryOpsPhone} onChange={set("primaryOpsPhone")} />
+          </div>
+        </div>
+      </div>
+
+      {/* Dispatch Contact */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Dispatch Contact</p>
+        <p className="text-xs text-muted-foreground -mt-1">Who handles day-to-day job dispatch. Also pre-fills your Dispatch Setup configuration.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Full Name</Label>
+            <Input placeholder="Alex Johnson" data-testid="input-dispatch-contact" value={form.dispatchContact} onChange={set("dispatchContact")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Email</Label>
+            <Input type="email" placeholder="dispatch@company.com" data-testid="input-dispatch-email" value={form.dispatchEmail} onChange={set("dispatchEmail")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Phone</Label>
+            <Input placeholder="+1 403 555 0200" data-testid="input-dispatch-phone" value={form.dispatchPhone} onChange={set("dispatchPhone")} />
+          </div>
+        </div>
+      </div>
+
       <Button onClick={() => save.mutate()} disabled={save.isPending} data-testid="button-save-profile">
         {save.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save Profile"}
       </Button>
@@ -240,6 +283,8 @@ function DispatchForm({ partner, onSave }: { partner: any; onSave: () => void })
     dispatchNotes: partner?.dispatchNotes ?? "",
   });
 
+  const hasProfileDispatch = !!(partner?.dispatchEmail || partner?.dispatchPhone);
+
   const save = useMutation({
     mutationFn: () => apiRequest("PUT", "/api/partner/dispatch", form),
     onSuccess: () => {
@@ -266,10 +311,16 @@ function DispatchForm({ partner, onSave }: { partner: any; onSave: () => void })
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Dispatch Phone</Label>
+          {hasProfileDispatch && partner?.dispatchPhone && !form.dispatchPhone && (
+            <p className="text-xs text-muted-foreground">Pre-filled from profile</p>
+          )}
           <Input placeholder="+1 416 555 0100" data-testid="input-dispatch-phone" value={form.dispatchPhone} onChange={e => setForm(f => ({ ...f, dispatchPhone: e.target.value }))} />
         </div>
         <div className="space-y-1.5">
           <Label>Dispatch Email</Label>
+          {hasProfileDispatch && partner?.dispatchEmail && !form.dispatchEmail && (
+            <p className="text-xs text-muted-foreground">Pre-filled from profile</p>
+          )}
           <Input type="email" data-testid="input-dispatch-email" value={form.dispatchEmail} onChange={e => setForm(f => ({ ...f, dispatchEmail: e.target.value }))} />
         </div>
         <div className="space-y-1.5 col-span-2">
@@ -277,6 +328,11 @@ function DispatchForm({ partner, onSave }: { partner: any; onSave: () => void })
           <Textarea rows={2} placeholder="Any special dispatch instructions…" data-testid="input-dispatch-notes" value={form.dispatchNotes} onChange={e => setForm(f => ({ ...f, dispatchNotes: e.target.value }))} />
         </div>
       </div>
+      {hasProfileDispatch && (
+        <p className="text-xs text-muted-foreground">
+          Dispatch email and phone are set from your Company Profile contact fields. Update them there to keep everything in sync.
+        </p>
+      )}
       <Button onClick={() => save.mutate()} disabled={save.isPending} data-testid="button-save-dispatch">
         {save.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save Dispatch Settings"}
       </Button>

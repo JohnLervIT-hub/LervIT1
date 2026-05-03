@@ -318,7 +318,12 @@ export function registerPartnerRoutes(app: Express) {
         operatingName: z.string().optional(),
         billingEmail: z.string().email().optional(),
         primaryOpsContact: z.string().optional(),
+        primaryOpsEmail: z.string().email().optional(),
+        primaryOpsPhone: z.string().optional(),
         dispatchContact: z.string().optional(),
+        // Allow dispatch email/phone to be set from profile form
+        dispatchEmail: z.string().email().optional(),
+        dispatchPhone: z.string().optional(),
         escalationContact: z.string().optional(),
         address: z.string().optional(),
         phone: z.string().optional(),
@@ -1818,7 +1823,7 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(partnerId, adminUser.id, "booking.routed", "booking", booking.id, `Routed by admin`);
 
-      // Notify partner admin/ops/dispatcher users about the new job
+      // Notify partner users + configured ops/dispatch contacts about the new job
       const baseUrl = process.env.BASE_URL ||
         (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
       db.select({ userId: partnerUsers.userId })
@@ -1829,19 +1834,48 @@ export function registerPartnerRoutes(app: Express) {
           inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager", "partner_dispatcher"]),
         ))
         .then(async (puRows) => {
-          if (!puRows.length) return;
-          const userIds = puRows.map(r => r.userId);
-          const partnerAdminUsers = await db.select().from(users).where(inArray(users.id, userIds));
-          for (const pu of partnerAdminUsers) {
-            if (pu.email) {
-              notificationService.sendPartnerBookingRouted({
-                toEmail: pu.email,
-                toName: pu.name || 'Partner',
-                partnerName: partner.name,
-                booking: updated,
-                portalUrl: `${baseUrl}/partner/bookings/${booking.id}`,
-              }).catch(e => console.error("[Partner notify] routing email failed:", e));
+          const portalUrl = `${baseUrl}/partner/bookings/${booking.id}`;
+          const notifiedEmails = new Set<string>();
+
+          // Email all portal users with admin/ops/dispatcher roles
+          if (puRows.length) {
+            const userIds = puRows.map(r => r.userId);
+            const partnerAdminUsers = await db.select().from(users).where(inArray(users.id, userIds));
+            for (const pu of partnerAdminUsers) {
+              if (pu.email) {
+                notifiedEmails.add(pu.email.toLowerCase());
+                notificationService.sendPartnerBookingRouted({
+                  toEmail: pu.email,
+                  toName: pu.name || 'Partner',
+                  partnerName: partner.name,
+                  booking: updated,
+                  portalUrl,
+                }).catch(e => console.error("[Partner notify] routing email failed:", e));
+              }
             }
+          }
+
+          // Also directly email the Primary Ops contact if set and not already notified
+          if (partner.primaryOpsEmail && !notifiedEmails.has(partner.primaryOpsEmail.toLowerCase())) {
+            notifiedEmails.add(partner.primaryOpsEmail.toLowerCase());
+            notificationService.sendPartnerBookingRouted({
+              toEmail: partner.primaryOpsEmail,
+              toName: partner.primaryOpsContact || 'Ops Team',
+              partnerName: partner.name,
+              booking: updated,
+              portalUrl,
+            }).catch(e => console.error("[Partner notify] ops contact routing email failed:", e));
+          }
+
+          // Also directly email the Dispatch contact if set and not already notified
+          if (partner.dispatchEmail && !notifiedEmails.has(partner.dispatchEmail.toLowerCase())) {
+            notificationService.sendPartnerBookingRouted({
+              toEmail: partner.dispatchEmail,
+              toName: partner.dispatchContact || 'Dispatch',
+              partnerName: partner.name,
+              booking: updated,
+              portalUrl,
+            }).catch(e => console.error("[Partner notify] dispatch contact routing email failed:", e));
           }
         })
         .catch(e => console.error("[Partner notify] fetch partner users failed:", e));

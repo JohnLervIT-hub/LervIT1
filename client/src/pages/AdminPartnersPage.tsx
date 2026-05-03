@@ -320,6 +320,8 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                     { label: "Dispatch Phone", value: partner.dispatchPhone },
                     { label: "Dispatch Email", value: partner.dispatchEmail },
                     { label: "Primary Ops", value: partner.primaryOpsContact },
+                    { label: "Ops Email", value: partner.primaryOpsEmail },
+                    { label: "Ops Phone", value: partner.primaryOpsPhone },
                     { label: "Escalation", value: partner.escalationContact },
                   ].map(({ label, value }) => value ? (
                     <div key={label} className="flex gap-2">

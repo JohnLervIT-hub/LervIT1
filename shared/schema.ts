@@ -1111,8 +1111,10 @@ export const partners = pgTable("partners", {
   status: text("status").notNull().default("invited"), // invited | onboarding | pending_approval | active | suspended
   onboardingStep: integer("onboarding_step").notNull().default(1),
   billingEmail: text("billing_email"),
-  primaryOpsContact: text("primary_ops_contact"),
-  dispatchContact: text("dispatch_contact"),
+  primaryOpsContact: text("primary_ops_contact"),   // ops contact name
+  primaryOpsEmail: text("primary_ops_email"),        // ops contact email — used for routing notifications
+  primaryOpsPhone: text("primary_ops_phone"),        // ops contact phone
+  dispatchContact: text("dispatch_contact"),          // dispatch contact name
   escalationContact: text("escalation_contact"),
   address: text("address"),
   phone: text("phone"),
