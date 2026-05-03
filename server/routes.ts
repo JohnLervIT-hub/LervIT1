@@ -3492,6 +3492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .orderBy(desc(bookingAssignments.assignedAt))
             .limit(1);
           let partnerAssignment = null;
+          let driverAvgRating: number | null = null;
           if (latestAssignment) {
             let driverPhoto: string | null = null;
             let driverCompletedMoves: number | null = null;
@@ -3508,6 +3509,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   .from(bookings)
                   .where(and(inArray(bookings.id, assignedIds), eq(bookings.enterpriseStatus, 'completed')));
                 driverCompletedMoves = completedRows.length;
+                const driverReviews = await db.select({ rating: reviews.rating })
+                  .from(reviews)
+                  .where(inArray(reviews.bookingId, assignedIds));
+                if (driverReviews.length > 0) {
+                  const sum = driverReviews.reduce((acc, r) => acc + r.rating, 0);
+                  driverAvgRating = Math.round((sum / driverReviews.length) * 10) / 10;
+                }
               } else {
                 driverCompletedMoves = 0;
               }
@@ -3539,6 +3547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             distanceToPickup,
             hasReview: reviewedBookingIds.has(booking.id),
             enterprisePartnerName,
+            partnerAvgRating: driverAvgRating,
             customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
             mover: mover && moverUser ? {
               id: mover.id,
