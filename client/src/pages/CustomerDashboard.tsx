@@ -69,6 +69,7 @@ type Booking = {
   id: string;
   customerId: string;
   moverId: string | null;
+  enterprisePartnerId?: string | null;
   pickupAddress: string;
   dropoffAddress: string;
   loadSize: string;
@@ -86,6 +87,9 @@ type Booking = {
       name: string;
     };
   };
+  partnerAssignment?: {
+    driverName?: string | null;
+  } | null;
 };
 
 const LOAD_SIZE_OPTIONS = [
@@ -215,13 +219,15 @@ export default function CustomerDashboard() {
     mutationFn: async (data: { bookingId: string; rating: number; actualLoadSize: string; comment: string }) => {
       const booking = bookings?.find(b => b.id === data.bookingId);
       if (!booking) throw new Error("Booking not found");
-      if (!booking.moverId) throw new Error("No mover assigned to this booking");
       
-      // First, save the actual review to update mover's rating
-      console.log('[Feedback] Submitting review:', { bookingId: data.bookingId, moverId: booking.moverId, rating: data.rating });
+      // For partner bookings there is no mover record — moverId will be null which is now allowed
+      const moverId = booking.moverId ?? null;
+      
+      // First, save the actual review to update mover's rating (skipped server-side when moverId is null)
+      console.log('[Feedback] Submitting review:', { bookingId: data.bookingId, moverId, rating: data.rating });
       await apiRequest("POST", "/api/reviews", {
         bookingId: data.bookingId,
-        moverId: booking.moverId,
+        moverId,
         customerId: user?.id,
         rating: data.rating,
         comment: data.comment || null,

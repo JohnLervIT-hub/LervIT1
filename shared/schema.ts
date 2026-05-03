@@ -232,7 +232,7 @@ export const messages = pgTable("messages", {
 export const reviews = pgTable("reviews", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingId: varchar("booking_id").references(() => bookings.id).notNull(),
-  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  moverId: varchar("mover_id").references(() => movers.id),
   customerId: varchar("customer_id").references(() => users.id).notNull(),
   rating: integer("rating").notNull(),
   comment: text("comment"),
@@ -316,6 +316,8 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 export const insertReviewSchema = createInsertSchema(reviews).omit({
   id: true,
   createdAt: true,
+}).extend({
+  moverId: z.string().nullable().optional(),
 });
 
 export const insertJobNotificationSchema = createInsertSchema(jobNotifications).omit({

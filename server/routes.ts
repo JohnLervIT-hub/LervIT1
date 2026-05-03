@@ -5939,22 +5939,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const review = await storage.createReview(reviewData);
       console.log('[Reviews] Review created with id:', review.id);
       
-      // IMPORTANT: Update mover's average rating after new review
-      const allReviews = await storage.getReviewsByMover(review.moverId);
-      console.log('[Reviews] Found', allReviews.length, 'total reviews for mover', review.moverId);
-      
-      if (allReviews.length > 0) {
-        const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
-        const averageRating = (totalRating / allReviews.length).toFixed(1);
+      // IMPORTANT: Update mover's average rating after new review (skip for partner bookings with no mover)
+      if (review.moverId) {
+        const allReviews = await storage.getReviewsByMover(review.moverId);
+        console.log('[Reviews] Found', allReviews.length, 'total reviews for mover', review.moverId);
         
-        console.log('[Reviews] Updating mover rating to', averageRating);
-        // Update mover's rating
-        await storage.updateMover(review.moverId, { 
-          rating: averageRating,
-          completedTrips: allReviews.length
-        });
-        
-        console.log(`[Reviews] SUCCESS: Updated mover ${review.moverId} rating to ${averageRating} (${allReviews.length} reviews)`);
+        if (allReviews.length > 0) {
+          const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
+          const averageRating = (totalRating / allReviews.length).toFixed(1);
+          
+          console.log('[Reviews] Updating mover rating to', averageRating);
+          await storage.updateMover(review.moverId, { 
+            rating: averageRating,
+            completedTrips: allReviews.length
+          });
+          
+          console.log(`[Reviews] SUCCESS: Updated mover ${review.moverId} rating to ${averageRating} (${allReviews.length} reviews)`);
+        }
+      } else {
+        console.log('[Reviews] Partner booking review — skipping mover rating update (no moverId)');
       }
       
       const customer = await storage.getUser(review.customerId);
