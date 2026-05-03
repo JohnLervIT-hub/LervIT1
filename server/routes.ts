@@ -5630,29 +5630,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const booking = await storage.getBooking(message.bookingId);
         if (booking) {
+          const senderName = sender?.name || "Someone";
+          const messagePreview = message.text.length > 80
+            ? message.text.substring(0, 80) + "..."
+            : message.text;
+
           // Determine recipient: if sender is customer, notify mover; if sender is mover's user, notify customer
           let recipientId: string | null = null;
-          
+
           if (message.senderId === booking.customerId && booking.moverId) {
-            // Sender is customer, notify mover
+            // Sender is customer → notify assigned mover
             const mover = await storage.getMover(booking.moverId);
-            if (mover) {
-              recipientId = mover.userId;
-            }
+            if (mover) recipientId = mover.userId;
           } else if (booking.moverId) {
-            // Sender is mover, notify customer
+            // Sender is mover → notify customer
             const mover = await storage.getMover(booking.moverId);
             if (mover && mover.userId === message.senderId) {
               recipientId = booking.customerId;
             }
           }
-          
+
           if (recipientId) {
-            const senderName = sender?.name || "Someone";
-            const messagePreview = message.text.length > 80 
-              ? message.text.substring(0, 80) + "..." 
-              : message.text;
-            
             await storage.createNotification({
               userId: recipientId,
               type: "new_message",
@@ -5662,6 +5660,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               actionUrl: `/messages/${message.bookingId}`,
               isRead: false,
             });
+          }
+
+          // Partner-routed booking: no direct mover — notify all active partner portal users instead
+          if (!recipientId && message.senderId === booking.customerId && (booking as any).enterprisePartnerId) {
+            const partnerUserRows = await db
+              .select({ userId: partnerUsers.userId })
+              .from(partnerUsers)
+              .where(
+                and(
+                  eq(partnerUsers.partnerId, (booking as any).enterprisePartnerId),
+                  eq(partnerUsers.isActive, true),
+                  inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager", "partner_dispatcher"]),
+                ),
+              );
+            for (const pu of partnerUserRows) {
+              await storage.createNotification({
+                userId: pu.userId,
+                type: "new_message",
+                title: `Customer message: ${senderName}`,
+                message: messagePreview,
+                bookingId: message.bookingId,
+                actionUrl: `/partner/messages`,
+                isRead: false,
+              });
+            }
           }
         }
       } catch (notifError) {

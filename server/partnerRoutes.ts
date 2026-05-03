@@ -39,6 +39,7 @@ import {
   insertPartnerTeamMemberSchema,
   insertPartnerIncidentSchema,
   messages,
+  inAppNotifications,
 } from "@shared/schema";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
@@ -2084,6 +2085,20 @@ export function registerPartnerRoutes(app: Express) {
         senderId: user.id,
         text,
       }).returning();
+
+      // Notify the customer that the partner has replied
+      if (booking.customerId) {
+        const messagePreview = text.length > 80 ? text.slice(0, 80) + "..." : text;
+        db.insert(inAppNotifications).values({
+          userId: booking.customerId,
+          type: "new_message",
+          title: `New message from ${partner.name}`,
+          message: messagePreview,
+          bookingId: booking.id,
+          actionUrl: `/messages/${booking.id}`,
+          isRead: false,
+        }).catch(e => console.error("[Partner msg] customer notify failed:", e));
+      }
 
       res.json({ ...msg, senderName: user.name, isPartnerMessage: true });
     } catch (err: any) {
