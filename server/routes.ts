@@ -3494,10 +3494,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let partnerAssignment = null;
           if (latestAssignment) {
             let driverPhoto: string | null = null;
+            let driverCompletedMoves: number | null = null;
             if (latestAssignment.teamMemberId) {
               const [tm] = await db.select({ driverPhoto: partnerTeamMembers.driverPhoto })
                 .from(partnerTeamMembers).where(eq(partnerTeamMembers.id, latestAssignment.teamMemberId)).limit(1);
               driverPhoto = tm?.driverPhoto ?? null;
+              const allAssigned = await db.select({ bookingId: bookingAssignments.bookingId })
+                .from(bookingAssignments)
+                .where(eq(bookingAssignments.teamMemberId, latestAssignment.teamMemberId));
+              if (allAssigned.length > 0) {
+                const assignedIds = allAssigned.map(a => a.bookingId);
+                const completed = await db.select({ id: bookings.id })
+                  .from(bookings)
+                  .where(and(inArray(bookings.id, assignedIds), eq(bookings.enterpriseStatus, 'completed')));
+                driverCompletedMoves = completed.length;
+              } else {
+                driverCompletedMoves = 0;
+              }
             }
             partnerAssignment = {
               driverName: latestAssignment.driverName,
@@ -3507,6 +3520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               vehicleType: latestAssignment.vehicleType,
               vehiclePlate: latestAssignment.vehiclePlate,
               assignedAt: latestAssignment.assignedAt,
+              completedMoves: driverCompletedMoves,
             };
           }
 
