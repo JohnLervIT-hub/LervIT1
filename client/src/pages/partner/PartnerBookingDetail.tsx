@@ -19,7 +19,7 @@ import {
   ArrowLeft, MapPin, Calendar, Package, CheckCircle, XCircle,
   User, Truck, AlertTriangle, Upload, Clock, ChevronRight, ChevronLeft,
   Loader2, DollarSign, Users, Route, Navigation, ZoomIn, Images,
-  Phone, Activity,
+  Phone, Activity, Star,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -625,13 +625,27 @@ export default function PartnerBookingDetail() {
                       {assignment.driverName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm">{assignment.driverName}</p>
                     {assignment.driverPhone && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Phone className="w-3 h-3" />{assignment.driverPhone}
                       </p>
                     )}
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                      {assignment.completedMoves != null && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Truck className="w-3 h-3" />
+                          {assignment.completedMoves} {assignment.completedMoves === 1 ? "trip" : "trips"}
+                        </span>
+                      )}
+                      {assignment.avgRating != null && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          {assignment.avgRating.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

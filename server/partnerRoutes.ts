@@ -738,18 +738,43 @@ export function registerPartnerRoutes(app: Express) {
       .where(and(eq(bookingAssignments.bookingId, booking.id), eq(bookingAssignments.partnerId, partner.id)))
       .orderBy(desc(bookingAssignments.assignedAt)).limit(1);
 
-    // Enrich assignment with driver photo from team member record
-    let assignment: typeof rawAssignment & { driverPhoto?: string | null } | null = null;
+    // Enrich assignment with driver photo, completed move count, and avg rating
+    let assignment: typeof rawAssignment & { driverPhoto?: string | null; completedMoves?: number | null; avgRating?: number | null } | null = null;
     if (rawAssignment) {
       let driverPhoto: string | null = null;
+      let completedMoves: number | null = null;
+      let avgRating: number | null = null;
       if (rawAssignment.teamMemberId) {
         const [tm] = await db.select({ driverPhoto: partnerTeamMembers.driverPhoto })
           .from(partnerTeamMembers)
           .where(eq(partnerTeamMembers.id, rawAssignment.teamMemberId))
           .limit(1);
         driverPhoto = tm?.driverPhoto ?? null;
+
+        // Count completed moves for this team member
+        const allAssigned = await db.select({ bookingId: bookingAssignments.bookingId })
+          .from(bookingAssignments)
+          .where(eq(bookingAssignments.teamMemberId, rawAssignment.teamMemberId));
+        if (allAssigned.length > 0) {
+          const assignedIds = allAssigned.map(a => a.bookingId);
+          const completed = await db.select({ id: bookings.id })
+            .from(bookings)
+            .where(and(inArray(bookings.id, assignedIds), eq(bookings.enterpriseStatus, "completed")));
+          completedMoves = completed.length;
+
+          // Compute average customer rating across all assigned bookings that have a review
+          const driverReviews = await db.select({ rating: reviews.rating })
+            .from(reviews)
+            .where(inArray(reviews.bookingId, assignedIds));
+          if (driverReviews.length > 0) {
+            const sum = driverReviews.reduce((acc, r) => acc + r.rating, 0);
+            avgRating = Math.round((sum / driverReviews.length) * 10) / 10;
+          }
+        } else {
+          completedMoves = 0;
+        }
       }
-      assignment = { ...rawAssignment, driverPhoto };
+      assignment = { ...rawAssignment, driverPhoto, completedMoves, avgRating };
     }
 
     const events = await db.select().from(bookingStatusEvents)
