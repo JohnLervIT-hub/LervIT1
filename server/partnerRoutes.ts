@@ -1706,6 +1706,20 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // GET /api/admin/partners/pending-count
+  app.get("/api/admin/partners/pending-count", requireAdminAuth, async (_req: Request, res: Response) => {
+    try {
+      const [result] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(partners)
+        .where(eq(partners.status, "pending_approval"));
+      res.json({ count: result?.count ?? 0 });
+    } catch (err) {
+      console.error("[Admin] pending partner count error:", err);
+      res.status(500).json({ error: "Failed to fetch pending partner count" });
+    }
+  });
+
   // GET /api/admin/partners
   app.get("/api/admin/partners", requireAdminAuth, async (_req: Request, res: Response) => {
     try {
