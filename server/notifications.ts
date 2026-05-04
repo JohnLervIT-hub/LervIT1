@@ -1936,6 +1936,242 @@ class NotificationService {
 
     await this.sendEmail({ to: opts.adminEmail, subject, body, type: 'booking_confirmation' });
   }
+
+  async sendAdminPartnerPendingApproval(opts: {
+    adminEmail: string;
+    partnerName: string;
+    companyName: string;
+    submittedAt: Date;
+    adminReviewUrl: string;
+  }): Promise<void> {
+    const subject = `[Action Required] Partner Application Awaiting Review — ${opts.companyName}`;
+    const formattedDate = formatCalgaryDate(opts.submittedAt, 'Unknown');
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#d97706;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Admin Alert</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">New Partner Application Submitted</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 28px 0;">
+                <strong>${opts.companyName}</strong> (represented by <strong>${opts.partnerName}</strong>) has completed their onboarding and submitted their application for review.
+              </p>
+              <h3 style="color:#333333;font-size:18px;margin:0 0 14px 0;">Application Details:</h3>
+              <ul style="color:#555555;font-size:15px;line-height:28px;margin:0 0 30px 0;padding-left:20px;">
+                <li><strong>Partner Name:</strong> ${opts.partnerName}</li>
+                <li><strong>Company:</strong> ${opts.companyName}</li>
+                <li><strong>Submitted:</strong> ${formattedDate}</li>
+              </ul>
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 25px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${opts.adminReviewUrl}" style="display:inline-block;background-color:#d97706;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 36px;border-radius:6px;">Review Application</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#555555;font-size:14px;line-height:24px;margin:0;">Please review and either activate or reject this partner from the admin dashboard.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Admin Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.adminEmail, subject, body, type: 'booking_confirmation' });
+  }
+
+  async sendPartnerComplianceDocReviewed(opts: {
+    partnerEmail: string;
+    partnerName: string;
+    docType: string;
+    outcome: 'approved' | 'rejected' | 'under_review';
+    reviewNotes?: string | null;
+    complianceUrl: string;
+  }): Promise<void> {
+    const outcomeLabel = opts.outcome === 'approved' ? 'Approved' : opts.outcome === 'rejected' ? 'Rejected' : 'Under Review';
+    const headerColor = opts.outcome === 'approved' ? '#16a34a' : opts.outcome === 'rejected' ? '#dc2626' : '#2563eb';
+    const subject = `Compliance Document ${outcomeLabel} — ${opts.docType.replace(/_/g, ' ')}`;
+    const notesHtml = opts.reviewNotes
+      ? `<p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 20px 0;padding:12px 16px;background-color:#f9f9f9;border-radius:6px;"><strong>Reviewer Notes:</strong> ${opts.reviewNotes}</p>`
+      : '';
+    const instructionHtml = opts.outcome === 'rejected'
+      ? `<p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 20px 0;">Please log in to the partner portal, navigate to <strong>Compliance</strong>, and upload a corrected version of this document before resubmitting your application.</p>`
+      : `<p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 20px 0;">No action is needed on your part for this document.</p>`;
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:${headerColor};padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Partner Portal</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">Compliance Document ${outcomeLabel}</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${opts.partnerName},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 28px 0;">
+                Your <strong>${opts.docType.replace(/_/g, ' ')}</strong> compliance document has been reviewed and marked as <strong>${outcomeLabel}</strong>.
+              </p>
+              ${notesHtml}
+              ${instructionHtml}
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 10px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${opts.complianceUrl}" style="display:inline-block;background-color:${headerColor};color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 36px;border-radius:6px;">View Compliance</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Partner Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.partnerEmail, subject, body, type: 'status_update' });
+  }
+
+  async sendPartnerActivated(opts: {
+    partnerEmail: string;
+    partnerName: string;
+    companyName: string;
+    dashboardUrl: string;
+  }): Promise<void> {
+    const subject = `Congratulations! Your Partner Application Has Been Approved`;
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#16a34a;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Partner Portal</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">You're Live on LervIT!</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${opts.partnerName},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 28px 0;">
+                Great news — <strong>${opts.companyName}</strong>'s application has been <strong>approved</strong> and your account is now active on the LervIT platform. You can start receiving and fulfilling jobs right away.
+              </p>
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 25px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${opts.dashboardUrl}" style="display:inline-block;background-color:#16a34a;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 36px;border-radius:6px;">Go to Partner Dashboard</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#555555;font-size:14px;line-height:24px;margin:0;">If you have any questions, reach out to us at <a href="mailto:support@lervit.com" style="color:#16a34a;">support@lervit.com</a>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Partner Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.partnerEmail, subject, body, type: 'status_update' });
+  }
+
+  async sendPartnerApplicationRejected(opts: {
+    partnerEmail: string;
+    partnerName: string;
+    companyName: string;
+    reason: string;
+    onboardingUrl: string;
+  }): Promise<void> {
+    const subject = `Update on Your LervIT Partner Application — Action Required`;
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#dc2626;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT Partner Portal</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <h2 style="color:#333333;margin:0 0 12px 0;font-size:22px;">Application Requires Updates</h2>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${opts.partnerName},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">
+                Thank you for applying to become a LervIT partner. After reviewing <strong>${opts.companyName}</strong>'s application, we were unable to approve it at this time.
+              </p>
+              <p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 8px 0;"><strong>Reason provided:</strong></p>
+              <p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 28px 0;padding:12px 16px;background-color:#fef2f2;border-radius:6px;border-left:3px solid #dc2626;">${opts.reason}</p>
+              <p style="color:#555555;font-size:14px;line-height:22px;margin:0 0 28px 0;">
+                Please log in to the partner portal and update your onboarding information to address the issue above, then resubmit your application for review.
+              </p>
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 25px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${opts.onboardingUrl}" style="display:inline-block;background-color:#dc2626;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 36px;border-radius:6px;">Update Onboarding</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#555555;font-size:14px;line-height:24px;margin:0;">Questions? Contact us at <a href="mailto:support@lervit.com" style="color:#dc2626;">support@lervit.com</a>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT Partner Notification</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await this.sendEmail({ to: opts.partnerEmail, subject, body, type: 'status_update' });
+  }
 }
 
 export const notificationService = new NotificationService();

@@ -394,11 +394,38 @@ export function registerPartnerRoutes(app: Express) {
     if (!partner.profileComplete || !partner.coverageComplete || !partner.complianceComplete || !partner.termsAccepted) {
       return res.status(400).json({ error: "Complete all required onboarding steps before submitting" });
     }
+    const submittedAt = new Date();
     const [updated] = await db.update(partners)
-      .set({ status: "pending_approval", updatedAt: new Date() })
+      .set({ status: "pending_approval", updatedAt: submittedAt })
       .where(eq(partners.id, partner.id))
       .returning();
     await logAudit(partner.id, user.id, "onboarding.submitted", "partner", partner.id);
+
+    // Notify all admin users about the pending application
+    const baseUrl = process.env.BASE_URL ||
+      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    db.select({ id: users.id, email: users.email }).from(users).where(eq(users.role, "admin")).then((admins) => {
+      for (const admin of admins) {
+        if (admin.email) {
+          notificationService.sendAdminPartnerPendingApproval({
+            adminEmail: admin.email,
+            partnerName: user.name || user.email || 'Partner',
+            companyName: partner.name,
+            submittedAt,
+            adminReviewUrl: `${baseUrl}/admin/partners/${partner.id}`,
+          }).catch(e => console.error("[onboarding submit] admin email failed:", e));
+        }
+        db.insert(inAppNotifications).values({
+          userId: admin.id,
+          type: "status_update",
+          title: "Partner Application Pending Review",
+          message: `${partner.name} has submitted their onboarding application and is awaiting approval.`,
+          actionUrl: `/admin/partners/${partner.id}`,
+          isRead: false,
+        }).catch(e => console.error("[onboarding submit] admin in-app notify failed:", e));
+      }
+    }).catch(e => console.error("[onboarding submit] fetch admins failed:", e));
+
     res.json(updated);
   });
 
@@ -1816,6 +1843,7 @@ export function registerPartnerRoutes(app: Express) {
       const adminUser = (req as any).adminUser;
       const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
       if (!partner) return res.status(404).json({ error: "Partner not found" });
+      if (partner.status === "active") return res.status(400).json({ error: "Partner is already active" });
 
       const [updated] = await db.update(partners)
         .set({ status: "active", activatedAt: new Date(), activatedBy: adminUser.id, updatedAt: new Date() })
@@ -1823,9 +1851,103 @@ export function registerPartnerRoutes(app: Express) {
         .returning();
 
       await logAudit(partner.id, adminUser.id, "partner.activated", "partner", partner.id);
+
+      // Notify partner admin users that they are now live
+      const baseUrl = process.env.BASE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      db
+        .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
+        .from(partnerUsers)
+        .innerJoin(users, eq(users.id, partnerUsers.userId))
+        .where(and(
+          eq(partnerUsers.partnerId, partner.id),
+          eq(partnerUsers.isActive, true),
+          eq(partnerUsers.partnerRole, "partner_admin"),
+        ))
+        .then((puRows) => {
+          for (const pu of puRows) {
+            if (pu.email) {
+              notificationService.sendPartnerActivated({
+                partnerEmail: pu.email,
+                partnerName: pu.name || pu.email,
+                companyName: partner.name,
+                dashboardUrl: `${baseUrl}/partner/dashboard`,
+              }).catch(e => console.error("[activate] partner email failed:", e));
+            }
+            db.insert(inAppNotifications).values({
+              userId: pu.userId,
+              type: "status_update",
+              title: "Your Partner Application Has Been Approved",
+              message: `${partner.name} is now active on LervIT. You can start receiving and fulfilling jobs.`,
+              actionUrl: `/partner/dashboard`,
+              isRead: false,
+            }).catch(e => console.error("[activate] partner in-app notify failed:", e));
+          }
+        })
+        .catch(e => console.error("[activate] fetch partner users failed:", e));
+
       res.json(updated);
     } catch (err) {
       res.status(500).json({ error: "Failed to activate partner" });
+    }
+  });
+
+  // PUT /api/admin/partners/:id/reject
+  app.put("/api/admin/partners/:id/reject", requireAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const adminUser = (req as any).adminUser;
+      const { reason } = z.object({ reason: z.string().min(1, "Rejection reason is required") }).parse(req.body);
+
+      const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
+      if (partner.status !== "pending_approval") return res.status(400).json({ error: "Only partners in pending_approval status can be rejected" });
+
+      const [updated] = await db.update(partners)
+        .set({ status: "onboarding", updatedAt: new Date() })
+        .where(eq(partners.id, partner.id))
+        .returning();
+
+      await logAudit(partner.id, adminUser.id, "partner.rejected", "partner", partner.id, reason);
+
+      // Notify partner admin users that their application was rejected
+      const baseUrl = process.env.BASE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      db
+        .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
+        .from(partnerUsers)
+        .innerJoin(users, eq(users.id, partnerUsers.userId))
+        .where(and(
+          eq(partnerUsers.partnerId, partner.id),
+          eq(partnerUsers.isActive, true),
+          eq(partnerUsers.partnerRole, "partner_admin"),
+        ))
+        .then((puRows) => {
+          for (const pu of puRows) {
+            if (pu.email) {
+              notificationService.sendPartnerApplicationRejected({
+                partnerEmail: pu.email,
+                partnerName: pu.name || pu.email,
+                companyName: partner.name,
+                reason,
+                onboardingUrl: `${baseUrl}/partner/onboarding`,
+              }).catch(e => console.error("[reject] partner email failed:", e));
+            }
+            db.insert(inAppNotifications).values({
+              userId: pu.userId,
+              type: "status_update",
+              title: "Application Requires Updates",
+              message: `Your partner application requires updates before it can be approved. Reason: ${reason}`,
+              actionUrl: `/partner/onboarding`,
+              isRead: false,
+            }).catch(e => console.error("[reject] partner in-app notify failed:", e));
+          }
+        })
+        .catch(e => console.error("[reject] fetch partner users failed:", e));
+
+      res.json(updated);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      res.status(500).json({ error: "Failed to reject partner" });
     }
   });
 
@@ -1898,6 +2020,10 @@ export function registerPartnerRoutes(app: Express) {
       const data = z.object({
         reviewStatus: z.enum(["approved", "rejected", "under_review"]),
         reviewNotes: z.string().optional(),
+      }).superRefine((val, ctx) => {
+        if (val.reviewStatus === "rejected" && !val.reviewNotes?.trim()) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Review notes are required when rejecting a document", path: ["reviewNotes"] });
+        }
       }).parse(req.body);
 
       const [doc] = await db.select().from(complianceDocs).where(eq(complianceDocs.id, req.params.docId)).limit(1);
@@ -1909,6 +2035,42 @@ export function registerPartnerRoutes(app: Express) {
         .returning();
 
       await logAudit(doc.partnerId, adminUser.id, `compliance.${data.reviewStatus}`, "compliance_doc", doc.id, data.reviewNotes);
+
+      // Notify partner admin users about the compliance doc review
+      if (data.reviewStatus === "approved" || data.reviewStatus === "rejected") {
+        const baseUrl = process.env.BASE_URL ||
+          (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+        const puRows = await db
+          .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
+          .from(partnerUsers)
+          .innerJoin(users, eq(users.id, partnerUsers.userId))
+          .where(and(
+            eq(partnerUsers.partnerId, doc.partnerId),
+            eq(partnerUsers.isActive, true),
+            eq(partnerUsers.partnerRole, "partner_admin"),
+          ));
+        for (const pu of puRows) {
+          if (pu.email) {
+            notificationService.sendPartnerComplianceDocReviewed({
+              partnerEmail: pu.email,
+              partnerName: pu.name || pu.email,
+              docType: doc.docType,
+              outcome: data.reviewStatus,
+              reviewNotes: data.reviewNotes,
+              complianceUrl: `${baseUrl}/partner/compliance`,
+            }).catch(e => console.error("[compliance review] partner email failed:", e));
+          }
+          db.insert(inAppNotifications).values({
+            userId: pu.userId,
+            type: "status_update",
+            title: `Compliance Document ${data.reviewStatus === "approved" ? "Approved" : "Rejected"}`,
+            message: `Your ${doc.docType.replace(/_/g, " ")} document has been ${data.reviewStatus}${data.reviewNotes ? `: ${data.reviewNotes}` : "."}`,
+            actionUrl: `/partner/compliance`,
+            isRead: false,
+          }).catch(e => console.error("[compliance review] partner in-app notify failed:", e));
+        }
+      }
+
       res.json(updated);
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });

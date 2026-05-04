@@ -100,6 +100,8 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   const { toast } = useToast();
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendOpen, setSuspendOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectOpen, setRejectOpen] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
   const [editingNotes, setEditingNotes] = useState(false);
   const [msgDraft, setMsgDraft] = useState("");
@@ -110,6 +112,9 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
   const [compFile, setCompFile] = useState<File | null>(null);
   const [compFileName, setCompFileName] = useState("");
   const [reviewingDoc, setReviewingDoc] = useState<string | null>(null);
+  const [docRejectOpen, setDocRejectOpen] = useState(false);
+  const [docRejectId, setDocRejectId] = useState<string | null>(null);
+  const [docRejectNotes, setDocRejectNotes] = useState("");
 
   const { data: _rawMsgs, isLoading: msgsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/partners", partnerId, "messages"],
@@ -159,6 +164,12 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
     mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}/suspend`, { reason: suspendReason }),
     onSuccess: () => { toast({ title: "Partner suspended" }); setSuspendOpen(false); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners"] }); },
     onError: () => toast({ title: "Failed to suspend", variant: "destructive" }),
+  });
+
+  const reject = useMutation({
+    mutationFn: () => apiRequest("PUT", `/api/admin/partners/${partnerId}/reject`, { reason: rejectReason }),
+    onSuccess: () => { toast({ title: "Application rejected", description: "Partner has been notified and returned to onboarding." }); setRejectOpen(false); setRejectReason(""); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners", partnerId] }); queryClient.invalidateQueries({ queryKey: ["/api/admin/partners"] }); },
+    onError: () => toast({ title: "Failed to reject application", variant: "destructive" }),
   });
 
   const saveNotes = useMutation({
@@ -251,6 +262,34 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
               {activate.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <BadgeCheck className="w-4 h-4 mr-1" />}
               Activate
             </Button>
+          )}
+          {partner.status === "pending_approval" && (
+            <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="destructive" data-testid="button-reject-partner">
+                  <XCircle className="w-4 h-4 mr-1" /> Reject
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Reject Partner Application</DialogTitle></DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">The partner will be returned to onboarding status and notified by email with your reason. They can update their application and resubmit.</p>
+                  <Label>Reason for rejection <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value)}
+                    placeholder="Required — explain what needs to be corrected before resubmitting"
+                    data-testid="input-reject-reason"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => { setRejectOpen(false); setRejectReason(""); }}>Cancel</Button>
+                    <Button variant="destructive" onClick={() => reject.mutate()} disabled={reject.isPending || !rejectReason.trim()} data-testid="button-confirm-reject">
+                      {reject.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Rejection"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           )}
           {partner.status === "active" && (
             <Dialog open={suspendOpen} onOpenChange={setSuspendOpen}>
@@ -774,7 +813,7 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                             <Button
                               size="sm" variant="ghost"
                               className="text-red-600 dark:text-red-400 text-xs"
-                              onClick={() => { setReviewingDoc(d.id); reviewCompDoc.mutate({ docId: d.id, reviewStatus: "rejected" }); }}
+                              onClick={() => { setDocRejectId(d.id); setDocRejectNotes(""); setDocRejectOpen(true); }}
                               disabled={reviewCompDoc.isPending && reviewingDoc === d.id}
                               data-testid={`button-reject-doc-${d.id}`}
                             >
@@ -797,6 +836,41 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
               })}
             </div>
           )}
+
+          {/* Compliance doc rejection dialog */}
+          <Dialog open={docRejectOpen} onOpenChange={open => { setDocRejectOpen(open); if (!open) { setDocRejectId(null); setDocRejectNotes(""); } }}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Reject Compliance Document</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">The partner will be notified by email with your reason and asked to re-upload a corrected document.</p>
+                <Label>Rejection reason <span className="text-destructive">*</span></Label>
+                <Textarea
+                  value={docRejectNotes}
+                  onChange={e => setDocRejectNotes(e.target.value)}
+                  placeholder="Required — explain what is wrong and what must be corrected"
+                  data-testid="input-doc-reject-notes"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => { setDocRejectOpen(false); setDocRejectId(null); setDocRejectNotes(""); }}>Cancel</Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      if (!docRejectId) return;
+                      setReviewingDoc(docRejectId);
+                      reviewCompDoc.mutate(
+                        { docId: docRejectId, reviewStatus: "rejected", reviewNotes: docRejectNotes },
+                        { onSettled: () => { setDocRejectOpen(false); setDocRejectId(null); setDocRejectNotes(""); setReviewingDoc(null); } }
+                      );
+                    }}
+                    disabled={reviewCompDoc.isPending || !docRejectNotes.trim()}
+                    data-testid="button-confirm-doc-reject"
+                  >
+                    {reviewCompDoc.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Rejection"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* MESSAGES */}
