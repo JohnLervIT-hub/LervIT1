@@ -1238,6 +1238,7 @@ export const partnerTeamMembers = pgTable("partner_team_members", {
   vehiclePlate: text("vehicle_plate"),
   vehicleColor: text("vehicle_color"),
   driverPhoto: text("driver_photo"),
+  vehiclePhoto: text("vehicle_photo"),
   isAvailable: boolean("is_available").default(true).notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

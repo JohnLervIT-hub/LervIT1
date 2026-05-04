@@ -18,7 +18,8 @@ import {
   XCircle, Clock, Search, ChevronRight, Shield, CreditCard,
   Phone, Mail, MapPin, Loader2, AlertTriangle, FileText,
   Package, Calendar, Activity, Ban, BadgeCheck, Plus, MessageSquare, Send,
-  Upload, Trash2, CheckCheck, ShieldCheck, ExternalLink
+  Upload, Trash2, CheckCheck, ShieldCheck, ExternalLink, ChevronDown, ChevronUp,
+  Car, StickyNote
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format, isValid, isToday, isYesterday } from "date-fns";
@@ -91,6 +92,130 @@ function BookingStatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={`text-xs ${map[status] ?? "bg-muted text-muted-foreground"}`}>
       {status.replace(/_/g, " ")}
     </Badge>
+  );
+}
+
+// ─── TEAM MEMBER LIST WITH EXPANDABLE ROWS ─────────────────────────────────
+function TeamMemberList({ team }: { team: any[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-2">
+      {team.map((m: any) => {
+        const isExpanded = expandedId === m.id;
+        const isDriver = m.memberType === "driver";
+        return (
+          <Card key={m.id} data-testid={`card-team-${m.id}`} className="overflow-hidden">
+            <CardContent className="pt-3 pb-3">
+              {/* Clickable summary row */}
+              <button
+                className="w-full text-left"
+                data-testid={`button-expand-team-${m.id}`}
+                onClick={() => setExpandedId(isExpanded ? null : m.id)}
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-10 h-10 border border-border shrink-0">
+                    <AvatarImage src={m.driverPhoto ?? undefined} alt={m.name} />
+                    <AvatarFallback className="bg-muted text-xs font-semibold">
+                      {m.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold">{m.name}</p>
+                      <Badge variant="outline" className="text-xs capitalize">{m.memberType}</Badge>
+                      <Badge variant="outline" className={`text-xs ${m.isAvailable ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-muted text-muted-foreground"}`}>
+                        {m.isAvailable ? "Available" : "Unavailable"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mt-0.5">
+                      {m.phone && <span>{m.phone}</span>}
+                      {m.vehicleType && (
+                        <span className="flex items-center gap-1">
+                          <Truck className="w-3 h-3" />
+                          {m.vehicleType}{m.vehiclePlate && ` · ${m.vehiclePlate}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-muted-foreground">
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </div>
+              </button>
+
+              {/* Expanded detail panel */}
+              {isExpanded && (
+                <div className="mt-3 pt-3 border-t border-border space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left: details */}
+                    <div className="space-y-2">
+                      {m.vehicleColor && (
+                        <div className="flex items-start gap-2">
+                          <Car className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Vehicle Color</p>
+                            <p className="text-sm font-medium capitalize">{m.vehicleColor}</p>
+                          </div>
+                        </div>
+                      )}
+                      {m.phone && (
+                        <div className="flex items-start gap-2">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Phone</p>
+                            <p className="text-sm font-medium">{m.phone}</p>
+                          </div>
+                        </div>
+                      )}
+                      {m.notes && (
+                        <div className="flex items-start gap-2">
+                          <StickyNote className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Notes</p>
+                            <p className="text-sm">{m.notes}</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-start gap-2">
+                        <Calendar className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Added</p>
+                          <p className="text-sm font-medium">{fmt(m.createdAt)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: vehicle photo (drivers only) */}
+                    {isDriver && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                          <Truck className="w-3 h-3" />
+                          Vehicle Photo
+                        </p>
+                        {m.vehiclePhoto ? (
+                          <a href={m.vehiclePhoto} target="_blank" rel="noopener noreferrer" data-testid={`link-vehicle-photo-${m.id}`}>
+                            <img
+                              src={m.vehiclePhoto}
+                              alt="Vehicle"
+                              className="w-full max-w-[200px] rounded-md border border-border object-cover aspect-video hover-elevate"
+                            />
+                          </a>
+                        ) : (
+                          <div className="w-full max-w-[200px] aspect-video rounded-md border border-dashed border-border flex items-center justify-center bg-muted/30">
+                            <p className="text-xs text-muted-foreground text-center px-2">No vehicle photo uploaded</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 
@@ -585,42 +710,7 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
         <TabsContent value="team" className="pt-3">
           {!team?.length
             ? <div className="text-center py-12 text-sm text-muted-foreground">No team members added yet.</div>
-            : (
-              <div className="space-y-2">
-                {team.map((m: any) => (
-                  <Card key={m.id} data-testid={`card-team-${m.id}`}>
-                    <CardContent className="pt-3 pb-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10 border border-border shrink-0">
-                          <AvatarImage src={m.driverPhoto ?? undefined} alt={m.name} />
-                          <AvatarFallback className="bg-muted text-xs font-semibold">
-                            {m.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-semibold">{m.name}</p>
-                            <Badge variant="outline" className="text-xs capitalize">{m.memberType}</Badge>
-                            <Badge variant="outline" className={`text-xs ${m.isAvailable ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-muted text-muted-foreground"}`}>
-                              {m.isAvailable ? "Available" : "Unavailable"}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mt-0.5">
-                            {m.phone && <span>{m.phone}</span>}
-                            {m.vehicleType && (
-                              <span className="flex items-center gap-1">
-                                <Truck className="w-3 h-3" />
-                                {m.vehicleType}{m.vehiclePlate && ` · ${m.vehiclePlate}`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )
+            : <TeamMemberList team={team} />
           }
         </TabsContent>
 
