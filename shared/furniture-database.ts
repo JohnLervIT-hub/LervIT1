@@ -21,7 +21,7 @@ export interface FurnitureItem {
   load_size: LoadSizeCategory;
   vehicle: VehicleType;
   movers_required: 1 | 2;
-  handling_complexity: 'low' | 'medium' | 'high' | 'very_high';
+  handling_complexity: 'low' | 'medium' | 'moderate' | 'high' | 'very_high';
   insurance_level: 'standard' | 'medium' | 'high' | 'premium';
 }
 
@@ -243,7 +243,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
-    handling_complexity: 'high',
+    handling_complexity: 'moderate',
     insurance_level: 'medium',
   },
   {
@@ -258,8 +258,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'large',
     vehicle: 'van',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'premium',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_SECTIONAL_L_LG_001',
@@ -273,8 +273,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'large',
     vehicle: 'van',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'premium',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_SECTIONAL_U_SM_001',

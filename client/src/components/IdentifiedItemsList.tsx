@@ -7,7 +7,7 @@ import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import { memo } from "react";
 
 // Tiered handling premiums — must stay in sync with shared/pricing.ts HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY
-const ITEM_PREMIUMS: Record<string, number> = { high: 15, very_high: 30 };
+const ITEM_PREMIUMS: Record<string, number> = { moderate: 10, high: 15, very_high: 30 };
 const ITEM_PREMIUM_CAP = 150;
 
 function calcTotalHandlingFee(items: IdentifiedItem[]): number {
@@ -137,6 +137,8 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
         return { label: 'Very Heavy', variant: 'destructive' as const, icon: AlertCircle };
       case 'high':
         return { label: 'Heavy', variant: 'default' as const, icon: Weight };
+      case 'moderate':
+        return { label: 'Moderate', variant: 'secondary' as const, icon: Weight };
       case 'medium':
         return { label: 'Medium', variant: 'secondary' as const, icon: null };
       default:

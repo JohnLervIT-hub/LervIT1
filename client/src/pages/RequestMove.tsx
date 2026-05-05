@@ -41,7 +41,7 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // high (large appliances, gym equipment, massage chairs): $15/item
 // very_high (pianos, hot tubs, pool tables, safes, motorcycles): $30/item
 // Cap: $150 total — no booking is ever charged more than this in handling fees alone.
-const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = { high: 15, very_high: 30 };
+const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = { moderate: 10, high: 15, very_high: 30 };
 const HEAVY_ITEM_PREMIUM_CAP = 150;
 
 function getItemTypePremium(items: IdentifiedItem[]): number {
