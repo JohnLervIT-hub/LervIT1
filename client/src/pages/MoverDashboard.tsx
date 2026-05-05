@@ -371,6 +371,8 @@ export default function MoverDashboard() {
   const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
     ?.filter((b) => {
+      // Explicitly exclude terminal statuses — ACTIVE_STATUSES includes COMPLETED so we must filter it out
+      if (b.status === BOOKING_STATUSES.COMPLETED || b.status === BOOKING_STATUSES.CANCELLED) return false;
       const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
       if (!isActiveStatus) return false;
       
@@ -1986,7 +1988,7 @@ export default function MoverDashboard() {
                   </div>
                   <h3 className="font-semibold text-xl mb-2">No Active Bookings</h3>
                   <p className="text-muted-foreground max-w-sm mx-auto mb-6">
-                    Accept jobs from the Jobs tab to start earning. Your active and completed bookings will appear here.
+                    Accept jobs from the Jobs tab to start earning. Your active bookings will appear here. Completed moves are tracked in your Earnings.
                   </p>
                   <Button variant="outline" onClick={() => handleTabChange("available")} className="rounded-full">
                     Browse Available Jobs
