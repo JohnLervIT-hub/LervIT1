@@ -456,7 +456,7 @@ export const insertIdentifiedItemSchema = createInsertSchema(identifiedItems).om
   updatedAt: true,
 }).extend({
   category: z.enum(['Furniture', 'Appliance', 'Fragile', 'Oversized', 'Bulky', 'Electronics', 'Other']).optional(),
-  handlingComplexity: z.enum(['low', 'medium', 'moderate', 'high', 'very_high']).optional(),
+  handlingComplexity: z.enum(['low', 'medium', 'slight', 'moderate', 'high', 'very_high']).optional(),
   vehicleType: z.enum(['car', 'van', 'pickup', 'truck']).optional(),
   insuranceLevel: z.enum(['standard', 'medium', 'high', 'premium']).optional(),
   processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),

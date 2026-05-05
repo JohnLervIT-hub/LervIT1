@@ -21,7 +21,7 @@ export interface FurnitureItem {
   load_size: LoadSizeCategory;
   vehicle: VehicleType;
   movers_required: 1 | 2;
-  handling_complexity: 'low' | 'medium' | 'moderate' | 'high' | 'very_high';
+  handling_complexity: 'low' | 'medium' | 'slight' | 'moderate' | 'high' | 'very_high';
   insurance_level: 'standard' | 'medium' | 'high' | 'premium';
 }
 
@@ -228,7 +228,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
-    handling_complexity: 'high',
+    handling_complexity: 'slight',
     insurance_level: 'medium',
   },
   {
