@@ -288,8 +288,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'large',
     vehicle: 'van',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'premium',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_SECTIONAL_U_MD_001',
