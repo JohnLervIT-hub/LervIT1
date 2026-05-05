@@ -207,28 +207,34 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider style={sidebarStyle}>
       <div className="partner-portal flex h-screen w-full overflow-hidden bg-background font-sans">
         <Sidebar>
-          <SidebarHeader className="px-4 py-4 border-b border-border">
-            <div className="flex flex-col items-center gap-2">
+          <SidebarHeader className="px-3 py-3 border-b border-border">
+            <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={() => logoRef.current?.click()}
-                className="relative group w-16 h-16 rounded-md overflow-hidden border border-border bg-muted flex items-center justify-center hover-elevate"
+                className="relative group w-full max-h-14 rounded-md overflow-hidden border border-border bg-muted flex items-center justify-center hover-elevate px-2 py-1.5"
                 title="Upload company logo"
                 data-testid="button-upload-logo"
               >
                 {partner?.logoUrl ? (
-                  <img src={partner.logoUrl} alt="Company logo" className="w-full h-full object-contain" />
+                  <img
+                    src={partner.logoUrl}
+                    alt="Company logo"
+                    className="max-w-full max-h-11 w-auto h-auto object-contain"
+                  />
                 ) : (
-                  <ImagePlus className="w-6 h-6 text-muted-foreground" />
+                  <div className="flex flex-col items-center gap-1 py-1">
+                    <ImagePlus className="w-5 h-5 text-muted-foreground" />
+                  </div>
                 )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-md">
                   {uploadLogo.isPending
-                    ? <Loader2 className="w-5 h-5 text-white animate-spin" />
-                    : <Camera className="w-5 h-5 text-white" />}
+                    ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    : <Camera className="w-4 h-4 text-white" />}
                 </div>
               </button>
               <button
                 onClick={() => logoRef.current?.click()}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                 data-testid="link-upload-logo"
               >
                 {partner?.logoUrl ? "Change logo" : "Upload logo"}
