@@ -93,6 +93,7 @@ function PartnerRouter() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/partner-activate" component={PartnerActivate} />
+        <Route path="/partner/activate" component={PartnerActivate} />
         <Route path="/partner/dashboard">
           <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
             <PartnerDashboard />

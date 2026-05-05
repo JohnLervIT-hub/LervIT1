@@ -1567,7 +1567,7 @@ export function registerPartnerRoutes(app: Express) {
       const baseUrl = process.env.REPLIT_DEV_DOMAIN
         ? `https://${process.env.REPLIT_DEV_DOMAIN}`
         : (process.env.BASE_URL || 'https://app.lervit.com');
-      const activationUrl = `${baseUrl}/partner-activate?token=${token}`;
+      const activationUrl = `${baseUrl}/partner/activate?token=${token}`;
 
       // Fire-and-forget — don't block response on email delivery
       notificationService.sendPartnerUserInvite({
@@ -1579,7 +1579,7 @@ export function registerPartnerRoutes(app: Express) {
         activationUrl,
       }).catch(err => console.error("[Partner] invite email error:", err));
 
-      res.status(201).json({ invite: { ...invite, activationUrl: `/partner-activate?token=${token}` } });
+      res.status(201).json({ invite: { ...invite, activationUrl: `/partner/activate?token=${token}` } });
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
       console.error("[Partner] invite user error:", err);
