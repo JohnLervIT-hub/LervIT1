@@ -110,6 +110,14 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     // Apply complexity override: heavy items in small loads need at least a pickup
     if (hasHighComplexity && recIndex < 1) recIndex = 1;
 
+    // DATABASE VEHICLE FLOOR: honour the per-item vehicleType from the ground truth DB.
+    // e.g. a 450 kg hot tub has vehicle='truck' — volume alone would only give pickup.
+    const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+    const maxDbTier = completedItems.reduce(
+      (max, item) => Math.max(max, VEHICLE_TIER_RANK[item.vehicleType || 'car'] ?? 0), 0
+    );
+    if (maxDbTier > recIndex) recIndex = maxDbTier;
+
     return recOrder[recIndex];
   };
   const vehicleRec = getVehicleRecommendation();

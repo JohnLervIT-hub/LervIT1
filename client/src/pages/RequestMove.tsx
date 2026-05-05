@@ -1175,6 +1175,16 @@ export default function RequestMove() {
         else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
         if (hasHeavyItems && tierIndex < 1)           tierIndex = 1;
 
+        // DATABASE VEHICLE FLOOR: honour the per-item vehicle assignment from the ground
+        // truth database. Items like a 450 kg hot tub are tagged vehicle='truck' in the DB;
+        // volume alone can't reflect that, so we take the highest vehicleType across all
+        // identified items and ensure we never recommend below it.
+        const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+        const maxDbTier = completedAll.reduce(
+          function(max, item) { return Math.max(max, VEHICLE_TIER_RANK[item.vehicleType || 'car'] ?? 0); }, 0
+        );
+        if (maxDbTier > tierIndex) tierIndex = maxDbTier;
+
         const recommendedLoadSize = loadSizeTiers[tierIndex];
         const recommendedVehicle  = vehicleTiers[tierIndex];
 
@@ -1270,6 +1280,13 @@ export default function RequestMove() {
     else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
 
+    // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
+    const VEHICLE_TIER_RANK2: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+    const maxDbTier2 = completedItems.reduce(
+      (max, item) => Math.max(max, VEHICLE_TIER_RANK2[item.vehicleType || 'car'] ?? 0), 0
+    );
+    if (maxDbTier2 > tierIndex) tierIndex = maxDbTier2;
+
     setAiDetectedVolume(totalVolume);
 
     setLoadSize(loadSizeTiers[tierIndex]);
@@ -1346,6 +1363,13 @@ export default function RequestMove() {
     if (maxDimRecalc > 200 && tierIndex < 2) tierIndex = 2;
     else if (maxDimRecalc > 150 && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
+
+    // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
+    const VEHICLE_TIER_RANK3: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+    const maxDbTier3 = completedItems.reduce(
+      (max, item) => Math.max(max, VEHICLE_TIER_RANK3[item.vehicleType || 'car'] ?? 0), 0
+    );
+    if (maxDbTier3 > tierIndex) tierIndex = maxDbTier3;
     
     const recommendedLoadSize = loadSizeTiers[tierIndex];
 
