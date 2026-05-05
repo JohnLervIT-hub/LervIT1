@@ -28,6 +28,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 // Telnyx configuration
 const telnyxApiKey = process.env.TELNYX_API_KEY;
 const telnyxPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
+const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID;
 
 // Email Rate Limiter - Resend allows 2 requests per second
 // This queue ensures we don't exceed that limit
@@ -242,11 +243,13 @@ class NotificationService {
     console.log('Type:', notification.type);
     
     // Block SMS in development mode (except OTP verification codes needed for login testing)
-    if (process.env.NODE_ENV === 'development' && notification.type !== 'phone_verification') {
+    // Set FORCE_SMS=true in env to bypass this block for testing real SMS delivery
+    const forceSms = process.env.FORCE_SMS === 'true';
+    if (process.env.NODE_ENV === 'development' && notification.type !== 'phone_verification' && !forceSms) {
       const maskedMessage = notification.message.length > 80 
         ? notification.message.substring(0, 80) + '...' 
         : notification.message;
-      console.log('[SMS] BLOCKED in development mode (not sent to real users)');
+      console.log('[SMS] BLOCKED in development mode (set FORCE_SMS=true to override)');
       console.log('Message preview:', maskedMessage);
       console.log('---\n');
       return true;
@@ -280,6 +283,7 @@ class NotificationService {
           from: telnyxPhoneNumber,
           to: formattedPhone,
           text: notification.message,
+          ...(telnyxMessagingProfileId && { messaging_profile_id: telnyxMessagingProfileId }),
         }),
       });
       
