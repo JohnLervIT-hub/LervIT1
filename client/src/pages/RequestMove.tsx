@@ -1153,9 +1153,13 @@ export default function RequestMove() {
           );
         });
 
-        if (itemTotalWeight > 150 && tierIndex < 3)      tierIndex = 3;
-        else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
-        else if (itemTotalWeight > 50 && tierIndex < 1)  tierIndex = 1;
+        // Weight bumps: capped at +1 tier above volume-based tier.
+        // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
+        // Prevents single/dual heavy items from jumping straight to "Moving Truck".
+        const volumeTierIndex1 = tierIndex;
+        if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex1 + 1, 3);
+        else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex1 + 1, 2);
+        else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex1 + 1, 1);
 
         const maxDimension = Math.max(
           ...completedAll.map(function(item) {
@@ -1249,9 +1253,10 @@ export default function RequestMove() {
       parseFloat(item.weightKg || '0') > 30
     );
 
-    if (itemTotalWeight > 150 && tierIndex < 3)      tierIndex = 3;
-    else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
-    else if (itemTotalWeight > 50  && tierIndex < 1) tierIndex = 1;
+    const volumeTierIndex2 = tierIndex;
+    if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex2 + 1, 3);
+    else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex2 + 1, 2);
+    else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex2 + 1, 1);
 
     const maxDim = Math.max(...completedItems.map(item =>
       Math.max(
@@ -1264,7 +1269,6 @@ export default function RequestMove() {
     else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
 
-    // Use actual volume for display consistency; calculatePrice handles class via loadSize floor.
     setAiDetectedVolume(totalVolume);
 
     setLoadSize(loadSizeTiers[tierIndex]);
@@ -1323,11 +1327,12 @@ export default function RequestMove() {
       parseFloat(item.weightKg || '0') > 30
     );
     
-    // WEIGHT OVERRIDE (matching server getVehicleRecommendationWithCategory):
-    // >150kg → truck, >100kg → pickup, >50kg → van
-    if (itemTotalWeight > 150 && tierIndex < 3) tierIndex = 3;
-    else if (itemTotalWeight > 100 && tierIndex < 2) tierIndex = 2;
-    else if (itemTotalWeight > 50 && tierIndex < 1) tierIndex = 1;
+    // Weight bumps: capped at +1 tier above volume-based tier.
+    // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
+    const volumeTierIndex3 = tierIndex;
+    if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex3 + 1, 3);
+    else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex3 + 1, 2);
+    else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex3 + 1, 1);
     
     // DIMENSION OVERRIDE: Check max dimension across all items
     const maxDimRecalc = Math.max(...completedItems.map(item => {

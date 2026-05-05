@@ -50,9 +50,8 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   );
   
   // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
-  // CAR_MAX: 20, PICKUP_MAX: 180, VAN_MAX: 300, >300 → Truck
-  // WEIGHT OVERRIDES (matching server getVehicleRecommendationWithCategory):
-  // >150kg → at least Moving Truck, >100kg → at least Cargo Van
+  // CAR_MAX: 20 ft³, PICKUP_MAX: 180 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
+  // WEIGHT BUMPS: max +1 tier from volume-based tier (pickup ~600kg, van ~900kg payload)
   // COMPLEXITY OVERRIDE: high/very_high items in small loads → at least Pickup Truck
   const getVehicleRecommendation = () => {
     const truckRec = { 
@@ -100,10 +99,12 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const recOrder = [carRec, pickupRec, vanRec, truckRec];
     let recIndex = recOrder.indexOf(volumeRec);
 
-    // Apply weight overrides (matching server logic)
-    if (totalWeight > 150 && recIndex < 3) recIndex = 3;
-    else if (totalWeight > 100 && recIndex < 2) recIndex = 2;
-    else if (totalWeight > 50 && recIndex < 1) recIndex = 1;
+    // Weight bumps: capped at +1 tier above volume-based tier.
+    // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
+    const volumeRecIndex = recIndex;
+    if (totalWeight > 600 && recIndex < 3)      recIndex = Math.min(volumeRecIndex + 1, 3);
+    else if (totalWeight > 300 && recIndex < 2) recIndex = Math.min(volumeRecIndex + 1, 2);
+    else if (totalWeight > 100 && recIndex < 1) recIndex = Math.min(volumeRecIndex + 1, 1);
 
     // Apply complexity override: heavy items in small loads need at least a pickup
     if (hasHighComplexity && recIndex < 1) recIndex = 1;
