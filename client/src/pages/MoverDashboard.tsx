@@ -448,9 +448,8 @@ export default function MoverDashboard() {
 
   const acceptBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/accept`, {
         moverId: mover?.id,
-        status: "confirmed",
       });
       if (!response.ok) {
         const data = await response.json();
@@ -460,6 +459,7 @@ export default function MoverDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/movers/me/pending-job-notifications"] });
       toast({
         title: "Booking accepted",
         description: "You've successfully accepted this booking.",
