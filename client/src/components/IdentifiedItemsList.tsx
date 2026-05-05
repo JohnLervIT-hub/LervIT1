@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, X } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
+import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import { memo } from "react";
 
 interface IdentifiedItemsListProps {
@@ -50,7 +51,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   );
   
   // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
-  // CAR_MAX: 20 ft³, PICKUP_MAX: 180 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
+  // CAR_MAX: 20 ft³, PICKUP_MAX: 165 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
   // WEIGHT BUMPS: max +1 tier from volume-based tier (pickup ~600kg, van ~900kg payload)
   // COMPLEXITY OVERRIDE: high/very_high items in small loads → at least Pickup Truck
   const getVehicleRecommendation = () => {
@@ -75,7 +76,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const pickupRec = { 
       vehicle: 'Pickup Truck', 
       loadSize: 'Medium Load', 
-      description: '21-180 ft³',
+      description: '21-165 ft³',
       gradient: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-50 dark:bg-blue-950/30',
       textColor: 'text-blue-700 dark:text-blue-400',
@@ -92,9 +93,9 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     };
 
     let volumeRec = carRec;
-    if (totalVolume > 300) volumeRec = truckRec;
-    else if (totalVolume > 180) volumeRec = vanRec;
-    else if (totalVolume > 20) volumeRec = pickupRec;
+    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         volumeRec = truckRec;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) volumeRec = vanRec;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    volumeRec = pickupRec;
 
     const recOrder = [carRec, pickupRec, vanRec, truckRec];
     let recIndex = recOrder.indexOf(volumeRec);

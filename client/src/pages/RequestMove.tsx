@@ -29,6 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
@@ -1134,9 +1135,9 @@ export default function RequestMove() {
         const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
         const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
         let tierIndex = 0;
-        if (totalVolume > 300)      tierIndex = 3;
-        else if (totalVolume > 180) tierIndex = 2;
-        else if (totalVolume > 20)  tierIndex = 1;
+        if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)    tierIndex = 3;
+        else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
+        else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
 
         const maxMovers = Math.max(
           ...completedAll.map(function(item) { return item.recommendedMovers || 1; })
@@ -1239,9 +1240,9 @@ export default function RequestMove() {
 
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
-    if (totalVolume > 300)      tierIndex = 3;
-    else if (totalVolume > 180) tierIndex = 2;
-    else if (totalVolume > 20)  tierIndex = 1;
+    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
 
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
     const itemTotalWeight = completedItems.reduce(
@@ -1307,14 +1308,14 @@ export default function RequestMove() {
     const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed');
     if (completedItems.length === 0) return;
     
-    // Calculate total volume and determine load size (synced with shared/pricing.ts)
-    // Boxes: 0-20 ft³, Medium: 21-180 ft³, Large: 181-300 ft³, Apartment: >300 ft³
+    // Volume thresholds sourced from shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
+    // CAR_MAX: 20 ft³, PICKUP_MAX: 165 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
     let tierIndex = 0;
-    if (totalVolume > 300) tierIndex = 3;
-    else if (totalVolume > 180) tierIndex = 2;
-    else if (totalVolume > 20) tierIndex = 1;
+    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
     
     // Get max recommended movers
     const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
