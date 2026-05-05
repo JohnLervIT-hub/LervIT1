@@ -347,15 +347,8 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                   <span>Est. total weight: <span className="font-semibold text-foreground">{totalWeight.toFixed(0)} kg</span></span>
                 </div>
               )}
-              {calcTotalHandlingFee(completedItems) > 0 && (
+              {false && (
                 <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" data-testid="text-handling-fee-total">
-                  <DollarSign className="h-4 w-4" />
-                  <span>
-                    Handling fee: <span className="font-semibold">${calcTotalHandlingFee(completedItems).toFixed(0)}</span>
-                    {calcTotalHandlingFee(completedItems) >= ITEM_PREMIUM_CAP && (
-                      <span className="ml-1 text-xs text-muted-foreground">(capped)</span>
-                    )}
-                  </span>
                 </div>
               )}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
