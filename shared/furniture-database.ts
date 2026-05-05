@@ -333,7 +333,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
-    handling_complexity: 'high',
+    handling_complexity: 'moderate',
     insurance_level: 'medium',
   },
   {
@@ -348,7 +348,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
-    handling_complexity: 'high',
+    handling_complexity: 'moderate',
     insurance_level: 'medium',
   },
   {
@@ -363,8 +363,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'high',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_BED_SECTIONAL_SM_001',
@@ -378,8 +378,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'high',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_BED_SECTIONAL_MD_001',
@@ -393,8 +393,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'large',
     vehicle: 'van',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'premium',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_BED_SECTIONAL_LG_001',
@@ -408,8 +408,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     load_size: 'large',
     vehicle: 'van',
     movers_required: 2,
-    handling_complexity: 'very_high',
-    insurance_level: 'premium',
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
   },
   {
     item_id: 'SOFA_RECLINER_001',
