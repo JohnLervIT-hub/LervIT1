@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Shield, HelpCircle, MessageSquare, FileCheck, LayoutDashboard, Users, Truck, Calendar, DollarSign, Handshake } from "lucide-react";
 
+const ENTERPRISE_ENABLED = import.meta.env.VITE_ENABLE_ENTERPRISE === "true";
+
 export function AdminNav() {
   const [location] = useLocation();
   
@@ -29,7 +31,7 @@ export function AdminNav() {
     { path: "/admin/moves", label: "Moves", icon: Calendar, testId: "link-admin-moves" },
     { path: "/admin/revenue", label: "Revenue", icon: DollarSign, testId: "link-admin-revenue" },
     { path: "/admin/verification", label: "Verify", icon: FileCheck, testId: "link-admin-verification" },
-    { path: "/admin/partners", label: "Partners", icon: Handshake, testId: "link-admin-partners", badgeCount: pendingPartnersCount?.count },
+    ...(ENTERPRISE_ENABLED ? [{ path: "/admin/partners", label: "Partners", icon: Handshake, testId: "link-admin-partners", badgeCount: pendingPartnersCount?.count }] : []),
     { path: "/admin/support", label: "Support", icon: MessageSquare, testId: "link-admin-support", badgeCount: supportCount?.count },
   ];
 

@@ -84,6 +84,8 @@ const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const MoverAgreement = lazy(() => import("@/pages/MoverAgreement"));
 
+const ENTERPRISE_ENABLED = import.meta.env.VITE_ENABLE_ENTERPRISE === "true";
+
 const PARTNER_ROLES = ["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"] as const;
 
 function PartnerRouter() {
@@ -280,16 +282,20 @@ function Router() {
             <AdminEmailCenter />
           </ProtectedRoute>
         </Route>
-        <Route path="/admin/partners/:id">
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminPartnersPage />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin/partners">
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminPartnersPage />
-          </ProtectedRoute>
-        </Route>
+        {ENTERPRISE_ENABLED && (
+          <>
+            <Route path="/admin/partners/:id">
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminPartnersPage />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/admin/partners">
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminPartnersPage />
+              </ProtectedRoute>
+            </Route>
+          </>
+        )}
 
         {/* Shared Routes (Customer & Mover) */}
         <Route path="/messages/:bookingId">
@@ -327,12 +333,12 @@ function AppContent({ children }: { children: ReactNode }) {
 function AppShell() {
   const [loc, setLocation] = useLocation();
   const { user, isLoading } = useAuth();
-  const isPartnerRoute =
-    loc.startsWith("/partner") || loc === "/partner-activate";
+  const isPartnerRoute = ENTERPRISE_ENABLED &&
+    (loc.startsWith("/partner") || loc === "/partner-activate");
 
   // Redirect partner users away from consumer routes
   useEffect(() => {
-    if (!isLoading && user?.role?.startsWith("partner_") && !isPartnerRoute) {
+    if (ENTERPRISE_ENABLED && !isLoading && user?.role?.startsWith("partner_") && !isPartnerRoute) {
       setLocation("/partner/dashboard");
     }
   }, [user, isLoading, isPartnerRoute, setLocation]);
@@ -347,7 +353,7 @@ function AppShell() {
   }
 
   // While a partner user's session is resolving, show nothing (they'll be redirected)
-  if (!isLoading && user?.role?.startsWith("partner_")) {
+  if (ENTERPRISE_ENABLED && !isLoading && user?.role?.startsWith("partner_")) {
     return null;
   }
 
