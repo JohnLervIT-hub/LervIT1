@@ -9,7 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Building2, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 const activateSchema = z.object({
@@ -46,12 +46,6 @@ export default function PartnerActivate() {
     defaultValues: { name: "", password: "", confirmPassword: "" },
   });
 
-  // Pre-fill name from invite once it loads
-  useEffect(() => {
-    if (inviteInfo?.name) {
-      form.setValue("name", inviteInfo.name);
-    }
-  }, [inviteInfo?.name]);
 
   const activate = useMutation({
     mutationFn: (data: ActivateForm) =>
@@ -125,9 +119,7 @@ export default function PartnerActivate() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-md bg-primary">
-              <Building2 className="w-6 h-6 text-primary-foreground" />
-            </div>
+            <span className="text-3xl font-bold tracking-tight">LervIT</span>
           </div>
           <CardTitle>Activate Your Partner Account</CardTitle>
           <CardDescription>
