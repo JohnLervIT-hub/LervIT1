@@ -44,8 +44,8 @@ export interface VehicleClassConfig {
  * IMPORTANT: These thresholds are synced with furniture-database.ts
  * Volume thresholds (2026):
  *   0-20 ft³    → Class A (SUV/Small Vehicle)
- *   21-180 ft³  → Class B (Pickup Truck)
- *   181-300 ft³ → Class C (Cargo Van)
+ *   21-165 ft³  → Class B (Pickup Truck)
+ *   166-300 ft³ → Class C (Cargo Van)
  *   >300 ft³    → Class E (Large Moving Truck)
  * 
  * Note: Class D is deprecated. Kept in type for backward compatibility.
@@ -67,8 +67,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     name: 'Pickup Truck',
     vehicleType: 'pickup',
     volumeRangeMin: 21,
-    volumeRangeMax: 180,
-    baseFee: 20.00,
+    volumeRangeMax: 165,
+    baseFee: 35.00,
     perKmRate: 1.92,
     loadType: 'Medium furniture, moderate loads',
     examples: 'Sofa, mattress, bedroom furniture, multiple boxes',
@@ -77,9 +77,9 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     class: 'C',
     name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 181,
+    volumeRangeMin: 166,
     volumeRangeMax: 300,
-    baseFee: 50.00,
+    baseFee: 35.00,
     perKmRate: 1.50,
     loadType: 'Large furniture loads, multiple rooms',
     examples: 'Full bedroom + living room, sectional sofas, large sets',
@@ -119,15 +119,15 @@ export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
 
 /**
  * Determine vehicle class from total volume
- * Synced with furniture-database.ts thresholds:
+ * Synced with furniture-database.ts VEHICLE_VOLUME_THRESHOLDS:
  *   0-20 ft³    → A (SUV)
- *   21-180 ft³  → B (Pickup Truck)
- *   181-300 ft³ → C (Cargo Van)
+ *   21-165 ft³  → B (Pickup Truck)
+ *   166-300 ft³ → C (Cargo Van)
  *   >300 ft³    → E (Large Moving Truck)
  */
 export function getVehicleClassFromVolume(volumeCuft: number): VehicleClass {
   if (volumeCuft <= 20) return 'A';
-  if (volumeCuft <= 180) return 'B';
+  if (volumeCuft <= 165) return 'B';
   if (volumeCuft <= 300) return 'C';
   return 'E';
 }
