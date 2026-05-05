@@ -229,16 +229,6 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                                 {complexityStyle.label}
                               </Badge>
                             )}
-                            {ITEM_PREMIUMS[item.handlingComplexity || ''] && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs font-medium text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700"
-                                data-testid={`badge-handling-fee-${index}`}
-                              >
-                                <DollarSign className="h-3 w-3 mr-0.5" />
-                                {ITEM_PREMIUMS[item.handlingComplexity!]} handling
-                              </Badge>
-                            )}
                           </div>
                         </div>
                         {onRemoveItem && (
