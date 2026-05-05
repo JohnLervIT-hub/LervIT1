@@ -177,14 +177,27 @@ export default function Payment() {
     setPaymentError(null);
     
     try {
-      const res = await apiRequest("POST", `/api/bookings/${bookingId}/create-payment-intent`, {});
+      // Use raw fetch (not apiRequest) so we can read the response body even on error status codes
+      const res = await fetch(`/api/bookings/${bookingId}/create-payment-intent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      
       const data = await res.json();
       
       if (!res.ok) {
+        // Already paid — redirect silently instead of showing an error
         if (data.alreadyPaid) {
           queryClient.invalidateQueries({ queryKey: [`/api/bookings/${bookingId}`] });
           queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
           setLocation("/my-bookings");
+          return;
+        }
+        // Email verification required — show specific message
+        if (data.requiresEmailVerification) {
+          setPaymentError("Please verify your email address before making a payment. Check your inbox for a verification link.");
           return;
         }
         throw new Error(data.error || "Failed to initialize payment");
@@ -237,7 +250,7 @@ export default function Payment() {
       <div className="min-h-screen pt-24 pb-12">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <p className="text-muted-foreground">Booking not found.</p>
-          <Button onClick={() => setLocation("/my-bookings")} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white">
+          <Button onClick={() => setLocation("/my-bookings")} className="mt-4">
             Back to My Bookings
           </Button>
         </div>
@@ -259,7 +272,7 @@ export default function Payment() {
               <CardDescription>This booking has already been paid</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => setLocation("/my-bookings")} className="w-full bg-orange-500 hover:bg-orange-600 text-white">
+              <Button onClick={() => setLocation("/my-bookings")} className="w-full">
                 Back to My Bookings
               </Button>
             </CardContent>
@@ -353,8 +366,8 @@ export default function Payment() {
                   ${booking.price}
                 </span>
               </div>
-              <Badge variant="outline" className="mt-2">
-                {booking.status}
+              <Badge variant="outline" className="mt-2 capitalize">
+                {booking.status.replace(/_/g, ' ')}
               </Badge>
             </div>
           </CardContent>
