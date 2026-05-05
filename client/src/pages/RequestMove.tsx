@@ -36,18 +36,24 @@ import singleMoverPoster from "@assets/generated_images/single_mover_poster_imag
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
 import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
 
-// Returns the total heavy-item premium: $10 per item with high or very_high handling complexity
-const HEAVY_ITEM_PREMIUM = 10;
+// Tiered handling premiums by complexity.
+// Rates mirror PRICING_CONFIG.HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY in shared/pricing.ts.
+// high (large appliances, gym equipment, massage chairs): $15/item
+// very_high (pianos, hot tubs, pool tables, safes, motorcycles): $30/item
+// Cap: $150 total — no booking is ever charged more than this in handling fees alone.
+const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = { high: 15, very_high: 30 };
+const HEAVY_ITEM_PREMIUM_CAP = 150;
+
 function getItemTypePremium(items: IdentifiedItem[]): number {
-  let count = 0;
+  let total = 0;
   for (const item of items) {
     if (item.processingStatus !== 'completed') continue;
-    if (item.handlingComplexity === 'very_high' || item.handlingComplexity === 'high') count++;
+    total += HEAVY_ITEM_PREMIUMS_TIERED[item.handlingComplexity || ''] ?? 0;
   }
-  return count * HEAVY_ITEM_PREMIUM;
+  return Math.min(total, HEAVY_ITEM_PREMIUM_CAP);
 }
 
-// Returns the number of heavy items (for passing to the server)
+// Returns the number of heavy items (for display / backwards compatibility)
 function countHeavyItems(items: IdentifiedItem[]): number {
   return items.filter(i => i.processingStatus === 'completed' && (i.handlingComplexity === 'very_high' || i.handlingComplexity === 'high')).length;
 }
@@ -816,7 +822,8 @@ export default function RequestMove() {
           numberOfMovers as 1 | 2,
           undefined,
           aiDetectedVolume,
-          countHeavyItems(identifiedItems)
+          countHeavyItems(identifiedItems),
+          getItemTypePremium(identifiedItems)
         );
         if (step === 1) {
           const step1Preview: PriceBreakdown = {
@@ -1590,6 +1597,7 @@ export default function RequestMove() {
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
         heavyItemCount: countHeavyItems(identifiedItems),
+        heavyItemFeeOverride: getItemTypePremium(identifiedItems),
         promoCode: appliedPromo?.code || undefined,
       };
       createBookingMutation.mutate(bookingData);

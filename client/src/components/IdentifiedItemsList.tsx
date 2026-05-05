@@ -1,10 +1,19 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, X } from "lucide-react";
+import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, X, DollarSign } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import { memo } from "react";
+
+// Tiered handling premiums — must stay in sync with shared/pricing.ts HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY
+const ITEM_PREMIUMS: Record<string, number> = { high: 15, very_high: 30 };
+const ITEM_PREMIUM_CAP = 150;
+
+function calcTotalHandlingFee(items: IdentifiedItem[]): number {
+  const total = items.reduce((sum, item) => sum + (ITEM_PREMIUMS[item.handlingComplexity || ''] ?? 0), 0);
+  return Math.min(total, ITEM_PREMIUM_CAP);
+}
 
 interface IdentifiedItemsListProps {
   items: IdentifiedItem[];
@@ -216,6 +225,16 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                                 {complexityStyle.label}
                               </Badge>
                             )}
+                            {ITEM_PREMIUMS[item.handlingComplexity || ''] && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs font-medium text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700"
+                                data-testid={`badge-handling-fee-${index}`}
+                              >
+                                <DollarSign className="h-3 w-3 mr-0.5" />
+                                {ITEM_PREMIUMS[item.handlingComplexity!]} handling
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         {onRemoveItem && (
@@ -326,12 +345,23 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
               </div>
             </div>
             
-            {/* Footer row: weight + confidence */}
+            {/* Footer row: weight + handling fee + confidence */}
             <div className="mt-5 pt-5 border-t border-border/50 flex flex-wrap items-center justify-between gap-3">
               {totalWeight > 0 && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Weight className="h-4 w-4" />
                   <span>Est. total weight: <span className="font-semibold text-foreground">{totalWeight.toFixed(0)} kg</span></span>
+                </div>
+              )}
+              {calcTotalHandlingFee(completedItems) > 0 && (
+                <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" data-testid="text-handling-fee-total">
+                  <DollarSign className="h-4 w-4" />
+                  <span>
+                    Handling fee: <span className="font-semibold">${calcTotalHandlingFee(completedItems).toFixed(0)}</span>
+                    {calcTotalHandlingFee(completedItems) >= ITEM_PREMIUM_CAP && (
+                      <span className="ml-1 text-xs text-muted-foreground">(capped)</span>
+                    )}
+                  </span>
                 </div>
               )}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

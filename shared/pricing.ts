@@ -180,7 +180,12 @@ const PRICING_CONFIG = {
   VOLUME_LOAD_FEE_MINIMUM: 6.00,  // Minimum load fee regardless of volume
   APARTMENT_MOVE_PREMIUM: 60.00, // $60 premium for 300+ ft³ loads (apartment moves)
   HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility
-  HEAVY_ITEM_PREMIUM_PER_ITEM: 10.00, // $10 per heavy item detected by AI
+  HEAVY_ITEM_PREMIUM_PER_ITEM: 10.00, // Kept for backwards compatibility (flat rate)
+  // Tiered handling premiums by complexity (2025)
+  // high: large appliances, massage chairs, gym equipment — specialist care needed
+  // very_high: pianos, hot tubs, pool tables, safes, motorcycles — rigging/specialist required
+  HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY: { high: 15, very_high: 30 } as Record<string, number>,
+  HEAVY_ITEM_PREMIUM_CAP: 150, // total heavy-item fee never exceeds $150 per booking
   TWO_MOVERS_MULTIPLIER: 1.30,
   
   // Platform commission (15% for Uber-style payout)
@@ -200,6 +205,8 @@ export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICUL
  * Class A Distance Rate: $1.08/km
  */
 export const HEAVY_ITEM_PREMIUM_PER_ITEM = PRICING_CONFIG.HEAVY_ITEM_PREMIUM_PER_ITEM;
+export const HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY = PRICING_CONFIG.HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY;
+export const HEAVY_ITEM_PREMIUM_CAP = PRICING_CONFIG.HEAVY_ITEM_PREMIUM_CAP;
 
 export function calculatePrice(
   pickupToDropoffDistance: number,
@@ -210,7 +217,8 @@ export function calculatePrice(
   numberOfMovers: 1 | 2,
   moverToPickupDistance?: number,
   volumeCuft?: number,  // Optional: use volume directly for more accurate class determination
-  heavyItemCount?: number  // Number of heavy items detected by AI — $10 each
+  heavyItemCount?: number,  // Number of heavy items detected by AI (flat-rate fallback)
+  heavyItemFeeOverride?: number  // Tiered pre-computed fee — takes priority over heavyItemCount
 ): PriceBreakdown {
   // Determine vehicle class: take the higher of volume-based and loadSize-based.
   // This ensures weight-bumped tiers (e.g. 110 kg sofa forces 'large'/van even if
@@ -256,10 +264,15 @@ export function calculatePrice(
   const isApartmentMove = volumeCuft ? volumeCuft >= 300 : loadSize === 'apartment';
   const apartmentPremium = isApartmentMove ? PRICING_CONFIG.APARTMENT_MOVE_PREMIUM : 0;
 
-  // Heavy item fee: $10 per heavy item. If AI provides a count, use it;
-  // otherwise fall back to the boolean flag (1 item if heavy, 0 if not).
-  const effectiveHeavyCount = heavyItemCount ?? (heavyItem ? 1 : 0);
-  const heavyItemFee = effectiveHeavyCount * PRICING_CONFIG.HEAVY_ITEM_PREMIUM_PER_ITEM;
+  // Heavy item fee: use tiered override when provided (frontend sends pre-computed tiered fee),
+  // otherwise fall back to flat $10 × count, then to the boolean flag.
+  let heavyItemFee: number;
+  if (heavyItemFeeOverride !== undefined) {
+    heavyItemFee = heavyItemFeeOverride;
+  } else {
+    const effectiveHeavyCount = heavyItemCount ?? (heavyItem ? 1 : 0);
+    heavyItemFee = effectiveHeavyCount * PRICING_CONFIG.HEAVY_ITEM_PREMIUM_PER_ITEM;
+  }
   
   // Mover travel fee (only if mover travels more than free radius)
   let moverTravelFee = 0;
