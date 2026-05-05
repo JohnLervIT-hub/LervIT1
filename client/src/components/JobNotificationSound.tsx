@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useCallback, Component, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { useMoverWebSocket } from '@/hooks/useMoverWebSocket';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { Bell, BellRing, Volume2, VolumeX } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
+import { Bell, BellRing, Volume2, VolumeX, CheckCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -46,18 +48,56 @@ class NotificationErrorBoundary extends Component<{ children: ReactNode }, { has
 function JobNotificationSoundContent() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [currentNotification, setCurrentNotification] = useState<JobNotification | null>(null);
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [moverId, setMoverId] = useState<string | null>(null);
 
   // Track which notification IDs have already been shown to avoid re-triggering
   const shownNotificationIds = useRef<Set<string>>(new Set());
 
   // Only enable for movers
   const isMover = user?.role === 'mover';
+
+  // Fetch mover profile to get moverId for accept calls
+  const { data: moverProfile } = useQuery<any>({
+    queryKey: [`/api/movers?userId=${user?.id}`],
+    enabled: isMover && !!user?.id,
+    select: (data: any) => Array.isArray(data) ? data[0] : data,
+  });
+
+  useEffect(() => {
+    if (moverProfile?.id) setMoverId(moverProfile.id);
+  }, [moverProfile]);
+
+  // Accept job mutation — called directly from the notification dialog
+  const acceptJobMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const response = await apiRequest('POST', `/api/bookings/${bookingId}/accept`, {
+        moverId,
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to accept booking');
+      }
+      return response.json();
+    },
+    onSuccess: (_data, bookingId) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/movers/me/pending-job-notifications'] });
+      setShowNotificationDialog(false);
+      setHasNewNotification(false);
+      toast({ title: 'Booking accepted', description: "You've accepted the job. Check your dashboard." });
+      setLocation('/mover-dashboard?tab=my-bookings');
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to accept', description: error.message, variant: 'destructive' });
+    },
+  });
 
   // Check notification permission
   useEffect(() => {
@@ -319,26 +359,38 @@ function JobNotificationSoundContent() {
                 
                 <div className="flex gap-2 pt-2">
                   <Button 
-                    className="flex-1 bg-orange-500 hover:bg-orange-600"
+                    className="flex-1 bg-orange-500"
+                    disabled={acceptJobMutation.isPending || !moverId || !currentNotification?.bookingId}
                     onClick={() => {
-                      setShowNotificationDialog(false);
-                      setHasNewNotification(false);
-                      // Navigate to notifications page or accept directly
-                      window.location.href = '/mover/dashboard';
+                      if (currentNotification?.bookingId && moverId) {
+                        acceptJobMutation.mutate(currentNotification.bookingId);
+                      }
                     }}
                     data-testid="button-view-job"
                   >
-                    View & Accept
+                    {acceptJobMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Accepting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Accept Job
+                      </>
+                    )}
                   </Button>
                   <Button 
                     variant="outline"
+                    disabled={acceptJobMutation.isPending}
                     onClick={() => {
                       setShowNotificationDialog(false);
                       setHasNewNotification(false);
+                      setLocation('/mover-dashboard');
                     }}
                     data-testid="button-dismiss-notification"
                   >
-                    Later
+                    View Later
                   </Button>
                 </div>
               </CardContent>
