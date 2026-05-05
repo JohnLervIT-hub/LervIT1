@@ -359,9 +359,16 @@ export function registerPartnerRoutes(app: Express) {
   app.get("/api/partner/onboarding", requirePartnerAuth(), async (req: Request, res: Response) => {
     const { partner } = (req as any).partnerCtx;
 
-    const zones = await db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id));
-    const docs = await db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id));
-    const team = await db.select().from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, partner.id));
+    const [zones, docs, team, lastRejection] = await Promise.all([
+      db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id)),
+      db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id)),
+      db.select().from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, partner.id)),
+      db.select({ notes: partnerAuditLog.notes, createdAt: partnerAuditLog.createdAt })
+        .from(partnerAuditLog)
+        .where(and(eq(partnerAuditLog.partnerId, partner.id), eq(partnerAuditLog.action, "partner.rejected")))
+        .orderBy(desc(partnerAuditLog.createdAt))
+        .limit(1),
+    ]);
 
     const steps = [
       { key: "profile", label: "Company Profile", complete: partner.profileComplete, description: "Business name, contacts, address" },
@@ -385,6 +392,7 @@ export function registerPartnerRoutes(app: Express) {
       docs,
       team,
       readyForReview: partner.profileComplete && partner.coverageComplete && partner.complianceComplete && partner.dispatchComplete && partner.termsAccepted,
+      lastRejectionReason: lastRejection[0]?.notes ?? null,
     });
   });
 

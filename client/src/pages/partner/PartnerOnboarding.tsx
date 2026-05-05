@@ -25,6 +25,7 @@ import {
   Loader2,
   Upload,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -469,6 +470,7 @@ function TermsForm({ accepted, onAccept }: { accepted: boolean; onAccept: () => 
 export default function PartnerOnboarding() {
   const { data, isLoading } = useQuery<any>({ queryKey: ["/api/partner/onboarding"] });
   const [activeStep, setActiveStep] = useState<string | null>(null);
+  const [rejectionDismissed, setRejectionDismissed] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -483,6 +485,10 @@ export default function PartnerOnboarding() {
 
   const steps = data?.steps ?? [];
   const partner = data?.partner;
+  const showRejectionBanner =
+    !rejectionDismissed &&
+    partner?.status === "onboarding" &&
+    !!data?.lastRejectionReason;
 
   return (
     <PartnerLayout>
@@ -491,6 +497,30 @@ export default function PartnerOnboarding() {
           <h1 className="text-lg font-semibold">Onboarding Checklist</h1>
           <p className="text-sm text-muted-foreground mt-1">Complete all steps to activate your partner account</p>
         </div>
+
+        {showRejectionBanner && (
+          <div
+            className="flex gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4"
+            data-testid="banner-rejection"
+          >
+            <AlertCircle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
+            <div className="flex-1 min-w-0 space-y-1">
+              <p className="text-sm font-medium text-destructive">Your previous application was not approved</p>
+              <p className="text-sm text-destructive/80">{data.lastRejectionReason}</p>
+              <p className="text-xs text-muted-foreground mt-1">Please address the issue above, update your application, and resubmit for review.</p>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="shrink-0 text-destructive/70"
+              onClick={() => setRejectionDismissed(true)}
+              data-testid="button-dismiss-rejection"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
         {data && (
           <Card>
