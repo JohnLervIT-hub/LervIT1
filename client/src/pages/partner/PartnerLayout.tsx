@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Building2, AlertTriangle, Camera, Loader2, Pencil } from "lucide-react";
+import { LogOut, AlertTriangle, Camera, Loader2, Pencil, ImagePlus } from "lucide-react";
 import "iconify-icon";
 
 declare global {
@@ -160,9 +160,27 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
   const [loc] = useLocation();
   const { user, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
+  const logoRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
 
   const { data: ctx } = useQuery<any>({
     queryKey: ["/api/partner/me"],
+  });
+
+  const uploadLogo = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("logo", file);
+      const res = await fetch("/api/partner/logo", { method: "PATCH", credentials: "include", body: fd });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Logo updated" });
+      qc.invalidateQueries({ queryKey: ["/api/partner/me"] });
+    },
+    onError: (err: any) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const { data: dashboard } = useQuery<any>({
@@ -190,23 +208,42 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
       <div className="partner-portal flex h-screen w-full overflow-hidden bg-background font-sans">
         <Sidebar>
           <SidebarHeader className="px-4 py-4 border-b border-border">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-                <Building2 className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold truncate leading-tight">
-                  {partner?.name ?? "Partner Portal"}
-                </span>
-                {partner?.status && (
-                  <Badge
-                    variant={partner.status === "active" ? "default" : "secondary"}
-                    className="text-[10px] h-4 px-1.5 mt-0.5 w-fit"
-                  >
-                    {partner.status.replace("_", " ")}
-                  </Badge>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => logoRef.current?.click()}
+                className="relative group w-16 h-16 rounded-md overflow-hidden border border-border bg-muted flex items-center justify-center hover-elevate"
+                title="Upload company logo"
+                data-testid="button-upload-logo"
+              >
+                {partner?.logoUrl ? (
+                  <img src={partner.logoUrl} alt="Company logo" className="w-full h-full object-contain" />
+                ) : (
+                  <ImagePlus className="w-6 h-6 text-muted-foreground" />
                 )}
-              </div>
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  {uploadLogo.isPending
+                    ? <Loader2 className="w-5 h-5 text-white animate-spin" />
+                    : <Camera className="w-5 h-5 text-white" />}
+                </div>
+              </button>
+              <button
+                onClick={() => logoRef.current?.click()}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="link-upload-logo"
+              >
+                {partner?.logoUrl ? "Change logo" : "Upload logo"}
+              </button>
+              <input
+                ref={logoRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadLogo.mutate(file);
+                  e.target.value = "";
+                }}
+              />
             </div>
           </SidebarHeader>
 

@@ -119,7 +119,7 @@ export default function PartnerActivate() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-3">
-            <span className="text-3xl font-bold tracking-tight">LervIT</span>
+            <span className="text-3xl font-bold tracking-tight text-blue-600">LervIT</span>
           </div>
           <CardTitle>Activate Your Partner Account</CardTitle>
           <CardDescription>

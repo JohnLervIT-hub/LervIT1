@@ -289,6 +289,22 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // PATCH /api/partner/logo — upload company logo
+  app.patch("/api/partner/logo", requirePartnerAuth(["partner_admin"]), upload.single("logo"), async (req: Request, res: Response) => {
+    try {
+      const { partner } = (req as any).partnerCtx;
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      if (!req.file.mimetype.startsWith("image/")) return res.status(400).json({ error: "Only image files accepted" });
+      const objectStorage = new ObjectStorageService();
+      const url = await objectStorage.uploadBuffer(req.file.buffer, `partner-logo.${req.file.originalname.split(".").pop()}`, req.file.mimetype, partner.id);
+      const [updated] = await db.update(partners).set({ logoUrl: url, updatedAt: new Date() }).where(eq(partners.id, partner.id)).returning();
+      res.json({ partner: updated });
+    } catch (err: any) {
+      console.error("[Partner] logo upload error:", err);
+      res.status(500).json({ error: "Failed to upload logo" });
+    }
+  });
+
   // =========================================================
   // PARTNER CONTEXT
   // =========================================================

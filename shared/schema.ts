@@ -1144,6 +1144,8 @@ export const partners = pgTable("partners", {
   stripeConnectStatus: text("stripe_connect_status").default("not_connected"), // not_connected | pending | active | restricted
   stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false),
   stripeDetailsSubmitted: boolean("stripe_details_submitted").default(false),
+  // Branding
+  logoUrl: text("logo_url"),
   // Notes from Lervit admin
   adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
