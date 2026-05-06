@@ -262,9 +262,10 @@ export default function PartnerMessages() {
                   onClick={() => setSelectedId(ADMIN_THREAD_ID)}
                   data-testid="conv-lervit-admin"
                   className={cn(
-                    "w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors",
+                    "w-full flex items-start gap-3 px-3 py-2.5 text-left rounded-md transition-colors mx-auto",
                     selectedId === ADMIN_THREAD_ID ? "bg-muted" : "hover-elevate"
                   )}
+                  style={{ width: "calc(100% - 16px)", marginLeft: 8, marginRight: 8 }}
                 >
                   <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <Shield className="w-4 h-4 text-primary" />
@@ -304,9 +305,10 @@ export default function PartnerMessages() {
                           onClick={() => setSelectedId(conv.bookingId)}
                           data-testid={`conv-${conv.bookingId}`}
                           className={cn(
-                            "w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors",
+                            "flex items-start gap-3 px-3 py-2.5 text-left rounded-md transition-colors",
                             isSelected ? "bg-muted" : "hover-elevate"
                           )}
+                          style={{ width: "calc(100% - 16px)", marginLeft: 8, marginRight: 8 }}
                         >
                           <Avatar className="w-9 h-9 shrink-0 mt-0.5">
                             <AvatarFallback className="text-sm font-semibold bg-primary/10 text-primary">
