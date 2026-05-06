@@ -367,23 +367,27 @@ export default function PartnerDashboard() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</p>
           <div className="flex flex-wrap gap-2">
             <Link href="/partner/bookings">
-              <Button variant="outline" size="sm" data-testid="quick-action-bookings">
-                <Package className="w-3.5 h-3.5 mr-1.5" /> View Bookings
+              <Button variant="outline" size="sm" data-testid="quick-action-bookings"
+                className="border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
+                <Package className="w-3.5 h-3.5 mr-1.5 text-blue-500 dark:text-blue-400" /> View Bookings
               </Button>
             </Link>
             <Link href="/partner/team">
-              <Button variant="outline" size="sm" data-testid="quick-action-team">
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Team Member
+              <Button variant="outline" size="sm" data-testid="quick-action-team"
+                className="border-emerald-500 dark:border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+                <Plus className="w-3.5 h-3.5 mr-1.5 text-emerald-500 dark:text-emerald-400" /> Add Team Member
               </Button>
             </Link>
             <Link href="/partner/compliance">
-              <Button variant="outline" size="sm" data-testid="quick-action-compliance">
-                <FileCheck className="w-3.5 h-3.5 mr-1.5" /> Compliance Docs
+              <Button variant="outline" size="sm" data-testid="quick-action-compliance"
+                className="border-violet-500 dark:border-violet-400 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300">
+                <FileCheck className="w-3.5 h-3.5 mr-1.5 text-violet-500 dark:text-violet-400" /> Compliance Docs
               </Button>
             </Link>
             <Link href="/partner/incidents">
-              <Button variant="outline" size="sm" data-testid="quick-action-incidents">
-                <AlertTriangle className="w-3.5 h-3.5 mr-1.5" /> Report Incident
+              <Button variant="outline" size="sm" data-testid="quick-action-incidents"
+                className="border-amber-500 dark:border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="w-3.5 h-3.5 mr-1.5 text-amber-500 dark:text-amber-400" /> Report Incident
               </Button>
             </Link>
           </div>
