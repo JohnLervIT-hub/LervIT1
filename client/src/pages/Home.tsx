@@ -13,6 +13,9 @@ import { Users, Navigation, MapPin, X, Truck, Mail, MapPinIcon, ShieldCheck, Bri
 import { SiFacebook, SiInstagram, SiLinkedin, SiStripe, SiGoogle } from "react-icons/si";
 import { FadeIn, StaggerChildren, StaggerItem } from "@/components/PageTransition";
 import { Skeleton } from "@/components/ui/skeleton";
+import afterpayLogo from "../assets/afterpay-logo.png";
+import klarnaLogo from "../assets/klarna-logo.png";
+import affirmLogo from "../assets/affirm-logo.png";
 import visionEngineIcon from "@assets/generated_images/feature_vision_engine.png";
 import matchLogicIcon from "@assets/generated_images/feature_match_logic.png";
 import securePayIcon from "@assets/generated_images/feature_secure_pay.png";
@@ -364,6 +367,32 @@ export default function Home() {
         </div>
       )}
       <HeroSection />
+
+      {/* FlexiPay providers strip */}
+      <div className="bg-white dark:bg-zinc-900 border-b border-border">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-10">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest shrink-0">
+              Pay later with
+            </span>
+            <img
+              src={afterpayLogo}
+              alt="Afterpay"
+              className="h-7 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity"
+            />
+            <img
+              src={klarnaLogo}
+              alt="Klarna"
+              className="h-6 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
+            />
+            <img
+              src={affirmLogo}
+              alt="Affirm"
+              className="h-7 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Google Reviews Section */}
       <GoogleReviewsSection />
