@@ -99,7 +99,7 @@ export default function HeroSection() {
               Get 20% OFF Your First 2 Moves <span className="whitespace-nowrap">with Flexible Payment Options</span>
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
-              Get upfront pricing, book verified movers, and track your move live.
+              Move now. Pay later in easy instalments.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-white/90 mb-8">
               <div className="flex items-center gap-1.5">
