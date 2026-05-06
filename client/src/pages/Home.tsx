@@ -371,24 +371,24 @@ export default function Home() {
       {/* FlexiPay providers strip */}
       <div className="bg-white dark:bg-zinc-900 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-10">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest shrink-0">
+          <div className="flex items-center justify-center gap-4 md:gap-10">
+            <span className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-widest shrink-0">
               Pay later with
             </span>
             <img
               src={afterpayLogo}
               alt="Afterpay"
-              className="h-10 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity"
+              className="h-7 md:h-10 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity shrink-0"
             />
             <img
               src={klarnaLogo}
               alt="Klarna"
-              className="h-9 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
+              className="h-6 md:h-9 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert shrink-0"
             />
             <img
               src={affirmLogo}
               alt="Affirm"
-              className="h-10 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
+              className="h-7 md:h-10 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert shrink-0"
             />
           </div>
         </div>
