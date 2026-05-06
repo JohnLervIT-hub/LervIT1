@@ -96,7 +96,7 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="text-white">
             <h1 className="font-display text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
-              Get 20% OFF Your First 2 Moves <span className="whitespace-nowrap">with Flexible Payment Options</span>
+              Get 20% OFF Your First 2 Moves <span className="whitespace-nowrap">with FlexiPay</span>
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
               Move now. Pay later in easy instalments.
