@@ -97,7 +97,7 @@ function MessageBubble({ msg, isOwn }: { msg: Message | DirectMessage; isOwn: bo
           </AvatarFallback>
         </Avatar>
       )}
-      <div className={cn("max-w-[70%] space-y-1 flex flex-col", isOwn ? "items-end" : "items-start")}>
+      <div className={cn("max-w-[60%] space-y-1 flex flex-col", isOwn ? "items-end" : "items-start")}>
         {!isOwn && name && (
           <span className="text-xs text-muted-foreground ml-1">{name}</span>
         )}
@@ -414,6 +414,7 @@ export default function PartnerMessages() {
 
               {/* Messages thread */}
               <ScrollArea className="flex-1 px-5 py-4">
+                <div className="max-w-2xl mx-auto">
                 {isThreadLoading ? (
                   <div className="space-y-4">
                     {[1, 2, 3].map(i => (
@@ -456,6 +457,7 @@ export default function PartnerMessages() {
                     <div ref={messagesEndRef} />
                   </>
                 )}
+                </div>
               </ScrollArea>
 
               {/* Compose bar */}
