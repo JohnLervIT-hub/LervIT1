@@ -378,17 +378,17 @@ export default function Home() {
             <img
               src={afterpayLogo}
               alt="Afterpay"
-              className="h-7 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity"
+              className="h-10 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity"
             />
             <img
               src={klarnaLogo}
               alt="Klarna"
-              className="h-6 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
+              className="h-9 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
             />
             <img
               src={affirmLogo}
               alt="Affirm"
-              className="h-7 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
+              className="h-10 w-auto object-contain opacity-75 hover:opacity-100 transition-opacity dark:brightness-0 dark:invert"
             />
           </div>
         </div>
