@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DollarSign, ArrowLeft, TrendingUp, Calendar, CreditCard, CheckCircle, Filter } from "lucide-react";
+import { DollarSign, ArrowLeft, TrendingUp, Calendar, CreditCard, CheckCircle, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, subDays, isAfter } from "date-fns";
 
 type Booking = {
@@ -47,6 +47,8 @@ type Booking = {
 export default function AdminRevenuePage() {
   const { user } = useAuth();
   const [filterPeriod, setFilterPeriod] = useState<string>("week");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
@@ -236,7 +238,7 @@ export default function AdminRevenuePage() {
             </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Period:</span>
-              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+              <Select value={filterPeriod} onValueChange={(v) => { setFilterPeriod(v); setCurrentPage(1); }}>
                 <SelectTrigger className="w-[130px]" data-testid="select-filter-period">
                   <SelectValue />
                 </SelectTrigger>
@@ -269,7 +271,7 @@ export default function AdminRevenuePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCompletedBookings.slice(0, 10).map((b) => (
+                    {filteredCompletedBookings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((b) => (
                       <TableRow key={b.id} data-testid={`row-revenue-${b.id}`}>
                         <TableCell>
                           {b.preferredDate ? format(new Date(b.preferredDate), "MMM d, yyyy") : "N/A"}
@@ -302,6 +304,45 @@ export default function AdminRevenuePage() {
                     ))}
                   </TableBody>
                 </Table>
+                {filteredCompletedBookings.length > PAGE_SIZE && (
+                  <div className="flex items-center justify-between pt-4 border-t border-border mt-2">
+                    <span className="text-sm text-muted-foreground">
+                      Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, filteredCompletedBookings.length)} of {filteredCompletedBookings.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      {Array.from({ length: Math.ceil(filteredCompletedBookings.length / PAGE_SIZE) }, (_, i) => i + 1).map(page => (
+                        <Button
+                          key={page}
+                          variant={page === currentPage ? "default" : "outline"}
+                          size="icon"
+                          onClick={() => setCurrentPage(page)}
+                          data-testid={`button-page-${page}`}
+                          className="w-9"
+                        >
+                          {page}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredCompletedBookings.length / PAGE_SIZE), p + 1))}
+                        disabled={currentPage === Math.ceil(filteredCompletedBookings.length / PAGE_SIZE)}
+                        data-testid="button-next-page"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
