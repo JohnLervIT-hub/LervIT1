@@ -1,0 +1,119 @@
+Create a new homepage section for LervIT called “Partner Network” that matches the attached design exactly in layout, tone, spacing, colors, and responsive behavior.
+
+SECTION GOAL
+Build a dark, premium, mobile-first and desktop-responsive marketing section for “Join the Partner Network.” This is for moving businesses/operators. Businesses cannot directly sign up. They can only request more information because access is invitation-only.
+
+PLACEMENT
+Add this section to the homepage below the current mover/customer content, without breaking existing homepage sections, navigation, routing, authentication, or booking flow.
+
+DESIGN STYLE
+Match the current LervIT dark UI:
+- Dark background: #080D14 or close equivalent
+- Card background: dark gradient from #101720 to #151C26
+- Subtle border: rgba(255,255,255,0.10)
+- Rounded corners: 28px desktop, 20px mobile
+- Blue accent: #2563EB / #1D4ED8
+- White headline text
+- Muted grey body text: #A7AFBD
+- Premium soft shadows
+- Clean spacing
+- Same 3D/cartoon illustration style already used on the Become a Mover page
+
+CONTENT
+Top badge:
+“• Invitation only”
+
+Main headline:
+“Join the Partner Network”
+
+Subtitle:
+“Partner with LervIT to grow your moving business, get more jobs, and build a stronger reputation in your community.”
+
+Main feature card:
+Desktop layout:
+- Left column: three benefit rows stacked vertically
+- Right column: large 3D/cartoon truck illustration
+- Truck should be a white moving truck with “LervIT” text only on the side.
+- Do not use any extra rear logo on the truck.
+- Driver should be happy, wearing blue mover uniform/cap, leaning toward the driver-side window and giving a thumbs up.
+- The truck should visually match the current LervIT 3D mover graphics style.
+
+Benefits:
+1. Icon: growth chart in blue circle
+Title: “More jobs”
+Text: “Get consistent leads from people who are ready to move.”
+
+2. Icon: dollar symbol in blue circle
+Title: “Grow your business”
+Text: “Keep more of what you earn and build lasting relationships.”
+
+3. Icon: shield/check in blue circle
+Title: “Trusted network”
+Text: “Work with a community of verified partners and deliver with confidence.”
+
+CTA card under main feature card:
+Left: blue circular envelope icon
+Title: “Want to learn more?”
+Text: “Request more information to see how LervIT can help your business grow.”
+Right: blue chevron arrow
+Make the entire CTA card clickable.
+Link target: /partner-network or /contact?topic=partner-network
+Use whichever route best fits the current app structure.
+Do NOT create a public partner signup form.
+
+Footer note:
+Lock icon + “By invitation only. Not accepting direct sign-ups.”
+
+RESPONSIVE BEHAVIOR
+Desktop:
+- Section max width around 1180px
+- Center aligned within page
+- Large outer card/panel
+- Badge centered above headline
+- Headline centered
+- Subtitle centered, max width around 720px
+- Main feature card uses two-column layout
+- Benefits on left, truck illustration on right
+- CTA card below main feature card
+
+Mobile:
+- Single column layout
+- Badge centered
+- Headline wraps cleanly into two lines if needed
+- Truck image appears above the benefit list inside the feature card
+- Benefits stack vertically below the image
+- CTA card remains compact and tappable
+- Maintain generous padding but avoid excessive vertical height
+- Ensure no horizontal overflow
+
+TECHNICAL REQUIREMENTS
+- Use existing styling system/components where possible.
+- If using React/Next.js, create a reusable component named PartnerNetworkSection.
+- If using Tailwind, implement with Tailwind utility classes consistent with current app.
+- Use lucide-react icons if already installed: TrendingUp, DollarSign, ShieldCheck, Mail, Lock, ChevronRight.
+- Do not introduce unnecessary new dependencies.
+- Do not break existing homepage, auth, mover page, booking flow, admin, partner portal, Stripe, or map features.
+- Ensure accessibility:
+  - CTA has proper aria-label
+  - icons are decorative where appropriate
+  - text contrast is readable
+  - keyboard focus state exists on CTA
+
+IMAGE / GRAPHIC IMPLEMENTATION
+If an existing LervIT 3D truck/driver asset exists, use it.
+If no asset exists, create a placeholder component using the closest existing 3D/cartoon mover image temporarily and add a TODO comment:
+TODO: Replace with final Partner Network truck illustration showing white LervIT truck, happy blue-uniform driver giving thumbs up from driver window.
+
+Do not generate or use an image with a rear logo on the truck. The truck should only show “LervIT” on the side.
+
+DELIVERABLES
+1. Implement the PartnerNetworkSection component.
+2. Add it to the homepage.
+3. Ensure desktop and mobile views match the provided design.
+4. Test responsiveness at:
+   - 390px mobile
+   - 768px tablet
+   - 1024px desktop
+   - 1440px wide desktop
+5. Confirm there are no console errors.
+6. Provide a short summary of files changed.

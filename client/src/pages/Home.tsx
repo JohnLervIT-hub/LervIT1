@@ -6,6 +6,7 @@ import { useAnalytics } from "@/hooks/use-analytics";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import HeroSection from "@/components/HeroSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
+import PartnerNetworkSection from "@/components/PartnerNetworkSection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -620,6 +621,9 @@ export default function Home() {
           </p>
         </div>
       </section>
+
+      {/* Partner Network Section */}
+      <PartnerNetworkSection />
 
       {/* Footer */}
       <footer className="bg-black/90 text-white border-t border-white/10" data-testid="footer">
