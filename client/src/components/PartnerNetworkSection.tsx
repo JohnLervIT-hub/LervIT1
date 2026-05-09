@@ -1,7 +1,8 @@
 import { Link } from "wouter";
-import { ShieldCheck, Mail, Lock, ChevronRight } from "lucide-react";
+import { Mail, Lock, ChevronRight } from "lucide-react";
 import truckImg from "../assets/generated_images/partner_network_truck.png";
 import dashboardImg from "../assets/generated_images/partner_analytics_dashboard.png";
+import trustedNetworkImg from "../assets/generated_images/partner_trusted_network.png";
 
 export default function PartnerNetworkSection() {
   return (
@@ -33,7 +34,7 @@ export default function PartnerNetworkSection() {
             className="text-base md:text-lg leading-relaxed max-w-[720px]"
             style={{ color: "#A7AFBD" }}
           >
-            Partner with LervIT to grow your moving business, get more jobs, and build a stronger reputation in your community.
+            Scale your moving company with a steady pipeline of pre-qualified jobs, transparent earnings, and a platform built for serious operators — not hobbyists.
           </p>
         </div>
 
@@ -96,7 +97,7 @@ export default function PartnerNetworkSection() {
             </div>
           </div>
 
-          {/* Card 3 — Trusted network (icon, stays the same) */}
+          {/* Card 3 — Trusted network */}
           <div
             className="flex flex-col overflow-hidden rounded-[20px]"
             style={{
@@ -105,16 +106,16 @@ export default function PartnerNetworkSection() {
             }}
           >
             <div
-              className="flex items-center justify-center"
+              className="flex items-center justify-center overflow-hidden"
               style={{ background: "rgba(255,255,255,0.04)", minHeight: 200 }}
             >
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, #2563EB, #1D4ED8)", boxShadow: "0 0 48px rgba(37,99,235,0.35)" }}
-                aria-hidden="true"
-              >
-                <ShieldCheck className="w-10 h-10 text-white" />
-              </div>
+              <img
+                src={trustedNetworkImg}
+                alt="Connected network of verified moving partners"
+                className="w-full h-full object-contain select-none"
+                style={{ maxHeight: 220 }}
+                draggable={false}
+              />
             </div>
             <div className="px-6 py-5 space-y-2">
               <h3 className="font-display font-bold text-base tracking-tight text-white">Trusted network</h3>
