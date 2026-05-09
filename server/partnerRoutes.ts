@@ -409,6 +409,7 @@ export function registerPartnerRoutes(app: Express) {
       team,
       readyForReview: partner.profileComplete && partner.coverageComplete && partner.complianceComplete && partner.dispatchComplete && partner.termsAccepted,
       lastRejectionReason: lastRejection[0]?.notes ?? null,
+      lastRejectionAt: lastRejection[0]?.createdAt ?? null,
     });
   });
 

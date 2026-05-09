@@ -478,17 +478,21 @@ export default function PartnerOnboarding() {
   const partner = data?.partner;
 
   // Build a stable localStorage key tied to this specific rejection event.
-  // Using partner ID + first 40 chars of reason means a new rejection reason
-  // (after re-submission and a second rejection) will show the banner again.
+  // Keyed by partner ID + rejection timestamp so a new rejection (even with
+  // the same reason text) always shows a fresh banner.
   const rejectionKey =
-    partner?.id && data?.lastRejectionReason
-      ? `lervit-rejection-dismissed-${partner.id}-${String(data.lastRejectionReason).slice(0, 40)}`
+    partner?.id && data?.lastRejectionAt
+      ? `lervit-rejection-dismissed-${partner.id}-${new Date(data.lastRejectionAt).getTime()}`
       : null;
 
-  // On data load, restore dismissal state from localStorage.
+  // On data load (or when the rejection event changes), restore dismissal
+  // state from localStorage. Explicitly resets to false when the key changes
+  // so a new rejection event is never suppressed by a stale dismissal.
   useEffect(() => {
-    if (rejectionKey && localStorage.getItem(rejectionKey) === "1") {
-      setRejectionDismissed(true);
+    if (rejectionKey) {
+      setRejectionDismissed(localStorage.getItem(rejectionKey) === "1");
+    } else {
+      setRejectionDismissed(false);
     }
   }, [rejectionKey]);
 
