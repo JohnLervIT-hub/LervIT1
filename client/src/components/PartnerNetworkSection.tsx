@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { Mail, Lock, ChevronRight } from "lucide-react";
 import truckImg from "../assets/generated_images/partner_network_truck.png";
 import dashboardImg from "../assets/generated_images/partner_analytics_dashboard.png";
@@ -127,10 +126,11 @@ export default function PartnerNetworkSection() {
         </div>
 
         {/* CTA card */}
-        <Link
-          href="/contact?topic=partner-network"
-          aria-label="Request more information about the LervIT Partner Network"
+        <a
+          href="mailto:partnership@lervit.com"
+          aria-label="Email partnership@lervit.com to learn more about the Partner Network"
           data-testid="link-partner-network-cta"
+          className="block"
         >
           <div
             className="rounded-[20px] p-5 md:p-6 flex items-center gap-4 cursor-pointer transition-opacity hover:opacity-90 active:opacity-80 mb-6"
@@ -155,7 +155,7 @@ export default function PartnerNetworkSection() {
             </div>
             <ChevronRight className="shrink-0 w-6 h-6" style={{ color: "#2563EB" }} aria-hidden="true" />
           </div>
-        </Link>
+        </a>
 
         {/* Footer note */}
         <div className="flex items-center justify-center gap-2" style={{ color: "#6B7280" }}>
