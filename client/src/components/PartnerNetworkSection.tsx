@@ -1,28 +1,20 @@
 import { Link } from "wouter";
 import { TrendingUp, DollarSign, ShieldCheck, Mail, Lock, ChevronRight } from "lucide-react";
-import moverEarningsImg from "@assets/generated_images/mover_earnings_85.png";
-import moverFlexImg from "@assets/generated_images/mover_go_online_flex.png";
-import moverReputationImg from "@assets/generated_images/mover_reputation_stars.png";
+import partnerTruckImg from "../assets/partner-truck-driver.png";
 
 const benefits = [
   {
     icon: TrendingUp,
-    img: moverEarningsImg,
-    imgAlt: "Mover holding cash — consistent job leads",
     title: "More jobs",
     text: "Get consistent leads from people who are ready to move.",
   },
   {
     icon: DollarSign,
-    img: moverFlexImg,
-    imgAlt: "Mover going online — grow your business",
     title: "Grow your business",
     text: "Keep more of what you earn and build lasting relationships.",
   },
   {
     icon: ShieldCheck,
-    img: moverReputationImg,
-    imgAlt: "Mover with 5-star rating — trusted network",
     title: "Trusted network",
     text: "Work with a community of verified partners and deliver with confidence.",
   },
@@ -62,48 +54,47 @@ export default function PartnerNetworkSection() {
           </p>
         </div>
 
-        {/* Benefit cards — 3 col on desktop, 1 col on mobile */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          {benefits.map(({ icon: Icon, img, imgAlt, title, text }) => (
-            <div
-              key={title}
-              className="flex flex-col rounded-[20px] overflow-hidden"
-              style={{
-                background: "linear-gradient(135deg, #101720 0%, #151C26 100%)",
-                border: "1px solid rgba(255,255,255,0.10)",
-                boxShadow: "0 16px 48px rgba(0,0,0,0.40)",
-              }}
-            >
-              {/* Image area */}
-              <div
-                className="flex items-center justify-center mx-4 mt-4 rounded-[14px]"
-                style={{ background: "rgba(255,255,255,0.04)", minHeight: 190 }}
-              >
-                <img
-                  src={img}
-                  alt={imgAlt}
-                  className="w-full h-full object-contain"
-                  style={{ maxHeight: 210 }}
-                  draggable={false}
-                />
-              </div>
+        {/* Main feature card */}
+        <div
+          className="rounded-[20px] md:rounded-[28px] p-6 md:p-10 mb-4"
+          style={{
+            background: "linear-gradient(135deg, #101720 0%, #151C26 100%)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.45)",
+          }}
+        >
+          <div className="flex flex-col md:grid md:grid-cols-2 md:gap-8 md:items-center">
 
-              {/* Text area */}
-              <div className="px-5 py-5 space-y-2">
-                <div className="flex items-center gap-2.5">
+            {/* Truck illustration — top on mobile, right column on desktop */}
+            <div className="order-first md:order-last flex items-end justify-center mb-6 md:mb-0">
+              <img
+                src={partnerTruckImg}
+                alt="LervIT moving truck with driver giving thumbs up"
+                className="w-full max-w-[320px] md:max-w-full h-auto object-contain select-none drop-shadow-2xl"
+                style={{ maxHeight: 360 }}
+                draggable={false}
+              />
+            </div>
+
+            {/* Benefits — below image on mobile, left column on desktop */}
+            <div className="order-last md:order-first flex flex-col gap-7">
+              {benefits.map(({ icon: Icon, title, text }) => (
+                <div key={title} className="flex items-start gap-4">
                   <div
-                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                    className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center"
                     style={{ background: "linear-gradient(135deg, #2563EB, #1D4ED8)" }}
                     aria-hidden="true"
                   >
-                    <Icon className="w-4 h-4 text-white" />
+                    <Icon className="w-5 h-5 text-white" />
                   </div>
-                  <p className="font-bold text-white text-base leading-snug">{title}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold text-white text-base leading-snug mb-1">{title}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "#A7AFBD" }}>{text}</p>
+                  </div>
                 </div>
-                <p className="text-sm leading-relaxed" style={{ color: "#A7AFBD" }}>{text}</p>
-              </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
 
         {/* CTA card */}
