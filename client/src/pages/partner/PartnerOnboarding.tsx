@@ -470,7 +470,8 @@ function TermsForm({ accepted, onAccept }: { accepted: boolean; onAccept: () => 
 export default function PartnerOnboarding() {
   const { data, isLoading } = useQuery<any>({ queryKey: ["/api/partner/onboarding"] });
   const [activeStep, setActiveStep] = useState<string | null>(null);
-  const [rejectionDismissed, setRejectionDismissed] = useState(false);
+  // null = localStorage not yet checked (avoids one-frame flash); true/false after effect runs
+  const [rejectionDismissed, setRejectionDismissed] = useState<boolean | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -510,8 +511,9 @@ export default function PartnerOnboarding() {
     onError: (e: any) => toast({ title: e?.message ?? "Submit failed", variant: "destructive" }),
   });
 
+  // Only show once localStorage check is complete (rejectionDismissed === false, not null)
   const showRejectionBanner =
-    !rejectionDismissed &&
+    rejectionDismissed === false &&
     partner?.status === "onboarding" &&
     !!data?.lastRejectionReason;
 
