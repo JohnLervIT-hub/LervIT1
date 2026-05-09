@@ -78,6 +78,12 @@ uri = "file://attached_assets/generated_images/feature_trust_shield.png"
 type = "image"
 title = "trust shield verified badge"
 
+[[generated]]
+id = "wCWRCpFZuYQQX1tU7LKGk"
+uri = "file://client/src/assets/generated_images/partner_network_truck.png"
+type = "image"
+title = "partner network truck driver"
+
 [[outputs]]
 id = "GifJ2V3leOcbRaDzlCOce"
 uri = "file://attached_assets/screenshots/6397d05f-aa2c-4df0-92ef-e226018b8f65-00-278pmwf971x7j_spock_replit_dev_mockup_preview_lervit-architecture_PhasedOrchestration.png"

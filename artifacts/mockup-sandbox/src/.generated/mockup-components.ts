@@ -3,6 +3,8 @@ type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/lervit-architecture/PhasedOrchestration.tsx": () => import("../components/mockups/lervit-architecture/PhasedOrchestration.tsx"),
   "./components/mockups/partner-network/BoldPartnership.tsx": () => import("../components/mockups/partner-network/BoldPartnership.tsx"),
+  "./components/mockups/partner-network/CenteredSpotlight.tsx": () => import("../components/mockups/partner-network/CenteredSpotlight.tsx"),
   "./components/mockups/partner-network/CommunityNetwork.tsx": () => import("../components/mockups/partner-network/CommunityNetwork.tsx"),
+  "./components/mockups/partner-network/DarkSplit.tsx": () => import("../components/mockups/partner-network/DarkSplit.tsx"),
   "./components/mockups/partner-network/EnterpriseTrust.tsx": () => import("../components/mockups/partner-network/EnterpriseTrust.tsx")
 };
