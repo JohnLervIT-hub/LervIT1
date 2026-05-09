@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   CheckCircle,
   Circle,
@@ -474,6 +474,29 @@ export default function PartnerOnboarding() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  const steps = data?.steps ?? [];
+  const partner = data?.partner;
+
+  // Build a stable localStorage key tied to this specific rejection event.
+  // Using partner ID + first 40 chars of reason means a new rejection reason
+  // (after re-submission and a second rejection) will show the banner again.
+  const rejectionKey =
+    partner?.id && data?.lastRejectionReason
+      ? `lervit-rejection-dismissed-${partner.id}-${String(data.lastRejectionReason).slice(0, 40)}`
+      : null;
+
+  // On data load, restore dismissal state from localStorage.
+  useEffect(() => {
+    if (rejectionKey && localStorage.getItem(rejectionKey) === "1") {
+      setRejectionDismissed(true);
+    }
+  }, [rejectionKey]);
+
+  const handleDismissRejection = () => {
+    if (rejectionKey) localStorage.setItem(rejectionKey, "1");
+    setRejectionDismissed(true);
+  };
+
   const submitForReview = useMutation({
     mutationFn: () => apiRequest("POST", "/api/partner/onboarding/submit", {}),
     onSuccess: () => {
@@ -483,8 +506,6 @@ export default function PartnerOnboarding() {
     onError: (e: any) => toast({ title: e?.message ?? "Submit failed", variant: "destructive" }),
   });
 
-  const steps = data?.steps ?? [];
-  const partner = data?.partner;
   const showRejectionBanner =
     !rejectionDismissed &&
     partner?.status === "onboarding" &&
@@ -513,7 +534,7 @@ export default function PartnerOnboarding() {
               size="icon"
               variant="ghost"
               className="shrink-0 text-destructive/70"
-              onClick={() => setRejectionDismissed(true)}
+              onClick={handleDismissRejection}
               data-testid="button-dismiss-rejection"
               aria-label="Dismiss"
             >
