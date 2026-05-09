@@ -609,7 +609,11 @@ export default function Home() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" asChild data-testid="button-become-mover-learn">
-              <a href="mailto:movers@lervit.com" className="inline-flex items-center gap-2">
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); window.location.href = ["mailto", "support@lervit.com"].join(":"); }}
+                className="inline-flex items-center gap-2"
+              >
                 <Mail className="w-4 h-4" />
                 Talk to our team
               </a>
