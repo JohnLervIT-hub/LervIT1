@@ -22,10 +22,7 @@ export default function PartnerNetworkSection() {
             Invitation only
           </span>
 
-          <h2
-            className="font-display font-extrabold tracking-tight text-white leading-tight"
-            style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
-          >
+          <h2 className="font-display text-3xl md:text-4xl font-extrabold tracking-tight text-white">
             Join the Partner Network
           </h2>
 
