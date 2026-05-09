@@ -211,7 +211,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col items-center gap-1.5">
               <button
                 onClick={() => logoRef.current?.click()}
-                className="relative group w-full max-h-14 rounded-md overflow-hidden border border-border bg-muted flex items-center justify-center hover-elevate px-2 py-1.5"
+                className="relative group w-full max-h-14 rounded-md border border-border bg-muted flex items-center justify-center hover-elevate px-2 py-1.5"
                 title="Upload company logo"
                 data-testid="button-upload-logo"
               >
@@ -226,10 +226,13 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                     <ImagePlus className="w-5 h-5 text-muted-foreground" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-md">
+                {/* Overlay: show spinner while uploading; show camera icon only when no logo exists */}
+                <div className="absolute inset-0 rounded-md bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   {uploadLogo.isPending
                     ? <Loader2 className="w-4 h-4 text-white animate-spin" />
-                    : <Camera className="w-4 h-4 text-white" />}
+                    : !partner?.logoUrl
+                      ? <Camera className="w-4 h-4 text-white" />
+                      : null}
                 </div>
               </button>
               <button
