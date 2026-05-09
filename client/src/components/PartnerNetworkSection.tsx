@@ -1,20 +1,28 @@
 import { Link } from "wouter";
 import { TrendingUp, DollarSign, ShieldCheck, Mail, Lock, ChevronRight } from "lucide-react";
+import moverEarningsImg from "@assets/generated_images/mover_earnings_85.png";
 import moverFlexImg from "@assets/generated_images/mover_go_online_flex.png";
+import moverReputationImg from "@assets/generated_images/mover_reputation_stars.png";
 
 const benefits = [
   {
     icon: TrendingUp,
+    img: moverEarningsImg,
+    imgAlt: "Mover holding cash — consistent job leads",
     title: "More jobs",
     text: "Get consistent leads from people who are ready to move.",
   },
   {
     icon: DollarSign,
+    img: moverFlexImg,
+    imgAlt: "Mover going online — grow your business",
     title: "Grow your business",
     text: "Keep more of what you earn and build lasting relationships.",
   },
   {
     icon: ShieldCheck,
+    img: moverReputationImg,
+    imgAlt: "Mover with 5-star rating — trusted network",
     title: "Trusted network",
     text: "Work with a community of verified partners and deliver with confidence.",
   },
@@ -30,7 +38,7 @@ export default function PartnerNetworkSection() {
       <div className="max-w-[1180px] mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Badge + headline + subtitle */}
-        <div className="flex flex-col items-center text-center gap-5 mb-10 md:mb-12">
+        <div className="flex flex-col items-center text-center gap-5 mb-10 md:mb-14">
           <span
             className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full"
             style={{ border: "1px solid rgba(37,99,235,0.55)", color: "#93B4F8", background: "rgba(37,99,235,0.10)" }}
@@ -54,52 +62,48 @@ export default function PartnerNetworkSection() {
           </p>
         </div>
 
-        {/* Main feature card */}
-        <div
-          className="rounded-[20px] md:rounded-[28px] p-6 md:p-10 mb-4"
-          style={{
-            background: "linear-gradient(135deg, #101720 0%, #151C26 100%)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.45)",
-          }}
-        >
-          <div className="flex flex-col md:grid md:grid-cols-2 md:gap-10 md:items-center">
+        {/* Benefit cards — 3 col on desktop, 1 col on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          {benefits.map(({ icon: Icon, img, imgAlt, title, text }) => (
+            <div
+              key={title}
+              className="flex flex-col rounded-[20px] overflow-hidden"
+              style={{
+                background: "linear-gradient(135deg, #101720 0%, #151C26 100%)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 16px 48px rgba(0,0,0,0.40)",
+              }}
+            >
+              {/* Image area */}
+              <div
+                className="flex items-center justify-center mx-4 mt-4 rounded-[14px]"
+                style={{ background: "rgba(255,255,255,0.04)", minHeight: 190 }}
+              >
+                <img
+                  src={img}
+                  alt={imgAlt}
+                  className="w-full h-full object-contain"
+                  style={{ maxHeight: 210 }}
+                  draggable={false}
+                />
+              </div>
 
-            {/* Truck illustration — top on mobile, right column on desktop */}
-            <div className="order-first md:order-last flex items-center justify-center mb-8 md:mb-0">
-              {/*
-                TODO: Replace with final Partner Network truck illustration showing
-                a white LervIT truck with happy blue-uniform driver giving thumbs up
-                from driver-side window. Only "LervIT" text on the truck side.
-              */}
-              <img
-                src={moverFlexImg}
-                alt="LervIT moving truck with driver"
-                className="w-full max-w-[340px] md:max-w-full h-auto object-contain select-none"
-                style={{ maxHeight: 340 }}
-                draggable={false}
-              />
-            </div>
-
-            {/* Benefits — bottom on mobile, left column on desktop */}
-            <div className="order-last md:order-first flex flex-col gap-7">
-              {benefits.map(({ icon: Icon, title, text }) => (
-                <div key={title} className="flex items-start gap-4">
+              {/* Text area */}
+              <div className="px-5 py-5 space-y-2">
+                <div className="flex items-center gap-2.5">
                   <div
-                    className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center"
+                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                     style={{ background: "linear-gradient(135deg, #2563EB, #1D4ED8)" }}
                     aria-hidden="true"
                   >
-                    <Icon className="w-5 h-5 text-white" />
+                    <Icon className="w-4 h-4 text-white" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-white text-base leading-snug mb-1">{title}</p>
-                    <p className="text-sm leading-relaxed" style={{ color: "#A7AFBD" }}>{text}</p>
-                  </div>
+                  <p className="font-bold text-white text-base leading-snug">{title}</p>
                 </div>
-              ))}
+                <p className="text-sm leading-relaxed" style={{ color: "#A7AFBD" }}>{text}</p>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
 
         {/* CTA card */}
@@ -116,7 +120,6 @@ export default function PartnerNetworkSection() {
               boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
             }}
           >
-            {/* Mail icon */}
             <div
               className="shrink-0 w-14 h-14 rounded-full flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #2563EB, #1D4ED8)" }}
@@ -125,7 +128,6 @@ export default function PartnerNetworkSection() {
               <Mail className="w-6 h-6 text-white" />
             </div>
 
-            {/* Text */}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-white text-base leading-snug mb-0.5">Want to learn more?</p>
               <p className="text-sm leading-relaxed" style={{ color: "#A7AFBD" }}>
@@ -133,7 +135,6 @@ export default function PartnerNetworkSection() {
               </p>
             </div>
 
-            {/* Chevron */}
             <ChevronRight className="shrink-0 w-6 h-6" style={{ color: "#2563EB" }} aria-hidden="true" />
           </div>
         </Link>
