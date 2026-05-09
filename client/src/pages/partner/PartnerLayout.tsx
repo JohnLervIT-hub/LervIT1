@@ -235,13 +235,6 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                       : null}
                 </div>
               </button>
-              <button
-                onClick={() => logoRef.current?.click()}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                data-testid="link-upload-logo"
-              >
-                {partner?.logoUrl ? "Change logo" : "Upload logo"}
-              </button>
               <input
                 ref={logoRef}
                 type="file"
