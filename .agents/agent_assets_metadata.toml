@@ -107,3 +107,9 @@ id = "t4JMyS9fxeB-amzJeLIZC"
 uri = "file://attached_assets/LervIT_Phase_Gated_Architecture.png"
 type = "image"
 title = "LervIT Phase-Gated Orchestration Architecture"
+
+[[outputs]]
+id = "GEciF1OGzHCv6dbgvBsMH"
+uri = "file://docs/IRAP_RD_Technical_Summary.md"
+type = "text"
+title = "LervIT — IRAP R&D Technical Summary"
