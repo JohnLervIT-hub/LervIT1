@@ -448,6 +448,19 @@ function TermsForm({ accepted, onAccept }: { accepted: boolean; onAccept: () => 
           <p className="text-muted-foreground mt-1">LervIT owns the booking environment, payment workflow, platform data, and dispatch layer. All platform-originated bookings must be handled through approved LervIT workflows. Customer relationships established through the LervIT platform belong to LervIT.</p>
         </div>
 
+        <div className="rounded-md border border-border bg-muted/60 p-3 space-y-1.5">
+          <p className="font-semibold text-foreground text-sm flex items-center gap-1.5">
+            <span>18. Intellectual Property Protection</span>
+            <span className="inline-block text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded">IP</span>
+          </p>
+          <p className="text-muted-foreground mt-1">All technology, software, algorithms, data models, dispatch logic, pricing systems, matching systems, user interface designs, branding, trademarks, trade secrets, and proprietary processes developed by or belonging to LervIT Technologies Corporation (collectively, "LervIT IP") are and remain the exclusive property of LervIT Technologies Corporation. The Partner receives a limited, non-exclusive, non-transferable, revocable license to access the LervIT partner portal solely for the purpose of fulfilling approved bookings. The Partner expressly agrees not to: (a) reverse-engineer, decompile, disassemble, or otherwise attempt to derive the source code, algorithms, or underlying logic of any LervIT platform component; (b) replicate, reproduce, or create derivative works based on any LervIT IP; (c) use knowledge, data, pricing logic, or operational insights gained through the partnership to build, assist, fund, or advise any competing platform or service; (d) disclose LervIT's proprietary methodologies, pricing models, matching algorithms, or dispatch rules to any third party; or (e) retain any copies of LervIT platform data, documentation, or technical materials beyond what is strictly necessary for active fulfillment of approved bookings. Upon termination of the partnership for any reason, all access to LervIT systems and data is immediately revoked, and the Partner must certify in writing within 30 days that all LervIT confidential materials have been deleted or destroyed. Breach of this clause may result in immediate legal action and financial liability. Nothing in this agreement transfers any ownership of LervIT IP to the Partner.</p>
+        </div>
+
+        <div>
+          <p className="font-medium text-foreground">19. Governing Law</p>
+          <p className="text-muted-foreground mt-1">This agreement is governed by the laws of the Province of Alberta, Canada. Any disputes shall be resolved in the courts of Calgary, Alberta, unless both parties agree in writing to an alternative dispute resolution mechanism.</p>
+        </div>
+
         <div className="border-t pt-4 border-border">
           <p className="text-muted-foreground text-xs">LervIT Technologies Corporation · Effective {new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}. By accepting below, you confirm you have read, understood, and agree to be bound by all terms above on behalf of your organization.</p>
         </div>

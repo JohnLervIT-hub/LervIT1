@@ -35,6 +35,7 @@ const PartnerAudit = lazy(() => import("@/pages/partner/PartnerAudit"));
 const PartnerEarnings = lazy(() => import("@/pages/partner/PartnerEarnings"));
 const PartnerUsers = lazy(() => import("@/pages/partner/PartnerUsers"));
 const PartnerMessages = lazy(() => import("@/pages/partner/PartnerMessages"));
+const PartnerLegal = lazy(() => import("@/pages/partner/PartnerLegal"));
 
 // Eagerly load critical public pages
 import Home from "@/pages/Home";
@@ -147,6 +148,11 @@ function PartnerRouter() {
         <Route path="/partner/earnings">
           <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
             <PartnerEarnings />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/partner/legal">
+          <ProtectedRoute allowedRoles={[...PARTNER_ROLES]}>
+            <PartnerLegal />
           </ProtectedRoute>
         </Route>
         <Route component={NotFound} />
