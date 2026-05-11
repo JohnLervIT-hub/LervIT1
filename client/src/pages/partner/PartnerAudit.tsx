@@ -13,8 +13,9 @@ import { Link } from "wouter";
 import {
   History, CheckCircle, XCircle, Upload, UserPlus, FileCheck,
   ScrollText, Settings, AlertTriangle, ArrowRight, Search, X,
-  ChevronRight, Lightbulb, Info, CalendarDays, Tag, ExternalLink,
+  ChevronRight, Lightbulb, Info, CalendarDays, Tag, ExternalLink, Download,
 } from "lucide-react";
+import { downloadCsv } from "@/lib/exportCsv";
 import { format, isToday, isYesterday, subDays, startOfDay } from "date-fns";
 
 const ACTION_META: Record<string, { icon: React.ElementType; color: string; label: string; category: string }> = {
@@ -351,11 +352,34 @@ export default function PartnerAudit() {
       <div className="p-6 max-w-2xl mx-auto space-y-5">
 
         {/* Header */}
-        <div>
-          <h1 className="text-lg font-semibold">Audit Log</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            A complete record of actions taken in your partner portal — click any entry for insights and recommendations.
-          </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-lg font-semibold">Audit Log</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              A complete record of actions taken in your partner portal — click any entry for insights and recommendations.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isLoading || filtered.length === 0}
+            onClick={() => downloadCsv(
+              `lervit-audit-log-${format(new Date(), "yyyy-MM-dd")}.csv`,
+              filtered,
+              [
+                { key: "createdAt",  label: "Timestamp",   format: (v) => v ? format(new Date(v), "yyyy-MM-dd HH:mm:ss") : "" },
+                { key: "action",     label: "Action Code" },
+                { key: "action",     label: "Action Label", format: (v) => getActionMeta(v).label },
+                { key: "notes",      label: "Notes" },
+                { key: "objectType", label: "Record Type" },
+                { key: "objectId",   label: "Record ID" },
+              ]
+            )}
+            data-testid="button-export-audit"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Export CSV
+          </Button>
         </div>
 
         {/* Filters */}

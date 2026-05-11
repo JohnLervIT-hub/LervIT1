@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Calendar, ChevronRight, Search, Package, Clock } from "lucide-react";
+import { MapPin, Calendar, ChevronRight, Search, Package, Clock, Download } from "lucide-react";
 import { format } from "date-fns";
+import { downloadCsv } from "@/lib/exportCsv";
 
 const STATUS_COLOR: Record<string, string> = {
   new:               "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -107,13 +108,38 @@ export default function PartnerBookings() {
       <div className="max-w-5xl mx-auto space-y-5">
 
         {/* Page header */}
-        <div>
-          <h1 className="text-lg font-semibold">Bookings</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {counts.pending > 0
-              ? <><span className="text-blue-600 dark:text-blue-400 font-semibold">{counts.pending} new</span> booking{counts.pending !== 1 ? "s" : ""} awaiting response</>
-              : `${bookings.length} total booking${bookings.length !== 1 ? "s" : ""}`}
-          </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-lg font-semibold">Bookings</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {counts.pending > 0
+                ? <><span className="text-blue-600 dark:text-blue-400 font-semibold">{counts.pending} new</span> booking{counts.pending !== 1 ? "s" : ""} awaiting response</>
+                : `${bookings.length} total booking${bookings.length !== 1 ? "s" : ""}`}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isLoading || filtered.length === 0}
+            onClick={() => downloadCsv(
+              `lervit-bookings-${format(new Date(), "yyyy-MM-dd")}.csv`,
+              filtered,
+              [
+                { key: "id",              label: "Booking ID" },
+                { key: "enterpriseStatus",label: "Status",      format: (v) => formatStatus(v ?? "new") },
+                { key: "pickupAddress",   label: "Pickup Address" },
+                { key: "dropoffAddress",  label: "Dropoff Address" },
+                { key: "preferredDate",   label: "Preferred Date", format: (v) => v ? format(new Date(v), "yyyy-MM-dd") : "" },
+                { key: "loadSize",        label: "Load Size",   format: (v) => LOAD_SIZE_LABEL[v] ?? v ?? "" },
+                { key: "price",           label: "Price (CAD)", format: (v) => v ? parseFloat(v).toFixed(2) : "" },
+                { key: "routedToPartnerAt", label: "Routed At", format: (v) => v ? format(new Date(v), "yyyy-MM-dd HH:mm") : "" },
+              ]
+            )}
+            data-testid="button-export-bookings"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Export CSV
+          </Button>
         </div>
 
         {/* Tab bar + search */}

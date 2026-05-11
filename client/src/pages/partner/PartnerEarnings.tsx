@@ -10,8 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   DollarSign, ExternalLink, CheckCircle, Clock,
-  ArrowRight, Calendar, TrendingUp, Shield, ChevronRight,
+  ArrowRight, Calendar, TrendingUp, Shield, ChevronRight, Download,
 } from "lucide-react";
+import { downloadCsv } from "@/lib/exportCsv";
 import { format } from "date-fns";
 
 function fmt(n: string | number | undefined) {
@@ -163,9 +164,33 @@ export default function PartnerEarnings() {
         <div className="max-w-5xl mx-auto space-y-5">
 
           {/* Page header */}
-          <div>
-            <h1 className="text-lg font-semibold">Earnings</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Revenue from completed bookings and payout settings</p>
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <h1 className="text-lg font-semibold">Earnings</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Revenue from completed bookings and payout settings</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isLoading || allEarnings.length === 0}
+              onClick={() => downloadCsv(
+                `lervit-earnings-${format(new Date(), "yyyy-MM-dd")}.csv`,
+                allEarnings,
+                [
+                  { key: "id",               label: "Booking ID" },
+                  { key: "pickupAddress",    label: "Pickup Address" },
+                  { key: "dropoffAddress",   label: "Dropoff Address" },
+                  { key: "completedAt",      label: "Completed Date", format: (v) => v ? format(new Date(v), "yyyy-MM-dd") : "" },
+                  { key: "price",            label: "Total Price (CAD)", format: (v) => v ? parseFloat(v).toFixed(2) : "" },
+                  { key: "platformFeePercent", label: "Platform Fee %", format: (v) => v ? parseFloat(v).toFixed(1) : "15.0" },
+                  { key: "partnerNet",       label: "Your Earnings (CAD)", format: (v) => v ? parseFloat(v).toFixed(2) : "" },
+                ]
+              )}
+              data-testid="button-export-earnings"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              Export CSV
+            </Button>
           </div>
 
           {/* Stripe Connect card */}
