@@ -290,7 +290,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-border p-3">
+          <SidebarFooter className="border-t border-border p-3 space-y-3">
             <div className="flex items-center gap-2">
               {/* Clickable profile area */}
               <button
@@ -329,6 +329,14 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
               >
                 <LogOut className="w-4 h-4" />
               </Button>
+            </div>
+
+            {/* Powered by LervIT */}
+            <div className="flex items-center justify-center gap-1.5 pt-1 border-t border-border/50" data-testid="footer-powered-by">
+              <img src="/favicon.png" alt="LervIT" className="w-3.5 h-3.5 object-contain opacity-60" />
+              <span className="text-[10px] text-muted-foreground/60 leading-none tracking-wide">
+                Powered by <span className="font-medium">LervIT Technologies Corporation</span>
+              </span>
             </div>
           </SidebarFooter>
         </Sidebar>
