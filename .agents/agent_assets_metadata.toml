@@ -113,3 +113,9 @@ id = "GEciF1OGzHCv6dbgvBsMH"
 uri = "file://docs/IRAP_RD_Technical_Summary.md"
 type = "text"
 title = "LervIT — IRAP R&D Technical Summary"
+
+[[outputs]]
+id = "DdwBMHsxBXXibExe5G_CN"
+uri = "file://exports/MoveDeck-PaaS-Scope-Document.md"
+type = "text"
+title = "MoveDeck PaaS — Full Scope, Execution, Deployment & Hypercare"
