@@ -84,6 +84,7 @@ const Inbox = lazy(() => import("@/pages/Inbox"));
 const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const MoverAgreement = lazy(() => import("@/pages/MoverAgreement"));
+const Downloads = lazy(() => import("@/pages/Downloads"));
 
 const ENTERPRISE_ENABLED = import.meta.env.VITE_ENABLE_ENTERPRISE === "true";
 
@@ -175,6 +176,7 @@ function Router() {
         <Route path="/terms" component={TermsOfService} />
         <Route path="/privacy" component={PrivacyPolicy} />
         <Route path="/mover-agreement" component={MoverAgreement} />
+        <Route path="/downloads" component={Downloads} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route path="/verify-email" component={VerifyEmail} />
