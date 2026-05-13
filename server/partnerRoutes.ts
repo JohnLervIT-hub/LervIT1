@@ -1948,10 +1948,13 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(partner.id, adminUser.id, "partner.rejected", "partner", partner.id, reason);
 
-      // Notify partner admin users that their application was rejected
+      // Notify all active partner_admin users of the rejection.
+      // Notifications are awaited so the admin gets a 500 if delivery fails rather than
+      // a silent success that leaves partners uninformed of the rejection reason.
       const baseUrl = process.env.BASE_URL ||
         (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-      db
+
+      const puRows = await db
         .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
         .from(partnerUsers)
         .innerJoin(users, eq(users.id, partnerUsers.userId))
@@ -1959,29 +1962,31 @@ export function registerPartnerRoutes(app: Express) {
           eq(partnerUsers.partnerId, partner.id),
           eq(partnerUsers.isActive, true),
           eq(partnerUsers.partnerRole, "partner_admin"),
-        ))
-        .then((puRows) => {
-          for (const pu of puRows) {
-            if (pu.email) {
-              notificationService.sendPartnerApplicationRejected({
-                partnerEmail: pu.email,
-                partnerName: pu.name || pu.email,
-                companyName: partner.name,
-                reason,
-                onboardingUrl: `${baseUrl}/partner/onboarding`,
-              }).catch(e => console.error("[reject] partner email failed:", e));
-            }
-            db.insert(inAppNotifications).values({
-              userId: pu.userId,
-              type: "status_update",
-              title: "Application Requires Updates",
-              message: `Your partner application requires updates before it can be approved. Reason: ${reason}`,
-              actionUrl: `/partner/onboarding`,
-              isRead: false,
-            }).catch(e => console.error("[reject] partner in-app notify failed:", e));
-          }
-        })
-        .catch(e => console.error("[reject] fetch partner users failed:", e));
+        ));
+
+      await Promise.all(puRows.map(async (pu) => {
+        // In-app notification: full rejection reason visible in the partner portal
+        // notification bell; actionUrl navigates to /partner/onboarding on click.
+        await db.insert(inAppNotifications).values({
+          userId: pu.userId,
+          type: "status_update",
+          title: "Application Rejected — Action Required",
+          message: `Your application for ${partner.name} was not approved. Reason: ${reason}. Please update your details and re-submit.`,
+          actionUrl: `/partner/onboarding`,
+          isRead: false,
+        });
+
+        // Email notification (non-blocking — email failures should not fail the API call)
+        if (pu.email) {
+          notificationService.sendPartnerApplicationRejected({
+            partnerEmail: pu.email,
+            partnerName: pu.name || pu.email,
+            companyName: partner.name,
+            reason,
+            onboardingUrl: `${baseUrl}/partner/onboarding`,
+          }).catch(e => console.error("[reject] partner email failed:", e));
+        }
+      }));
 
       res.json(updated);
     } catch (err: any) {
