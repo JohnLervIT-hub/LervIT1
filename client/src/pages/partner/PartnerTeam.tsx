@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
@@ -229,14 +229,15 @@ function TeamMemberDialog({ member, onClose }: { member?: any; onClose: () => vo
       <Pencil className="w-4 h-4" />
     </Button>
   ) : (
-    <Button data-testid="button-add-member">
+    <Button onClick={() => setOpen(true)} data-testid="button-add-member">
       <Plus className="w-4 h-4 mr-2" /> Add Member
     </Button>
   );
 
   return (
-    <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) onClose(); }}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <>
+      {trigger}
+      <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
@@ -377,6 +378,7 @@ function TeamMemberDialog({ member, onClose }: { member?: any; onClose: () => vo
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
