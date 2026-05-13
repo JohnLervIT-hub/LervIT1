@@ -12,7 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Loader2, Truck, Pencil, Trash2, Camera, Search, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Users, Plus, Loader2, Truck, Pencil, Trash2, Camera, Search, X, StickyNote } from "lucide-react";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -354,6 +355,19 @@ function TeamMemberDialog({ member, onClose }: { member?: any; onClose: () => vo
             <Switch checked={form.isAvailable} onCheckedChange={v => setForm(f => ({ ...f, isAvailable: v }))} data-testid="switch-availability" />
             <Label>Available for assignments</Label>
           </div>
+
+          <div className="space-y-1.5">
+            <Label>Internal Notes</Label>
+            <Textarea
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Add notes visible to admins and dispatchers only…"
+              className="resize-none text-sm min-h-[72px]"
+              data-testid="textarea-member-notes"
+            />
+            <p className="text-xs text-muted-foreground">Only visible to your team — not shown to customers.</p>
+          </div>
+
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => { setOpen(false); onClose(); }}>Cancel</Button>
             <Button onClick={() => save.mutate()} disabled={save.isPending || !form.name} data-testid="button-save-member">
@@ -578,6 +592,12 @@ export default function PartnerTeam() {
                               className="w-16 h-10 object-cover rounded-md border border-border"
                               data-testid={`img-vehicle-${member.id}`}
                             />
+                          </div>
+                        )}
+                        {member.notes && (
+                          <div className="flex items-start gap-1.5 mt-2" data-testid={`notes-${member.id}`}>
+                            <StickyNote className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                            <p className="text-xs text-muted-foreground leading-relaxed">{member.notes}</p>
                           </div>
                         )}
                       </div>
