@@ -125,3 +125,9 @@ id = "VJvI8YM1_qrHRPsTv1hR8"
 uri = "file://exports/LervIT-12-Month-Dev-Roadmap.md"
 type = "text"
 title = "LervIT 12-Month Product Development Roadmap"
+
+[[outputs]]
+id = "6gXspxOP6Q4rdvxf_vvhq"
+uri = "file://exports/LervIT-Technical-Brief.md"
+type = "text"
+title = "LervIT Technical Brief"
