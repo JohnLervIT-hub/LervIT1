@@ -285,8 +285,28 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('uncaughtException', (error) => {
+  const msg = error?.message ?? '';
+
+  // Transient infrastructure errors — log and survive. The pool/driver will
+  // recover on the next query. Exiting here would cause unnecessary restarts
+  // for events that Neon handles automatically (idle timeout, branch suspend,
+  // connection limit, WebSocket drop).
+  const isTransient =
+    msg.includes('FATAL') ||
+    msg.includes('WebSocket') ||
+    msg.includes('Connection terminated') ||
+    msg.includes('connection terminated') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('ENOTFOUND') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('too many connections');
+
+  if (isTransient) {
+    console.error('[WARN] Transient infrastructure error (server will continue):', msg);
+    return;
+  }
+
+  // Genuinely unknown/fatal — log and exit after flushing
   console.error('[CRITICAL] Uncaught Exception:', error);
-  // For uncaught exceptions, we should exit after logging
-  // But give time for logs to flush
   setTimeout(() => process.exit(1), 1000);
 });
