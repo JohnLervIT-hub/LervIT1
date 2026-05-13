@@ -224,6 +224,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register auth middleware globally
   app.use(authMiddleware);
   
+  // ===== DOCUMENT DOWNLOADS =====
+  app.get("/api/downloads/roadmap", (_req: Request, res: Response) => {
+    const filePath = path.resolve(process.cwd(), "exports", "LervIT-12-Month-Dev-Roadmap.md");
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="LervIT-12-Month-Dev-Roadmap.md"');
+    res.sendFile(filePath);
+  });
+
   // ===== PUBLIC CONFIG ROUTES (no auth required) =====
   // Expose support phone number for display on frontend
   app.get("/api/config/support-phone", (_req: Request, res: Response) => {
