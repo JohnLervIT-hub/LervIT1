@@ -195,7 +195,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
     refetchInterval: 20000,
   });
 
-  const { data: inboxData } = useQuery<any>({
+  const { data: inboxData } = useQuery<any[]>({
     queryKey: ["/api/inbox"],
     refetchInterval: 30000,
   });
@@ -211,7 +211,8 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/inbox"] }),
   });
 
-  const notifications: any[] = inboxData?.notifications ?? [];
+  // /api/inbox returns a raw array
+  const notifications: any[] = Array.isArray(inboxData) ? inboxData : [];
   const unreadNotifs = notifications.filter((n: any) => !n.isRead);
 
   const partner = ctx?.partner;
