@@ -134,10 +134,8 @@ LERVIT20 promo exists but admin visibility is limited. Add a promo analytics car
 #### P0 — Open Beta Launch & Public Signup `M` `New`
 Remove invite-gate from signup. Add a "Beta" badge in the UI (small, tasteful). Set up basic onboarding analytics to track where new users drop off in the first session.
 
-#### P0 — Progressive Web App (PWA) — Installable on Mobile `M` `Partial`
-LervIT is already mobile-responsive. Convert it to a full PWA with: service worker for offline shell, `manifest.json` with app icon, Add to Home Screen prompt at the right moment (after first completed booking). This closes the "no mobile app" gap without native development.
-- Files: `client/public/manifest.json`, `client/src/components/InstallPrompt.tsx` (Partial — exists, needs improvement)
-- Done when: A customer on iPhone can install LervIT to their home screen and use it like a native app
+#### ~~P0 — Progressive Web App (PWA) — Installable on Mobile~~ `ALREADY COMPLETE`
+LervIT is already a fully configured PWA. `manifest.json` covers all icon sizes (16/32/192/512px) with `any` and `maskable` purposes, `display: standalone`, app shortcuts, and correct theme/background colours. `sw.js` (v4) implements three caching strategies (network-first, cache-first, stale-while-revalidate), offline fallback, push notification handling with deep-link on click, and automatic old cache cleanup. `index.html` registers the service worker on load and includes all Apple-specific meta tags for correct iOS home screen behaviour. **No work required — remove from sprint planning.**
 
 #### P0 — Saved Addresses & Quick Re-Book `M` `New`
 Customers can save up to 5 addresses (home, work, storage unit, etc.). On the booking flow, a saved address dropdown replaces the manual entry. Also add a "Re-book this move" shortcut on completed bookings.
@@ -374,7 +372,7 @@ Allow a local operator in a new city to "license" the LervIT brand and platform 
 | Closed beta live with 10 real customers | June 2026 | 10 completed moves |
 | CI/CD pipeline and error monitoring active | June 2026 | Zero blind production errors |
 | Open beta — no invite required | August 2026 | Public signup enabled |
-| PWA installable on iOS + Android | September 2026 | App store equivalent experience |
+| ~~PWA installable on iOS + Android~~ | ~~September 2026~~ | Already complete — fully configured |
 | Mover premium subscription launched | September 2026 | First 10 premium mover subscribers |
 | 50 paying customers (marketplace) | October 2026 | MRR ≥ $5,000 |
 | Multi-tenancy foundation complete | December 2026 | Two isolated tenants in staging |
