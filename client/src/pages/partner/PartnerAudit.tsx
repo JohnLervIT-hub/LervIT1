@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { PartnerLayout } from "./PartnerLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,10 @@ import {
   History, CheckCircle, XCircle, Upload, UserPlus, FileCheck,
   ScrollText, Settings, AlertTriangle, ArrowRight, Search, X,
   ChevronRight, Lightbulb, Info, CalendarDays, Tag, ExternalLink, Download,
+  Sparkles, Loader2, ShieldAlert, ShieldCheck, ShieldX,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/exportCsv";
+import { apiRequest } from "@/lib/queryClient";
 import { format, isToday, isYesterday, subDays, startOfDay } from "date-fns";
 
 const ACTION_META: Record<string, { icon: React.ElementType; color: string; label: string; category: string }> = {
@@ -66,7 +68,7 @@ const ACTION_INSIGHTS: Record<string, { insight: string; recommendation: string;
   },
   "incident.created": {
     insight: "A new incident has been logged. Unresolved incidents affect your partner health score and may be reviewed by the LervIT operations team.",
-    recommendation: "Resolve this incident as quickly as possible. If it involves customer property damage, document everything with photos and notify your insurance. Communication speed is the most important factor in customer satisfaction after an incident.",
+    recommendation: "Resolve this incident as quickly as possible. If it involves customer property damage, document everything with photos and notify your insurance.",
     linkLabel: "View incidents",
     linkPath: () => `/partner/incidents`,
   },
@@ -78,29 +80,29 @@ const ACTION_INSIGHTS: Record<string, { insight: string; recommendation: string;
   },
   "compliance.uploaded": {
     insight: "Your document is in the review queue. LervIT compliance review typically takes 2–3 business days. Expired or pending documents can pause job routing.",
-    recommendation: "Check back in 3 business days. If not approved by then, contact your partner success manager. Keep original copies of all submitted documents.",
+    recommendation: "Check back in 3 business days. If not approved by then, contact your partner success manager.",
     linkLabel: "View compliance",
     linkPath: () => `/partner/compliance`,
   },
   "compliance.approved": {
-    insight: "Approved compliance documents unlock or maintain your eligibility for the full job routing pipeline. Keeping all documents current maximizes your revenue potential.",
-    recommendation: "Set a calendar reminder 30 days before this document's expiry date so you can renew proactively and avoid any interruption to job routing.",
+    insight: "Approved compliance documents unlock or maintain your eligibility for the full job routing pipeline.",
+    recommendation: "Set a calendar reminder 30 days before this document's expiry date so you can renew proactively.",
     linkLabel: "View compliance",
     linkPath: () => `/partner/compliance`,
   },
   "partner.activated": {
     insight: "Your partner account is now fully active. From this point, LervIT can begin routing enterprise jobs to your organization.",
-    recommendation: "Complete your coverage zone setup and ensure at least one team member is marked as available so you start receiving job matches immediately.",
+    recommendation: "Complete your coverage zone setup and ensure at least one team member is marked as available.",
   },
   "partner.invited": {
     insight: "An invitation was sent to a prospective team member or partner. Pending invites expire after 7 days.",
-    recommendation: "Follow up with the invitee directly if they haven't accepted within 48 hours. Expired invites can be resent from the Team section.",
+    recommendation: "Follow up with the invitee directly if they haven't accepted within 48 hours.",
     linkLabel: "View team",
     linkPath: () => `/partner/team`,
   },
   "terms.accepted": {
     insight: "Accepting the partner terms is a one-time step that enables the full suite of LervIT enterprise features including payout processing.",
-    recommendation: "Keep a copy of the accepted terms version for your records. If terms are updated in the future, you'll receive a notification to re-accept.",
+    recommendation: "Keep a copy of the accepted terms version for your records.",
   },
   "user.invited": {
     insight: "A new user has been invited to your partner portal. They will have access based on the role they were assigned.",
@@ -110,13 +112,13 @@ const ACTION_INSIGHTS: Record<string, { insight: string; recommendation: string;
   },
   "user.role_changed": {
     insight: "Role changes take effect immediately. Elevated roles (admin, dispatcher) have access to sensitive booking and payout information.",
-    recommendation: "Audit your team's roles quarterly to ensure access levels match current responsibilities. Avoid assigning admin roles to temporary or contract staff.",
+    recommendation: "Audit your team's roles quarterly to ensure access levels match current responsibilities.",
     linkLabel: "View team",
     linkPath: () => `/partner/team`,
   },
   "user.removed": {
     insight: "This user's access has been permanently revoked. They can no longer log in or view any partner portal data.",
-    recommendation: "If this user had access to shared accounts or tools outside the portal, update those credentials as well. Review any recent actions they took before removal.",
+    recommendation: "If this user had access to shared accounts or tools outside the portal, update those credentials as well.",
     linkLabel: "View audit log",
     linkPath: () => `/partner/audit`,
   },
@@ -128,19 +130,19 @@ const ACTION_INSIGHTS: Record<string, { insight: string; recommendation: string;
   },
   "team.updated": {
     insight: "Team member details affect job matching. Vehicle type and availability status are used by the LervIT dispatch engine to route jobs correctly.",
-    recommendation: "Keep vehicle information and availability status up to date. Stale data leads to mismatched job assignments and potential rejections.",
+    recommendation: "Keep vehicle information and availability status up to date. Stale data leads to mismatched job assignments.",
     linkLabel: "View team",
     linkPath: () => `/partner/team`,
   },
   "team.deleted": {
     insight: "Removing a team member reduces your available capacity. If this person covered specific routes or zones, those may now be under-served.",
-    recommendation: "Review your coverage zones and reassign any pending bookings this team member was responsible for. Consider recruiting a replacement if capacity drops below your target.",
+    recommendation: "Review your coverage zones and reassign any pending bookings this team member was responsible for.",
     linkLabel: "View team",
     linkPath: () => `/partner/team`,
   },
   "profile.updated": {
     insight: "Partner profile information is visible to LervIT's operations team and may be used in partner-facing communications.",
-    recommendation: "Ensure your business name, contact email, and phone number are accurate. Outdated contact details can cause delays in payment processing and support responses.",
+    recommendation: "Ensure your business name, contact email, and phone number are accurate.",
   },
 };
 
@@ -161,6 +163,34 @@ const DATE_RANGES = [
   { value: "7d",    label: "Last 7 days" },
   { value: "30d",   label: "Last 30 days" },
 ];
+
+interface AiResult {
+  insight: string;
+  recommendation: string;
+  riskFlag: "low" | "medium" | "high";
+  confidence: number;
+}
+
+function RiskBadge({ risk }: { risk: "low" | "medium" | "high" }) {
+  if (risk === "high") return (
+    <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+      <ShieldX className="w-3.5 h-3.5" />
+      <span className="text-xs font-medium">High risk</span>
+    </div>
+  );
+  if (risk === "medium") return (
+    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+      <ShieldAlert className="w-3.5 h-3.5" />
+      <span className="text-xs font-medium">Medium risk</span>
+    </div>
+  );
+  return (
+    <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+      <ShieldCheck className="w-3.5 h-3.5" />
+      <span className="text-xs font-medium">Low risk</span>
+    </div>
+  );
+}
 
 function getActionMeta(action: string) {
   return ACTION_META[action] ?? {
@@ -188,10 +218,20 @@ function dayLabel(dateStr: string) {
   return format(d, "EEEE, MMMM d");
 }
 
-function AuditDetailSheet({ log, onClose }: { log: any; onClose: () => void }) {
+interface AuditDetailSheetProps {
+  log: any;
+  onClose: () => void;
+  aiCache: Record<string, AiResult>;
+  onAnalyze: (logId: string) => void;
+  analyzingId: string | null;
+}
+
+function AuditDetailSheet({ log, onClose, aiCache, onAnalyze, analyzingId }: AuditDetailSheetProps) {
   const meta = getActionMeta(log.action);
   const Icon = meta.icon;
-  const insights = ACTION_INSIGHTS[log.action];
+  const staticInsights = ACTION_INSIGHTS[log.action];
+  const aiResult = aiCache[log.id];
+  const isAnalyzing = analyzingId === log.id;
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -256,48 +296,114 @@ function AuditDetailSheet({ log, onClose }: { log: any; onClose: () => void }) {
             )}
           </div>
 
-          {/* Insights & recommendation */}
-          {insights && (
+          {/* Static insights (always shown when available) */}
+          {staticInsights && (
             <>
               <Separator />
-
-              <div className="space-y-4">
-                {/* Insight */}
-                <div
-                  className="rounded-lg p-4 space-y-2"
-                  style={{ background: "hsl(var(--muted))" }}
-                >
+              <div className="space-y-3">
+                <div className="rounded-lg p-4 space-y-2" style={{ background: "hsl(var(--muted))" }}>
                   <div className="flex items-center gap-2">
                     <Info className="w-4 h-4 text-blue-500 shrink-0" />
                     <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Insight</p>
                   </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{insights.insight}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{staticInsights.insight}</p>
                 </div>
 
-                {/* Recommendation */}
-                <div
-                  className="rounded-lg p-4 space-y-2"
-                  style={{ background: "hsl(var(--muted))" }}
-                >
+                <div className="rounded-lg p-4 space-y-2" style={{ background: "hsl(var(--muted))" }}>
                   <div className="flex items-center gap-2">
                     <Lightbulb className="w-4 h-4 text-amber-500 shrink-0" />
                     <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Recommendation</p>
                   </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{insights.recommendation}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{staticInsights.recommendation}</p>
                 </div>
 
-                {/* Deep link */}
-                {insights.linkLabel && insights.linkPath && (
-                  <Link href={insights.linkPath(log)} onClick={onClose}>
+                {staticInsights.linkLabel && staticInsights.linkPath && (
+                  <Link href={staticInsights.linkPath(log)} onClick={onClose}>
                     <Button variant="outline" className="w-full" data-testid="button-audit-deeplink">
                       <ExternalLink className="w-4 h-4 mr-2" />
-                      {insights.linkLabel}
+                      {staticInsights.linkLabel}
                     </Button>
                   </Link>
                 )}
               </div>
             </>
           )}
+
+          {/* AI Copilot section */}
+          <Separator />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
+                <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">AI Copilot</p>
+              </div>
+              {aiResult && (
+                <RiskBadge risk={aiResult.riskFlag} />
+              )}
+            </div>
+
+            {!aiResult && !isAnalyzing && (
+              <div className="rounded-lg border border-dashed p-4 flex flex-col items-center gap-3">
+                <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                  Get a context-aware AI analysis of this specific entry — tailored to the notes, actor, and timing recorded above.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onAnalyze(log.id)}
+                  data-testid="button-audit-ai-analyze"
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  Analyze with AI
+                </Button>
+              </div>
+            )}
+
+            {isAnalyzing && (
+              <div className="rounded-lg border p-4 flex flex-col items-center gap-2">
+                <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
+                <p className="text-xs text-muted-foreground">Analyzing entry…</p>
+              </div>
+            )}
+
+            {aiResult && (
+              <div className="space-y-3">
+                <div className="rounded-lg p-4 space-y-2" style={{ background: "hsl(var(--muted))" }}>
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-violet-500 shrink-0" />
+                    <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">AI Insight</p>
+                  </div>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{aiResult.insight}</p>
+                </div>
+
+                <div className="rounded-lg p-4 space-y-2" style={{ background: "hsl(var(--muted))" }}>
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-violet-500 shrink-0" />
+                    <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">AI Recommendation</p>
+                  </div>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{aiResult.recommendation}</p>
+                </div>
+
+                {aiResult.confidence > 0 && (
+                  <p className="text-xs text-muted-foreground text-right">
+                    Confidence: {aiResult.confidence}%
+                  </p>
+                )}
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => onAnalyze(log.id)}
+                  data-testid="button-audit-ai-reanalyze"
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  Re-analyze
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </SheetContent>
     </Sheet>
@@ -311,6 +417,25 @@ export default function PartnerAudit() {
   const [category, setCategory] = useState("all");
   const [dateRange, setDateRange] = useState("all");
   const [selected, setSelected] = useState<any | null>(null);
+  const [aiCache, setAiCache] = useState<Record<string, AiResult>>({});
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+
+  const analyzeMutation = useMutation({
+    mutationFn: (logId: string) =>
+      apiRequest("POST", `/api/partner/audit-log/${logId}/analyze`).then(r => r.json()),
+    onSuccess: (data: AiResult, logId: string) => {
+      setAiCache(prev => ({ ...prev, [logId]: data }));
+      setAnalyzingId(null);
+    },
+    onError: () => {
+      setAnalyzingId(null);
+    },
+  });
+
+  function handleAnalyze(logId: string) {
+    setAnalyzingId(logId);
+    analyzeMutation.mutate(logId);
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -356,7 +481,7 @@ export default function PartnerAudit() {
           <div>
             <h1 className="text-lg font-semibold">Audit Log</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              A complete record of actions taken in your partner portal — click any entry for insights and recommendations.
+              A complete record of actions in your partner portal — click any entry for insights and AI analysis.
             </p>
           </div>
           <Button
@@ -474,12 +599,12 @@ export default function PartnerAudit() {
                     {grouped[day].map((log: any, idx: number) => {
                       const meta = getActionMeta(log.action);
                       const Icon = meta.icon;
-                      const hasInsights = !!ACTION_INSIGHTS[log.action];
+                      const hasAiResult = !!aiCache[log.id];
                       return (
                         <div
                           key={log.id}
-                          className={`relative flex items-start gap-4 pl-10 rounded-lg transition-colors ${hasInsights ? "cursor-pointer hover:bg-muted/60 group" : ""}`}
-                          onClick={() => hasInsights && setSelected(log)}
+                          className="relative flex items-start gap-4 pl-10 rounded-lg transition-colors cursor-pointer hover:bg-muted/60 group"
+                          onClick={() => setSelected(log)}
                           data-testid={`row-log-${log.id}`}
                         >
                           <div className="absolute left-0 flex items-center justify-center w-9 h-9 rounded-full bg-background border-2 border-border shrink-0">
@@ -499,12 +624,13 @@ export default function PartnerAudit() {
                                 )}
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
+                                {hasAiResult && (
+                                  <Sparkles className="w-3 h-3 text-violet-400" />
+                                )}
                                 <span className="text-xs text-muted-foreground">
                                   {format(new Date(log.createdAt), "h:mm a")}
                                 </span>
-                                {hasInsights && (
-                                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                )}
+                                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                               </div>
                             </div>
                           </div>
@@ -520,7 +646,13 @@ export default function PartnerAudit() {
       </div>
 
       {selected && (
-        <AuditDetailSheet log={selected} onClose={() => setSelected(null)} />
+        <AuditDetailSheet
+          log={selected}
+          onClose={() => setSelected(null)}
+          aiCache={aiCache}
+          onAnalyze={handleAnalyze}
+          analyzingId={analyzingId}
+        />
       )}
     </PartnerLayout>
   );

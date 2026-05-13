@@ -44,7 +44,7 @@ import {
   aiIncidentInsights,
   reviews,
 } from "@shared/schema";
-import { analyzeIncident } from "./ai-support-analyzer";
+import { analyzeIncident, analyzeAuditEntry } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
 
@@ -1666,6 +1666,44 @@ export function registerPartnerRoutes(app: Express) {
       .orderBy(desc(partnerAuditLog.createdAt))
       .limit(100);
     res.json(logs);
+  });
+
+  // POST /api/partner/audit-log/:id/analyze
+  app.post("/api/partner/audit-log/:id/analyze", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const { id } = req.params;
+
+      const [entry] = await db.select().from(partnerAuditLog)
+        .where(and(eq(partnerAuditLog.id, id), eq(partnerAuditLog.partnerId, partner.id)))
+        .limit(1);
+
+      if (!entry) return res.status(404).json({ error: "Audit log entry not found" });
+
+      // Resolve actor name if present
+      let actorName: string | null = null;
+      if (entry.actorId) {
+        const [actor] = await db.select({ name: users.name, email: users.email })
+          .from(users).where(eq(users.id, entry.actorId)).limit(1);
+        actorName = actor?.name || actor?.email || null;
+      }
+
+      const result = await analyzeAuditEntry({
+        id: entry.id,
+        action: entry.action,
+        notes: entry.notes,
+        objectType: entry.objectType,
+        objectId: entry.objectId,
+        actorName,
+        createdAt: entry.createdAt,
+        partnerName: partner.name,
+      });
+
+      res.json(result);
+    } catch (err) {
+      console.error("[AuditAI] Route error:", err);
+      res.status(500).json({ error: "Failed to analyze audit entry" });
+    }
   });
 
   // =========================================================

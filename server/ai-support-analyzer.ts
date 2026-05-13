@@ -390,3 +390,109 @@ export function getQuickResponses(category: string): { label: string; template: 
 
   return responses[category] || responses.general;
 }
+
+// ============================================================
+// AUDIT LOG AI COPILOT
+// ============================================================
+
+export interface AuditEntryContext {
+  id: string;
+  action: string;
+  notes?: string | null;
+  objectType?: string | null;
+  objectId?: string | null;
+  actorName?: string | null;
+  createdAt: Date | string;
+  partnerName: string;
+}
+
+export interface AuditAnalysisResult {
+  insight: string;
+  recommendation: string;
+  riskFlag: "low" | "medium" | "high";
+  confidence: number;
+}
+
+const AUDIT_SYSTEM_PROMPT = `You are an expert enterprise operations advisor for LervIT, a premium moving marketplace platform in Calgary, Alberta. You are advising partner company administrators about actions logged in their partner portal.
+
+LervIT Partner Portal Context:
+- Partners are professional moving companies (e.g. OOMovers Inc.) who receive enterprise bookings from LervIT
+- The audit log records every action taken: booking decisions, team changes, compliance uploads, incidents, etc.
+- Your role is to give the PARTNER ADMIN specific, contextual insight into what this logged action means for their business
+- Tone: professional, direct, advisory — like a trusted COO speaking to an operations manager
+
+Your response should be tightly focused on the SPECIFIC log entry provided, not generic advice for the action type. Use the notes, object ID, actor, and timing to make the insight genuinely contextual.
+
+Respond in JSON format only.`;
+
+const AUDIT_ANALYSIS_PROMPT = `Analyze this specific audit log entry and provide targeted operational insight for the partner admin.
+
+PARTNER: {{partnerName}}
+
+AUDIT LOG ENTRY:
+- Action: {{action}}
+- Timestamp: {{createdAt}}
+- Actor: {{actorName}}
+- Object Type: {{objectType}}
+- Object ID: {{objectId}}
+- Notes: {{notes}}
+
+Provide your analysis in this exact JSON structure:
+{
+  "insight": "2-3 sentences of specific, contextual insight about what this action means for this partner's operations. Reference the actual notes, timing, or actor where relevant — do NOT give generic advice.",
+  "recommendation": "1-2 specific, actionable next steps the partner admin should take based on this exact entry. Be concrete.",
+  "riskFlag": "low|medium|high — operational risk this action creates or signals",
+  "confidence": 80
+}`;
+
+export async function analyzeAuditEntry(context: AuditEntryContext): Promise<AuditAnalysisResult> {
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      insight: "AI analysis is not available right now. Review the action details above for context.",
+      recommendation: "Refer to the static insight panel for guidance on this action type.",
+      riskFlag: "low",
+      confidence: 0,
+    };
+  }
+
+  try {
+    const prompt = AUDIT_ANALYSIS_PROMPT
+      .replace("{{partnerName}}", context.partnerName)
+      .replace("{{action}}", context.action)
+      .replace("{{createdAt}}", new Date(context.createdAt).toISOString())
+      .replace("{{actorName}}", context.actorName || "Unknown")
+      .replace("{{objectType}}", context.objectType || "N/A")
+      .replace("{{objectId}}", context.objectId || "N/A")
+      .replace("{{notes}}", context.notes || "No notes recorded");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: AUDIT_SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 400,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("Empty response from OpenAI");
+
+    const result = JSON.parse(content) as AuditAnalysisResult;
+    return {
+      insight: result.insight || "No insight generated.",
+      recommendation: result.recommendation || "No recommendation generated.",
+      riskFlag: (["low", "medium", "high"].includes(result.riskFlag) ? result.riskFlag : "low") as "low" | "medium" | "high",
+      confidence: Math.min(100, Math.max(0, result.confidence || 75)),
+    };
+  } catch (err) {
+    console.error("[AuditAI] analyzeAuditEntry error:", err);
+    return {
+      insight: "Unable to generate AI analysis for this entry at the moment.",
+      recommendation: "Please try again shortly.",
+      riskFlag: "low",
+      confidence: 0,
+    };
+  }
+}
