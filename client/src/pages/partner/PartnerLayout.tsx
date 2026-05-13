@@ -23,11 +23,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, AlertTriangle, Camera, Loader2, Pencil, ImagePlus, Bell, XCircle, CheckCheck } from "lucide-react";
+import { LogOut, AlertTriangle, Camera, Loader2, Pencil, ImagePlus, Bell, CheckCheck } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { apiRequest } from "@/lib/queryClient";
-import { useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import "iconify-icon";
 
@@ -162,7 +160,7 @@ function ProfileEditDialog({ user, onClose }: { user: any; onClose: () => void }
 }
 
 export function PartnerLayout({ children }: { children: React.ReactNode }) {
-  const [loc] = useLocation();
+  const [loc, navigate] = useLocation();
   const { user, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
@@ -196,6 +194,25 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
     queryKey: ["/api/partner/messages/unread-count"],
     refetchInterval: 20000,
   });
+
+  const { data: inboxData } = useQuery<any>({
+    queryKey: ["/api/inbox"],
+    refetchInterval: 30000,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: async (id: number) =>
+      apiRequest("POST", `/api/inbox/${id}/read`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/inbox"] }),
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/inbox/read-all"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/inbox"] }),
+  });
+
+  const notifications: any[] = inboxData?.notifications ?? [];
+  const unreadNotifs = notifications.filter((n: any) => !n.isRead);
 
   const partner = ctx?.partner;
   const pendingBookings = dashboard?.stats?.pendingBookings ?? 0;
@@ -350,12 +367,12 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
 
         {/* Main content */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <header className="flex items-center h-12 px-4 border-b border-border bg-background shrink-0">
+          <header className="flex items-center h-12 px-4 border-b border-border bg-background shrink-0 gap-2">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             {isOnboarding && partner && (
-              <div className="ml-3 flex items-center gap-2">
+              <div className="ml-1 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground hidden sm:inline">
                   Complete onboarding to go live
                 </span>
                 <Link href="/partner/onboarding">
@@ -365,6 +382,74 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               </div>
             )}
+            <div className="ml-auto">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="icon" variant="ghost" className="relative" data-testid="button-notifications">
+                    <Bell className="w-4 h-4" />
+                    {unreadNotifs.length > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center leading-none" data-testid="badge-notification-count">
+                        {unreadNotifs.length > 9 ? "9+" : unreadNotifs.length}
+                      </span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0" data-testid="popover-notifications">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                    <span className="text-sm font-semibold">Notifications</span>
+                    {unreadNotifs.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => markAllReadMutation.mutate()}
+                        disabled={markAllReadMutation.isPending}
+                        data-testid="button-mark-all-read"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        Mark all read
+                      </Button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="py-8 text-center text-sm text-muted-foreground" data-testid="text-no-notifications">
+                        No notifications yet
+                      </div>
+                    ) : (
+                      notifications.slice(0, 20).map((notif: any) => (
+                        <button
+                          key={notif.id}
+                          data-testid={`notification-item-${notif.id}`}
+                          className={`w-full text-left px-4 py-3 border-b border-border/50 last:border-0 hover-elevate transition-colors ${!notif.isRead ? "bg-muted/40" : ""}`}
+                          onClick={() => {
+                            if (!notif.isRead) markReadMutation.mutate(notif.id);
+                            if (notif.actionUrl) navigate(notif.actionUrl);
+                          }}
+                        >
+                          <div className="flex items-start gap-2">
+                            {!notif.isRead && (
+                              <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />
+                            )}
+                            <div className={`flex-1 min-w-0 ${notif.isRead ? "pl-4" : ""}`}>
+                              <p className="text-sm font-medium leading-snug" data-testid={`text-notif-title-${notif.id}`}>
+                                {notif.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" data-testid={`text-notif-message-${notif.id}`}>
+                                {notif.message}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                                {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </header>
           <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
