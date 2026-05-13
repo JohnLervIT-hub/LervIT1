@@ -929,7 +929,6 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
             <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
-            <TabsTrigger value="downloads" data-testid="tab-downloads">Downloads</TabsTrigger>
           </TabsList>
 
           {/* Bookings Tab */}
@@ -1139,51 +1138,6 @@ export default function AdminDashboard() {
             </Suspense>
           </TabsContent>
 
-          <TabsContent value="downloads" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Documents</CardTitle>
-                <CardDescription>Internal documents for engineering, partners, and investors.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  {
-                    icon: BookOpen,
-                    title: "12-Month Product Development Roadmap",
-                    description: "Quarterly roadmap covering Q1–Q4 2026 through Q1 2027 with confirmed features, gaps, and milestones.",
-                    href: "/api/downloads/roadmap",
-                    filename: "LervIT-12-Month-Dev-Roadmap.md",
-                  },
-                  {
-                    icon: FileText,
-                    title: "Technical Brief",
-                    description: "One-page architecture overview — stack, AI capabilities, enterprise portal, security model, and live production metrics.",
-                    href: "/api/downloads/technical-brief",
-                    filename: "LervIT-Technical-Brief.md",
-                  },
-                ].map((doc) => {
-                  const Icon = doc.icon;
-                  return (
-                    <div key={doc.href} className="flex items-start gap-4 p-4 rounded-md border">
-                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-                        <Icon className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <p className="text-sm font-medium">{doc.title}</p>
-                        <p className="text-xs text-muted-foreground">{doc.description}</p>
-                      </div>
-                      <a href={doc.href} download={doc.filename} target="_blank" rel="noreferrer">
-                        <Button size="sm" variant="outline" data-testid={`button-download-${doc.filename}`}>
-                          <Download className="w-3.5 h-3.5 mr-1.5" />
-                          Download
-                        </Button>
-                      </a>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
 
         {/* Booking Detail Dialog */}
