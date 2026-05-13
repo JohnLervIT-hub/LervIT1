@@ -2007,7 +2007,7 @@ export function registerPartnerRoutes(app: Express) {
         // notification bell; actionUrl navigates to /partner/onboarding on click.
         await db.insert(inAppNotifications).values({
           userId: pu.userId,
-          type: "status_update",
+          type: "partner_rejected",
           title: "Application Rejected — Action Required",
           message: `Your application for ${partner.name} was not approved. Reason: ${reason}. Please update your details and re-submit.`,
           actionUrl: `/partner/onboarding`,

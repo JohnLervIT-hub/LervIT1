@@ -425,7 +425,9 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                           className={`w-full text-left px-4 py-3 border-b border-border/50 last:border-0 hover-elevate transition-colors ${!notif.isRead ? "bg-muted/40" : ""}`}
                           onClick={() => {
                             if (!notif.isRead) markReadMutation.mutate(notif.id);
-                            if (notif.actionUrl) navigate(notif.actionUrl);
+                            const dest = notif.actionUrl
+                              ?? (notif.type === "partner_rejected" ? "/partner/onboarding" : null);
+                            if (dest) navigate(dest);
                           }}
                         >
                           <div className="flex items-start gap-2">
