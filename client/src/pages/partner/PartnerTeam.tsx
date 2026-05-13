@@ -187,7 +187,7 @@ function TeamMemberDialog({ member, onClose }: { member?: any; onClose: () => vo
   const { toast } = useToast();
   const qc = useQueryClient();
   const isEdit = !!member;
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const driverPhotoRef = useRef<HTMLInputElement>(null);
   const vehiclePhotoRef = useRef<HTMLInputElement>(null);
