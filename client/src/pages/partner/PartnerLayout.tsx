@@ -23,7 +23,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, AlertTriangle, Camera, Loader2, Pencil, ImagePlus } from "lucide-react";
+import { LogOut, AlertTriangle, Camera, Loader2, Pencil, ImagePlus, Bell, XCircle, CheckCheck } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { apiRequest } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { formatDistanceToNow } from "date-fns";
 import "iconify-icon";
 
 declare global {

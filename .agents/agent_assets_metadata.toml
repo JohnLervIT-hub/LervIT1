@@ -119,3 +119,9 @@ id = "DdwBMHsxBXXibExe5G_CN"
 uri = "file://exports/MoveDeck-PaaS-Scope-Document.md"
 type = "text"
 title = "MoveDeck PaaS — Full Scope, Execution, Deployment & Hypercare"
+
+[[outputs]]
+id = "VJvI8YM1_qrHRPsTv1hR8"
+uri = "file://exports/LervIT-12-Month-Dev-Roadmap.md"
+type = "text"
+title = "LervIT — 12-Month Product Development Roadmap (May 2026 → April 2027)"
