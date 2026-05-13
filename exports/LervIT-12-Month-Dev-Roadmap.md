@@ -1,40 +1,91 @@
 # LervIT — 12-Month Product Development Roadmap
 ## May 2026 → April 2027
 
-**Version:** 2.0 (Audited — confirmed-built items removed)
+**Version:** 3.0 (Production-Aligned)
 **Prepared By:** LervIT Technologies Corporation
 **Date:** May 2026
 **Classification:** Internal — Product & Engineering
 
 ---
 
+## Production Baseline
+
+Live as of May 13, 2026. Data queried directly from the production database.
+
+| Metric | Value |
+|---|---|
+| Total users | 71 (35 customers, 35 movers) |
+| Total bookings | 37 |
+| Completed moves | 16 |
+| Cancelled bookings | 10 |
+| Analytics events recorded | 913 |
+| Support tickets | 8 |
+| Enterprise partners | 1 (OOMovers pilot) |
+| Last booking date | May 5, 2026 |
+| Production URL | https://app.lervit.com |
+
+---
+
 ## Audit Notes
 
-Before finalising this roadmap, every item was checked against the live codebase. The following are **already fully built** and have been removed from sprint planning entirely:
+Every item was checked against both the live codebase **and** the production environment. Three categories are used:
 
-| Feature | Where it lives |
+- **Confirmed working in production** — feature exists in code and all required API keys/config are set in production
+- **In code, broken in production** — feature exists and is deployed, but a missing secret or schema gap means it silently fails
+- **Confirmed configured** — infrastructure/tooling that is already set up (keys present, services connected)
+
+### Confirmed working in production
+
+| Feature | Evidence |
 |---|---|
-| Progressive Web App (PWA) | `client/public/manifest.json`, `client/public/sw.js`, `client/index.html` |
-| Rate limiting (auth, API, webhook) | `server/middleware/security.ts` — `authLimiter`, `generalApiLimiter`, `webhookLimiter` |
-| Re-book shortcut | `client/src/pages/MyBookings.tsx` L930, `CustomerDashboard.tsx` L805 |
-| My Bookings / Move History page | `client/src/pages/MyBookings.tsx` — route `/my-bookings` in App.tsx |
-| Customer → Mover message button | `CustomerDashboard.tsx` L684 — message button on active bookings |
-| Booking cancellation button | `MyBookings.tsx` — `cancelBookingMutation` with UI button |
-| Promo code system (LERVIT20) | `shared/schema.ts`, `server/routes.ts`, Admin Payouts tab |
-| In-app notification system | `shared/schema.ts` — `inAppNotifications`, `/api/inbox` endpoints |
-| Analytics event tracking | `analytics_events` table, `POST /api/analytics/event`, `use-analytics.ts` |
-| Mover earnings dashboard + Stripe payouts | `MoverDashboard.tsx`, `moverStripeAccounts` table |
-| Real-time GPS + WebSocket (movers) | `server/index.ts` WebSocket server, `JobNotificationSound.tsx` |
-| OTP signup, mover verification, driver documents | `server/routes.ts`, `MoverOnboarding.tsx` |
-| Abandoned booking reminders | `server/background-jobs.ts` |
-| Stripe Connect mover onboarding reminders | `server/background-jobs.ts` |
-| AI Auto-Quote, Vision Engine, AI Support Copilot | `server/ai-identifier.ts`, `shared/ai.ts` flags |
+| Progressive Web App (PWA) | `client/public/manifest.json`, `sw.js` |
+| Rate limiting (auth, API, webhook) | `server/middleware/security.ts` |
+| Re-book shortcut | `MyBookings.tsx` L930, `CustomerDashboard.tsx` L805 |
+| My Bookings / Move History page | Route `/my-bookings` in `App.tsx` |
+| Customer → Mover message button | `CustomerDashboard.tsx` L684 |
+| Booking cancellation button | `MyBookings.tsx` — `cancelBookingMutation` |
+| In-app notification system | `in_app_notifications` table exists in prod; 39 notifications present |
+| Analytics event tracking | `analytics_events` table — 913 events in prod; `POST /api/analytics/event` returning 200 in prod logs |
+| Mover earnings dashboard | `mover_earnings`, `mover_payouts` tables exist in prod |
+| Stripe Connect + payouts | `STRIPE_SECRET_KEY` + `VITE_STRIPE_PUBLIC_KEY` set; `mover_stripe_accounts` table in prod |
+| SMS notifications (Telnyx) | `TELNYX_API_KEY`, `TELNYX_PHONE_NUMBER`, `TELNYX_MESSAGING_PROFILE_ID` all set |
+| Real-time WebSocket (movers) | WebSocket server initialised on every prod startup (confirmed in prod logs) |
+| Google Maps (geocoding + distance) | `VITE_GOOGLE_MAPS_API_KEY` set; used by both frontend and server |
+| OTP signup, mover verification, driver documents | `phone_verification_tokens`, `verification_items` tables in prod |
+| Abandoned booking tracking | `abandoned_bookings` table in prod |
+| AI Auto-Quote Predictor | Pure math — no API key required; works in production as-is |
 | Growth Dashboard + Operations Dashboard | `GrowthDashboard.tsx`, `OperationsDashboard.tsx` |
-| Full partner portal | `client/src/pages/partner/*`, `server/partnerRoutes.ts` |
+| Full partner portal (v1) | All partner tables (`partners`, `partner_users`, `partner_invites`, etc.) exist in prod; 1 partner record present |
+| Object storage (image uploads) | `DEFAULT_OBJECT_STORAGE_BUCKET_ID`, `PUBLIC_OBJECT_SEARCH_PATHS`, `PRIVATE_OBJECT_DIR` all set |
 | Gzip/Brotli compression, lazy loading | `server/vite.ts`, `client/src/App.tsx` |
 | Facebook Pixel + SEO structured data | `client/index.html` |
+| Session security secret | `SESSION_SECRET` confirmed set in production |
+| Sentry error monitoring | `SENTRY_DSN` and `VITE_SENTRY_DSN` both set in production — **removed from Q1 sprint** |
+| Enterprise portal enabled | `VITE_ENABLE_ENTERPRISE=true` set in production env |
 
-Items that are **partially built** are kept in the roadmap but scoped to only the remaining work.
+### In code, broken in production
+
+These features are deployed and appear to work but will silently fail on every trigger because a required secret is not configured.
+
+| Feature | Root cause | Impact |
+|---|---|---|
+| **All email notifications** | `RESEND_API_KEY` not set — `resend` client initialises to `null` at startup | Abandoned booking reminders, Stripe Connect onboarding reminders (1st/2nd/3rd), move confirmation emails, partner rejection emails, post-move feedback surveys — all silently drop |
+| **Vision Engine (AI Item Detection)** | `OPENAI_API_KEY` not set — `ai-identifier.ts` line 8 reads it at module load | Photo analysis on booking Step 2 returns no AI result; load size / vehicle recommendation falls back to manual input only |
+| **AI Support Copilot** | `OPENAI_API_KEY` not set — `ai-support-analyzer.ts` line 99 guards with early return | Admin support ticket analysis produces no summaries, classifications, or suggested responses |
+
+### Schema gaps in production
+
+| Feature | Gap | Impact |
+|---|---|---|
+| Promo code system (LERVIT20) | `promo_code_uses` table does not exist in production | Promo usage tracking will throw a runtime error if triggered; main promo fields on `bookings` table may still exist |
+
+### Production infrastructure concerns
+
+| Issue | Observation | Frequency |
+|---|---|---|
+| node-cron missed executions | `[NODE-CRON] [WARN] missed execution` — appears in every production uptime window | Every ~30 minutes |
+| Neon DB FATAL crash | One `severity: 'FATAL'` WebSocket error from Neon driver causing full server restart | Observed once in current log window |
+| Twilio credentials set but unused | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` are all set; the app uses Telnyx exclusively | Unused secrets — no functional impact, but confusing |
 
 ---
 
@@ -42,7 +93,7 @@ Items that are **partially built** are kept in the roadmap but scoped to only th
 
 | Quarter | Theme | Goal |
 |---|---|---|
-| Q1 (May–Jul) | **Stabilize & Validate** | Closed beta with real users; fix everything that breaks |
+| Q1 (May–Jul) | **Stabilize & Validate** | Close the production gaps above; closed beta with real users |
 | Q2 (Aug–Oct) | **Grow & Convert** | Open beta; first 50 paying customers |
 | Q3 (Nov–Jan) | **Scale & Diversify** | PaaS multi-tenancy; API; Calgary dominance |
 | Q4 (Feb–Apr) | **Expand & Compound** | City 2 expansion; enterprise; native mobile app |
@@ -54,10 +105,38 @@ Items that are **partially built** are kept in the roadmap but scoped to only th
 
 ---
 
+### Production Gap Fixes (P0 — pre-beta blockers)
+
+These are not new features. They are production defects that must be resolved before any beta launch.
+
+#### P0 — Email Notifications: Set RESEND_API_KEY `XS` `Fix`
+Every email the platform sends — abandoned booking reminders, Stripe Connect onboarding nudges, move confirmations, partner rejection notices — is currently silently dropped in production. All the code is working; only the API key is missing.
+- Action: Add `RESEND_API_KEY` to production secrets; verify at least one email delivers end-to-end
+- Done when: An abandoned booking triggers a recovery email that actually arrives in the inbox
+
+#### P0 — AI Features: Set OPENAI_API_KEY `XS` `Fix`
+The Vision Engine and AI Support Copilot are deployed but return nothing because `OPENAI_API_KEY` is not set. The Auto-Quote Predictor is unaffected (pure math).
+- Action: Add `OPENAI_API_KEY` to production secrets; test a photo upload and a support ticket analysis
+- Done when: A booking photo upload returns a load size recommendation; support ticket analysis produces a summary
+
+#### P0 — Deploy Missing Schema: `promo_code_uses` `XS` `Fix`
+The `promo_code_uses` table does not exist in the production database. A customer attempting to use the LERVIT20 promo code will hit a runtime error.
+- Action: Trigger a production deploy to sync the schema (Replit Publish flow diffs and applies)
+- Done when: `SELECT COUNT(*) FROM promo_code_uses` returns 0 in production (table exists, empty)
+
+#### P1 — Background Job Scheduler Reliability `M` `Fix`
+node-cron is logging `missed execution` in every production uptime window, roughly every 30 minutes. This means abandoned booking reminders, Stripe onboarding nudges, and booking expiry jobs are all running late or not at all.
+- Root cause: node-cron and the Express server share the same single-threaded process. Heavy request handling blocks the event loop long enough to cause cron to miss its slot.
+- Options: (a) move background jobs to a separate worker process; (b) replace node-cron with a DB-backed job queue (pg-boss or similar) that survives restarts; (c) use Replit's scheduled tasks if available
+- Files: `server/background-jobs.ts`, `server/index.ts`
+- Done when: Zero missed execution warnings in a 24-hour production window
+
+---
+
 ### Core Product
 
 #### P0 — Closed Beta Invite Flow `M` `New`
-A landing page at `/beta` allowing hand-picked customers to sign up with an invite code. Tracks referral source. Auto-sends a "Welcome to Beta" email with onboarding tips. This is specifically for the **main marketplace** (customers booking moves) — the partner portal already has its own invite system.
+A landing page at `/beta` allowing hand-picked customers to sign up with an invite code. Tracks referral source. Auto-sends a "Welcome to Beta" email with onboarding tips. **Depends on RESEND_API_KEY fix above.**
 - Files: `client/src/pages/BetaSignup.tsx` (new), `server/routes.ts`
 - Done when: 10 beta customers can sign up, book, and pay without needing support
 
@@ -95,16 +174,11 @@ The WebSocket system currently serves movers only. Extend it to push status upda
 GitHub Actions: TypeScript check + ESLint on every PR; auto-deploy to staging on merge to main; smoke tests post-deploy; alert on failure.
 - Done when: No code reaches production without passing type check and smoke tests
 
-#### P0 — Error Monitoring (Sentry) `S` `New`
-Integrate Sentry for frontend and backend. Every unhandled exception captured with user ID, request path, and stack trace.
-- Files: `server/index.ts`, `client/src/main.tsx`
-- Done when: Zero unhandled errors go undetected for more than 5 minutes in production
-
 #### P0 — Database Backup Restoration Drill `S` `New`
-Neon provides automatic backups but they have never been tested. Run a monthly restoration drill to a staging database and document the recovery procedure.
+Neon provides automatic backups but they have never been tested. A FATAL crash was observed in production logs causing a full server restart — recovery from data loss has not been validated. Run a monthly restoration drill to a staging database and document the recovery procedure.
 
 #### P1 — Session Security Hardening `S` `Partial`
-`sameSite: 'lax'` is set. What remains: upgrade to `sameSite: 'strict'`, ensure `secure: true` is enforced in production (not just via proxy trust), and add an absolute session expiry of 8 hours regardless of activity.
+`SESSION_SECRET` is confirmed set in production. `sameSite: 'lax'` is set. What remains: upgrade to `sameSite: 'strict'`, ensure `secure: true` is enforced in production (not just via proxy trust), and add an absolute session expiry of 8 hours regardless of activity.
 - Files: `server/index.ts` (session config)
 
 #### P2 — Uptime Monitoring & Status Page `S` `New`
@@ -119,7 +193,7 @@ Extend the Growth Dashboard with a "Beta Health" section: daily active customers
 - Files: `client/src/pages/GrowthDashboard.tsx`
 
 #### P0 — Post-Move Feedback Survey `M` `New`
-After every completed move, send a 3-question survey (NPS + 2 open-ended) via email. Store responses in a new `feedback` table. Admin views all responses.
+After every completed move, send a 3-question survey (NPS + 2 open-ended) via email. Store responses in a new `feedback` table. Admin views all responses. **Depends on RESEND_API_KEY fix above.**
 - Files: `shared/schema.ts`, `server/routes.ts`, new `client/src/pages/admin/AdminFeedback.tsx`
 
 #### P1 — Mover Earnings Statement (PDF Download) `M` `New`
@@ -127,7 +201,7 @@ Movers need documentation for tax purposes. Generate a monthly earnings PDF on d
 - Files: `client/src/pages/MoverDashboard.tsx`
 
 #### P1 — Promo Code Analytics Card `S` `New`
-No admin visibility into promo performance yet. Add a card to the Growth Dashboard: total LERVIT20 uses, total discount absorbed, average order value with/without promo, conversion lift.
+No admin visibility into promo performance yet. Add a card to the Growth Dashboard: total LERVIT20 uses, total discount absorbed, average order value with/without promo, conversion lift. **Note: `promo_code_uses` schema fix is a prerequisite.**
 - Files: `client/src/pages/GrowthDashboard.tsx`
 
 ---
@@ -145,7 +219,7 @@ Remove the invite gate from customer signup. Add a tasteful "Beta" badge in the 
 #### P0 — Saved Addresses `M` `New`
 Customers can save up to 5 addresses (home, work, storage unit, etc.). A saved address dropdown replaces manual entry in the booking flow.
 - Files: `client/src/pages/RequestMove.tsx`, `shared/schema.ts`
-- Note: Re-book shortcut already exists in MyBookings.tsx — no work needed there
+- Note: Re-book shortcut already exists in `MyBookings.tsx` — no work needed there
 
 #### P1 — Mover Availability Calendar `L` `New`
 Movers set their available days and hours for the coming 4 weeks. Customers see only movers marked available on their preferred date. Reduces "no movers available" situations and no-shows.
@@ -181,7 +255,7 @@ Full audit of queries in `server/routes.ts` and `server/partnerRoutes.ts`. Add m
 Move images served directly from Replit Object Storage behind Cloudflare CDN. Reduces application server load and improves image load times for Calgary customers.
 
 #### P2 — Background Job Admin Dashboard `S` `New`
-Hidden admin page showing all cron job statuses: last run time, success/failure, next scheduled run. Currently failures are invisible.
+Hidden admin page showing all cron job statuses: last run time, success/failure, next scheduled run. Currently failures are invisible. **Higher priority if background job reliability fix in Q1 is delayed.**
 - Files: new `client/src/pages/admin/AdminJobs.tsx`
 
 ---
@@ -197,7 +271,7 @@ Free tier: 3 jobs/month, 20% platform fee. Premium ($29/mo): unlimited jobs, 15%
 - Files: `shared/schema.ts`, `server/routes.ts`, `client/src/pages/MoverDashboard.tsx`
 
 #### P1 — Automated Mover Recruitment Emails `M` `New`
-When a customer books in a zone with fewer than 3 available movers, trigger automated outreach to unverified movers in that area.
+When a customer books in a zone with fewer than 3 available movers, trigger automated outreach to unverified movers in that area. **Depends on RESEND_API_KEY being set.**
 - Files: `server/routes.ts`, `server/notificationService.ts`
 
 #### P1 — Admin Revenue Dashboard V2 `M` `New`
@@ -256,7 +330,7 @@ Unit tests for: pricing model, vehicle matching algorithm, promo code validation
 Replace `connect-pg-simple` sessions with Redis. Add Redis caching for mover list queries (60s TTL), Google Maps geocoding results (24h TTL), AI quote results (30m TTL).
 
 #### P1 — Structured Logging Dashboard `M` `New`
-Pipe Pino JSON logs to Logtail or Papertrail. Create saved searches for: payment failures, booking errors, mover WebSocket disconnects, AI quota errors.
+Pipe Pino JSON logs (currently writing structured JSON in production) to Logtail or Papertrail. Create saved searches for: payment failures, booking errors, mover WebSocket disconnects, AI quota errors. Note: Sentry is already configured for exceptions — this is for operational log search.
 
 #### P2 — Database Read Replica `M` `New`
 Provision a Neon read replica. Route analytics and reporting queries to it, keeping write traffic on the primary.
@@ -360,8 +434,11 @@ Allow a local operator in a new city to licence the LervIT brand and platform fo
 
 | Milestone | Target Date | Indicator |
 |---|---|---|
+| RESEND_API_KEY set — emails delivering in production | May 2026 | One abandoned booking email arrives in inbox |
+| OPENAI_API_KEY set — AI features functional in production | May 2026 | Photo upload returns load size recommendation |
+| Background job scheduler reliable in production | June 2026 | Zero node-cron missed execution warnings in 24h |
 | Closed beta live — 10 real customers | June 2026 | 10 completed moves |
-| CI/CD pipeline + error monitoring active | June 2026 | Zero blind production errors |
+| CI/CD pipeline active | June 2026 | No code reaches production without type check passing |
 | Stripe refund + cancellation policy live | July 2026 | Self-serve cancel with auto refund |
 | Open beta — no invite required | August 2026 | Public signup enabled |
 | Mover premium subscription launched | September 2026 | First 10 premium mover subscribers |
@@ -392,6 +469,10 @@ P0 items are committed. P1 items are targeted. P2 items are stretch goals droppe
 
 | Risk | Affected Milestones | Mitigation |
 |---|---|---|
+| **Email silently broken in production** (RESEND_API_KEY not set) | All Q1 features that trigger email | Set the key immediately — this is a production defect, not a roadmap item |
+| **AI features silently broken in production** (OPENAI_API_KEY not set) | Vision Engine, AI Support Copilot | Set the key immediately |
+| **Background job scheduler unreliable** | Abandoned booking recovery, Stripe onboarding reminders, booking expiry | Move to DB-backed job queue (pg-boss) or a separate process in Q1 |
+| Neon FATAL crash observed in production | Database availability | Test backup restoration drill; consider connection pooling tuning |
 | Mover supply too thin for beta | All Q1–Q2 | Pre-recruit 20 movers before opening beta |
 | Multi-tenancy scope creep delays PaaS | Q3 milestone | Timebox to 4 weeks; ship row-level isolation first |
 | Native app App Store review delays | Q4 mobile milestone | Submit TestFlight by end of January — 3-week buffer |
@@ -400,5 +481,5 @@ P0 items are committed. P1 items are targeted. P2 items are stretch goals droppe
 
 ---
 
-*LervIT Technologies Corporation. Prepared May 2026. Version 2.0 (Audited).*
+*LervIT Technologies Corporation. Prepared May 2026. Version 3.0 (Production-Aligned).*
 *Review quarterly as market and product learnings evolve.*
