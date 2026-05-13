@@ -1942,7 +1942,7 @@ export function registerPartnerRoutes(app: Express) {
       if (partner.status !== "pending_approval") return res.status(400).json({ error: "Only partners in pending_approval status can be rejected" });
 
       const [updated] = await db.update(partners)
-        .set({ status: "onboarding", rejectionReason: reason, updatedAt: new Date() })
+        .set({ status: "onboarding", updatedAt: new Date() })
         .where(eq(partners.id, partner.id))
         .returning();
 
