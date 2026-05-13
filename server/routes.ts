@@ -233,6 +233,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendFile(filePath);
   });
 
+  app.get("/api/downloads/technical-brief", (_req: Request, res: Response) => {
+    const filePath = path.resolve(process.cwd(), "exports", "LervIT-Technical-Brief.md");
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="LervIT-Technical-Brief.md"');
+    res.sendFile(filePath);
+  });
+
   // ===== PUBLIC CONFIG ROUTES (no auth required) =====
   // Expose support phone number for display on frontend
   app.get("/api/config/support-phone", (_req: Request, res: Response) => {
