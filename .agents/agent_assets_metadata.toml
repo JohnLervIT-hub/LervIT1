@@ -131,3 +131,9 @@ id = "6gXspxOP6Q4rdvxf_vvhq"
 uri = "file://exports/LervIT-Technical-Brief.md"
 type = "text"
 title = "LervIT Technical Brief"
+
+[[outputs]]
+id = "1z80WR9AqW31dPSH9TUSb"
+uri = "file://exports/LervIT-Technical-Brief.pdf"
+type = "pdf"
+title = "LervIT Technical Brief (PDF)"

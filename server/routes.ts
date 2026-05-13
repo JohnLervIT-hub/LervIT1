@@ -241,6 +241,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendFile(filePath);
   });
 
+  app.get("/api/downloads/technical-brief-pdf", (_req: Request, res: Response) => {
+    import("./generate-brief-pdf.js").then(({ generateTechnicalBriefPdf }) => {
+      generateTechnicalBriefPdf(res);
+    }).catch((err) => {
+      console.error("PDF generation error:", err);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    });
+  });
+
   // ===== PUBLIC CONFIG ROUTES (no auth required) =====
   // Expose support phone number for display on frontend
   app.get("/api/config/support-phone", (_req: Request, res: Response) => {
