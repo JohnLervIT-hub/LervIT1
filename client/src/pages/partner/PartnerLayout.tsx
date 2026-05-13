@@ -435,7 +435,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
                               <p className="text-sm font-medium leading-snug" data-testid={`text-notif-title-${notif.id}`}>
                                 {notif.title}
                               </p>
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" data-testid={`text-notif-message-${notif.id}`}>
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words" data-testid={`text-notif-message-${notif.id}`}>
                                 {notif.message}
                               </p>
                               <p className="text-[10px] text-muted-foreground/60 mt-1">
