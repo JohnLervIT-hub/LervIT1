@@ -142,6 +142,77 @@ type GrowthMetrics = {
   generatedAt: string;
 };
 
+type SurveyRow = {
+  id: string;
+  bookingId: string;
+  npsScore: number;
+  easeRating: number;
+  moverRating: number;
+  comments: string | null;
+  submittedAt: string;
+  userName: string;
+  userEmail: string;
+};
+
+type SurveySummary = {
+  totalSurveys: number;
+  avgNpsScore: number | null;
+  avgEaseRating: number | null;
+  avgMoverRating: number | null;
+};
+
+function FeedbackTab() {
+  const { data: summary } = useQuery<SurveySummary>({ queryKey: ["/api/admin/surveys/summary"] });
+  const { data: surveysData } = useQuery<{ data: SurveyRow[]; total: number }>({ queryKey: ["/api/admin/surveys"] });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total Surveys", value: summary?.totalSurveys ?? "—" },
+          { label: "Avg NPS", value: summary?.avgNpsScore != null ? `${summary.avgNpsScore}/10` : "—" },
+          { label: "Avg Ease", value: summary?.avgEaseRating != null ? `${summary.avgEaseRating}/5` : "—" },
+          { label: "Avg Mover", value: summary?.avgMoverRating != null ? `${summary.avgMoverRating}/5` : "—" },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="pt-4 pb-3">
+              <p className="text-xs text-muted-foreground">{stat.label}</p>
+              <p className="text-2xl font-bold">{stat.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Recent Surveys {surveysData?.total != null && <span className="text-muted-foreground font-normal text-sm">({surveysData.total} total)</span>}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!surveysData?.data?.length ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No surveys submitted yet</p>
+          ) : (
+            <div className="space-y-2">
+              {surveysData.data.map((row) => (
+                <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b last:border-0 text-sm">
+                  <div>
+                    <p className="font-medium">{row.userName}</p>
+                    <p className="text-xs text-muted-foreground">{row.userEmail} · {format(new Date(row.submittedAt), "MMM d, yyyy")}</p>
+                    {row.comments && <p className="text-xs text-muted-foreground mt-0.5 italic">"{row.comments}"</p>}
+                  </div>
+                  <div className="flex gap-2 text-xs">
+                    <Badge variant="outline">NPS {row.npsScore}/10</Badge>
+                    <Badge variant="outline">Ease {row.easeRating}/5</Badge>
+                    <Badge variant="outline">Mover {row.moverRating}/5</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function GrowthDashboard() {
   const { toast } = useToast();
   const [fulfilmentPeriod, setFulfilmentPeriod] = useState<string>('all');
@@ -929,6 +1000,7 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
             <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
+            <TabsTrigger value="feedback" data-testid="tab-feedback">Feedback</TabsTrigger>
           </TabsList>
 
           {/* Bookings Tab */}
@@ -1136,6 +1208,10 @@ export default function AdminDashboard() {
             }>
               <OperationsDashboard />
             </Suspense>
+          </TabsContent>
+
+          <TabsContent value="feedback" className="space-y-4 mt-4">
+            <FeedbackTab />
           </TabsContent>
 
         </Tabs>

@@ -1,6 +1,7 @@
 import * as React from "react";
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { queryClient } from "@/lib/queryClient";
+import { toast } from "@/hooks/use-toast";
 
 export type UserRole =
   | "customer"
@@ -53,6 +54,61 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const customerWsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectDelayRef = useRef(1000);
+
+  const connectCustomerWs = useCallback((userId: string) => {
+    if (customerWsRef.current?.readyState === WebSocket.OPEN) return;
+
+    fetch("/api/auth/ws-token/customer", { credentials: "include" })
+      .then((r) => r.json())
+      .then(({ token }) => {
+        if (!token) return;
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws/customer-notifications?token=${token}`);
+        customerWsRef.current = ws;
+
+        ws.onopen = () => { reconnectDelayRef.current = 1000; };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "booking_status_update") {
+              queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+              queryClient.invalidateQueries({ queryKey: [`/api/bookings/${data.bookingId}`] });
+              toast({
+                title: "Booking Updated",
+                description: `Your booking status changed to: ${data.status.replace(/_/g, " ")}`,
+              });
+            }
+          } catch (_) {}
+        };
+
+        ws.onclose = () => {
+          customerWsRef.current = null;
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 2, 30000);
+            connectCustomerWs(userId);
+          }, reconnectDelayRef.current);
+        };
+
+        ws.onerror = () => { ws.close(); };
+      })
+      .catch(() => {});
+  }, []);
+
+  const disconnectCustomerWs = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (customerWsRef.current) {
+      customerWsRef.current.onclose = null;
+      customerWsRef.current.close();
+      customerWsRef.current = null;
+    }
+  }, []);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -98,6 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     initAuth();
   }, [refreshUser]);
+
+  useEffect(() => {
+    if (user && user.role === "customer") {
+      connectCustomerWs(user.id);
+    } else {
+      disconnectCustomerWs();
+    }
+    return () => { disconnectCustomerWs(); };
+  }, [user?.id, user?.role, connectCustomerWs, disconnectCustomerWs]);
 
   const login = async (email: string, password: string): Promise<{ role: string }> => {
     const response = await fetch("/api/auth/login", {
@@ -232,12 +297,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    disconnectCustomerWs();
     try {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
-      
+
       // Wait for the response to complete before clearing user state
       if (response.ok) {
         console.log("Logout successful");
@@ -253,7 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear on network error to prevent stuck state
       setUser(null);
     }
-    
+
     // Always clear cached queries on logout to prevent data leakage to next user
     queryClient.clear();
   };

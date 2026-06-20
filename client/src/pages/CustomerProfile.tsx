@@ -142,6 +142,118 @@ function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+type SavedAddress = { id: string; label: string; address: string };
+
+function SavedAddressesCard() {
+  const { toast } = useToast();
+  const [newLabel, setNewLabel] = useState("");
+  const [newAddress, setNewAddress] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const { data: addresses, isLoading } = useQuery<SavedAddress[]>({
+    queryKey: ["/api/addresses"],
+  });
+
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/addresses", { label: newLabel.trim(), address: newAddress.trim() });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/addresses"] });
+      toast({ title: "Address saved" });
+      setNewLabel("");
+      setNewAddress("");
+      setAdding(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save address", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/addresses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/addresses"] });
+      toast({ title: "Address removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove address", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="w-5 h-5 text-primary" />
+          Saved Addresses
+        </CardTitle>
+        <CardDescription>Quick-select addresses when booking a move (max 5)</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : addresses && addresses.length > 0 ? (
+          <div className="space-y-2">
+            {addresses.map((addr) => (
+              <div key={addr.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                <div>
+                  <p className="font-medium text-sm">{addr.label}</p>
+                  <p className="text-xs text-muted-foreground">{addr.address}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={() => deleteMutation.mutate(addr.id)}
+                  disabled={deleteMutation.isPending}
+                  data-testid={`button-delete-address-${addr.id}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-2">No saved addresses yet</p>
+        )}
+
+        {!adding ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={() => setAdding(true)}
+            disabled={(addresses?.length ?? 0) >= 5}
+            data-testid="button-add-address"
+          >
+            <Plus className="w-4 h-4" /> Add Address
+          </Button>
+        ) : (
+          <div className="space-y-2 pt-1">
+            <div className="space-y-1">
+              <Label htmlFor="addr-label" className="text-xs">Label (e.g. "Home", "Office")</Label>
+              <Input id="addr-label" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Home" data-testid="input-address-label" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="addr-address" className="text-xs">Full address</Label>
+              <Input id="addr-address" value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="123 Main St, Calgary, AB" data-testid="input-address-value" />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => addMutation.mutate()} disabled={!newLabel.trim() || !newAddress.trim() || addMutation.isPending} data-testid="button-save-address">
+                {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewLabel(""); setNewAddress(""); }}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CustomerProfile() {
   const { user, refreshUser } = useAuth();
   const { toast } = useToast();
@@ -767,6 +879,9 @@ export default function CustomerProfile() {
             </Dialog>
           </CardContent>
         </Card>
+
+        {/* Saved Addresses */}
+        <SavedAddressesCard />
 
         <Card>
           <CardHeader>

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone, Route, Camera, ImagePlus } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, CheckCircle, XCircle, ChevronDown, Users, Weight, Clock, Sparkles, Navigation, Settings, Shield, AlertTriangle, Box, Truck, Wallet, User, Phone, TrendingUp, CheckCircle2, HelpCircle, ArrowRight, Star, Smartphone, Route, Camera, ImagePlus, Download } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MoverPayoutCenter } from "@/components/MoverPayoutCenter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -340,6 +340,7 @@ export default function MoverDashboard() {
 
   const [showWelcomeTutorial, setShowWelcomeTutorial] = useState(false);
   const [tutorialDismissed, setTutorialDismissed] = useState(false);
+  const [earningsPdfMonth, setEarningsPdfMonth] = useState("");
 
   // Show welcome tutorial for new movers (only once, persisted to database)
   useEffect(() => {
@@ -2183,6 +2184,24 @@ export default function MoverDashboard() {
                       <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">
                         <DollarSign className="w-8 h-8" />
                       </div>
+                    </div>
+                    <div className="mt-6 flex flex-wrap items-center gap-2">
+                      <input
+                        type="month"
+                        value={earningsPdfMonth}
+                        onChange={(e) => setEarningsPdfMonth(e.target.value)}
+                        className="h-9 rounded-md bg-white/10 border border-white/20 text-primary-foreground text-sm px-3 focus:outline-none focus:ring-1 focus:ring-white/40"
+                        data-testid="input-earnings-month"
+                      />
+                      <a
+                        href={earningsPdfMonth ? `/api/mover/earnings/pdf?month=${earningsPdfMonth}` : "/api/mover/earnings/pdf"}
+                        download
+                        className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-white/10 border border-white/20 text-sm font-medium text-primary-foreground hover:bg-white/20 transition-colors"
+                        data-testid="link-download-earnings-pdf"
+                      >
+                        <Download className="w-4 h-4" />
+                        {earningsPdfMonth ? "Download Statement" : "Download All"}
+                      </a>
                     </div>
                   </CardContent>
                 </Card>

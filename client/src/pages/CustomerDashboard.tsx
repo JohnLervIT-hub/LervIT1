@@ -138,6 +138,13 @@ export default function CustomerDashboard() {
   const [actualLoadSize, setActualLoadSize] = useState('');
   const [feedbackComment, setFeedbackComment] = useState('');
 
+  const [surveyDialogOpen, setSurveyDialogOpen] = useState(false);
+  const [surveyBooking, setSurveyBooking] = useState<Booking | null>(null);
+  const [surveyNps, setSurveyNps] = useState(9);
+  const [surveyEase, setSurveyEase] = useState(5);
+  const [surveyMover, setSurveyMover] = useState(5);
+  const [surveyComments, setSurveyComments] = useState('');
+
   const { data: bookings, isLoading, isError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
@@ -171,6 +178,24 @@ export default function CustomerDashboard() {
       return () => clearTimeout(timer);
     }
   }, [bookings, isLoading, showTutorial, feedbackDialogOpen]);
+
+  // Auto-popup feedback survey for completed bookings older than 24 h (localStorage-gated)
+  useEffect(() => {
+    if (!bookings || isLoading || showTutorial || feedbackDialogOpen || surveyDialogOpen) return;
+    const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+    const candidate = bookings.find((b) => {
+      if (b.status !== "completed") return false;
+      const moved = new Date(b.preferredDate).getTime();
+      if (Date.now() - moved < TWENTY_FOUR_H) return false;
+      return !localStorage.getItem(`survey_done_${b.id}`);
+    });
+    if (!candidate) return;
+    const timer = setTimeout(() => {
+      setSurveyBooking(candidate);
+      setSurveyDialogOpen(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [bookings, isLoading, showTutorial, feedbackDialogOpen, surveyDialogOpen]);
 
   const handleTutorialComplete = async () => {
     setShowTutorial(false);
@@ -269,6 +294,27 @@ export default function CustomerDashboard() {
         description: error.message || "Unable to submit feedback. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  const surveyMutation = useMutation({
+    mutationFn: async (data: { bookingId: string; npsScore: number; easeRating: number; moverRating: number; comments: string }) => {
+      return await apiRequest("POST", "/api/surveys", data);
+    },
+    onSuccess: () => {
+      if (surveyBooking) {
+        localStorage.setItem(`survey_done_${surveyBooking.id}`, "1");
+      }
+      toast({ title: "Thank you!", description: "Your feedback helps us improve LervIT." });
+      setSurveyDialogOpen(false);
+      setSurveyBooking(null);
+      setSurveyNps(9);
+      setSurveyEase(5);
+      setSurveyMover(5);
+      setSurveyComments('');
+    },
+    onError: () => {
+      toast({ title: "Submission failed", description: "Please try again.", variant: "destructive" });
     },
   });
 
@@ -1022,6 +1068,84 @@ export default function CustomerDashboard() {
                 ) : (
                   "Submit Feedback"
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Post-move feedback survey (NPS + ease + mover rating) */}
+        <Dialog open={surveyDialogOpen} onOpenChange={setSurveyDialogOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-center">How was your experience?</DialogTitle>
+              <DialogDescription className="text-center">Quick 3-question survey — takes 30 seconds</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-5 py-2">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">How likely are you to recommend LervIT? (0–10)</Label>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSurveyNps(n)}
+                      className={`w-8 h-8 rounded text-xs font-medium border transition-colors ${surveyNps === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
+                      data-testid={`button-nps-${n}`}
+                    >{n}</button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">{surveyNps <= 6 ? "Needs improvement" : surveyNps <= 8 ? "Good" : "Excellent!"}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">How easy was the booking process? (1–5)</Label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSurveyEase(n)}
+                      className={`w-9 h-9 rounded border text-sm font-medium transition-colors ${surveyEase === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
+                      data-testid={`button-ease-${n}`}
+                    >{n}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Rate your mover (1–5)</Label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSurveyMover(n)}
+                      className={`w-9 h-9 rounded border text-sm font-medium transition-colors ${surveyMover === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
+                      data-testid={`button-mover-rating-${n}`}
+                    >{n}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="survey-comments" className="text-sm font-medium">Comments (optional)</Label>
+                <Textarea
+                  id="survey-comments"
+                  placeholder="Anything else you'd like to share?"
+                  value={surveyComments}
+                  onChange={(e) => setSurveyComments(e.target.value)}
+                  rows={2}
+                  data-testid="textarea-survey-comments"
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { if (surveyBooking) localStorage.setItem(`survey_done_${surveyBooking.id}`, "1"); setSurveyDialogOpen(false); }}>
+                Skip
+              </Button>
+              <Button
+                onClick={() => surveyBooking && surveyMutation.mutate({ bookingId: surveyBooking.id, npsScore: surveyNps, easeRating: surveyEase, moverRating: surveyMover, comments: surveyComments })}
+                disabled={surveyMutation.isPending}
+                data-testid="button-submit-survey"
+              >
+                {surveyMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Submitting...</> : "Submit"}
               </Button>
             </DialogFooter>
           </DialogContent>

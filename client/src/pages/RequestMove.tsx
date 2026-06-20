@@ -310,6 +310,13 @@ export default function RequestMove() {
     enabled: !!preSelectedMoverId,
   });
   
+  // Fetch saved addresses for quick-select chips (customers only)
+  type SavedAddress = { id: string; label: string; address: string; latitude: number | null; longitude: number | null };
+  const { data: savedAddresses } = useQuery<SavedAddress[]>({
+    queryKey: ["/api/addresses"],
+    enabled: !!user && user.role === "customer",
+  });
+
   // Use shared location context - no more separate location prompts!
   const { coords: geoCoords, permissionState: locationStatus, requestLocation: requestGeoLocation, isRequesting: isRequestingLocation } = useGeoLocation();
   const [showLocationDialog, setShowLocationDialog] = useState(false);
@@ -2018,6 +2025,21 @@ export default function RequestMove() {
                           <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-green-500/20 flex-shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pickup</span>
                         </div>
+                        {savedAddresses && savedAddresses.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5" data-testid="saved-addresses-pickup">
+                            {savedAddresses.map((addr) => (
+                              <button
+                                key={addr.id}
+                                type="button"
+                                onClick={() => setPickupAddress(addr.address)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs bg-background hover:bg-muted transition-colors"
+                                data-testid={`chip-pickup-${addr.id}`}
+                              >
+                                <MapPin className="w-3 h-3 text-primary" />{addr.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <CustomAddressInput
                           id="pickup"
                           placeholder="Enter pickup address in Calgary"
@@ -2058,6 +2080,21 @@ export default function RequestMove() {
                           <div className="w-2.5 h-2.5 rounded-sm bg-primary flex-shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dropoff</span>
                         </div>
+                        {savedAddresses && savedAddresses.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5" data-testid="saved-addresses-dropoff">
+                            {savedAddresses.map((addr) => (
+                              <button
+                                key={addr.id}
+                                type="button"
+                                onClick={() => setDropoffAddress(addr.address)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs bg-background hover:bg-muted transition-colors"
+                                data-testid={`chip-dropoff-${addr.id}`}
+                              >
+                                <MapPin className="w-3 h-3 text-primary" />{addr.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <CustomAddressInput
                           id="dropoff"
                           placeholder="Enter dropoff address in Calgary"

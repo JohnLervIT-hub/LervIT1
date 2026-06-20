@@ -1489,6 +1489,41 @@ export const ENTERPRISE_TO_BOOKING_STATUS: Record<string, string> = {
   cancelled: 'cancelled',
 };
 
+// Saved addresses for quick booking selection
+export const savedAddresses = pgTable("saved_addresses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  label: text("label").notNull(),
+  address: text("address").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userLabelUniq: unique("saved_addresses_user_label_uniq").on(table.userId, table.label),
+  userIdIdx: index("saved_addresses_user_id_idx").on(table.userId),
+}));
+
+export const insertSavedAddressSchema = createInsertSchema(savedAddresses).omit({ id: true, createdAt: true });
+export type InsertSavedAddress = z.infer<typeof insertSavedAddressSchema>;
+
+// Post-move feedback surveys
+export const feedbackSurveys = pgTable("feedback_surveys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").references(() => bookings.id).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  npsScore: integer("nps_score").notNull(),
+  easeRating: integer("ease_rating").notNull(),
+  moverRating: integer("mover_rating").notNull(),
+  comments: text("comments"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+}, (table) => ({
+  bookingIdIdx: index("feedback_surveys_booking_id_idx").on(table.bookingId),
+  userIdIdx: index("feedback_surveys_user_id_idx").on(table.userId),
+}));
+
+export const insertFeedbackSurveySchema = createInsertSchema(feedbackSurveys).omit({ id: true, submittedAt: true });
+export type InsertFeedbackSurvey = z.infer<typeof insertFeedbackSurveySchema>;
+
 // AI-generated insights for partner incidents
 export const aiIncidentInsights = pgTable("ai_incident_insights", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

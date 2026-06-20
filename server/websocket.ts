@@ -44,16 +44,21 @@ setInterval(() => {
 export function generateWebSocketToken(userId: string, moverId: string): string {
   const tokenId = crypto.randomBytes(32).toString('hex');
   const now = Date.now();
-  
+
   tokenStore.set(tokenId, {
     userId,
     moverId,
     createdAt: now,
     expiresAt: now + TOKEN_EXPIRY_MS,
   });
-  
+
   logger.info({ userId, moverId }, 'WebSocket token generated');
   return tokenId;
+}
+
+/** Generate a short-lived token for customer WebSocket connections. */
+export function generateCustomerWebSocketToken(userId: string): string {
+  return generateWebSocketToken(userId, '');
 }
 
 /**
@@ -263,3 +268,105 @@ class MoverWebSocketServer {
 }
 
 export const moverWebSocket = new MoverWebSocketServer();
+
+interface ConnectedCustomer {
+  ws: WebSocket;
+  userId: string;
+  lastPing: number;
+}
+
+class CustomerWebSocketServer {
+  private wss: WebSocketServer | null = null;
+  private clients: Map<string, ConnectedCustomer> = new Map();
+  private pingInterval: NodeJS.Timeout | null = null;
+
+  initialize(server: Server) {
+    this.wss = new WebSocketServer({
+      server,
+      path: '/ws/customer-notifications',
+      verifyClient: (info, callback) => {
+        const origin = info.origin || info.req.headers.origin;
+        const host = info.req.headers.host;
+        const validOrigin = !origin ||
+          origin.includes(host || '') ||
+          origin.includes('.replit.') ||
+          origin.includes('localhost');
+        if (!validOrigin) {
+          callback(false, 403, 'Forbidden');
+          return;
+        }
+        callback(true);
+      },
+    });
+
+    this.wss.on('connection', (ws, req) => {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const token = url.searchParams.get('token');
+      if (!token) { ws.close(4001, 'Missing authentication token'); return; }
+      const tokenData = validateToken(token);
+      if (!tokenData) { ws.close(4003, 'Invalid or expired token'); return; }
+
+      const { userId } = tokenData;
+      const clientId = `${userId}-${Date.now()}`;
+      this.clients.set(clientId, { ws, userId, lastPing: Date.now() });
+      logger.info({ userId, clientId }, 'Customer WebSocket connected');
+
+      ws.on('message', (message) => {
+        try {
+          const data = JSON.parse(message.toString());
+          if (data.type === 'pong') {
+            const client = this.clients.get(clientId);
+            if (client) client.lastPing = Date.now();
+          }
+        } catch (_) {}
+      });
+
+      ws.on('close', () => {
+        this.clients.delete(clientId);
+        logger.info({ userId, clientId }, 'Customer WebSocket disconnected');
+      });
+
+      ws.on('error', (error) => {
+        logger.error({ userId, error: error.message }, 'Customer WebSocket error');
+        this.clients.delete(clientId);
+      });
+
+      try { ws.send(JSON.stringify({ type: 'connected', userId })); } catch (_) {}
+    });
+
+    this.pingInterval = setInterval(() => {
+      const now = Date.now();
+      this.clients.forEach((client, clientId) => {
+        if (now - client.lastPing > 60000) {
+          try { client.ws.close(4002, 'Ping timeout'); } catch (_) {}
+          this.clients.delete(clientId);
+        } else if (client.ws.readyState === WebSocket.OPEN) {
+          try { client.ws.send(JSON.stringify({ type: 'ping' })); } catch (_) { this.clients.delete(clientId); }
+        }
+      });
+    }, 30000);
+
+    logger.info('Customer WebSocket server initialized');
+  }
+
+  notifyCustomer(userId: string, notification: { type: string; bookingId: string; status: string; updatedAt: string }) {
+    let sentCount = 0;
+    this.clients.forEach((client) => {
+      if (client.userId === userId && client.ws.readyState === WebSocket.OPEN) {
+        try {
+          client.ws.send(JSON.stringify({ ...notification, timestamp: new Date().toISOString() }));
+          sentCount++;
+        } catch (_) {}
+      }
+    });
+    return sentCount;
+  }
+
+  shutdown() {
+    if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this.wss) this.wss.close();
+    this.clients.clear();
+  }
+}
+
+export const customerWebSocket = new CustomerWebSocketServer();

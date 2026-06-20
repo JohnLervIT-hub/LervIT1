@@ -39,8 +39,8 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { moverWebSocket, generateWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents } from "@shared/schema";
+import { moverWebSocket, customerWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents, savedAddresses, feedbackSurveys } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -1578,6 +1578,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ token, expiresIn: 300 }); // 5 minutes
     } catch (error) {
       console.error('Get WebSocket token error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/auth/ws-token/customer - WebSocket auth token for customer notifications
+  app.get("/api/auth/ws-token/customer", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const token = generateCustomerWebSocketToken(user.id);
+      res.json({ token, expiresIn: 300 });
+    } catch (error) {
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -4374,6 +4386,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Push real-time status update to customer (AC: Task 2)
+      if (updates.status && booking.customerId) {
+        try {
+          customerWebSocket.notifyCustomer(booking.customerId, {
+            type: 'booking_status_update',
+            bookingId: booking.id,
+            status: booking.status,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (_) {}
+      }
+
       res.json(booking);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -11138,6 +11162,312 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== SPRINT 5: SAVED ADDRESSES =====
+
+  app.get("/api/addresses", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const rows = await db
+        .select()
+        .from(savedAddresses)
+        .where(eq(savedAddresses.userId, user.id))
+        .orderBy(savedAddresses.createdAt);
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch saved addresses" });
+    }
+  });
+
+  app.post("/api/addresses", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const { label, address, latitude, longitude } = req.body;
+      if (!label || !address) {
+        return res.status(400).json({ error: "label and address are required" });
+      }
+      const existing = await db
+        .select({ id: savedAddresses.id })
+        .from(savedAddresses)
+        .where(eq(savedAddresses.userId, user.id));
+      if (existing.length >= 5) {
+        return res.status(400).json({ error: "Maximum 5 saved addresses allowed" });
+      }
+      const [created] = await db
+        .insert(savedAddresses)
+        .values({ userId: user.id, label: String(label), address: String(address), latitude: latitude ?? null, longitude: longitude ?? null })
+        .returning();
+      res.status(201).json(created);
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        return res.status(400).json({ error: "An address with that label already exists" });
+      }
+      res.status(500).json({ error: "Failed to save address" });
+    }
+  });
+
+  app.delete("/api/addresses/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const [deleted] = await db
+        .delete(savedAddresses)
+        .where(and(eq(savedAddresses.id, req.params.id), eq(savedAddresses.userId, user.id)))
+        .returning();
+      if (!deleted) return res.status(404).json({ error: "Address not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete address" });
+    }
+  });
+
+  // ===== SPRINT 5: FEEDBACK SURVEYS =====
+
+  app.post("/api/surveys", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const { bookingId, npsScore, easeRating, moverRating, comments } = req.body;
+      if (!bookingId || npsScore === undefined || easeRating === undefined || moverRating === undefined) {
+        return res.status(400).json({ error: "bookingId, npsScore, easeRating, and moverRating are required" });
+      }
+      if (npsScore < 0 || npsScore > 10) return res.status(400).json({ error: "npsScore must be 0-10" });
+      if (easeRating < 1 || easeRating > 5) return res.status(400).json({ error: "easeRating must be 1-5" });
+      if (moverRating < 1 || moverRating > 5) return res.status(400).json({ error: "moverRating must be 1-5" });
+      const booking = await storage.getBooking(bookingId);
+      if (!booking || booking.customerId !== user.id) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      const [created] = await db
+        .insert(feedbackSurveys)
+        .values({ bookingId, userId: user.id, npsScore: Number(npsScore), easeRating: Number(easeRating), moverRating: Number(moverRating), comments: comments ?? null })
+        .returning();
+      res.status(201).json(created);
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        return res.status(400).json({ error: "Survey already submitted for this booking" });
+      }
+      res.status(500).json({ error: "Failed to submit survey" });
+    }
+  });
+
+  app.get("/api/admin/surveys", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const [countRow] = await db.select({ total: sql<number>`count(*)::int` }).from(feedbackSurveys);
+      const total = countRow?.total ?? 0;
+      const rows = await db
+        .select({
+          id: feedbackSurveys.id,
+          bookingId: feedbackSurveys.bookingId,
+          npsScore: feedbackSurveys.npsScore,
+          easeRating: feedbackSurveys.easeRating,
+          moverRating: feedbackSurveys.moverRating,
+          comments: feedbackSurveys.comments,
+          submittedAt: feedbackSurveys.submittedAt,
+          userName: usersTable.name,
+          userEmail: usersTable.email,
+        })
+        .from(feedbackSurveys)
+        .innerJoin(usersTable, eq(feedbackSurveys.userId, usersTable.id))
+        .orderBy(desc(feedbackSurveys.submittedAt))
+        .limit(limit)
+        .offset(offset);
+      res.json({ data: rows, total, limit, offset, hasMore: offset + rows.length < total });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch surveys" });
+    }
+  });
+
+  app.get("/api/admin/surveys/summary", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const [stats] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+          avgNps: sql<number>`round(avg(nps_score)::numeric, 2)`,
+          avgEase: sql<number>`round(avg(ease_rating)::numeric, 2)`,
+          avgMover: sql<number>`round(avg(mover_rating)::numeric, 2)`,
+        })
+        .from(feedbackSurveys);
+      res.json({
+        totalSurveys: stats?.count ?? 0,
+        avgNpsScore: stats?.avgNps ?? null,
+        avgEaseRating: stats?.avgEase ?? null,
+        avgMoverRating: stats?.avgMover ?? null,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch survey summary" });
+    }
+  });
+
+  // ===== SPRINT 5: INSTANT QUOTE WIDGET =====
+
+  app.post("/api/quote/instant", async (req: Request, res: Response) => {
+    try {
+      const { loadSize } = req.body;
+      const validLoadSizes = ['boxes', 'small', 'medium', 'large', 'apartment'];
+      if (!loadSize || !validLoadSizes.includes(loadSize)) {
+        return res.status(400).json({ error: "loadSize must be one of: boxes, small, medium, large, apartment" });
+      }
+      const { calculatePrice, getVehicleClassFromLoadSize, VEHICLE_CLASSES } = await import("@shared/pricing");
+      const vehicleClass = getVehicleClassFromLoadSize(loadSize);
+      const classConfig = VEHICLE_CLASSES[vehicleClass];
+      // Min: 5 km distance, 1 mover, no difficulty, no heavy items
+      const minBreakdown = calculatePrice(5, loadSize as any, 'ground_floor', 'ground_floor', false, 1);
+      // Max: 20 km distance, 1 mover, standard difficulty, no heavy items
+      const maxBreakdown = calculatePrice(20, loadSize as any, 'ground_floor', 'ground_floor', false, 1);
+      // Estimated duration: base 1h + 30 min per km band
+      const estimatedDurationMin = loadSize === 'boxes' || loadSize === 'small' ? 60 : loadSize === 'medium' ? 90 : loadSize === 'large' ? 120 : 180;
+      res.json({
+        minPrice: minBreakdown.totalCost.toFixed(2),
+        maxPrice: maxBreakdown.totalCost.toFixed(2),
+        vehicleClass,
+        vehicleName: classConfig.name,
+        estimatedDuration: `${estimatedDurationMin / 60}-${estimatedDurationMin / 60 + 1} hrs`,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to calculate quote" });
+    }
+  });
+
+  // ===== SPRINT 5: MOVER EARNINGS PDF =====
+
+  app.get("/api/mover/earnings/pdf", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const moversForUser = await storage.getMovers({ userId: user.id });
+      if (!moversForUser.length) {
+        return res.status(404).json({ error: "Mover profile not found" });
+      }
+      const mover = moversForUser[0];
+
+      const monthParam = req.query.month as string | undefined;
+      let monthLabel = 'All Time';
+      let earningsQuery = db
+        .select()
+        .from(moverEarnings)
+        .where(eq(moverEarnings.moverId, mover.id))
+        .$dynamic();
+
+      if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+        const [year, month] = monthParam.split('-').map(Number);
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 1);
+        earningsQuery = db
+          .select()
+          .from(moverEarnings)
+          .where(and(
+            eq(moverEarnings.moverId, mover.id),
+            sql`${moverEarnings.createdAt} >= ${start.toISOString()}`,
+            sql`${moverEarnings.createdAt} < ${end.toISOString()}`
+          ))
+          .$dynamic();
+        monthLabel = format(start, 'MMMM yyyy');
+      }
+
+      const earningsRows = await earningsQuery.orderBy(moverEarnings.createdAt);
+
+      // Enrich with booking info
+      const rows: { date: string; pickup: string; dropoff: string; gross: string; fee: string; net: string; status: string }[] = [];
+      for (const e of earningsRows) {
+        const booking = await storage.getBooking(e.bookingId);
+        rows.push({
+          date: format(new Date(e.createdAt), 'MMM d, yyyy'),
+          pickup: booking?.pickupAddress?.split(',')[0] ?? '—',
+          dropoff: booking?.dropoffAddress?.split(',')[0] ?? '—',
+          gross: `$${parseFloat(e.grossAmount).toFixed(2)}`,
+          fee: `$${parseFloat(e.platformFeeAmount).toFixed(2)}`,
+          net: `$${parseFloat(e.netAmount).toFixed(2)}`,
+          status: e.status,
+        });
+      }
+
+      const totalGross = earningsRows.reduce((s, e) => s + parseFloat(e.grossAmount), 0);
+      const totalFee = earningsRows.reduce((s, e) => s + parseFloat(e.platformFeeAmount), 0);
+      const totalNet = earningsRows.reduce((s, e) => s + parseFloat(e.netAmount), 0);
+
+      const PDFDocument = (await import("pdfkit")).default;
+      const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+      const filename = monthParam ? `earnings-${monthParam}.pdf` : 'earnings-all-time.pdf';
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      doc.pipe(res);
+
+      // Header
+      doc.fontSize(20).fillColor('#1D4ED8').font('Helvetica-Bold').text('LervIT', 50, 50);
+      doc.fontSize(10).fillColor('#6B7280').font('Helvetica').text('Earnings Statement', 50, doc.y + 2);
+      doc.moveDown(0.5);
+      doc.fontSize(13).fillColor('#111827').font('Helvetica-Bold').text(`${user.name}  —  ${monthLabel}`);
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
+      doc.moveDown(0.5);
+
+      // Summary
+      doc.fontSize(10).fillColor('#111827').font('Helvetica-Bold').text('Summary', { underline: false });
+      doc.moveDown(0.2);
+      doc.fontSize(9).font('Helvetica').fillColor('#374151');
+      doc.text(`Total Jobs: ${rows.length}`);
+      doc.text(`Gross Revenue: $${totalGross.toFixed(2)} CAD`);
+      doc.text(`Platform Fee: $${totalFee.toFixed(2)} CAD`);
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#1D4ED8').text(`Net Earnings: $${totalNet.toFixed(2)} CAD`);
+      doc.moveDown(0.8);
+
+      // Table headers
+      if (rows.length > 0) {
+        doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
+        doc.moveDown(0.3);
+        const colX = [50, 110, 230, 330, 390, 450, 505];
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#6B7280');
+        doc.text('Date', colX[0], doc.y, { width: 55, continued: true });
+        doc.text('Pickup', colX[1] - doc.x + colX[1], doc.y, { width: 115, continued: true });
+        doc.text('Dropoff', { width: 95, continued: true });
+        doc.text('Gross', { width: 55, continued: true });
+        doc.text('Fee', { width: 55, continued: true });
+        doc.text('Net', { width: 50, continued: true });
+        doc.text('Status', { width: 50 });
+        doc.moveDown(0.3);
+        doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.4).strokeColor('#D1D5DB').stroke();
+        doc.moveDown(0.2);
+
+        for (const row of rows) {
+          doc.fontSize(8).font('Helvetica').fillColor('#111827');
+          const y = doc.y;
+          doc.text(row.date, colX[0], y, { width: 55, lineBreak: false });
+          doc.text(row.pickup, colX[1], y, { width: 115, lineBreak: false });
+          doc.text(row.dropoff, colX[2], y, { width: 95, lineBreak: false });
+          doc.text(row.gross, colX[3], y, { width: 55, lineBreak: false });
+          doc.text(row.fee, colX[4], y, { width: 55, lineBreak: false });
+          doc.text(row.net, colX[5], y, { width: 50, lineBreak: false });
+          doc.text(row.status, colX[6], y, { width: 50, lineBreak: false });
+          doc.moveDown(0.8);
+        }
+
+        doc.moveDown(0.3);
+        doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
+        doc.moveDown(0.3);
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('#1D4ED8')
+          .text(`Net Total: $${totalNet.toFixed(2)} CAD`, { align: 'right' });
+      } else {
+        doc.fontSize(9).fillColor('#6B7280').font('Helvetica').text('No earnings found for this period.');
+      }
+
+      doc.moveDown(1);
+      doc.fontSize(7).fillColor('#9CA3AF').font('Helvetica')
+        .text(`Generated ${format(new Date(), 'MMM d, yyyy')} · LervIT Platform`, { align: 'center' });
+
+      doc.end();
+    } catch (error) {
+      logEvent.error('mover_earnings_pdf', error);
+      if (!res.headersSent) res.status(500).json({ error: "Failed to generate earnings PDF" });
+    }
+  });
+
   // Register enterprise partner portal routes
   registerPartnerRoutes(app);
 
@@ -11145,6 +11475,8 @@ Respond with VALID JSON only:
   
   // Initialize WebSocket server for real-time mover notifications
   moverWebSocket.initialize(httpServer);
+  // Initialize WebSocket server for real-time customer notifications
+  customerWebSocket.initialize(httpServer);
   
   return httpServer;
 }
