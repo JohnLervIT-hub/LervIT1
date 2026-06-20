@@ -9,7 +9,6 @@ import compression from "compression";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
-import { initBackgroundJobs } from "./background-jobs";
 import { logger, logEvent } from "./logger";
 import { 
   corsMiddleware, 
@@ -219,10 +218,7 @@ app.use((req, res, next) => {
     
     server.listen(port, "0.0.0.0", () => {
       logger.info({ port, env: process.env.NODE_ENV || 'development' }, `Server listening on port ${port}`);
-      
-      // Initialize background jobs immediately (non-blocking)
-      initBackgroundJobs();
-      
+
       // Warm up database connections in background (non-blocking)
       // This doesn't block Cloud Run's health check
       setImmediate(async () => {

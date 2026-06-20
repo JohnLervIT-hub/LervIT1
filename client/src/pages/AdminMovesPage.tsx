@@ -30,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus, Building2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,14 @@ type ActivePartner = {
   id: string;
   name: string;
   status: string;
+};
+
+type BookingsResponse = {
+  data: Booking[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 };
 
 type Booking = {
@@ -74,12 +82,14 @@ type Booking = {
   } | null;
 };
 
+const PAGE_SIZE = 50;
+
 export default function AdminMovesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get("status") || "all";
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
@@ -87,11 +97,22 @@ export default function AdminMovesPage() {
   const [editDropoff, setEditDropoff] = useState("");
   const [selectedMoverId, setSelectedMoverId] = useState<string>("");
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+  const [page, setPage] = useState(0);
 
-  const { data: bookings, isLoading } = useQuery<Booking[]>({
-    queryKey: ["/api/bookings"],
+  // Reset to first page when filters change
+  useEffect(() => { setPage(0); }, [statusFilter, searchTerm]);
+
+  const { data: bookingsResponse, isLoading } = useQuery<BookingsResponse>({
+    queryKey: ["/api/bookings", { limit: PAGE_SIZE, offset: page * PAGE_SIZE }],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
     refetchInterval: 30000,
   });
+  const bookings = bookingsResponse?.data ?? [];
+  const bookingTotal = bookingsResponse?.total ?? 0;
 
   // Fetch available movers for assignment or reassignment
   const { data: availableMovers } = useQuery<AvailableMover[]>({
@@ -400,7 +421,7 @@ export default function AdminMovesPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <CardTitle>Booking List ({filteredBookings.length})</CardTitle>
+              <CardTitle>Booking List ({bookingTotal} total)</CardTitle>
               <div className="flex flex-col sm:flex-row gap-2">
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -507,6 +528,31 @@ export default function AdminMovesPage() {
               <div className="text-center py-8 text-muted-foreground">
                 <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No bookings found</p>
+              </div>
+            )}
+            {!isLoading && bookingsResponse && (
+              <div className="flex items-center justify-between pt-4 border-t mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  data-testid="button-bookings-prev"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {page + 1} · {bookingTotal} total
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={!bookingsResponse.hasMore}
+                  data-testid="button-bookings-next"
+                >
+                  Next
+                </Button>
               </div>
             )}
           </CardContent>
