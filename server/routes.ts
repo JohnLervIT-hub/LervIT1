@@ -57,6 +57,7 @@ import { logger, logEvent } from "./logger";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
+import he from "he";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -225,7 +226,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(authMiddleware);
   
   // ===== DOCUMENT DOWNLOADS =====
-  app.get("/api/downloads/roadmap", (_req: Request, res: Response) => {
+  // Admin-only: internal strategic documents must not be publicly accessible
+  app.get("/api/downloads/roadmap", (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
     const filePath = path.resolve(process.cwd(), "exports", "LervIT-12-Month-Dev-Roadmap.md");
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
@@ -233,7 +236,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendFile(filePath);
   });
 
-  app.get("/api/downloads/technical-brief", (_req: Request, res: Response) => {
+  app.get("/api/downloads/technical-brief", (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
     const filePath = path.resolve(process.cwd(), "exports", "LervIT-Technical-Brief.md");
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
@@ -277,9 +281,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Serve uploaded files statically with express.static (secure against path traversal)
   const express = await import('express');
+  const allowedUploadOrigins = [
+    'https://app.lervit.com',
+    'https://www.lervit.com',
+    ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:5000'] : []),
+  ];
   app.use('/uploads', express.default.static(uploadDir, {
-    setHeaders: (res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+    setHeaders: (res, _filePath, _stat) => {
+      const origin = (res as any).req?.headers?.origin;
+      if (origin && allowedUploadOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
       res.setHeader('Cache-Control', 'public, max-age=31536000');
     },
   }));
@@ -501,9 +513,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use the verified phone number from the token
       // Strip any user-provided phone/phoneVerified to prevent bypass attempts
       const { phone: _ignoredPhone, phoneVerified: _ignoredVerified, ...safeUserData } = userData as any;
-      const hashedPassword = hashPassword(userData.password);
-      const user = await storage.createUser({ 
-        ...safeUserData, 
+      const hashedPassword = await hashPassword(userData.password);
+      const user = await storage.createUser({
+        ...safeUserData,
         password: hashedPassword,
         phone: phoneToken.phone, // Always use phone from verified token
         phoneVerified: true, // Phone is already verified via OTP
@@ -602,8 +614,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const isValid = verifyPassword(password, user.password);
-      
+      const isValid = await verifyPassword(password, user.password);
+
+      // Transparently migrate legacy SHA-256 hashes to bcrypt on successful login
+      if (isValid && !user.password.startsWith('$2b$') && !user.password.startsWith('$2a$')) {
+        try {
+          const newHash = await hashPassword(password);
+          await db.update(usersTable).set({ password: newHash }).where(eq(usersTable.id, user.id));
+        } catch (rehashErr) {
+          logEvent.error('password_rehash', rehashErr, { userId: user.id });
+        }
+      }
+
       if (!isValid) {
         // Increment failed login attempts
         const newAttempts = (user.failedLoginAttempts || 0) + 1;
@@ -890,7 +912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid or expired reset token" });
       }
       
-      const hashedPassword = hashPassword(password);
+      const hashedPassword = await hashPassword(password);
       await storage.updateUser(user.id, {
         password: hashedPassword,
         resetToken: null,
@@ -1255,7 +1277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/users", async (req: Request, res: Response) => {
     try {
       const userData = validateBody(insertUserSchema, req.body);
-      const hashedPassword = userData.password ? hashPassword(userData.password) : null;
+      const hashedPassword = userData.password ? await hashPassword(userData.password) : null;
       const user = await storage.createUser({ ...userData, password: hashedPassword });
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
@@ -2368,8 +2390,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const item = result[0];
       if (status === 'Approved') {
         console.log(`[Notification] Verification item ${item.type} approved for mover ${item.moverId}`);
-        // TODO: Send notification: "Your ${item.type} has been approved. You're one step closer to going online."
-        
+
+        // Notify mover of verification approval
+        try {
+          const verifMover = await storage.getMover(item.moverId);
+          if (verifMover) {
+            const verifMoverUser = await storage.getUser(verifMover.userId);
+            if (verifMoverUser) {
+              await notificationService.sendEmail({
+                to: verifMoverUser.email,
+                subject: `Your ${item.type} has been approved`,
+                body: `<p>Hi ${verifMoverUser.name},</p><p>Your <strong>${item.type}</strong> has been approved. You're one step closer to going online!</p><p>Log in to your dashboard to check your full verification status.</p><p>The LervIT Team</p>`,
+                type: 'status_update',
+              });
+              await storage.createNotification({
+                userId: verifMoverUser.id,
+                type: 'verification_update',
+                title: `${item.type} Approved`,
+                message: `Your ${item.type} has been approved. You're one step closer to going online!`,
+                actionUrl: '/mover-verification',
+                isRead: false,
+              });
+            }
+          }
+        } catch (verifNotifErr) {
+          logEvent.error('verification_approval_notification', verifNotifErr, { moverId: item.moverId, itemType: item.type });
+        }
+
         // Check if ALL 7 required verification items are now approved
         const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
         const allItems = await db.select().from(verificationItems).where(eq(verificationItems.moverId, item.moverId));
@@ -2389,8 +2436,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else if (status === 'Rejected') {
         console.log(`[Notification] Verification item ${item.type} rejected for mover ${item.moverId}: ${rejectionReason}`);
-        // TODO: Send notification: "Your ${item.type} was rejected: ${rejectionReason}. Please upload a corrected version."
-        
+
+        // Notify mover of verification rejection
+        try {
+          const verifMover = await storage.getMover(item.moverId);
+          if (verifMover) {
+            const verifMoverUser = await storage.getUser(verifMover.userId);
+            if (verifMoverUser) {
+              await notificationService.sendEmail({
+                to: verifMoverUser.email,
+                subject: `Your ${item.type} was not approved`,
+                body: `<p>Hi ${verifMoverUser.name},</p><p>Unfortunately your <strong>${item.type}</strong> was not approved${rejectionReason ? `: ${rejectionReason}` : ''}. Please re-upload a corrected version from your dashboard.</p><p>If you have any questions, contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+                type: 'status_update',
+              });
+              await storage.createNotification({
+                userId: verifMoverUser.id,
+                type: 'verification_update',
+                title: `${item.type} Not Approved`,
+                message: `One or more documents were not approved. Please re-upload.`,
+                actionUrl: '/mover-verification',
+                isRead: false,
+              });
+            }
+          }
+        } catch (verifNotifErr) {
+          logEvent.error('verification_rejection_notification', verifNotifErr, { moverId: item.moverId, itemType: item.type });
+        }
+
         // If any item is rejected, ensure mover is NOT marked as verified
         await storage.updateMover(item.moverId, { 
           documentsVerified: false,
@@ -5685,17 +5757,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           break;
         
-        // Handle charge refunds for future implementation
         case 'charge.refunded':
           const refundedCharge = event.data.object as Stripe.Charge;
-          
-          logEvent.payment('charge_refunded', { 
+          const refundedAmountDollars = refundedCharge.amount_refunded / 100;
+
+          logEvent.payment('charge_refunded', {
             chargeId: refundedCharge.id,
-            amount: refundedCharge.amount_refunded / 100,
+            amount: refundedAmountDollars,
           });
-          
-          // TODO: Implement refund handling - mark booking as refunded,
-          // adjust mover transfer if applicable
+
+          try {
+            // Resolve payment intent ID from the charge (may be string or expanded object)
+            const refundPaymentIntentId = typeof refundedCharge.payment_intent === 'string'
+              ? refundedCharge.payment_intent
+              : (refundedCharge.payment_intent as any)?.id ?? null;
+
+            if (refundPaymentIntentId) {
+              const [refundedBooking] = await db
+                .select()
+                .from(bookings)
+                .where(eq(bookings.stripePaymentIntentId, refundPaymentIntentId))
+                .limit(1);
+
+              if (refundedBooking) {
+                // Mark booking cancelled and payment refunded
+                await storage.updateBooking(refundedBooking.id, {
+                  status: BOOKING_STATUSES.CANCELLED,
+                  paymentStatus: 'refunded',
+                });
+
+                logEvent.payment('refund_booking_cancelled', {
+                  bookingId: refundedBooking.id,
+                  chargeId: refundedCharge.id,
+                  refundedAmount: refundedAmountDollars,
+                  timestamp: new Date().toISOString(),
+                });
+
+                // Notify customer (email + in-app)
+                const refundCustomer = await storage.getUser(refundedBooking.customerId);
+                if (refundCustomer) {
+                  // In-app notification
+                  await storage.createNotification({
+                    userId: refundCustomer.id,
+                    type: 'booking_cancelled',
+                    title: 'Booking Cancelled & Refunded',
+                    message: `Your booking has been cancelled and a refund of $${refundedAmountDollars.toFixed(2)} CAD has been issued to your original payment method.`,
+                    bookingId: refundedBooking.id,
+                    actionUrl: '/my-bookings',
+                    isRead: false,
+                  });
+
+                  // Email notification
+                  await notificationService.sendEmail({
+                    to: refundCustomer.email,
+                    subject: 'Your LervIT booking has been refunded',
+                    body: `<p>Hi ${refundCustomer.name},</p><p>Your booking has been cancelled and a refund of <strong>$${refundedAmountDollars.toFixed(2)} CAD</strong> has been issued to your original payment method. Please allow 5–10 business days for the refund to appear.</p><p>If you have any questions, contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+                    type: 'status_update',
+                  });
+                }
+              } else {
+                logger.warn({ refundPaymentIntentId, chargeId: refundedCharge.id }, 'charge.refunded: no matching booking found');
+              }
+            }
+          } catch (refundErr) {
+            logEvent.error('charge_refunded_handler', refundErr, { chargeId: refundedCharge.id });
+          }
           break;
           
         default:
@@ -5739,6 +5865,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/messages", async (req: Request, res: Response) => {
     try {
       const messageData = validateBody(insertMessageSchema, req.body);
+      messageData.text = he.encode(messageData.text);
       const message = await storage.createMessage(messageData);
       
       const sender = await storage.getUser(message.senderId);
@@ -5970,6 +6097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('[Reviews] POST /api/reviews - Request body:', JSON.stringify(req.body));
     try {
       const reviewData = validateBody(insertReviewSchema, req.body);
+      if (reviewData.comment) reviewData.comment = he.encode(reviewData.comment);
       console.log('[Reviews] Validated review data:', JSON.stringify(reviewData));
       
       // Validate that the booking is completed before allowing a review
@@ -6629,7 +6757,9 @@ Respond with VALID JSON only:
       
       const user = (req as any).user;
       const ticketData = validateBody(insertSupportTicketSchema, req.body);
-      
+      ticketData.subject = he.encode(ticketData.subject);
+      ticketData.message = he.encode(ticketData.message);
+
       const ticket = await db.insert(supportTickets).values({
         ...ticketData,
         userId: user.id,
@@ -6776,8 +6906,9 @@ Respond with VALID JSON only:
         message: z.string().min(1),
       });
       
-      const { message } = validateBody(replySchema, req.body);
-      
+      const { message: rawReplyMessage } = validateBody(replySchema, req.body);
+      const message = he.encode(rawReplyMessage);
+
       // Check if ticket exists and user has access
       const ticket = await db.select()
         .from(supportTickets)
@@ -7920,7 +8051,7 @@ Respond with VALID JSON only:
       // Create test users with passwords
       const customer1 = await storage.createUser({
         email: "john.doe@example.com",
-        password: hashPassword("password123"),
+        password: await hashPassword("password123"),
         name: "John Doe",
         phone: "+1-403-555-0100",
         role: "customer"
@@ -7928,7 +8059,7 @@ Respond with VALID JSON only:
 
       const moverUser1 = await storage.createUser({
         email: "mike.johnson@moveit.com",
-        password: hashPassword("password123"),
+        password: await hashPassword("password123"),
         name: "Mike Johnson",
         phone: "+1-403-555-0101",
         role: "mover"
@@ -7936,7 +8067,7 @@ Respond with VALID JSON only:
 
       const moverUser2 = await storage.createUser({
         email: "sarah.chen@moveit.com",
-        password: hashPassword("password123"),
+        password: await hashPassword("password123"),
         name: "Sarah Chen",
         phone: "+1-403-555-0102",
         role: "mover"

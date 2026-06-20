@@ -3,9 +3,7 @@
 ## Admin Access
 
 **Admin Login:**
-- Email: `admin@lervit.com`
-- Password: `admin123`
-- Role: Admin
+[Admin credentials stored in team password manager — contact john@lervit.com]
 
 Use this account to access the admin dashboard and manage the platform.
 

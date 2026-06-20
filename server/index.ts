@@ -35,6 +35,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 if (!process.env.SESSION_SECRET) {
+  if (process.env.NODE_ENV === 'production') throw new Error('SESSION_SECRET must be set in production');
   console.warn("WARNING: SESSION_SECRET not set, using default (not recommended for production)");
 }
 
@@ -88,12 +89,13 @@ app.use(session({
   store: sessionStore,
   secret: process.env.SESSION_SECRET || 'lervit-dev-secret-change-in-production',
   resave: false,
+  rolling: false,
   saveUninitialized: false,
   cookie: {
     secure: 'auto', // Automatically set based on connection (respects trust proxy)
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000, // 8 hours absolute expiry
+    sameSite: 'strict',
   },
   name: 'lervit.sid',
 }));
@@ -111,13 +113,16 @@ declare module 'express-session' {
   }
 }
 
-app.use(express.json({
-  limit: '50mb', // Increased for email attachments with videos
-  verify: (req, _res, buf) => {
-    req.rawBody = buf;
-  }
+// Upload routes need a higher limit for file data; everything else is capped at 10 MB
+app.use(['/api/uploads', '/api/bookings'], express.json({
+  limit: '50mb',
+  verify: (req, _res, buf) => { req.rawBody = buf; }
 }));
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => { req.rawBody = buf; }
+}));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 // ===== SECURITY MIDDLEWARE =====
 // CORS - restricts cross-origin requests
