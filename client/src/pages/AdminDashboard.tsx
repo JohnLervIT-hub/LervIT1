@@ -778,7 +778,7 @@ export default function AdminDashboard() {
                 <Users className="w-4 h-4 text-blue-200" />
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-users">{users?.length || 0}</div>
+                <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-users">{usersResponse?.total ?? users?.length ?? 0}</div>
                 <div className="flex items-center justify-between mt-1.5">
                   <p className="text-xs text-blue-200">Registered accounts</p>
                   <ChevronRight className="w-3.5 h-3.5 text-blue-200" />

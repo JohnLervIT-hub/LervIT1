@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run TypeScript type check
+        run: npm run check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for hardcoded secrets patterns
+        run: |
+          ! grep -rn "sk_live_\|pk_live_\|whsec_[A-Za-z0-9]\{20\}" --include="*.ts" --include="*.tsx" server/ client/src/ || (echo "Possible hardcoded Stripe key found" && exit 1)
+      - name: Check dist/ is not committed
+        run: test ! -d dist || (echo "dist/ directory should not be committed" && exit 1)
+      # Add eslint.config.js and run: npx eslint . --ext .ts,.tsx
+      # to enable full lint checks once ESLint is configured.
+
+  smoke-test:
+    name: Smoke Test (Build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build project
+        run: npm run build
+      - name: Verify server bundle exists
+        run: test -f dist/index.js && echo "Server bundle OK"

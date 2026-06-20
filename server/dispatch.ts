@@ -48,7 +48,7 @@
 
 import { db } from './db';
 import { jobNotifications, users, movers as moversTable } from '@shared/schema';
-import { eq, and, isNotNull } from 'drizzle-orm';
+import { eq, and, isNotNull, ne } from 'drizzle-orm';
 import { moverWebSocket } from './websocket';
 import { notificationService } from './notifications';
 import { logEvent, logger } from './logger';
@@ -98,31 +98,42 @@ export interface DispatchResult {
  * Optionally excludes one mover by profile ID (e.g. the mover who just declined).
  */
 async function loadOperationalMovers(excludeMoverId?: string): Promise<MoverData[]> {
-  const allMovers = await db
-    .select()
-    .from(moversTable)
-    .where(and(eq(moversTable.isAvailable, true), isNotNull(moversTable.latitude), isNotNull(moversTable.longitude)));
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(moversTable.isAvailable, true),
+    isNotNull(moversTable.latitude),
+    isNotNull(moversTable.longitude),
+  ];
+  if (excludeMoverId) {
+    conditions.push(ne(moversTable.id, excludeMoverId));
+  }
 
-  const enriched = await Promise.all(
-    allMovers.map(async (m) => {
-      if (excludeMoverId && m.id === excludeMoverId) return null;
-      const [moverUser] = await db.select().from(users).where(eq(users.id, m.userId)).limit(1);
-      if (!moverUser || m.latitude === null || m.longitude === null) return null;
-      return {
-        moverId: m.id,
-        userId: m.userId,
-        name: moverUser.name,
-        vehicleType: m.vehicleType ?? '',
-        rating: m.rating ?? '0',
-        totalMoves: m.totalMoves ?? 0,
-        isAvailable: m.isAvailable ?? false,
-        latitude: m.latitude as number,
-        longitude: m.longitude as number,
-      };
+  const rows = await db
+    .select({
+      moverId: moversTable.id,
+      userId: moversTable.userId,
+      vehicleType: moversTable.vehicleType,
+      rating: moversTable.rating,
+      totalMoves: moversTable.totalMoves,
+      isAvailable: moversTable.isAvailable,
+      latitude: moversTable.latitude,
+      longitude: moversTable.longitude,
+      name: users.name,
     })
-  );
+    .from(moversTable)
+    .innerJoin(users, eq(moversTable.userId, users.id))
+    .where(and(...conditions));
 
-  return enriched.filter((m): m is MoverData => m !== null);
+  return rows.map((r) => ({
+    moverId: r.moverId,
+    userId: r.userId,
+    name: r.name,
+    vehicleType: r.vehicleType ?? '',
+    rating: r.rating ?? '0',
+    totalMoves: r.totalMoves ?? 0,
+    isAvailable: r.isAvailable ?? false,
+    latitude: r.latitude as number,
+    longitude: r.longitude as number,
+  }));
 }
 
 /**

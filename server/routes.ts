@@ -1425,11 +1425,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Apply location filter with case-insensitive matching
       if (location) {
-        movers = movers.filter(m => 
+        movers = movers.filter(m =>
           m.location && m.location.toLowerCase().includes(location.toLowerCase())
         );
       }
-      
+
+      // Optional server-side pagination (only when explicit params are provided)
+      const moverTotal = movers.length;
+      let moverPagination: { limit: number; offset: number } | null = null;
+      if (req.query.limit !== undefined || req.query.offset !== undefined) {
+        const pgLimit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+        const pgOffset = parseInt(req.query.offset as string) || 0;
+        moverPagination = { limit: pgLimit, offset: pgOffset };
+        movers = movers.slice(pgOffset, pgOffset + pgLimit);
+      }
+
       // Calculate driving distances using Google Maps API (batch request for efficiency)
       let drivingDistances: Map<string, { distanceKm: number; durationMinutes: number }> = new Map();
       
@@ -1501,8 +1511,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return a.distance - b.distance;
         });
       }
-      
-      res.json(enrichedMovers);
+
+      if (moverPagination) {
+        res.json({
+          data: enrichedMovers,
+          total: moverTotal,
+          limit: moverPagination.limit,
+          offset: moverPagination.offset,
+          hasMore: moverPagination.offset + enrichedMovers.length < moverTotal,
+        });
+      } else {
+        res.json(enrichedMovers);
+      }
     } catch (error) {
       console.error('Get movers error:', error);
       res.status(500).json({ error: "Internal server error" });
@@ -2635,11 +2655,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // GET /api/admin/users - Get all users with lock status
+  // GET /api/admin/users - Get all users with lock status (paginated)
   app.get("/api/admin/users", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const [countRow] = await db.select({ total: sql<number>`count(*)::int` }).from(usersTable);
+      const total = countRow?.total ?? 0;
+
       const allUsers = await db.select({
         id: usersTable.id,
         email: usersTable.email,
@@ -2652,9 +2678,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lockedByAdmin: usersTable.lockedByAdmin,
         lockReason: usersTable.lockReason,
         createdAt: usersTable.createdAt,
-      }).from(usersTable).orderBy(usersTable.createdAt);
-      
-      res.json(allUsers);
+      }).from(usersTable).orderBy(usersTable.createdAt).limit(limit).offset(offset);
+
+      res.json({ data: allUsers, total, limit, offset, hasMore: offset + allUsers.length < total });
     } catch (error) {
       console.error('Admin get users error:', error);
       res.status(500).json({ error: "Failed to fetch users" });
@@ -3483,7 +3509,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = (req as any).user;
       
       let userBookings;
-      
+      let adminPagination: { total: number; limit: number; offset: number } | null = null;
+
       // SECURITY: Force filtering based on user role - ignore query parameters
       if (user.role === "customer") {
         // Customers can ONLY see their own bookings
@@ -3528,6 +3555,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const offset = parseInt(req.query.offset as string) || 0;
           const result = await storage.getAllBookings({ limit, offset });
           userBookings = result.data;
+          // Return paginated envelope only when client explicitly requests pagination
+          if (req.query.limit !== undefined || req.query.offset !== undefined) {
+            adminPagination = { total: result.total, limit, offset };
+          }
         }
       } else {
         return res.status(403).json({ error: "Access denied" });
@@ -3668,7 +3699,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       );
       
-      res.json(enrichedBookings);
+      if (adminPagination) {
+        res.json({
+          data: enrichedBookings,
+          total: adminPagination.total,
+          limit: adminPagination.limit,
+          offset: adminPagination.offset,
+          hasMore: adminPagination.offset + enrichedBookings.length < adminPagination.total,
+        });
+      } else {
+        res.json(enrichedBookings);
+      }
     } catch (error) {
       console.error("Error fetching bookings:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -6809,7 +6850,14 @@ Respond with VALID JSON only:
   app.get("/api/support/tickets/all", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      
+
+      const hasExplicitPagination = req.query.limit !== undefined || req.query.offset !== undefined;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const [countRow] = await db.select({ total: sql<number>`count(*)::int` }).from(supportTickets);
+      const total = countRow?.total ?? 0;
+
       const tickets = await db.select({
         id: supportTickets.id,
         userId: supportTickets.userId,
@@ -6830,9 +6878,15 @@ Respond with VALID JSON only:
       })
         .from(supportTickets)
         .leftJoin(usersTable, eq(supportTickets.userId, usersTable.id))
-        .orderBy(supportTickets.createdAt);
-      
-      res.json(tickets);
+        .orderBy(supportTickets.createdAt)
+        .limit(limit)
+        .offset(offset);
+
+      if (hasExplicitPagination) {
+        res.json({ data: tickets, total, limit, offset, hasMore: offset + tickets.length < total });
+      } else {
+        res.json(tickets);
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tickets" });
     }
