@@ -1590,8 +1590,10 @@ export default function MoverDashboard() {
 
   const firstName = user?.name?.split(' ')[0] || 'there';
   const rating = mover?.rating ? parseFloat(mover.rating).toFixed(1) : '5.0';
-  // Use earnings data for accurate completed count (matches Earnings tab)
-  const totalMoves = earnings?.completedJobs ?? mover?.totalMoves ?? 0;
+  // earnings.completedJobs filters by paymentStatus === 'succeeded', so it can be 0 even when
+  // the mover has completed jobs (cash payments, dev accounts, etc.). Fall through with ||
+  // to mover.completedTrips (incremented at every job completion, payment-agnostic).
+  const totalMoves = earnings?.completedJobs || mover?.completedTrips || mover?.totalMoves || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
