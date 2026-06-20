@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index, date, time } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -41,6 +41,9 @@ export const users = pgTable("users", {
   emailEarningsReports: boolean("email_earnings_reports").default(true).notNull(),
   emailPromotions: boolean("email_promotions").default(false).notNull(),
   pushNotifications: boolean("push_notifications").default(true).notNull(),
+  // Referral program
+  referralCode: varchar("referral_code", { length: 6 }).unique(),
+  referralCredits: integer("referral_credits").default(0).notNull(),
   // Activity tracking timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastLoginAt: timestamp("last_login_at"),
@@ -1523,6 +1526,41 @@ export const feedbackSurveys = pgTable("feedback_surveys", {
 
 export const insertFeedbackSurveySchema = createInsertSchema(feedbackSurveys).omit({ id: true, submittedAt: true });
 export type InsertFeedbackSurvey = z.infer<typeof insertFeedbackSurveySchema>;
+
+// Mover availability calendar
+export const moverAvailability = pgTable("mover_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  availableDate: date("available_date").notNull(),
+  startTime: time("start_time"),
+  endTime: time("end_time"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userDateUniq: unique("mover_availability_user_date_uniq").on(table.userId, table.availableDate),
+  userIdIdx: index("mover_availability_user_id_idx").on(table.userId),
+  dateIdx: index("mover_availability_date_idx").on(table.availableDate),
+}));
+
+export const insertMoverAvailabilitySchema = createInsertSchema(moverAvailability).omit({ id: true, createdAt: true });
+export type InsertMoverAvailability = z.infer<typeof insertMoverAvailabilitySchema>;
+export type MoverAvailabilityDay = typeof moverAvailability.$inferSelect;
+
+// Referral program
+export const referrals = pgTable("referrals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  referrerId: varchar("referrer_id").references(() => users.id).notNull(),
+  referredId: varchar("referred_id").references(() => users.id).notNull().unique(),
+  code: varchar("code", { length: 6 }).notNull(),
+  creditAwarded: boolean("credit_awarded").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  referrerIdIdx: index("referrals_referrer_id_idx").on(table.referrerId),
+  codeIdx: index("referrals_code_idx").on(table.code),
+}));
+
+export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true });
+export type InsertReferral = z.infer<typeof insertReferralSchema>;
+export type Referral = typeof referrals.$inferSelect;
 
 // AI-generated insights for partner incidents
 export const aiIncidentInsights = pgTable("ai_incident_insights", {

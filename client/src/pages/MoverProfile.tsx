@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -31,7 +31,9 @@ import {
   FileCheck,
   AlertTriangle,
   Star,
-  Navigation
+  Navigation,
+  ChevronRight,
+  X as XIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import { PhoneVerification } from "@/components/PhoneVerification";
@@ -59,6 +61,104 @@ type NotificationSettings = {
   smsBookingUpdates: boolean;
   pushNotifications: boolean;
 };
+
+type AvailabilityDay = { id: string; userId: string; availableDate: string; startTime?: string | null; endTime?: string | null };
+
+function AvailabilityCalendarCard() {
+  const { toast } = useToast();
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-indexed
+
+  const monthKey = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`;
+
+  const { data: availableDays = [], refetch } = useQuery<AvailabilityDay[]>({
+    queryKey: ["/api/mover/availability", monthKey],
+    queryFn: async () => {
+      const res = await fetch(`/api/mover/availability?month=${monthKey}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load availability');
+      return res.json();
+    },
+  });
+
+  const availableSet = useMemo(() => new Set(availableDays.map(d => d.availableDate)), [availableDays]);
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ dateStr, add }: { dateStr: string; add: boolean }) => {
+      if (add) {
+        const res = await fetch('/api/mover/availability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ availableDate: dateStr }),
+        });
+        if (!res.ok) throw new Error('Failed to save');
+      } else {
+        const res = await fetch(`/api/mover/availability/${dateStr}`, { method: 'DELETE', credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to remove');
+      }
+    },
+    onSuccess: () => refetch(),
+    onError: () => toast({ title: 'Error updating availability', variant: 'destructive' }),
+  });
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay(); // 0=Sun
+  const calCells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
+
+  const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-blue-600" />
+          Availability Calendar
+        </CardTitle>
+        <CardDescription>Mark days you're available for jobs. Customers can filter by date.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between mb-3">
+          <Button variant="ghost" size="icon" onClick={prevMonth}><ChevronLeft className="w-4 h-4" /></Button>
+          <span className="font-medium text-sm">{monthLabel}</span>
+          <Button variant="ghost" size="icon" onClick={nextMonth}><ChevronRight className="w-4 h-4" /></Button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground mb-1">
+          {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <div key={d}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {calCells.map((day, i) => {
+            if (!day) return <div key={i} />;
+            const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isAvailable = availableSet.has(dateStr);
+            const isPast = new Date(dateStr) < new Date(new Date().toDateString());
+            return (
+              <button
+                key={dateStr}
+                disabled={isPast || toggleMutation.isPending}
+                onClick={() => toggleMutation.mutate({ dateStr, add: !isAvailable })}
+                className={`rounded-md py-1.5 text-xs font-medium transition-colors ${
+                  isPast ? 'text-muted-foreground/40 cursor-not-allowed' :
+                  isAvailable ? 'bg-blue-600 text-white hover:bg-blue-700' :
+                  'bg-muted hover:bg-muted/80'
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          <span className="inline-block w-3 h-3 rounded bg-blue-600 mr-1 align-middle" />
+          Blue = available. Click a day to toggle.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function MoverProfile() {
   const { user, refreshUser } = useAuth();
@@ -701,6 +801,8 @@ export default function MoverProfile() {
             </Link>
           </CardContent>
         </Card>
+
+        <AvailabilityCalendarCard />
 
         <Card>
           <CardHeader>

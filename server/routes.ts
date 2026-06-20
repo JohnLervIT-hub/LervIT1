@@ -40,7 +40,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents, savedAddresses, feedbackSurveys } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -514,11 +514,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Strip any user-provided phone/phoneVerified to prevent bypass attempts
       const { phone: _ignoredPhone, phoneVerified: _ignoredVerified, ...safeUserData } = userData as any;
       const hashedPassword = await hashPassword(userData.password);
+
+      // Generate a unique 6-char alphanumeric referral code
+      const generateReferralCode = async (): Promise<string> => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        for (let attempts = 0; attempts < 10; attempts++) {
+          const code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+          const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.referralCode, code)).limit(1);
+          if (existing.length === 0) return code;
+        }
+        throw new Error("Could not generate unique referral code");
+      };
+      const referralCode = await generateReferralCode();
+
       const user = await storage.createUser({
         ...safeUserData,
         password: hashedPassword,
         phone: phoneToken.phone, // Always use phone from verified token
         phoneVerified: true, // Phone is already verified via OTP
+        referralCode,
       });
       
       // Delete the used verification token
@@ -1417,7 +1431,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       let movers = await storage.getMovers({ isAvailable });
-      
+
+      // Filter by date: exclude movers who explicitly marked themselves unavailable on that date
+      const dateFilter = req.query.date as string | undefined;
+      if (dateFilter && /^\d{4}-\d{2}-\d{2}$/.test(dateFilter)) {
+        const unavailableUserIds = new Set(
+          (await db.select({ userId: moverAvailability.userId })
+            .from(moverAvailability)
+            .where(eq(moverAvailability.availableDate, dateFilter))
+          ).map(r => r.userId)
+        );
+        // Keep movers who haven't marked any availability (no restrictions) or ARE listed for this date
+        // The table stores AVAILABLE dates, so if a mover has any availability rows but not for this date, exclude them
+        const moversWithAnyAvailability = new Set(
+          (await db.select({ userId: moverAvailability.userId }).from(moverAvailability)).map(r => r.userId)
+        );
+        movers = movers.filter(m =>
+          !moversWithAnyAvailability.has(m.userId) || unavailableUserIds.has(m.userId)
+        );
+      }
+
       // Filter by userId if provided
       if (userId) {
         movers = movers.filter(m => m.userId === userId);
@@ -11435,6 +11468,173 @@ Respond with VALID JSON only:
     } catch (error) {
       logEvent.error('mover_earnings_pdf', error);
       if (!res.headersSent) res.status(500).json({ error: "Failed to generate earnings PDF" });
+    }
+  });
+
+  // ===== SPRINT 6: MOVER AVAILABILITY CALENDAR =====
+
+  app.get("/api/mover/availability", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const month = req.query.month as string | undefined; // YYYY-MM
+      let rows;
+      if (month && /^\d{4}-\d{2}$/.test(month)) {
+        const startDate = `${month}-01`;
+        const [year, mon] = month.split('-').map(Number);
+        const endDate = new Date(year, mon, 0).toISOString().slice(0, 10); // last day of month
+        rows = await db.select().from(moverAvailability)
+          .where(and(
+            eq(moverAvailability.userId, user.id),
+            sql`${moverAvailability.availableDate} >= ${startDate}`,
+            sql`${moverAvailability.availableDate} <= ${endDate}`
+          ))
+          .orderBy(moverAvailability.availableDate);
+      } else {
+        rows = await db.select().from(moverAvailability)
+          .where(eq(moverAvailability.userId, user.id))
+          .orderBy(moverAvailability.availableDate);
+      }
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/mover/availability", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const schema = z.object({
+        availableDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
+      });
+      const body = validateBody(schema, req.body);
+      const [row] = await db.insert(moverAvailability)
+        .values({ userId: user.id, ...body })
+        .onConflictDoUpdate({
+          target: [moverAvailability.userId, moverAvailability.availableDate],
+          set: { startTime: body.startTime ?? null, endTime: body.endTime ?? null },
+        })
+        .returning();
+      res.json(row);
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/mover/availability/:date", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const dateParam = req.params.date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        return res.status(400).json({ error: "Invalid date format" });
+      }
+      await db.delete(moverAvailability)
+        .where(and(eq(moverAvailability.userId, user.id), eq(moverAvailability.availableDate, dateParam)));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ===== SPRINT 6: REFERRAL PROGRAM =====
+
+  app.get("/api/referrals", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const rows = await db.select().from(referrals)
+        .where(eq(referrals.referrerId, user.id))
+        .orderBy(desc(referrals.createdAt));
+      res.json({
+        referralCode: user.referralCode,
+        referralCredits: user.referralCredits ?? 0,
+        referrals: rows,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/referrals/apply", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const schema = z.object({ code: z.string().min(1).max(6).transform(s => s.toUpperCase()) });
+      const { code } = validateBody(schema, req.body);
+
+      // Can't use own code
+      if (user.referralCode === code) {
+        return res.status(400).json({ error: "You cannot use your own referral code" });
+      }
+      // Already received a referral?
+      const existing = await db.select({ id: referrals.id }).from(referrals)
+        .where(eq(referrals.referredId, user.id)).limit(1);
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "You have already used a referral code" });
+      }
+      // Find referrer
+      const [referrer] = await db.select({ id: usersTable.id, referralCode: usersTable.referralCode })
+        .from(usersTable).where(eq(usersTable.referralCode, code)).limit(1);
+      if (!referrer) {
+        return res.status(404).json({ error: "Referral code not found" });
+      }
+      // Record referral and award credits to referrer
+      await db.insert(referrals).values({
+        referrerId: referrer.id,
+        referredId: user.id,
+        code,
+        creditAwarded: true,
+      });
+      await db.update(usersTable)
+        .set({ referralCredits: sql`${usersTable.referralCredits} + 20` })
+        .where(eq(usersTable.id, referrer.id));
+      res.json({ success: true, message: "$20 referral credit applied" });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ===== SPRINT 6: UPTIME MONITORING =====
+
+  app.get("/api/health", async (_req: Request, res: Response) => {
+    try {
+      await db.execute(sql`SELECT 1`);
+      res.json({
+        status: "ok",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(503).json({ status: "error", error: "Database unreachable" });
+    }
+  });
+
+  app.get("/api/health/detailed", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      let dbStatus = "ok";
+      try { await db.execute(sql`SELECT 1`); } catch { dbStatus = "error"; }
+      const mem = process.memoryUsage();
+      res.json({
+        status: dbStatus === "ok" ? "ok" : "degraded",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        db: dbStatus,
+        memory: {
+          heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+          heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
+          rssMb: Math.round(mem.rss / 1024 / 1024),
+        },
+        websockets: {
+          connectedMovers: moverWebSocket.getConnectedMoversCount(),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

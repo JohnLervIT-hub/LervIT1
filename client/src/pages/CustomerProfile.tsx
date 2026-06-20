@@ -30,7 +30,10 @@ import {
   Trash2,
   Star,
   CheckCircle,
-  MoreVertical
+  MoreVertical,
+  Gift,
+  Copy,
+  ExternalLink
 } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -248,6 +251,77 @@ function SavedAddressesCard() {
               <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewLabel(""); setNewAddress(""); }}>Cancel</Button>
             </div>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type ReferralData = {
+  referralCode: string | null;
+  referralCredits: number;
+  referrals: { id: string; createdAt: string; creditAwarded: boolean }[];
+};
+
+function ReferralCard() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<ReferralData>({ queryKey: ["/api/referrals"] });
+
+  const referralLink = data?.referralCode
+    ? `https://app.lervit.com/request-move?ref=${data.referralCode}`
+    : null;
+
+  const copyLink = () => {
+    if (!referralLink) return;
+    navigator.clipboard.writeText(referralLink).then(() => {
+      toast({ title: "Copied!", description: "Referral link copied to clipboard." });
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Gift className="w-5 h-5 text-primary" />
+          Refer a Friend
+        </CardTitle>
+        <CardDescription>
+          Earn $20 credit for every friend who books their first move.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground mb-1">Your referral link</p>
+                <p className="text-sm font-mono break-all">{referralLink ?? '—'}</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={copyLink} disabled={!referralLink} aria-label="Copy referral link">
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Credits earned</span>
+              <span className="font-semibold">${(data?.referralCredits ?? 0) * 1} CAD</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Friends referred</span>
+              <span className="font-semibold">{data?.referrals?.length ?? 0}</span>
+            </div>
+            {referralLink && (
+              <a
+                href={referralLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                Open link <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -882,6 +956,9 @@ export default function CustomerProfile() {
 
         {/* Saved Addresses */}
         <SavedAddressesCard />
+
+        {/* Referral Program */}
+        <ReferralCard />
 
         <Card>
           <CardHeader>

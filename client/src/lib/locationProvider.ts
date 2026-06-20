@@ -81,7 +81,8 @@ export async function autocompleteAddress(
 
 /**
  * Get place details from a place ID
- * Uses the new google.maps.places.Place API (replaces deprecated PlacesService)
+ * Tries the new google.maps.places.Place API first; falls back to legacy PlacesService
+ * if the new API is unavailable (e.g., older Maps JS SDK versions).
  */
 export async function getPlaceDetails(
   placeId: string,
@@ -91,42 +92,75 @@ export async function getPlaceDetails(
   }
 
   const PlaceClass = (window.google.maps.places as any).Place;
-  if (!PlaceClass) {
-    throw createLocationError('API_ERROR', 'google.maps.places.Place not available');
-  }
+  if (PlaceClass) {
+    try {
+      const place = new PlaceClass({ id: placeId });
+      await place.fetchFields({
+        fields: ['formattedAddress', 'location', 'addressComponents', 'id', 'displayName'],
+      });
 
-  try {
-    const place = new PlaceClass({ id: placeId });
-    await place.fetchFields({
-      fields: ['formattedAddress', 'location', 'addressComponents', 'id', 'displayName'],
-    });
+      if (!place.location) {
+        throw createLocationError('NO_RESULTS', 'No location found for place');
+      }
 
-    if (!place.location) {
-      throw createLocationError('NO_RESULTS', 'No location found for place');
+      const components: any[] = place.addressComponents || [];
+      const getComponent = (type: string): string | undefined => {
+        return components.find((c: any) => c.types?.includes(type))?.longText;
+      };
+
+      return {
+        placeId: place.id || placeId,
+        formattedAddress: place.formattedAddress || '',
+        latitude: place.location.lat(),
+        longitude: place.location.lng(),
+        name: place.displayName,
+        streetNumber: getComponent('street_number'),
+        route: getComponent('route'),
+        city: getComponent('locality') || getComponent('sublocality'),
+        province: getComponent('administrative_area_level_1'),
+        postalCode: getComponent('postal_code'),
+        country: getComponent('country'),
+      };
+    } catch (error) {
+      if (isLocationProviderError(error)) throw error;
+      // Fall through to legacy API on unexpected failure
     }
-
-    const components: any[] = place.addressComponents || [];
-    const getComponent = (type: string): string | undefined => {
-      return components.find((c: any) => c.types?.includes(type))?.longText;
-    };
-
-    return {
-      placeId: place.id || placeId,
-      formattedAddress: place.formattedAddress || '',
-      latitude: place.location.lat(),
-      longitude: place.location.lng(),
-      name: place.displayName,
-      streetNumber: getComponent('street_number'),
-      route: getComponent('route'),
-      city: getComponent('locality') || getComponent('sublocality'),
-      province: getComponent('administrative_area_level_1'),
-      postalCode: getComponent('postal_code'),
-      country: getComponent('country'),
-    };
-  } catch (error) {
-    if (isLocationProviderError(error)) throw error;
-    throw createLocationError('API_ERROR', 'Failed to fetch place details', error);
   }
+
+  // Fallback: legacy PlacesService (works with older Maps JS SDK)
+  return new Promise((resolve, reject) => {
+    const PlacesServiceClass = (window.google.maps.places as any).PlacesService;
+    if (!PlacesServiceClass) {
+      reject(createLocationError('API_ERROR', 'google.maps.places.Place and PlacesService both unavailable'));
+      return;
+    }
+    const el = document.createElement('div');
+    const service = new PlacesServiceClass(el);
+    service.getDetails(
+      { placeId, fields: ['formatted_address', 'geometry', 'address_components', 'name'] },
+      (result: any, status: string) => {
+        if (status !== 'OK' || !result) {
+          reject(createLocationError('API_ERROR', `PlacesService.getDetails failed: ${status}`));
+          return;
+        }
+        const getComponent = (type: string): string | undefined =>
+          result.address_components?.find((c: any) => c.types?.includes(type))?.long_name;
+        resolve({
+          placeId,
+          formattedAddress: result.formatted_address || '',
+          latitude: result.geometry?.location?.lat() ?? 0,
+          longitude: result.geometry?.location?.lng() ?? 0,
+          name: result.name,
+          streetNumber: getComponent('street_number'),
+          route: getComponent('route'),
+          city: getComponent('locality') || getComponent('sublocality'),
+          province: getComponent('administrative_area_level_1'),
+          postalCode: getComponent('postal_code'),
+          country: getComponent('country'),
+        });
+      }
+    );
+  });
 }
 
 /**

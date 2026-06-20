@@ -73,18 +73,21 @@ export default function BrowseMovers() {
   const [minRating, setMinRating] = useState<string>("all");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<string>("distance");
+  const [dateFilter, setDateFilter] = useState<string>("");
   const { toast } = useToast();
-  
-  const activeFilterCount = 
-    selectedVehicleTypes.length + 
-    (minRating !== "all" ? 1 : 0) + 
-    (verifiedOnly ? 1 : 0);
+
+  const activeFilterCount =
+    selectedVehicleTypes.length +
+    (minRating !== "all" ? 1 : 0) +
+    (verifiedOnly ? 1 : 0) +
+    (dateFilter ? 1 : 0);
 
   const clearFilters = () => {
     setSelectedVehicleTypes([]);
     setMinRating("all");
     setVerifiedOnly(false);
     setSortBy("distance");
+    setDateFilter("");
   };
 
   const toggleVehicleType = (type: string) => {
@@ -97,12 +100,15 @@ export default function BrowseMovers() {
 
   // Always fetch movers immediately, update with coords when available
   const baseUrl = "/api/movers?isAvailable=true";
-  const apiUrl = userCoords
-    ? `${baseUrl}&lat=${userCoords.lat}&lng=${userCoords.lng}`
-    : baseUrl;
+  const apiUrl = (() => {
+    let url = baseUrl;
+    if (userCoords) url += `&lat=${userCoords.lat}&lng=${userCoords.lng}`;
+    if (dateFilter) url += `&date=${dateFilter}`;
+    return url;
+  })();
 
   const { data: movers, isLoading, isError, refetch } = useQuery({
-    queryKey: [baseUrl, userCoords?.lat, userCoords?.lng],
+    queryKey: [baseUrl, userCoords?.lat, userCoords?.lng, dateFilter],
     queryFn: async () => {
       const res = await fetch(apiUrl);
       if (!res.ok) throw new Error('Failed to fetch movers');
@@ -230,8 +236,8 @@ export default function BrowseMovers() {
           </div>
         )}
 
-        <div className="mb-8 flex gap-4">
-          <div className="relative flex-1">
+        <div className="mb-8 flex gap-4 flex-wrap">
+          <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
               placeholder="Search by name or vehicle type..."
@@ -240,6 +246,21 @@ export default function BrowseMovers() {
               onChange={(e) => setSearchQuery(e.target.value)}
               data-testid="input-search"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={dateFilter}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-40"
+              data-testid="input-date-filter"
+            />
+            {dateFilter && (
+              <Button variant="ghost" size="icon" onClick={() => setDateFilter("")} data-testid="button-clear-date">
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
           <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
             <PopoverTrigger asChild>

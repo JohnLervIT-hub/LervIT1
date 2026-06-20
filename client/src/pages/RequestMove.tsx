@@ -221,6 +221,7 @@ export default function RequestMove() {
   const [promoInput, setPromoInput] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [referralApplied, setReferralApplied] = useState(false);
 
   const handleApplyPromo = useCallback(async () => {
     if (!promoInput.trim()) return;
@@ -571,6 +572,27 @@ export default function RequestMove() {
     },
   });
 
+
+  // Detect ?ref=CODE on mount and apply referral credit
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    if (!refCode || !user) return;
+    fetch('/api/referrals/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ code: refCode }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setReferralApplied(true);
+      })
+      .catch(() => {});
+    // Remove ?ref from URL so it doesn't re-apply on refresh
+    const newUrl = window.location.pathname + window.location.search.replace(/[?&]ref=[^&]*/g, '').replace(/^&/, '?');
+    window.history.replaceState({}, '', newUrl);
+  }, [user]);
 
   // Load Google Maps API on mount (for Step 1 map)
   useEffect(() => {
@@ -1881,6 +1903,12 @@ export default function RequestMove() {
       <div className="min-h-screen pt-16 pb-12 bg-background">
         <div className={step === 1 ? "w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8" : "max-w-5xl mx-auto px-4 sm:px-6"}>
 
+        {referralApplied && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-sm text-green-800 dark:text-green-200 flex items-center gap-2" data-testid="banner-referral-applied">
+            <span className="font-medium">$20 referral credit applied!</span> Your friend's code was accepted.
+          </div>
+        )}
+
         {/* Page Header — hidden on mobile step 1 (map is the hero element there) */}
         <div className={step === 1 ? "py-4 mb-4 hidden md:block" : "py-6 mb-2"}>
           <h1 className="text-2xl sm:text-3xl font-bold mb-1">Request a Move</h1>
@@ -2527,6 +2555,16 @@ export default function RequestMove() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Availability note */}
+                    {date && (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1.5 px-1">
+                        <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                        Only movers who marked themselves available on{' '}
+                        {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
+                        will be matched to your booking.
+                      </div>
+                    )}
 
                     {/* Notes Section */}
                     <div className="relative bg-gradient-to-r from-muted/30 to-transparent border border-border/50 rounded-xl p-5">
