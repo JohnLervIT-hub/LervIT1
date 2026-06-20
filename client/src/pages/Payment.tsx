@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield, Gift, Sparkles, Tag } from "lucide-react";
+import { MapPin, Calendar, DollarSign, CheckCircle2, Loader2, Shield, Gift, Sparkles, Tag, Info } from "lucide-react";
 import type { Booking } from "@shared/schema";
 
 // Lazy-load Stripe with key from server (handles dev/prod automatically)
@@ -132,7 +132,14 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <PaymentElement />
-      <Button 
+      {/* Cancellation policy */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-3">
+        <p className="text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          Free cancellation within 2 hours of booking. After 2 hours, cancellation fees may apply.
+        </p>
+      </div>
+      <Button
         type="submit" 
         className="w-full" 
         disabled={!stripe || !elements || isProcessing}

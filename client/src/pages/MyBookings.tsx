@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil, RotateCcw, ListChecks } from "lucide-react";
+import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown, Sparkles, CreditCard, CheckCircle2, XCircle, Navigation, Clock, TrendingUp, ArrowRight, AlertTriangle, Loader2, Info, ImageOff, Truck, Phone, Shield, User, X, ZoomIn, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil, RotateCcw, ListChecks, ChevronUp } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { format, isValid } from "date-fns";
@@ -101,6 +102,15 @@ export default function MyBookings() {
 
   // State for status timeline dialog (partner bookings)
   const [timelineBookingId, setTimelineBookingId] = useState<string | null>(null);
+
+  // Task 2: Post-move review modal state
+  const [reviewModalBooking, setReviewModalBooking] = useState<Booking | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  // Task 5: Status timeline open state (per booking)
+  const [openTimelines, setOpenTimelines] = useState<Record<string, boolean>>({});
   
   // State for countdown timer refresh
   const [countdownTick, setCountdownTick] = useState(0);
@@ -145,6 +155,50 @@ export default function MyBookings() {
     enabled: !!user?.id,
     retry: 2,
   });
+
+  // Task 2: Trigger review modal for first unseen completed booking
+  useEffect(() => {
+    if (!bookings) return;
+    const target = bookings.find(
+      (b) =>
+        b.status === "completed" &&
+        b.mover &&
+        !b.hasReview &&
+        !localStorage.getItem(`review_prompted_${b.id}`)
+    );
+    if (target) setReviewModalBooking(target);
+  }, [bookings]);
+
+  const submitReview = async () => {
+    if (!reviewModalBooking || !user) return;
+    setIsSubmittingReview(true);
+    try {
+      await apiRequest("POST", "/api/reviews", {
+        bookingId: reviewModalBooking.id,
+        moverId: reviewModalBooking.mover?.id,
+        customerId: user.id,
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({ title: "Review submitted", description: "Thank you for your feedback!" });
+    } catch {
+      toast({ title: "Could not submit review", variant: "destructive" });
+    } finally {
+      localStorage.setItem(`review_prompted_${reviewModalBooking.id}`, "1");
+      setIsSubmittingReview(false);
+      setReviewModalBooking(null);
+      setReviewRating(5);
+      setReviewComment("");
+    }
+  };
+
+  const dismissReviewModal = () => {
+    if (reviewModalBooking) localStorage.setItem(`review_prompted_${reviewModalBooking.id}`, "1");
+    setReviewModalBooking(null);
+    setReviewRating(5);
+    setReviewComment("");
+  };
   
   // Sort and filter bookings with safe date handling
   const now = new Date();
@@ -237,6 +291,85 @@ export default function MyBookings() {
       case "cancelled": return <XCircle className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
     }
+  };
+
+  // Task 5: Status timeline steps and helper
+  const TIMELINE_STEPS = [
+    { label: "Booked", statuses: ["pending_payment", "pending"] },
+    { label: "Confirmed", statuses: ["confirmed", "accepted", "assigned"] },
+    { label: "En Route", statuses: ["en_route_to_pickup"] },
+    { label: "Arrived", statuses: ["loading"] },
+    { label: "In Progress", statuses: ["en_route_to_dropoff", "unloading", "in_transit"] },
+    { label: "Completed", statuses: ["completed"] },
+  ];
+
+  const STATUS_RANK: Record<string, number> = {
+    pending_payment: 0, pending: 1, confirmed: 2, accepted: 2, assigned: 2,
+    en_route_to_pickup: 3, loading: 4, en_route_to_dropoff: 5, unloading: 5, in_transit: 5,
+    completed: 6,
+  };
+
+  const getTimelineStepState = (stepStatuses: string[], bookingStatus: string): "completed" | "current" | "upcoming" => {
+    const bookingRank = STATUS_RANK[bookingStatus] ?? -1;
+    const stepRank = Math.min(...stepStatuses.map((s) => STATUS_RANK[s] ?? 0));
+    if (bookingRank > stepRank) return "completed";
+    if (stepStatuses.includes(bookingStatus)) return "current";
+    return "upcoming";
+  };
+
+  const StatusTimeline = ({ bookingStatus, bookingId }: { bookingStatus: string; bookingId: string }) => {
+    if (bookingStatus === "cancelled") return null;
+    const isOpen = openTimelines[bookingId] ?? false;
+    return (
+      <div className="mt-4 border-t pt-4">
+        <button
+          onClick={() => setOpenTimelines((prev) => ({ ...prev, [bookingId]: !isOpen }))}
+          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          data-testid={`button-timeline-toggle-${bookingId}`}
+        >
+          <ListChecks className="w-3.5 h-3.5" />
+          <span>Move Progress</span>
+          {isOpen ? <ChevronUp className="w-3.5 h-3.5 ml-auto" /> : <ChevronDown className="w-3.5 h-3.5 ml-auto" />}
+        </button>
+        {isOpen && (
+          <div className="mt-3 flex items-center gap-0 overflow-x-auto pb-1">
+            {TIMELINE_STEPS.map((step, i) => {
+              const state = getTimelineStepState(step.statuses, bookingStatus);
+              return (
+                <div key={step.label} className="flex items-center min-w-0">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      state === "completed" ? "bg-green-500" :
+                      state === "current" ? "bg-blue-500" :
+                      "bg-muted border border-muted-foreground/30"
+                    }`}>
+                      {state === "completed" ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                      ) : state === "current" ? (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-medium whitespace-nowrap ${
+                      state === "completed" ? "text-green-600" :
+                      state === "current" ? "text-blue-600 font-semibold" :
+                      "text-muted-foreground"
+                    }`}>{step.label}</span>
+                  </div>
+                  {i < TIMELINE_STEPS.length - 1 && (
+                    <div className={`h-0.5 w-6 flex-shrink-0 mx-1 mb-4 ${
+                      getTimelineStepState(TIMELINE_STEPS[i + 1].statuses, bookingStatus) !== "upcoming" ||
+                      state === "completed" ? "bg-green-500" : "bg-muted"
+                    }`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const getStatusColor = (status: string) => {
@@ -934,6 +1067,8 @@ export default function MyBookings() {
                       </Button>
                     )}
                   </div>
+                  {/* Task 5: Status timeline */}
+                  <StatusTimeline bookingStatus={booking.status} bookingId={booking.id} />
                 </CardContent>
               </Card>
             ))}
@@ -1031,6 +1166,66 @@ export default function MyBookings() {
         bookingId={timelineBookingId}
         onClose={() => setTimelineBookingId(null)}
       />
+
+      {/* Task 2: Post-move review modal */}
+      <Dialog open={!!reviewModalBooking} onOpenChange={dismissReviewModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Star className="w-5 h-5 text-yellow-500" />
+              Rate Your Move
+            </DialogTitle>
+            <DialogDescription>
+              How was your experience with {reviewModalBooking?.mover?.name}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Star picker */}
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setReviewRating(star)}
+                  className="focus:outline-none"
+                  data-testid={`star-${star}`}
+                >
+                  <Star
+                    className={`w-8 h-8 transition-colors ${star <= reviewRating ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground"}`}
+                  />
+                </button>
+              ))}
+            </div>
+            {/* Optional comment */}
+            <Textarea
+              placeholder="Share details about your experience (optional)"
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              rows={3}
+              className="resize-none"
+              data-testid="textarea-review-comment"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={dismissReviewModal}
+                data-testid="button-review-skip"
+              >
+                Skip
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={submitReview}
+                disabled={isSubmittingReview}
+                data-testid="button-review-submit"
+              >
+                {isSubmittingReview ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Star className="w-4 h-4 mr-2" />}
+                Submit
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

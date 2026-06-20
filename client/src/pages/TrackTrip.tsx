@@ -4,11 +4,15 @@ import { useRoute } from "wouter";
 import { GoogleMap, Marker, DirectionsRenderer, OverlayView } from "@react-google-maps/api";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Phone, MessageCircle, Star, Truck, ChevronUp, ChevronDown, MapPin, Navigation2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Phone, MessageCircle, Star, Truck, ChevronUp, ChevronDown, MapPin, Navigation2, Send, X } from "lucide-react";
 import { Link } from "wouter";
 import { ACTIVE_STATUSES, type BookingStatus } from "@shared/schema";
 import { useResilientPolling, getConnectionStatusText } from "@/hooks/useResilientPolling";
 import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LocationData {
   bookingId: string;
@@ -118,12 +122,44 @@ function haversineKm(
 export default function TrackTrip() {
   const [, params] = useRoute("/track-trip/:bookingId");
   const bookingId = params?.bookingId;
+  const { user } = useAuth();
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+
+  // Task 4: Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string; durationMinutes: number } | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   
+  // Task 4: Messages query — poll every 10 seconds while on screen
+  const { data: messages = [] } = useQuery<{ id: string; senderId: string; text: string; createdAt: string }[]>({
+    queryKey: ["/api/messages", bookingId],
+    queryFn: () => fetch(`/api/messages?bookingId=${bookingId}`, { credentials: "include" }).then((r) => r.json()),
+    enabled: !!bookingId,
+    refetchInterval: 10000,
+    select: (data) => (Array.isArray(data) ? data.slice(-10) : []),
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: (text: string) =>
+      apiRequest("POST", "/api/messages", { bookingId, senderId: user?.id, text }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/messages", bookingId] }),
+  });
+
+  useEffect(() => {
+    if (isChatOpen) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isChatOpen]);
+
+  const handleSendMessage = () => {
+    const text = chatMessage.trim();
+    if (!text) return;
+    sendMessageMutation.mutate(text);
+    setChatMessage("");
+  };
+
   // Google Maps loading
   const { isLoaded, loadMaps, loadError } = useGoogleMaps();
   
@@ -530,6 +566,66 @@ export default function TrackTrip() {
         )}
       </div>
 
+      {/* Task 4: Chat panel — collapsible slide-up drawer */}
+      <div
+        className={`absolute left-0 right-0 z-20 transition-all duration-300 ${isChatOpen ? 'bottom-0' : 'bottom-[-340px]'}`}
+        style={{ bottom: isChatOpen ? (isSheetExpanded ? '340px' : '120px') : '-340px' }}
+        data-testid="chat-panel"
+      >
+        <div className="bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl border-t border-border mx-0">
+          {/* Chat header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-primary" />
+              <span className="font-semibold text-sm">Chat with Mover</span>
+            </div>
+            <button onClick={() => setIsChatOpen(false)} className="p-1 rounded-full hover:bg-muted" data-testid="button-close-chat">
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Messages list */}
+          <div className="h-48 overflow-y-auto px-4 py-3 space-y-2">
+            {messages.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No messages yet. Say hi!</p>
+            ) : (
+              messages.map((msg) => {
+                const isOwn = msg.senderId === user?.id;
+                return (
+                  <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${isOwn ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
+            <Input
+              placeholder="Type a message…"
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              className="flex-1 h-9 text-sm"
+              data-testid="input-chat-message"
+            />
+            <Button
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={handleSendMessage}
+              disabled={!chatMessage.trim() || sendMessageMutation.isPending}
+              data-testid="button-send-message"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* Bottom sheet - Uber style */}
       <div className={`absolute bottom-0 left-0 right-0 z-10 transition-transform duration-300 ${isSheetExpanded ? 'translate-y-0' : 'translate-y-[180px]'}`}>
         <div className="bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl">
@@ -592,10 +688,11 @@ export default function TrackTrip() {
                   >
                     <Phone className="h-4 w-4" />
                   </Button>
-                  <Button 
-                    size="icon" 
-                    variant="outline"
+                  <Button
+                    size="icon"
+                    variant={isChatOpen ? "default" : "outline"}
                     className="rounded-full h-10 w-10"
+                    onClick={() => setIsChatOpen((o) => !o)}
                     data-testid="button-message"
                   >
                     <MessageCircle className="h-4 w-4" />

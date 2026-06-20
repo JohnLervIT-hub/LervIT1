@@ -292,6 +292,12 @@ export default function MoverDashboard() {
   const [previewIndex, setPreviewIndex] = useState(0);
   const [showImagePreview, setShowImagePreview] = useState(false);
 
+  // Task 3: Job acceptance overlay
+  const seenJobIds = useRef<Set<string>>(new Set());
+  const jobsSeedDone = useRef(false);
+  const [overlayJob, setOverlayJob] = useState<Booking | null>(null);
+  const [overlayCountdown, setOverlayCountdown] = useState(60);
+
   // Vehicle photo nudge state
   const [showVehiclePhotoDialog, setShowVehiclePhotoDialog] = useState(false);
   const [showOnlineNudgeDialog, setShowOnlineNudgeDialog] = useState(false);
@@ -520,6 +526,35 @@ export default function MoverDashboard() {
       });
     },
   });
+
+  // Task 3: Detect newly arrived available jobs and show overlay
+  useEffect(() => {
+    if (!availableBookings) return;
+    if (!jobsSeedDone.current) {
+      availableBookings.forEach((b) => seenJobIds.current.add(b.id));
+      jobsSeedDone.current = true;
+      return;
+    }
+    const newJob = availableBookings.find((b) => !seenJobIds.current.has(b.id));
+    if (newJob && !overlayJob) {
+      seenJobIds.current.add(newJob.id);
+      setOverlayJob(newJob);
+      setOverlayCountdown(60);
+    }
+    availableBookings.forEach((b) => seenJobIds.current.add(b.id));
+  }, [availableBookings]);
+
+  // Task 3: Countdown timer — auto-decline when timer hits zero
+  useEffect(() => {
+    if (!overlayJob) return;
+    if (overlayCountdown <= 0) {
+      declineBookingMutation.mutate(overlayJob.id);
+      setOverlayJob(null);
+      return;
+    }
+    const timer = setTimeout(() => setOverlayCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [overlayJob, overlayCountdown]);
 
   const completeBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
@@ -1559,6 +1594,99 @@ export default function MoverDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
+      {/* Task 3: Full-screen job acceptance overlay */}
+      {overlayJob && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col" data-testid="job-overlay">
+          {/* Countdown bar */}
+          <div className="h-1.5 bg-muted">
+            <div
+              className="h-full bg-primary transition-all duration-1000"
+              style={{ width: `${(overlayCountdown / 60) * 100}%` }}
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 pt-8 pb-4 space-y-6">
+            {/* Header */}
+            <div className="text-center">
+              <div className="inline-flex items-center gap-2 bg-primary/10 text-primary rounded-full px-4 py-1.5 text-sm font-semibold mb-3">
+                <Clock className="w-4 h-4" />
+                New Job — {overlayCountdown}s
+              </div>
+              <h1 className="text-2xl font-bold">New Move Request</h1>
+              <p className="text-muted-foreground text-sm mt-1">Accept quickly — this job will be offered to other movers</p>
+            </div>
+
+            {/* Job details card */}
+            <div className="rounded-2xl border bg-card p-5 space-y-5">
+              {/* Route */}
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center pt-1 gap-1">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <div className="w-0.5 flex-1 min-h-[2rem] bg-muted-foreground/30" />
+                  <div className="w-3 h-3 rounded-sm bg-primary" />
+                </div>
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Pickup</p>
+                    <p className="font-semibold">{overlayJob.pickupAddress}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Dropoff</p>
+                    <p className="font-semibold">{overlayJob.dropoffAddress}</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Distance</p>
+                  <p className="font-bold text-lg">{overlayJob.distance ? `${parseFloat(overlayJob.distance).toFixed(1)} km` : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Load</p>
+                  <p className="font-bold text-lg capitalize">{overlayJob.loadSize}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Your Earnings</p>
+                  <p className="font-bold text-lg text-green-600">
+                    ${overlayJob.price ? (parseFloat(overlayJob.price) * 0.85).toFixed(2) : "—"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">after 15% fee</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA buttons */}
+          <div className="px-6 pb-8 pt-2 grid grid-cols-2 gap-4">
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-16 text-base font-semibold"
+              onClick={() => { declineBookingMutation.mutate(overlayJob.id); setOverlayJob(null); }}
+              disabled={declineBookingMutation.isPending || acceptBookingMutation.isPending}
+              data-testid="button-overlay-decline"
+            >
+              <XCircle className="w-5 h-5 mr-2" />
+              Decline
+            </Button>
+            <Button
+              size="lg"
+              className="bg-green-600 hover:bg-green-700 text-white h-16 text-base font-semibold"
+              onClick={() => { handleAcceptBooking(overlayJob.id); setOverlayJob(null); }}
+              disabled={acceptBookingMutation.isPending || declineBookingMutation.isPending}
+              data-testid="button-overlay-accept"
+            >
+              <CheckCircle className="w-5 h-5 mr-2" />
+              Accept
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Premium Header Section */}
       <div className="bg-gradient-to-br from-primary/5 via-primary/10 to-transparent border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-8">
