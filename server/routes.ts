@@ -11304,36 +11304,6 @@ Respond with VALID JSON only:
     }
   });
 
-  // ===== SPRINT 5: INSTANT QUOTE WIDGET =====
-
-  app.post("/api/quote/instant", async (req: Request, res: Response) => {
-    try {
-      const { loadSize } = req.body;
-      const validLoadSizes = ['boxes', 'small', 'medium', 'large', 'apartment'];
-      if (!loadSize || !validLoadSizes.includes(loadSize)) {
-        return res.status(400).json({ error: "loadSize must be one of: boxes, small, medium, large, apartment" });
-      }
-      const { calculatePrice, getVehicleClassFromLoadSize, VEHICLE_CLASSES } = await import("@shared/pricing");
-      const vehicleClass = getVehicleClassFromLoadSize(loadSize);
-      const classConfig = VEHICLE_CLASSES[vehicleClass];
-      // Min: 5 km distance, 1 mover, no difficulty, no heavy items
-      const minBreakdown = calculatePrice(5, loadSize as any, 'ground_floor', 'ground_floor', false, 1);
-      // Max: 20 km distance, 1 mover, standard difficulty, no heavy items
-      const maxBreakdown = calculatePrice(20, loadSize as any, 'ground_floor', 'ground_floor', false, 1);
-      // Estimated duration: base 1h + 30 min per km band
-      const estimatedDurationMin = loadSize === 'boxes' || loadSize === 'small' ? 60 : loadSize === 'medium' ? 90 : loadSize === 'large' ? 120 : 180;
-      res.json({
-        minPrice: minBreakdown.totalCost.toFixed(2),
-        maxPrice: maxBreakdown.totalCost.toFixed(2),
-        vehicleClass,
-        vehicleName: classConfig.name,
-        estimatedDuration: `${estimatedDurationMin / 60}-${estimatedDurationMin / 60 + 1} hrs`,
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to calculate quote" });
-    }
-  });
-
   // ===== SPRINT 5: MOVER EARNINGS PDF =====
 
   app.get("/api/mover/earnings/pdf", async (req: Request, res: Response) => {

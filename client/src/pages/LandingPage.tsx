@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -7,7 +6,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -50,27 +48,10 @@ import {
 import { SiLinkedin, SiX, SiInstagram, SiFacebook } from "react-icons/si";
 import heroImage from "@assets/generated_images/calgary_mover_loading_furniture.png";
 
-type QuoteResult = { minPrice: string; maxPrice: string; vehicleClass: string; vehicleName: string; estimatedDuration: string };
-
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [quoteLoadSize, setQuoteLoadSize] = useState("");
-  const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
   useAnalytics("landing_page");
-
-  const quoteMutation = useMutation({
-    mutationFn: async (loadSize: string): Promise<QuoteResult> => {
-      const res = await fetch("/api/quote/instant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loadSize }),
-      });
-      if (!res.ok) throw new Error("Failed to get quote");
-      return res.json();
-    },
-    onSuccess: (data) => setQuoteResult(data),
-  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -308,47 +289,9 @@ export default function LandingPage() {
                     />
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Package className="w-4 h-4 text-muted-foreground" /> Load Size
-                    </Label>
-                    <Select value={quoteLoadSize} onValueChange={(v) => { setQuoteLoadSize(v); setQuoteResult(null); }}>
-                      <SelectTrigger className="h-12" data-testid="select-hero-load-size">
-                        <SelectValue placeholder="Select load size" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="boxes">Boxes Only (few boxes)</SelectItem>
-                        <SelectItem value="medium">Medium (bedroom + boxes)</SelectItem>
-                        <SelectItem value="large">Large (2-3 rooms)</SelectItem>
-                        <SelectItem value="apartment">Full Apartment / House</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {quoteLoadSize && (
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full gap-2"
-                      disabled={quoteMutation.isPending}
-                      onClick={() => quoteMutation.mutate(quoteLoadSize)}
-                      data-testid="button-hero-instant-quote"
-                    >
-                      {quoteMutation.isPending ? "Calculating..." : "Get Instant Estimate"}
-                    </Button>
-                  )}
-
-                  {quoteResult && (
-                    <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-sm" data-testid="quote-result">
-                      <p className="font-semibold text-primary">${quoteResult.minPrice}–${quoteResult.maxPrice} CAD</p>
-                      <p className="text-muted-foreground text-xs mt-0.5">{quoteResult.vehicleName} · Est. {quoteResult.estimatedDuration}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Exact price calculated at booking based on distance</p>
-                    </div>
-                  )}
-
                   <Link href="/request-move">
                     <Button size="lg" className="w-full gap-2 mt-2" data-testid="button-hero-get-price">
-                      Book Now <ArrowRight className="w-5 h-5" />
+                      Get Price <ArrowRight className="w-5 h-5" />
                     </Button>
                   </Link>
                 </div>
