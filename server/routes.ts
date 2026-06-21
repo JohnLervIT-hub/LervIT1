@@ -11638,6 +11638,30 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ONE-TIME ADMIN PASSWORD RESET =====
+  // Only active when ADMIN_RESET_TOKEN env var is set. Remove after use.
+  app.post("/api/internal/reset-admin-password", async (req: Request, res: Response) => {
+    const token = process.env.ADMIN_RESET_TOKEN;
+    if (!token) return res.status(404).json({ error: "Not found" });
+    const provided = req.headers['x-reset-token'] as string | undefined;
+    if (!provided || provided !== token) return res.status(403).json({ error: "Forbidden" });
+    try {
+      const bcrypt = await import('bcryptjs');
+      const { newPassword } = req.body;
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+        return res.status(400).json({ error: "newPassword must be at least 8 characters" });
+      }
+      const hash = await bcrypt.hash(newPassword, 12);
+      const result = await db
+        .update(usersTable)
+        .set({ password: hash })
+        .where(and(eq(usersTable.role, 'admin'), eq(usersTable.email, 'admin12@lervit.com')));
+      return res.json({ ok: true, message: "Admin password updated. Remove ADMIN_RESET_TOKEN now." });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to update password" });
+    }
+  });
+
   // Register enterprise partner portal routes
   registerPartnerRoutes(app);
 
