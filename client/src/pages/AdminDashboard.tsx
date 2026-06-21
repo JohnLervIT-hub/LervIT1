@@ -1047,10 +1047,10 @@ export default function AdminDashboard() {
                       >
                         <div className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${getStatusColor(booking.status)}`} />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 flex-wrap">
-                            <div>
-                              <p className="font-semibold text-sm">{booking.customer?.name || "Unknown Customer"}</p>
-                              <p className="text-xs text-muted-foreground">{booking.customer?.email}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-sm truncate">{booking.customer?.name || "Unknown Customer"}</p>
+                              <p className="text-xs text-muted-foreground truncate">{booking.customer?.email}</p>
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0">
                               <p className="font-bold text-sm tabular-nums">${booking.price ? parseFloat(booking.price).toFixed(2) : "0.00"}</p>
