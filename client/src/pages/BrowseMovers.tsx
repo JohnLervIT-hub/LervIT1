@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MoverCard from "@/components/MoverCard";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, SlidersHorizontal, MapPin, X, Navigation } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, X, Navigation, SearchX } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -98,31 +98,21 @@ export default function BrowseMovers() {
     );
   };
 
-  // Always fetch movers immediately, update with coords when available
+  // URL built inside queryFn so it's always fresh when queryKey changes — no stale closure
   const baseUrl = "/api/movers?isAvailable=true";
-  const apiUrl = (() => {
-    let url = baseUrl;
-    if (userCoords) url += `&lat=${userCoords.lat}&lng=${userCoords.lng}`;
-    if (dateFilter) url += `&date=${dateFilter}`;
-    return url;
-  })();
 
   const { data: movers, isLoading, isError, refetch } = useQuery({
     queryKey: [baseUrl, userCoords?.lat, userCoords?.lng, dateFilter],
     queryFn: async () => {
-      const res = await fetch(apiUrl);
+      let url = baseUrl;
+      if (userCoords) url += `&lat=${userCoords.lat}&lng=${userCoords.lng}`;
+      if (dateFilter) url += `&date=${dateFilter}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch movers');
       return res.json();
     },
     retry: 2,
   });
-
-  // Refetch when coords become available
-  useEffect(() => {
-    if (userCoords) {
-      refetch();
-    }
-  }, [userCoords, refetch]);
 
   const filteredMovers = useMemo(() => {
     if (!movers || !Array.isArray(movers)) return [];
@@ -164,6 +154,13 @@ export default function BrowseMovers() {
       result.sort((a: any, b: any) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
     } else if (sortBy === "moves") {
       result.sort((a: any, b: any) => (b.totalMoves || 0) - (a.totalMoves || 0));
+    } else if (sortBy === "distance") {
+      if (userCoords) {
+        result.sort((a: any, b: any) => (parseFloat(a.distance) || 999) - (parseFloat(b.distance) || 999));
+      } else {
+        // No GPS available — fall back to rating so list is never unsorted
+        result.sort((a: any, b: any) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
+      }
     }
     
     return result;
@@ -241,11 +238,21 @@ export default function BrowseMovers() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
               placeholder="Search by name or vehicle type..."
-              className="pl-10"
+              className="pl-10 pr-9"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               data-testid="input-search"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="button-clear-search"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Input
@@ -264,7 +271,7 @@ export default function BrowseMovers() {
           </div>
           <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="hover-elevate active-elevate-2 relative" data-testid="button-filters">
+              <Button variant="outline" className="relative" data-testid="button-filters">
                 <SlidersHorizontal className="w-4 h-4 mr-2" />
                 Filters
                 {activeFilterCount > 0 && (
@@ -372,7 +379,11 @@ export default function BrowseMovers() {
         <div className="mb-6 flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Showing:</span>
           <Badge variant="secondary" data-testid="badge-mover-count">
-            {isLoading ? "Loading..." : `${filteredMovers.length} movers available`}
+            {isLoading
+              ? "Loading..."
+              : activeFilterCount > 0 || searchQuery
+                ? `${filteredMovers.length} movers shown`
+                : `${filteredMovers.length} movers available`}
           </Badge>
         </div>
 
@@ -388,17 +399,36 @@ export default function BrowseMovers() {
               <X className="w-7 h-7 text-destructive" />
             </div>
             <p className="text-muted-foreground mb-4">Could not load movers. Please check your connection.</p>
-            <button
+            <Button
+              variant="link"
+              size="sm"
               onClick={() => refetch()}
-              className="text-sm text-primary hover:underline"
               data-testid="button-retry-movers"
             >
               Try again
-            </button>
+            </Button>
           </div>
         ) : filteredMovers.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No movers found matching your search.</p>
+          <div className="text-center py-16">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+              <SearchX className="w-8 h-8 text-muted-foreground/50" />
+            </div>
+            <p className="font-medium mb-1">No movers found</p>
+            <p className="text-sm text-muted-foreground mb-5">
+              {searchQuery
+                ? `No results for "${searchQuery}"`
+                : "Try adjusting your filters to see more movers."}
+            </p>
+            {(activeFilterCount > 0 || searchQuery) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { clearFilters(); setSearchQuery(""); }}
+                data-testid="button-clear-all-filters"
+              >
+                Clear all filters
+              </Button>
+            )}
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
