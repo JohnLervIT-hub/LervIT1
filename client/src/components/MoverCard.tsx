@@ -13,7 +13,7 @@ function getEstimatedStartingPrice(vehicleType: string): number {
   if (v.includes('truck')) return 115;
   if (v.includes('van')) return 95;
   if (v.includes('pickup')) return 80;
-  return 65;
+  return 20;
 }
 
 interface MoverCardProps {
