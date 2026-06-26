@@ -1,5 +1,6 @@
 import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
+import { logger } from './logger';
 
 // Calgary timezone used for all date formatting in emails, SMS, and logs
 const CALGARY_TZ = 'America/Edmonton';
@@ -77,6 +78,37 @@ class EmailRateLimiter {
 }
 
 const emailRateLimiter = new EmailRateLimiter();
+
+// SMS Rate Limiter — Telnyx allows ~3 req/sec; we use 400ms intervals (~2.5/sec) for safety
+class SmsRateLimiter {
+  private queue: Array<() => Promise<any>> = [];
+  private isProcessing = false;
+  private lastSendTime = 0;
+  private readonly minIntervalMs = 400;
+
+  async enqueue<T>(smsFn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push(async () => {
+        try { resolve(await smsFn()); } catch (error) { reject(error); }
+      });
+      this.processQueue();
+    });
+  }
+
+  private async processQueue() {
+    if (this.isProcessing || this.queue.length === 0) return;
+    this.isProcessing = true;
+    while (this.queue.length > 0) {
+      const wait = this.minIntervalMs - (Date.now() - this.lastSendTime);
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      const smsFn = this.queue.shift();
+      if (smsFn) { this.lastSendTime = Date.now(); await smsFn(); }
+    }
+    this.isProcessing = false;
+  }
+}
+
+const smsRateLimiter = new SmsRateLimiter();
 
 // Email notification service with Resend integration
 export interface EmailNotification {
@@ -235,73 +267,56 @@ class NotificationService {
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     // Normalize phone number to E.164 format
     const formattedPhone = normalizeToE164(notification.to);
-    
-    console.log('\n[SMS] Sending notification:');
-    console.log('To (original):', notification.to);
-    console.log('To (E.164):', formattedPhone || 'INVALID');
-    console.log('From:', telnyxPhoneNumber ? `${telnyxPhoneNumber.slice(0, 4)}****${telnyxPhoneNumber.slice(-2)}` : 'NOT SET');
-    console.log('Type:', notification.type);
-    
+
     // Block SMS in development mode (except OTP verification codes needed for login testing)
     // Set FORCE_SMS=true in env to bypass this block for testing real SMS delivery
     const forceSms = process.env.FORCE_SMS === 'true';
     if (process.env.NODE_ENV === 'development' && notification.type !== 'phone_verification' && !forceSms) {
-      const maskedMessage = notification.message.length > 80 
-        ? notification.message.substring(0, 80) + '...' 
-        : notification.message;
-      console.log('[SMS] BLOCKED in development mode (set FORCE_SMS=true to override)');
-      console.log('Message preview:', maskedMessage);
-      console.log('---\n');
+      logger.debug({ type: notification.type }, 'SMS blocked in development mode');
       return true;
     }
-    
+
     if (!formattedPhone) {
-      console.log('[SMS] Invalid phone number - cannot send');
-      console.log('---\n');
+      logger.warn({ to: notification.to, type: notification.type }, 'SMS send skipped: invalid phone number');
       return false;
     }
-    
+
     if (!telnyxApiKey || !telnyxPhoneNumber) {
-      console.log('[SMS] Telnyx not configured - SMS logged only');
-      // Mask verification codes in logs for security
-      const maskedMessage = notification.type === 'phone_verification' 
-        ? notification.message.replace(/\d{6}/, '******')
-        : notification.message;
-      console.log('Message:', maskedMessage);
-      console.log('---\n');
+      logger.warn({ type: notification.type }, 'SMS send skipped: Telnyx not configured');
       return false;
     }
-    
-    try {
-      const response = await fetch('https://api.telnyx.com/v2/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${telnyxApiKey}`,
-        },
-        body: JSON.stringify({
-          from: telnyxPhoneNumber,
-          to: formattedPhone,
-          text: notification.message,
-          ...(telnyxMessagingProfileId && { messaging_profile_id: telnyxMessagingProfileId }),
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (!response.ok) {
-        console.error('[SMS] Telnyx API error:', result);
+
+    // Enqueue through rate limiter to prevent Telnyx rate limit errors on burst dispatch
+    return smsRateLimiter.enqueue(async () => {
+      try {
+        const response = await fetch('https://api.telnyx.com/v2/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${telnyxApiKey}`,
+          },
+          body: JSON.stringify({
+            from: telnyxPhoneNumber,
+            to: formattedPhone,
+            text: notification.message,
+            ...(telnyxMessagingProfileId && { messaging_profile_id: telnyxMessagingProfileId }),
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          logger.error({ type: notification.type, to: formattedPhone, status: response.status, telnyxError: result }, 'SMS Telnyx API error');
+          return false;
+        }
+
+        logger.info({ type: notification.type, to: formattedPhone, messageId: result.data?.id }, 'SMS sent successfully');
+        return true;
+      } catch (error: any) {
+        logger.error({ type: notification.type, to: formattedPhone, error: error.message }, 'SMS send failed');
         return false;
       }
-      
-      console.log('[SMS] Sent successfully! ID:', result.data?.id);
-      console.log('---\n');
-      return true;
-    } catch (error: any) {
-      console.error('[SMS] Failed to send:', error.message);
-      console.log('---\n');
-      return false;
-    }
+    });
   }
   
   async sendEmail(notification: EmailNotification): Promise<void> {

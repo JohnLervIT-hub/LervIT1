@@ -149,7 +149,7 @@ async function notifyMover(
   const earningsStr = toDecimalString(mover.estimatedEarnings);
 
   // WebSocket (AC-9: always include expiresAt)
-  moverWebSocket.notifyMover(mover.userId, {
+  const wsSent = moverWebSocket.notifyMover(mover.userId, {
     type: 'job_notification',
     bookingId: booking.id,
     pickupAddress: booking.pickupAddress ?? '',
@@ -159,15 +159,22 @@ async function notifyMover(
     expiresAt,
     isPriority: opts.isPriority,
   });
+  if (wsSent === 0) {
+    logger.info({ moverId: mover.moverId, userId: mover.userId, bookingId: booking.id },
+      'Mover offline at dispatch — WS missed, SMS/email will cover');
+  }
 
-  // Email
+  // Email + SMS + in-app fallback
   try {
     const [moverUser] = await db.select().from(users).where(eq(users.id, mover.userId)).limit(1);
     if (moverUser) {
-      await notificationService.sendJobAssignment(moverUser, booking as any, earningsStr);
+      // Fix 1: Respect user notification preferences before sending each channel
+      if (moverUser.emailJobAlerts !== false) {
+        await notificationService.sendJobAssignment(moverUser, booking as any, earningsStr);
+      }
 
-      // SMS (AC-4)
-      if (moverUser.phone) {
+      // Fix 1: Respect smsJobAlerts preference (AC-4 still fires when opted-in)
+      if (moverUser.smsJobAlerts !== false && moverUser.phone) {
         const smsText = opts.isPriority
           ? `LervIT PRIORITY: A customer selected YOU! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`
           : `LervIT New Job! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`;

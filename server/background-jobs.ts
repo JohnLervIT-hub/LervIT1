@@ -168,6 +168,34 @@ async function redispatchIfAllExpired(bookingIds: string[]) {
           { event: 'redispatch_cap_reached', bookingId, totalNotifs: allNotifs.length },
           'Auto re-dispatch cap reached — admin manual assignment required'
         );
+        // Notify customer that no movers could be found
+        try {
+          const [customer] = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, booking.customerId))
+            .limit(1);
+          if (customer?.email) {
+            await notificationService.sendEmail({
+              to: customer.email,
+              subject: 'Update on Your LervIT Booking',
+              body: `<p>Hi ${customer.name?.split(' ')[0] || 'there'},</p>
+<p>We were unable to find an available mover for your booking at this time. Our team has been notified and will reach out to you shortly to assist.</p>
+<p>We apologize for any inconvenience. You can also <a href="${process.env.BASE_URL || 'https://app.lervit.com'}/support">contact support</a> for immediate help.</p>
+<p>— The LervIT Team</p>`,
+              type: 'status_update',
+            });
+          }
+          if (customer?.phone) {
+            await notificationService.sendSMS({
+              to: customer.phone,
+              message: `LervIT: We couldn't find an available mover for your booking. Our team will contact you shortly. Need help now? Visit ${process.env.BASE_URL || 'https://app.lervit.com'}/support`,
+              type: 'booking_update',
+            });
+          }
+        } catch (notifyErr) {
+          logEvent.error('redispatch_cap_customer_notify', notifyErr, { bookingId });
+        }
         continue;
       }
 
