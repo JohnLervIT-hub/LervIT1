@@ -2045,7 +2045,7 @@ export default function MoverDashboard() {
             </TabsTrigger>
             <TabsTrigger value="my-bookings" data-testid="tab-my-bookings" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <Calendar className="w-4 h-4" />
-              <span className="hidden sm:inline">Bookings</span>
+              <span className="hidden sm:inline">Active</span>
               {bookings && bookings.length > 0 && (
                 <Badge variant="secondary" className="no-default-hover-elevate no-default-active-elevate h-5 px-1.5 text-xs bg-green-500 text-white border-transparent" data-testid="badge-bookings-count">
                   {bookings.length}
