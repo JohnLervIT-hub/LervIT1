@@ -2038,7 +2038,7 @@ export default function MoverDashboard() {
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">Jobs</span>
               {availableBookings && availableBookings.length > 0 && (
-                <Badge variant="secondary" className="no-default-hover-elevate h-5 px-1.5 text-xs bg-primary-foreground/20 text-inherit">
+                <Badge variant="secondary" className="no-default-hover-elevate no-default-active-elevate h-5 px-1.5 text-xs bg-red-500 text-white border-transparent" data-testid="badge-available-count">
                   {availableBookings.length}
                 </Badge>
               )}
@@ -2047,7 +2047,7 @@ export default function MoverDashboard() {
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Bookings</span>
               {bookings && bookings.length > 0 && (
-                <Badge variant="secondary" className="no-default-hover-elevate h-5 px-1.5 text-xs bg-primary-foreground/20 text-inherit">
+                <Badge variant="secondary" className="no-default-hover-elevate no-default-active-elevate h-5 px-1.5 text-xs bg-green-500 text-white border-transparent" data-testid="badge-bookings-count">
                   {bookings.length}
                 </Badge>
               )}
