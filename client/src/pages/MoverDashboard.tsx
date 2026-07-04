@@ -2137,19 +2137,35 @@ export default function MoverDashboard() {
                 <Card className="bg-green-500/5 border-green-500/20">
                   <CardContent className="py-4 px-4">
                     <p className="text-sm font-medium mb-2">What happens next</p>
-                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-                      <span className="px-2 py-1 rounded-full bg-background border">Head to pickup</span>
-                      <span>→</span>
-                      <span className="px-2 py-1 rounded-full bg-background border">Load items</span>
-                      <span>→</span>
-                      <span className="px-2 py-1 rounded-full bg-background border">Head to drop-off</span>
-                      <span>→</span>
-                      <span className="px-2 py-1 rounded-full bg-background border">Unload items</span>
-                      <span>→</span>
-                      <span className="px-2 py-1 rounded-full bg-background border">Mark complete</span>
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      <button
+                        type="button"
+                        onClick={() => openUrl(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(bookings[0].pickupAddress)}`)}
+                        className="px-2 py-1 rounded-full bg-background border hover-elevate active-elevate-2 text-muted-foreground flex items-center gap-1"
+                        data-testid="button-flow-navigate-pickup"
+                      >
+                        <Navigation className="w-3 h-3" />
+                        Head to pickup
+                      </button>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border text-muted-foreground">Load items</span>
+                      <span className="text-muted-foreground">→</span>
+                      <button
+                        type="button"
+                        onClick={() => openUrl(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(bookings[0].dropoffAddress)}`)}
+                        className="px-2 py-1 rounded-full bg-background border hover-elevate active-elevate-2 text-muted-foreground flex items-center gap-1"
+                        data-testid="button-flow-navigate-dropoff"
+                      >
+                        <Navigation className="w-3 h-3" />
+                        Head to drop-off
+                      </button>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border text-muted-foreground">Unload items</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border text-muted-foreground">Mark complete</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Tap the status button on each job card below to move it to the next step. Completed moves and payouts show up in Earnings.
+                      Tap "Head to pickup" or "Head to drop-off" above for directions to your next stop. Use the status button on each job card below to move it to the next step. Completed moves and payouts show up in Earnings.
                     </p>
                   </CardContent>
                 </Card>
