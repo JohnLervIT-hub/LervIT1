@@ -299,7 +299,25 @@ export default function CustomerDashboard() {
 
   const surveyMutation = useMutation({
     mutationFn: async (data: { bookingId: string; npsScore: number; easeRating: number; moverRating: number; comments: string }) => {
-      return await apiRequest("POST", "/api/surveys", data);
+      await apiRequest("POST", "/api/surveys", data);
+
+      // The survey already collects a mover rating (1-5). If this booking doesn't
+      // have a review yet, save one now so the separate "Rate Your Move" card
+      // doesn't keep reappearing after the survey is completed.
+      const booking = bookings?.find(b => b.id === data.bookingId);
+      if (booking && !booking.hasReview) {
+        try {
+          await apiRequest("POST", "/api/reviews", {
+            bookingId: data.bookingId,
+            moverId: booking.moverId ?? null,
+            customerId: user?.id,
+            rating: data.moverRating,
+            comment: data.comments || null,
+          });
+        } catch (e) {
+          console.log('[Survey] Review already exists or failed to save, continuing...');
+        }
+      }
     },
     onSuccess: () => {
       if (surveyBooking) {
@@ -312,6 +330,9 @@ export default function CustomerDashboard() {
       setSurveyEase(5);
       setSurveyMover(5);
       setSurveyComments('');
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews"] });
     },
     onError: () => {
       toast({ title: "Submission failed", description: "Please try again.", variant: "destructive" });
