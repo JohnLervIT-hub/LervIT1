@@ -2129,11 +2129,30 @@ export default function MoverDashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Your Bookings</h2>
+                  <h2 className="text-lg font-semibold">Your Active Bookings</h2>
                   <Badge variant="outline">
                     {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'}
                   </Badge>
                 </div>
+                <Card className="bg-green-500/5 border-green-500/20">
+                  <CardContent className="py-4 px-4">
+                    <p className="text-sm font-medium mb-2">What happens next</p>
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+                      <span className="px-2 py-1 rounded-full bg-background border">Head to pickup</span>
+                      <span>→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border">Load items</span>
+                      <span>→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border">Head to drop-off</span>
+                      <span>→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border">Unload items</span>
+                      <span>→</span>
+                      <span className="px-2 py-1 rounded-full bg-background border">Mark complete</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Tap the status button on each job card below to move it to the next step. Completed moves and payouts show up in Earnings.
+                    </p>
+                  </CardContent>
+                </Card>
                 {bookings.map((booking) => renderBookingCard(booking))}
               </div>
             )}
