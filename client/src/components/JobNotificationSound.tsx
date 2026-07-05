@@ -256,6 +256,21 @@ function JobNotificationSoundContent() {
     }
   }, [polledNotifications, handleJobNotification]);
 
+  // Auto-dismiss the notification card once it's no longer pending — e.g. it was
+  // accepted/declined elsewhere (available jobs list, another device) or expired
+  // and was taken by another mover. Without this the dialog can linger indefinitely.
+  useEffect(() => {
+    if (!showNotificationDialog || !currentNotification?.bookingId) return;
+    const stillPending = (polledNotifications || []).some(
+      (n) => n.bookingId === currentNotification.bookingId
+    );
+    if (!stillPending) {
+      setShowNotificationDialog(false);
+      setHasNewNotification(false);
+      setCurrentNotification(null);
+    }
+  }, [polledNotifications, showNotificationDialog, currentNotification]);
+
   // Request permission on first interaction
   useEffect(() => {
     const handleFirstInteraction = () => {
