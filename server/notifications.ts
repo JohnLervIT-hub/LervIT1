@@ -420,14 +420,14 @@ class NotificationService {
   }
 
   // Job assignment email to mover - urgent notification with 10min expiry
-  async sendJobAssignment(mover: User, booking: Partial<Booking>, estimatedEarnings: string, distanceToPickup?: string): Promise<void> {
+  async sendJobAssignment(mover: User, booking: Partial<Booking>, bookedAmount: string, distanceToPickup?: string): Promise<void> {
     const baseUrl = process.env.BASE_URL || 
       (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
     const dashboardUrl = `${baseUrl}/mover-dashboard`;
     
     const formattedDate = formatCalgaryDate(booking.preferredDate, 'ASAP');
     
-    const subject = `[URGENT] NEW JOB - Earn $${estimatedEarnings} CAD (Expires in 10 min)`;
+    const subject = `[URGENT] NEW JOB - $${bookedAmount} CAD Booking (Expires in 10 min)`;
     const body = `
 <!DOCTYPE html>
 <html>
@@ -443,11 +443,11 @@ class NotificationService {
               <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">TIME SENSITIVE - This opportunity expires in 10 minutes</p>
             </td>
           </tr>
-          <!-- Earnings highlight -->
+          <!-- Booking amount highlight -->
           <tr>
             <td style="background-color:#FFF7ED;padding:20px;text-align:center;border-bottom:1px solid #EA580C;">
-              <p style="color:#9A3412;margin:0;font-size:14px;">Your Estimated Earnings</p>
-              <p style="color:#EA580C;margin:5px 0 0 0;font-size:36px;font-weight:bold;">$${estimatedEarnings} CAD</p>
+              <p style="color:#9A3412;margin:0;font-size:14px;">Total Booked Amount</p>
+              <p style="color:#EA580C;margin:5px 0 0 0;font-size:36px;font-weight:bold;">$${bookedAmount} CAD</p>
             </td>
           </tr>
           <!-- Content -->
@@ -518,7 +518,7 @@ class NotificationService {
     
     // Also send SMS if mover has a phone number
     if (mover.phone) {
-      const smsMessage = `LervIT: NEW JOB - $${estimatedEarnings} CAD. ${booking.loadSize || 'Standard'} load. Expires in 10 min! Open app to accept: ${dashboardUrl}`;
+      const smsMessage = `LervIT: NEW JOB - $${bookedAmount} CAD booking. ${booking.loadSize || 'Standard'} load. Expires in 10 min! Open app to accept: ${dashboardUrl}`;
       await this.sendSMS({
         to: mover.phone,
         message: smsMessage,

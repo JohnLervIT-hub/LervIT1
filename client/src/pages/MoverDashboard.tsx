@@ -1653,11 +1653,10 @@ export default function MoverDashboard() {
                   <p className="font-bold text-lg capitalize">{overlayJob.loadSize}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Your Earnings</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Booked Amount</p>
                   <p className="font-bold text-lg text-green-600">
-                    ${overlayJob.price ? (parseFloat(overlayJob.price) * 0.85).toFixed(2) : "—"}
+                    ${overlayJob.price ? parseFloat(overlayJob.price).toFixed(2) : "—"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">after 15% fee</p>
                 </div>
               </div>
             </div>

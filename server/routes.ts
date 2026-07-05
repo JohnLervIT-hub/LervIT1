@@ -1663,7 +1663,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           )
         );
 
-      // Enrich with booking details for display
+      // Enrich with booking details for display.
+      // Show the full booked amount charged to the customer, not the post-commission payout.
       const enriched = await Promise.all(
         pendingNotifs.map(async (n) => {
           const booking = await storage.getBooking(n.bookingId);
@@ -1671,7 +1672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...n,
             pickupAddress: booking?.pickupAddress || '',
             dropoffAddress: booking?.dropoffAddress || '',
-            price: n.estimatedEarnings,
+            price: booking?.price || n.estimatedEarnings,
           };
         })
       );
@@ -1886,21 +1887,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (matched.length > 0) {
             const expiresAt = calculateExpiryTime(10);
+            // Display the full booked amount to the mover (not the post-commission payout).
+            const bookedAmount = parseFloat(pendingBooking.price || '0');
             await storage.createJobNotification({
               bookingId: pendingBooking.id, moverId: mover.id,
               distanceToPickup: toDecimalString(matched[0].distanceToPickup),
-              estimatedEarnings: toDecimalString(matched[0].estimatedEarnings),
+              estimatedEarnings: toDecimalString(bookedAmount),
               status: 'pending', expiresAt,
             });
             moverWebSocket.notifyMover(mover.userId, {
               type: 'job_notification', bookingId: pendingBooking.id,
               pickupAddress: pendingBooking.pickupAddress || '', dropoffAddress: pendingBooking.dropoffAddress || '',
-              price: toDecimalString(matched[0].estimatedEarnings),
+              price: toDecimalString(bookedAmount),
               estimatedTime: `${Math.round(matched[0].distanceToPickup)} km`, expiresAt,
             });
             const moverUser = await storage.getUser(mover.userId);
             if (moverUser) {
-              await notificationService.sendJobAssignment(moverUser, pendingBooking, matched[0].estimatedEarnings.toFixed(2)).catch(() => {});
+              await notificationService.sendJobAssignment(moverUser, pendingBooking, bookedAmount.toFixed(2)).catch(() => {});
             }
             console.log(`[Late Dispatch] Sent pending booking ${pendingBooking.id} to newly-online mover ${mover.id}`);
           }
@@ -8480,7 +8483,7 @@ Respond with VALID JSON only:
         bookingId: bookingId,
         moverId: moverId,
         distanceToPickup: "0",
-        estimatedEarnings: ((parseFloat(booking.price || '0')) * 0.85).toFixed(2),
+        estimatedEarnings: (parseFloat(booking.price || '0')).toFixed(2),
         status: 'accepted',
         expiresAt: calculateExpiryTime(10080), // far future — admin assignments don't expire
       });
