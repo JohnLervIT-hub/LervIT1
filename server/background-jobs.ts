@@ -118,7 +118,7 @@ async function expireOldNotifications() {
 
       // Auto re-dispatch: check each affected booking and send a new wave
       // if all its notifications are now expired/declined and it's still pending.
-      const affectedBookingIds = [...new Set(expiredNotifications.map(n => n.bookingId))];
+      const affectedBookingIds = Array.from(new Set(expiredNotifications.map(n => n.bookingId)));
       await redispatchIfAllExpired(affectedBookingIds);
     }
     

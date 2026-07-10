@@ -1185,7 +1185,8 @@ export function registerPartnerRoutes(app: Express) {
 
       // Notify all admin users so the incident appears in their support queue
       const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
-      const severityLabel = data.severity === "critical" ? "CRITICAL" : data.severity.charAt(0).toUpperCase() + data.severity.slice(1);
+      const severity = data.severity ?? "medium";
+      const severityLabel = severity === "critical" ? "CRITICAL" : severity.charAt(0).toUpperCase() + severity.slice(1);
       const preview = `[${severityLabel}] ${partner.name} — ${data.title}`;
       for (const admin of adminUsers) {
         db.insert(inAppNotifications).values({
@@ -2649,7 +2650,7 @@ export function registerPartnerRoutes(app: Express) {
     }
 
     // Fetch customer names
-    const customerIds = [...new Set(partnerBookingRows.map(b => b.customerId))];
+    const customerIds = Array.from(new Set(partnerBookingRows.map(b => b.customerId)));
     const customerRows = await db.select({ id: users.id, name: users.name })
       .from(users).where(inArray(users.id, customerIds));
     const customerMap = Object.fromEntries(customerRows.map(u => [u.id, u.name]));
@@ -2706,7 +2707,7 @@ export function registerPartnerRoutes(app: Express) {
       .where(eq(messages.bookingId, booking.id))
       .orderBy(asc(messages.createdAt));
 
-    const userIds = [...new Set(msgs.map(m => m.senderId))];
+    const userIds = Array.from(new Set(msgs.map(m => m.senderId)));
     const senderRows = userIds.length
       ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, userIds))
       : [];

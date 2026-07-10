@@ -306,7 +306,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Wait for the response to complete before clearing user state
       if (response.ok) {
-        console.log("Logout successful");
         // Only clear user state after server confirms successful logout
         setUser(null);
       } else {

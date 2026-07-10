@@ -46,9 +46,9 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
     // Use the official `callback` parameter so we know Maps is truly ready.
     // This is more reliable than script.onload when combined with loading=async.
     const callbackName = "__lervitMapsReady";
-    (window as Record<string, unknown>)[callbackName] = () => {
+    (window as unknown as Record<string, unknown>)[callbackName] = () => {
       setIsLoaded(true);
-      delete (window as Record<string, unknown>)[callbackName];
+      delete (window as unknown as Record<string, unknown>)[callbackName];
     };
 
     const script = document.createElement("script");
@@ -58,7 +58,7 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
 
     script.onerror = () => {
       setLoadError(new Error("Failed to load Google Maps"));
-      delete (window as Record<string, unknown>)[callbackName];
+      delete (window as unknown as Record<string, unknown>)[callbackName];
     };
 
     document.head.appendChild(script);

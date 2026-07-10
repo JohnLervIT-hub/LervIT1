@@ -40,7 +40,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -449,7 +449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "API configuration error" });
       }
 
-      async function geocode(resultType?: string): Promise<string | null> {
+      const geocode = async (resultType?: string): Promise<string | null> => {
         const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
         url.searchParams.append('latlng', `${lat},${lng}`);
         url.searchParams.append('key', apiKey!);
@@ -4224,11 +4224,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Email the customer
         try {
-          const { sendEmail } = await import('./notifications.js');
-          await sendEmail({
+          await notificationService.sendEmail({
             to: customer.email,
             subject: "Update on your LervIT booking",
-            html: `<p>Hi ${customer.name},</p><p>Unfortunately, your mover had to cancel your upcoming booking. Don't worry — we're actively searching for another available mover in your area.</p><p>You'll receive a notification as soon as a new mover accepts your job. If you have any concerns, please contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+            body: `<p>Hi ${customer.name},</p><p>Unfortunately, your mover had to cancel your upcoming booking. Don't worry — we're actively searching for another available mover in your area.</p><p>You'll receive a notification as soon as a new mover accepts your job. If you have any concerns, please contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+            type: 'booking_confirmation',
           });
         } catch (emailErr) {
           logEvent.error('mover_cancel_customer_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId });
@@ -8907,7 +8907,6 @@ Respond with VALID JSON only:
               dimensionsWcm: result.dimensionsWcm.toString() as any,
               dimensionsHcm: result.dimensionsHcm.toString() as any,
               volumeCuft: result.volumeCuft.toString() as any,
-              estimatedPrice: result.estimatedPrice.toString() as any,
               handlingComplexity: result.handlingComplexity,
               vehicleType: result.vehicleType,
               recommendedMovers: result.recommendedMovers,

@@ -400,7 +400,7 @@ export default function BrowseMovers() {
             </div>
             <p className="text-muted-foreground mb-4">Could not load movers. Please check your connection.</p>
             <Button
-              variant="link"
+              variant="ghost"
               size="sm"
               onClick={() => refetch()}
               data-testid="button-retry-movers"

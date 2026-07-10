@@ -735,7 +735,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         load_size: loadSize,      // Based on TOTAL
         vehicle: vehicle,         // Based on TOTAL
         movers_required: movers,
-        handling_complexity: item.handling_complexity,
+        handling_complexity: (item.handling_complexity === 'slight' ? 'low' : item.handling_complexity === 'moderate' ? 'medium' : item.handling_complexity) as 'low' | 'medium' | 'high' | 'very_high',
         insurance_level: item.insurance_level,
         confidence,
         source: 'database_match',

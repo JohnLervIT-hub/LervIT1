@@ -404,22 +404,14 @@ export default function RequestMove() {
     const resumeStepParam = wouterParams.get('resumeStep') || windowParams.get('resumeStep');
     const abandonedId = wouterParams.get('abandonedId') || windowParams.get('abandonedId');
 
-    console.log('[RequestMove] URL params check:', {
-      wouterSearch: searchString,
-      windowSearch: window.location.search,
-      pickup, dropoff, moverId, pickupAccess, dropoffAccess, urlLoadSize, resumeStepParam, abandonedId
-    });
-
     // PRIORITY 0: Fetch abandoned booking data from server if abandonedId is provided
     if (abandonedId && !pickup && !dropoff) {
-      console.log('[RequestMove] Fetching abandoned booking data:', abandonedId);
       hasRestoredRef.current = true;
       
       fetch(`/api/abandoned-bookings/${abandonedId}`)
         .then(res => res.json())
         .then(data => {
           if (data && !data.error) {
-            console.log('[RequestMove] Restored from abandoned booking:', data);
             if (data.pickupAddress) setPickupAddress(data.pickupAddress);
             if (data.dropoffAddress) setDropoffAddress(data.dropoffAddress);
             if (data.loadSize) setLoadSize(data.loadSize);
@@ -441,7 +433,6 @@ export default function RequestMove() {
           }
         })
         .catch(err => {
-          console.log('[RequestMove] Failed to fetch abandoned booking:', err);
         });
       return;
     }
@@ -450,7 +441,6 @@ export default function RequestMove() {
     const isReturningFromLogin = !!(pickup && dropoff && resumeStepParam);
     
     if (isReturningFromLogin) {
-      console.log('[RequestMove] Restoring from URL params (returned from login)');
       hasRestoredRef.current = true;
       
       setPickupAddress(pickup);
@@ -479,7 +469,6 @@ export default function RequestMove() {
     // PRIORITY 2: Check sessionStorage draft using bookingDraft module
     const draft = loadDraft(moverId);
     if (draft) {
-      console.log('[RequestMove] Restoring from bookingDraft module');
       hasRestoredRef.current = true;
       isRestoringRef.current = true;
       
@@ -973,7 +962,6 @@ export default function RequestMove() {
           abandonedBookingRef.current = data.id;
         }
       } catch (error) {
-        console.log('[Abandoned Booking] Failed to save:', error);
       }
     };
     
@@ -1042,7 +1030,6 @@ export default function RequestMove() {
             sourceMetadata: item.sourceMetadata,
           })),
         }).catch((err) => {
-          console.log('[RequestMove] Failed to save AI items to booking:', err);
         });
       }
     }
@@ -1424,17 +1411,6 @@ export default function RequestMove() {
   };
 
   const handleNext = () => {
-    // DEBUG: Show current state when Next is clicked
-    console.log('[RequestMove] handleNext called:', {
-      currentStep: step,
-      hasUser: !!user,
-      userId: user?.id,
-      hasImages: images?.length || 0,
-      pickupAddress,
-      dropoffAddress,
-      preSelectedMoverId
-    });
-    
     // Step 1: Validate addresses (MANDATORY)
     if (step === 1) {
       if (!pickupAddress || pickupAddress.trim() === "") {
@@ -1484,17 +1460,10 @@ export default function RequestMove() {
 
     // Step 2: Validate photos (MANDATORY)
     if (step === 2) {
-      console.log('[RequestMove] Step 2 validation - checking photos:', {
-        images,
-        imageCount: images?.length || 0,
-        user: !!user
-      });
-      
       if (!images || images.length === 0) {
         // For unauthenticated users, save data and redirect to login
         // They can upload photos after logging in
         if (!user) {
-          console.log('[RequestMove] No user detected - saving data and redirecting to login');
           toast({
             title: "Login Required",
             description: "Please log in to upload photos and complete your booking.",
@@ -1526,7 +1495,6 @@ export default function RequestMove() {
           params.set('loadSize', loadSize);
           params.set('resumeStep', '2');
           const returnPath = `/request-move?${params.toString()}`;
-          console.log('[RequestMove] Redirecting to login with return path:', returnPath);
           setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
           return;
         }
@@ -1544,16 +1512,8 @@ export default function RequestMove() {
       setStep(step + 1);
       window.scrollTo({ top: 0, behavior: "instant" });
     } else {
-      console.log('[RequestMove] handleNext on Step 3 - checking conditions:', {
-        step,
-        date,
-        user: !!user,
-        userId: user?.id
-      });
-      
       // Validate date before submission
       if (!date) {
-        console.log('[RequestMove] Date validation failed');
         toast({
           title: "Date required",
           description: "Please select a preferred date and time.",
@@ -1583,10 +1543,8 @@ export default function RequestMove() {
           date,
           preSelectedMoverId: preSelectedMoverId || null
         };
-        console.log('[RequestMove] Saving pending booking:', pendingData);
         localStorage.setItem('pendingBooking', JSON.stringify(pendingData));
         // Verify it was saved
-        console.log('[RequestMove] Verified saved:', localStorage.getItem('pendingBooking'));
         // Redirect to login with return path (include moverId if selected)
         const returnPath = preSelectedMoverId 
           ? `/request-move?moverId=${preSelectedMoverId}`
