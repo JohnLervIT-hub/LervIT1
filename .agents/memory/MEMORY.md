@@ -1,0 +1,5 @@
+- [TrackTrip null coord crash](tracktrip-null-coords.md) — booking lat/lng can be null; guard all Google Maps calls or it throws into ErrorBoundary.
+- [loadError guard ordering](loadError-guard-order.md) — in GoogleMapsContext, loadError must be checked BEFORE isLoaded spinner or it is unreachable.
+- [sed multi-line console.log danger](sed-multiline-log-removal.md) — sed line-by-line removal of multi-line console.log leaves orphaned object literal lines; breaks parse. Use manual edits instead.
+- [partnerUsers import gap](routes-ts-import-gap.md) — partnerUsers table from schema was used in routes.ts messaging logic but missing from the import line; causes TS2552 at runtime.
+- [notificationService sendEmail](notification-service-send-email.md) — correct call is notificationService.sendEmail({to, subject, body, type}); dynamic import of notifications.js sendEmail does not exist.
