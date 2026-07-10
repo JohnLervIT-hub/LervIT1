@@ -54,7 +54,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
@@ -149,6 +149,7 @@ export default function CustomerDashboard() {
   const [surveyEase, setSurveyEase] = useState(0);
   const [surveyMover, setSurveyMover] = useState(0);
   const [surveyComments, setSurveyComments] = useState('');
+  const surveyedBookingIds = useRef<Set<string>>(new Set());
   const SURVEY_STEPS = ['nps', 'ease', 'mover', 'comments'] as const;
 
   const { data: bookings, isLoading, isError } = useQuery<Booking[]>({
@@ -193,7 +194,7 @@ export default function CustomerDashboard() {
       if (b.status !== "completed") return false;
       const moved = new Date(b.preferredDate).getTime();
       if (Date.now() - moved < TWENTY_FOUR_H) return false;
-      return !localStorage.getItem(`survey_done_${b.id}`);
+      return !localStorage.getItem(`survey_done_${b.id}`) && !surveyedBookingIds.current.has(b.id);
     });
     if (!candidate) return;
     const timer = setTimeout(() => {
@@ -342,8 +343,10 @@ export default function CustomerDashboard() {
     onSuccess: () => {
       if (surveyBooking) {
         localStorage.setItem(`survey_done_${surveyBooking.id}`, "1");
+        surveyedBookingIds.current.add(surveyBooking.id);
       }
       setSurveySubmitted(true);
+      setTimeout(() => setSurveyDialogOpen(false), 2000);
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reviews"] });
