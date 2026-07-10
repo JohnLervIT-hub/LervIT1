@@ -557,6 +557,34 @@ export default function MoverDashboard() {
     return () => clearTimeout(timer);
   }, [overlayJob, overlayCountdown]);
 
+  const [cancelJobDialogBookingId, setCancelJobDialogBookingId] = useState<string | null>(null);
+
+  const moverCancelMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/mover-cancel`, {});
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to cancel booking");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setCancelJobDialogBookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Job cancelled",
+        description: "The job has been cancelled. We're finding another mover for the customer.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to cancel job",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const completeBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "completed" });
@@ -1492,17 +1520,29 @@ export default function MoverDashboard() {
               
               {/* Start Trip - Confirmed status AND assigned to this mover (not available jobs) */}
               {booking.status === "confirmed" && booking.moverId && !showActions && (
-                <Button
-                  variant="default"
-                  onClick={() => startTripMutation.mutate(booking.id)}
-                  disabled={startTripMutation.isPending || hasActiveTrip}
-                  data-testid={`button-start-trip-${booking.id}`}
-                  className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
-                  title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
-                >
-                  <Truck className="w-4 h-4 mr-2" />
-                  {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
-                </Button>
+                <>
+                  <Button
+                    variant="default"
+                    onClick={() => startTripMutation.mutate(booking.id)}
+                    disabled={startTripMutation.isPending || hasActiveTrip}
+                    data-testid={`button-start-trip-${booking.id}`}
+                    className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
+                    title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
+                  >
+                    <Truck className="w-4 h-4 mr-2" />
+                    {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCancelJobDialogBookingId(booking.id)}
+                    disabled={moverCancelMutation.isPending}
+                    data-testid={`button-cancel-job-${booking.id}`}
+                    className="flex-1 sm:flex-none text-destructive border-destructive/40 hover:bg-destructive/10"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Cancel Job
+                  </Button>
+                </>
               )}
               
               {/* En Route to Pickup → Loading */}
@@ -1941,6 +1981,48 @@ export default function MoverDashboard() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* ── Mover cancel confirmed job confirmation ───────────────────── */}
+        <AlertDialog
+          open={!!cancelJobDialogBookingId}
+          onOpenChange={(open) => { if (!open) setCancelJobDialogBookingId(null); }}
+        >
+          <AlertDialogContent data-testid="dialog-cancel-job">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-destructive" />
+                Cancel this job?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  Are you sure you want to cancel this booking? The customer will be notified and we'll find another mover for them right away.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You can only cancel before the trip has started.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel
+                onClick={() => setCancelJobDialogBookingId(null)}
+                data-testid="button-cancel-job-dismiss"
+                className="w-full sm:w-auto"
+              >
+                Keep Job
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (cancelJobDialogBookingId) moverCancelMutation.mutate(cancelJobDialogBookingId);
+                }}
+                disabled={moverCancelMutation.isPending}
+                data-testid="button-cancel-job-confirm"
+                className="w-full sm:w-auto bg-destructive text-destructive-foreground"
+              >
+                {moverCancelMutation.isPending ? "Cancelling..." : "Yes, Cancel Job"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* ── Soft nudge: go online without vehicle photo ───────────────── */}
         <AlertDialog open={showOnlineNudgeDialog} onOpenChange={setShowOnlineNudgeDialog}>

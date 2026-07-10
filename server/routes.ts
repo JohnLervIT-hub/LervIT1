@@ -4167,6 +4167,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mover cancels an accepted (confirmed) booking and triggers re-dispatch
+  app.post("/api/bookings/:id/mover-cancel", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      const { reason } = req.body as { reason?: string };
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+      // Only the assigned mover can do this
+      const mover = await storage.getMoverByUserId(user.id);
+      if (!mover || booking.moverId !== mover.id) {
+        return res.status(403).json({ error: "You are not assigned to this booking" });
+      }
+
+      // Only allowed before the trip has started (confirmed status only)
+      if (booking.status !== "confirmed") {
+        return res.status(400).json({ error: "You can only cancel before the trip has started" });
+      }
+
+      logEvent.booking('mover_cancelled_confirmed_job', { bookingId, moverId: mover.id, reason });
+
+      // Detach the mover and reset to pending so it can be re-dispatched
+      await storage.updateBooking(bookingId, {
+        moverId: null,
+        status: "pending",
+        preSelectedMoverId: null,
+      });
+
+      // Mark any active job notifications for this mover+booking as declined
+      await db
+        .update(jobNotifications)
+        .set({ status: 'declined', respondedAt: new Date() })
+        .where(
+          and(
+            eq(jobNotifications.bookingId, bookingId),
+            eq(jobNotifications.moverId, mover.id),
+          )
+        );
+
+      // Notify the customer
+      const customer = await storage.getUser(booking.customerId);
+      if (customer) {
+        await storage.createNotification({
+          userId: customer.id,
+          type: 'booking_update',
+          title: 'Your Mover Cancelled',
+          message: "Your mover had to cancel. We're finding another great mover nearby — hang tight!",
+          bookingId: booking.id,
+          actionUrl: '/my-bookings',
+          isRead: false,
+        });
+
+        // Email the customer
+        try {
+          const { sendEmail } = await import('./notifications.js');
+          await sendEmail({
+            to: customer.email,
+            subject: "Update on your LervIT booking",
+            html: `<p>Hi ${customer.name},</p><p>Unfortunately, your mover had to cancel your upcoming booking. Don't worry — we're actively searching for another available mover in your area.</p><p>You'll receive a notification as soon as a new mover accepts your job. If you have any concerns, please contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+          });
+        } catch (emailErr) {
+          logEvent.error('mover_cancel_customer_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId });
+        }
+      }
+
+      // Re-dispatch to other nearby movers (exclude the cancelling mover)
+      const refreshedBooking = await storage.getBooking(bookingId);
+      if (refreshedBooking) {
+        try {
+          const result = await dispatchJobToMovers(refreshedBooking, { excludeMoverId: mover.id });
+          logEvent.booking('mover_cancel_redispatch', { bookingId, moversNotified: result.dispatched });
+        } catch (dispatchErr) {
+          logEvent.error('mover_cancel_redispatch_failed', dispatchErr instanceof Error ? dispatchErr : new Error('dispatch error'), { bookingId });
+        }
+      }
+
+      res.json({ message: "Booking cancelled and job re-dispatched to other movers" });
+    } catch (error) {
+      logEvent.error('mover_cancel_job_error', error instanceof Error ? error : new Error('Unknown error'), { bookingId: req.params.id });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to cancel booking" });
+    }
+  });
+
   // Delete a failed/cancelled booking (customer only)
   app.delete("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
