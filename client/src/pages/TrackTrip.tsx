@@ -314,6 +314,9 @@ export default function TrackTrip() {
   // DirectionsService is created once and stored in a ref.
   useEffect(() => {
     if (!locationData || !isLoaded) return;
+    // Skip if pickup/dropoff coordinates are missing
+    if (locationData.pickup.latitude == null || locationData.pickup.longitude == null) return;
+    if (locationData.dropoff.latitude == null || locationData.dropoff.longitude == null) return;
 
     // Create service once
     if (!directionsServiceRef.current) {
@@ -322,7 +325,7 @@ export default function TrackTrip() {
 
     const currentStatus = locationData.status;
     const currentLoc = locationData.currentLocation;
-    const origin = currentLoc
+    const origin = (currentLoc && currentLoc.latitude != null && currentLoc.longitude != null)
       ? { lat: currentLoc.latitude, lng: currentLoc.longitude }
       : { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude };
 
@@ -363,12 +366,15 @@ export default function TrackTrip() {
   // Fit map bounds once when both map and data are ready (on mount/remount)
   useEffect(() => {
     if (!map || !locationData || hasFittedBoundsRef.current) return;
+    // Skip if pickup/dropoff coordinates are missing
+    if (locationData.pickup.latitude == null || locationData.pickup.longitude == null) return;
+    if (locationData.dropoff.latitude == null || locationData.dropoff.longitude == null) return;
     
     const bounds = new google.maps.LatLngBounds();
     bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
     bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
     
-    if (locationData.currentLocation) {
+    if (locationData.currentLocation && locationData.currentLocation.latitude != null) {
       bounds.extend({ 
         lat: locationData.currentLocation.latitude, 
         lng: locationData.currentLocation.longitude 
@@ -383,13 +389,15 @@ export default function TrackTrip() {
   const prevSheetExpandedRef = useRef(isSheetExpanded);
   useEffect(() => {
     if (!map || !locationData || prevSheetExpandedRef.current === isSheetExpanded) return;
+    if (locationData.pickup.latitude == null || locationData.pickup.longitude == null) return;
+    if (locationData.dropoff.latitude == null || locationData.dropoff.longitude == null) return;
     prevSheetExpandedRef.current = isSheetExpanded;
     
     const bounds = new google.maps.LatLngBounds();
     bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
     bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
     
-    if (locationData.currentLocation) {
+    if (locationData.currentLocation && locationData.currentLocation.latitude != null) {
       bounds.extend({ 
         lat: locationData.currentLocation.latitude, 
         lng: locationData.currentLocation.longitude 
@@ -407,14 +415,33 @@ export default function TrackTrip() {
   const defaultCenterRef = useRef<{ lat: number; lng: number } | null>(null);
   if (locationData && !defaultCenterRef.current) {
     const loc = locationData.currentLocation;
-    if (loc) {
+    if (loc && loc.latitude != null && loc.longitude != null) {
       defaultCenterRef.current = { lat: loc.latitude, lng: loc.longitude };
-    } else {
+    } else if (
+      locationData.pickup.latitude != null && locationData.pickup.longitude != null &&
+      locationData.dropoff.latitude != null && locationData.dropoff.longitude != null
+    ) {
       defaultCenterRef.current = {
         lat: (locationData.pickup.latitude + locationData.dropoff.latitude) / 2,
         lng: (locationData.pickup.longitude + locationData.dropoff.longitude) / 2,
       };
     }
+    // else: leave null — will fall back to CALGARY_DEFAULT after early-return guards
+  }
+
+  // Check load error first — when there's an error isLoaded stays false,
+  // so the loadError guard must come before the isLoaded spinner guard.
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <p className="text-destructive">Failed to load map. Please try again.</p>
+          <Link href="/my-bookings">
+            <Button className="mt-4">Back to Bookings</Button>
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (!isLoaded || isLoading || !locationData) {
@@ -429,12 +456,27 @@ export default function TrackTrip() {
       </div>
     );
   }
-  
-  if (loadError) {
+
+  const pickup = locationData.pickup;
+  const dropoff = locationData.dropoff;
+  const currentLocation = locationData.currentLocation;
+  const statusMessage = getStatusMessage(locationData.status, locationData.mover?.name);
+  const isLive = !!currentLocation && ACTIVE_STATUSES.includes(locationData.status as BookingStatus);
+
+  // Calgary downtown as fallback if geocoding was never stored for this booking
+  const CALGARY_DEFAULT = { lat: 51.0447, lng: -114.0719 };
+  const pickupCoords = (pickup.latitude != null && pickup.longitude != null)
+    ? { lat: pickup.latitude, lng: pickup.longitude }
+    : null;
+  const dropoffCoords = (dropoff.latitude != null && dropoff.longitude != null)
+    ? { lat: dropoff.latitude, lng: dropoff.longitude }
+    : null;
+
+  if (!pickupCoords || !dropoffCoords) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center">
-          <p className="text-destructive">Failed to load map. Please try again.</p>
+        <div className="text-center px-6">
+          <p className="text-muted-foreground mb-2">Location data is not available for this booking.</p>
           <Link href="/my-bookings">
             <Button className="mt-4">Back to Bookings</Button>
           </Link>
@@ -443,12 +485,7 @@ export default function TrackTrip() {
     );
   }
 
-  const pickup = locationData.pickup;
-  const dropoff = locationData.dropoff;
-  const currentLocation = locationData.currentLocation;
-  const statusMessage = getStatusMessage(locationData.status, locationData.mover?.name);
-  const isLive = !!currentLocation && ACTIVE_STATUSES.includes(locationData.status as BookingStatus);
-  const defaultCenter = defaultCenterRef.current || { lat: pickup.latitude, lng: pickup.longitude };
+  const defaultCenter = defaultCenterRef.current || pickupCoords || CALGARY_DEFAULT;
 
   return (
     <div className="fixed inset-0 top-16 z-40 overflow-hidden bg-gray-100">
@@ -477,7 +514,7 @@ export default function TrackTrip() {
 
         {/* Pickup marker - White dot with black ring */}
         <Marker
-          position={{ lat: pickup.latitude, lng: pickup.longitude }}
+          position={pickupCoords}
           icon={{
             path: google.maps.SymbolPath.CIRCLE,
             scale: 8,
@@ -491,7 +528,7 @@ export default function TrackTrip() {
 
         {/* Dropoff marker - Black square */}
         <Marker
-          position={{ lat: dropoff.latitude, lng: dropoff.longitude }}
+          position={dropoffCoords}
           icon={{
             path: "M -5,-5 L 5,-5 L 5,5 L -5,5 Z",
             scale: 1,
