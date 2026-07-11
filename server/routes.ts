@@ -4437,7 +4437,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updates.status = newStatus;
         
         // Skip validation for confirmed status (handled by job acceptance flow)
-        if (newStatus !== BOOKING_STATUSES.CONFIRMED && newStatus !== BOOKING_STATUSES.CANCELLED) {
+        if (newStatus === BOOKING_STATUSES.CANCELLED) {
+          // --- Customer cancellation: ownership, timing, refund, mover notification ---
+
+          // 1. Only the booking's customer (or an admin) can cancel
+          if (user.role !== 'admin' && booking.customerId !== user.id) {
+            return res.status(403).json({ error: "You are not authorized to cancel this booking" });
+          }
+
+          // 2. Block cancellation once the trip is physically in progress
+          const inProgressStatuses = [
+            BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+            BOOKING_STATUSES.LOADING,
+            BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
+            BOOKING_STATUSES.UNLOADING,
+          ];
+          if (inProgressStatuses.includes(booking.status as any)) {
+            return res.status(400).json({ error: "Cannot cancel a booking that is already in progress. Please contact support." });
+          }
+
+          // 3. Auto-issue Stripe refund if payment was captured
+          if (booking.stripePaymentIntentId && booking.paymentStatus === 'succeeded') {
+            try {
+              await stripe.refunds.create({
+                payment_intent: booking.stripePaymentIntentId,
+                reason: 'requested_by_customer',
+              });
+              (updates as any).paymentStatus = 'refunded';
+              logEvent.payment('auto_refund_on_customer_cancel', { bookingId: booking.id, intentId: booking.stripePaymentIntentId });
+            } catch (refundErr) {
+              logEvent.error('auto_refund_failed', refundErr instanceof Error ? refundErr : new Error('refund error'), { bookingId: booking.id });
+              return res.status(500).json({ error: "Failed to process your refund. Please contact support." });
+            }
+          } else if (booking.stripePaymentIntentId && booking.paymentStatus === 'pending') {
+            // Payment authorized but not yet captured — void the intent
+            try {
+              await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
+              (updates as any).paymentStatus = 'cancelled';
+            } catch (_) {
+              // Already cancelled or in non-cancellable state — safe to ignore
+            }
+          }
+
+          // 4. Notify the assigned mover (if any) that the customer cancelled
+          if (booking.moverId) {
+            try {
+              const cancelledMover = await storage.getMover(booking.moverId);
+              if (cancelledMover) {
+                const cancelledMoverUser = await storage.getUser(cancelledMover.userId);
+                await storage.createNotification({
+                  userId: cancelledMover.userId,
+                  type: 'booking_cancelled',
+                  title: 'Booking Cancelled by Customer',
+                  message: 'A customer has cancelled their booking. This job has been removed from your queue.',
+                  bookingId: booking.id,
+                });
+                if (cancelledMoverUser?.email) {
+                  await notificationService.sendEmail({
+                    to: cancelledMoverUser.email,
+                    subject: 'A booking has been cancelled',
+                    body: `<p>Hi ${cancelledMoverUser.name},</p><p>A customer has cancelled their upcoming booking. This job has been removed from your active jobs.</p><p>If you have any questions, contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+                    type: 'status_update',
+                  }).catch((emailErr: unknown) => {
+                    logEvent.error('mover_cancel_notify_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId: booking.id });
+                  });
+                }
+              }
+            } catch (notifyErr) {
+              logEvent.error('mover_cancel_notify_failed', notifyErr instanceof Error ? notifyErr : new Error('notify error'), { bookingId: booking.id });
+            }
+          }
+        } else if (newStatus !== BOOKING_STATUSES.CONFIRMED) {
           // Validate mover authorization for active status changes
           if (!booking.moverId) {
             console.log(`[Status Update] DENIED - No mover assigned. BookingId: ${booking.id}, UserId: ${user.id}, NewStatus: ${newStatus}`);

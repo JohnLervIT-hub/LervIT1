@@ -1,3 +1,4 @@
+- [Customer cancel refund flow](customer-cancel-refund.md) — cancel does ownership check, timing guard, auto Stripe refund, and mover email; sendEmail type must be 'status_update' not 'booking_cancelled'.
 - [TrackTrip null coord crash](tracktrip-null-coords.md) — booking lat/lng can be null; guard all Google Maps calls or it throws into ErrorBoundary.
 - [loadError guard ordering](loadError-guard-order.md) — in GoogleMapsContext, loadError must be checked BEFORE isLoaded spinner or it is unreachable.
 - [sed multi-line console.log danger](sed-multiline-log-removal.md) — sed line-by-line removal of multi-line console.log leaves orphaned object literal lines; breaks parse. Use manual edits instead.
