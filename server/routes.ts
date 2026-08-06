@@ -3330,7 +3330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const normalizedCode = code.trim().toUpperCase();
 
-      if (normalizedCode !== "LERVIT20") {
+      if (normalizedCode !== "LERVIT10") {
         return res.status(200).json({ valid: false, message: "Invalid promo code" });
       }
 
@@ -3339,17 +3339,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(200).json({ valid: false, message: "User not found" });
       }
 
-      if ((latestUser.promoUsesCount || 0) >= 2) {
-        return res.status(200).json({ valid: false, message: "You've already used this promo code on 2 moves" });
+      if ((latestUser.promoUsesCount || 0) >= 1) {
+        return res.status(200).json({ valid: false, message: "You've already used this promo code on your first Move" });
       }
 
-      const usesRemaining = 2 - (latestUser.promoUsesCount || 0);
+      const usesRemaining = 1 - (latestUser.promoUsesCount || 0);
       return res.status(200).json({
         valid: true,
-        code: "LERVIT20",
-        discountPercent: 20,
+        code: "LERVIT10",
+        discountPercent: 10,
         usesRemaining,
-        message: `20% off applied! ${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining.`
+        message: `10% off applied! Valid on your first Move.`
       });
     } catch (error: any) {
       console.error("Promo validation error:", error);
@@ -3466,13 +3466,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // NOTE: Re-fetches latest user state above to minimize race conditions.
       // For high-concurrency scenarios, consider adding row-level locking.
       const submittedPromo = bookingData.promoCode?.trim().toUpperCase();
-      if (submittedPromo === "LERVIT20" && latestUser && (latestUser.promoUsesCount || 0) < 2) {
-        promoCode = "LERVIT20";
-        discountPercent = 20;
-        discountAmount = Math.round(priceBreakdown.totalCost * 0.20 * 100) / 100;
+      if (submittedPromo === "LERVIT10" && latestUser && (latestUser.promoUsesCount || 0) < 1) {
+        promoCode = "LERVIT10";
+        discountPercent = 10;
+        discountAmount = Math.round(priceBreakdown.totalCost * 0.10 * 100) / 100;
         finalPrice = priceBreakdown.totalCost - discountAmount;
-        const usesRemaining = 2 - (latestUser.promoUsesCount || 0) - 1;
-        discountReason = `LERVIT20 promo - 20% off (${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining)`;
+        discountReason = `LERVIT10 promo - 10% off (first Move discount)`;
         // Platform absorbs discount: mover gets 85% of ORIGINAL price
         // Stripe auto-payout gives mover 85% of discounted price
         // Balance owed = 85% of original - 85% of discounted = 85% * discountAmount
@@ -4882,9 +4881,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let finalPrice = priceBreakdown.totalCost;
       let moverBalanceOwed = 0;
       
-      if (existingBooking.promoCode === "LERVIT20") {
-        discountPercent = 20;
-        discountAmount = priceBreakdown.totalCost * 0.20;
+      if (existingBooking.promoCode === "LERVIT10") {
+        discountPercent = 10;
+        discountAmount = priceBreakdown.totalCost * 0.10;
         discountReason = existingBooking.discountReason;
         finalPrice = priceBreakdown.totalCost - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
