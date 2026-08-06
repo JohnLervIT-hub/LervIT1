@@ -28,12 +28,12 @@ export function FirstMovePromo({ userName }: FirstMovePromoProps) {
               <h3 className="font-bold text-lg">Welcome, {firstName}!</h3>
               <Badge className="bg-green-500 text-white">
                 <Sparkles className="w-3 h-3 mr-1" />
-                20% OFF
+                10% OFF
               </Badge>
             </div>
             
             <p className="text-muted-foreground mb-4">
-              As a new customer, you get <span className="font-semibold text-green-600 dark:text-green-400">20% off your first 2 moves</span> with code <span className="font-bold">LERVIT20</span>. 
+              As a new customer, you get <span className="font-semibold text-green-600 dark:text-green-400">10% off your first Move</span> with code <span className="font-bold">LERVIT10</span>. 
               Book now and experience Calgary's smartest moving service!
             </p>
 

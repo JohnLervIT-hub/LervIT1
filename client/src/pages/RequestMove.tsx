@@ -2567,16 +2567,16 @@ export default function RequestMove() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-bold text-green-700 dark:text-green-400">Save 20% on this move</h3>
+                                <h3 className="font-bold text-green-700 dark:text-green-400">Save 10% on this move</h3>
                                 <Badge className="bg-green-500 text-white text-[10px] px-2 shrink-0">
                                   <Sparkles className="w-2.5 h-2.5 mr-1" />
-                                  LERVIT20
+                                  LERVIT10
                                 </Badge>
                               </div>
                               <p className="text-sm text-green-700/70 dark:text-green-500 mt-0.5">
                                 {appliedPromo?.valid
                                   ? `${appliedPromo.discountPercent}% discount applied to your total`
-                                  : "Enter code LERVIT20 below — valid on your first 2 moves"}
+                                  : "Enter code LERVIT10 below — valid on your first Move"}
                               </p>
                             </div>
                           </div>
@@ -2606,7 +2606,7 @@ export default function RequestMove() {
                                 <div className="relative flex-1">
                                   <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-600 dark:text-green-400" />
                                   <Input
-                                    placeholder="e.g. LERVIT20"
+                                    placeholder="e.g. LERVIT10"
                                     value={promoInput}
                                     onChange={(e) => {
                                       setPromoInput(e.target.value.toUpperCase());

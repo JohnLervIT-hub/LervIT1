@@ -96,7 +96,7 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="text-white">
             <h1 className="font-display text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold mb-6 leading-tight tracking-tight">
-              Get 20% OFF Your First 2 Moves <span className="whitespace-nowrap">with FlexiPay</span>
+              Get 10% OFF Your First Move <span className="whitespace-nowrap">with FlexiPay</span>
             </h1>
             <p className="text-lg md:text-xl mb-8 text-white/90">
               Move now. Pay later in easy instalments.
@@ -192,9 +192,9 @@ export default function HeroSection() {
               <div className="flex items-center gap-2.5 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-2.5" data-testid="promo-banner">
                 <Tag className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
                 <p className="text-sm text-green-700 dark:text-green-400">
-                  <span className="font-bold">20% off your first 2 moves</span>
+                  <span className="font-bold">10% off your first Move</span>
                   <span className="text-green-600/80 dark:text-green-400/80"> · Use code </span>
-                  <span className="font-mono font-bold tracking-wide">LERVIT20</span>
+                  <span className="font-mono font-bold tracking-wide">LERVIT10</span>
                 </p>
               </div>
 
