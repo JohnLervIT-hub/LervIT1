@@ -125,6 +125,7 @@ export default function PartnerNetworkSection() {
         {/* CTA card */}
         <a
           href="mailto:partnership@lervit.com"
+          onClick={(e) => { e.preventDefault(); window.open("mailto:partnership@lervit.com", "_self"); }}
           aria-label="Email the LervIT team to learn more about the Partner Network"
           data-testid="link-partner-network-cta"
           className="block"
