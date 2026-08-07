@@ -3,8 +3,23 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+// Strip Next.js "use client" directives — they're no-ops in Vite but confuse
+// React Fast Refresh, causing full module reloads instead of hot swaps and
+// leaving ReactCurrentDispatcher.current null mid-update (useContext crashes).
+function stripUseClient(): import("vite").Plugin {
+  return {
+    name: "strip-use-client",
+    transform(code, id) {
+      if (!id.includes("node_modules") && /^["']use client["']\s*;?\s*\n/m.test(code)) {
+        return { code: code.replace(/^["']use client["']\s*;?\s*\n/m, ""), map: null };
+      }
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
+    stripUseClient(),
     react(),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
