@@ -3766,13 +3766,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
-      // For customers, get all their reviews to check which bookings have been reviewed
+      // For customers, get all their reviews and surveys to check which bookings have been reviewed/surveyed
       let reviewedBookingIds = new Set<string>();
+      let surveyedBookingIds = new Set<string>();
       if (user.role === "customer") {
         const customerReviews = await db.select({ bookingId: reviews.bookingId })
           .from(reviews)
           .where(eq(reviews.customerId, user.id));
         reviewedBookingIds = new Set(customerReviews.map(r => r.bookingId));
+
+        const customerSurveys = await db.select({ bookingId: feedbackSurveys.bookingId })
+          .from(feedbackSurveys)
+          .where(eq(feedbackSurveys.userId, user.id));
+        surveyedBookingIds = new Set(customerSurveys.map(s => s.bookingId));
       }
       
       // For movers, look up distanceToPickup from job notifications
@@ -3879,6 +3885,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...booking,
             distanceToPickup,
             hasReview: reviewedBookingIds.has(booking.id),
+            hasSurvey: surveyedBookingIds.has(booking.id),
             enterprisePartnerName,
             partnerAvgRating: driverAvgRating,
             customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,

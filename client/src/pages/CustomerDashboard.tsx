@@ -194,7 +194,7 @@ export default function CustomerDashboard() {
       if (b.status !== "completed") return false;
       const moved = new Date(b.preferredDate).getTime();
       if (Date.now() - moved < TWENTY_FOUR_H) return false;
-      return !localStorage.getItem(`survey_done_${b.id}`) && !surveyedBookingIds.current.has(b.id);
+      return !(b as any).hasSurvey && !localStorage.getItem(`survey_done_${b.id}`) && !surveyedBookingIds.current.has(b.id);
     });
     if (!candidate) return;
     const timer = setTimeout(() => {
