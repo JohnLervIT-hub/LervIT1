@@ -24,7 +24,10 @@ export default function PartnerNetworkSection() {
     e.stopPropagation();
     navigator.clipboard.writeText(PARTNER_EMAIL).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {
+        setCopied(false);
+        setShowEmail(false);
+      }, 1500);
     });
   }
 
