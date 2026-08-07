@@ -196,6 +196,7 @@ export default function PartnerUsers() {
       queryClient.invalidateQueries({ queryKey: QK });
       toast({ title: "Invite cancelled" });
     },
+    onError: (e: any) => toast({ title: "Failed to cancel invite", description: e?.message, variant: "destructive" }),
   });
 
   const users: any[] = data?.users ?? [];

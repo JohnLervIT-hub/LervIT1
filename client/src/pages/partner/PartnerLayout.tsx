@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -454,7 +455,7 @@ export function PartnerLayout({ children }: { children: React.ReactNode }) {
               </Popover>
             </div>
           </header>
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <main className="flex-1 overflow-y-auto"><ErrorBoundary>{children}</ErrorBoundary></main>
         </div>
       </div>
 
