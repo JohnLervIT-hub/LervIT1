@@ -760,21 +760,75 @@ export default function PartnerBookingDetail() {
                 <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Proof of Completion ({proofs.length})</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {proofs.map((p: any) => (
-                <div key={p.id} className="flex items-center gap-3 p-2 rounded-md bg-muted/50" data-testid={`proof-${p.id}`}>
-                  <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{p.fileName}</p>
-                    {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
-                  </div>
-                  {p.fileUrl && (
-                    <a href={p.fileUrl} target="_blank" rel="noopener noreferrer">
-                      <Button size="sm" variant="ghost">View</Button>
-                    </a>
-                  )}
-                </div>
-              ))}
+            <CardContent className="space-y-3">
+              {/* Image proofs — thumbnail grid with lightbox */}
+              {(() => {
+                const imageProofs = proofs.filter((p: any) => p.fileType?.startsWith("image/"));
+                const docProofs = proofs.filter((p: any) => !p.fileType?.startsWith("image/"));
+                return (
+                  <>
+                    {imageProofs.length > 0 && (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {imageProofs.map((p: any, index: number) => {
+                          const proxyUrl = `/api/partner/proof/${p.id}/file`;
+                          return (
+                            <div
+                              key={p.id}
+                              className="relative aspect-square rounded-md overflow-hidden border cursor-pointer group"
+                              onClick={() => {
+                                setPreviewImages(imageProofs.map((ip: any) => `/api/partner/proof/${ip.id}/file`));
+                                setPreviewIndex(index);
+                                setShowImagePreview(true);
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={e => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  setPreviewImages(imageProofs.map((ip: any) => `/api/partner/proof/${ip.id}/file`));
+                                  setPreviewIndex(index);
+                                  setShowImagePreview(true);
+                                }
+                              }}
+                              aria-label={`View proof photo ${index + 1}`}
+                              data-testid={`button-proof-image-${p.id}`}
+                            >
+                              <img
+                                src={proxyUrl}
+                                alt={p.fileName ?? `Proof ${index + 1}`}
+                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                data-testid={`image-proof-${p.id}`}
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                              {p.notes && (
+                                <div className="absolute bottom-0 inset-x-0 bg-black/50 px-1.5 py-0.5">
+                                  <p className="text-[10px] text-white truncate">{p.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Document / non-image proofs */}
+                    {docProofs.map((p: any) => (
+                      <div key={p.id} className="flex items-center gap-3 p-2 rounded-md bg-muted/50" data-testid={`proof-${p.id}`}>
+                        <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{p.fileName}</p>
+                          {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
+                        </div>
+                        {p.fileUrl && (
+                          <a href={`/api/partner/proof/${p.id}/file`} target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" variant="ghost">View</Button>
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         )}

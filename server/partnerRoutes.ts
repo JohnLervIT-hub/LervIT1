@@ -1359,6 +1359,24 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // GET /api/partner/proof/:proofId/file — signed download/view URL for proof files
+  app.get("/api/partner/proof/:proofId/file", requirePartnerAuth(), async (req: Request, res: Response) => {
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const [proof] = await db.select().from(proofOfCompletion)
+        .where(and(eq(proofOfCompletion.id, req.params.proofId), eq(proofOfCompletion.partnerId, partner.id)))
+        .limit(1);
+      if (!proof) return res.status(404).json({ error: "Proof not found" });
+      if (!proof.fileUrl) return res.status(404).json({ error: "No file attached" });
+      const objectStorage = new ObjectStorageService();
+      const signedUrl = await objectStorage.getSignedDownloadUrl(proof.fileUrl, 900);
+      res.redirect(302, signedUrl);
+    } catch (err) {
+      console.error("[Partner] proof file download error:", err);
+      res.status(500).json({ error: "Could not generate file link" });
+    }
+  });
+
   // =========================================================
   // STRIPE CONNECT
   // =========================================================
