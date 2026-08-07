@@ -132,11 +132,15 @@ const CheckoutForm = ({ bookingId, userId }: { bookingId: string; userId: string
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <PaymentElement />
-      {/* Cancellation policy */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-3">
+      {/* Cancellation & FlexiPay instalment policy */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-3 space-y-1.5">
         <p className="text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
           <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           Free cancellation within 2 hours of booking. After 2 hours, cancellation fees may apply.
+        </p>
+        <p className="text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          Pay in easy instalments with Afterpay or Klarna — select your preferred option above. Instalment schedules and eligibility are determined by your chosen BNPL provider.
         </p>
       </div>
       <Button

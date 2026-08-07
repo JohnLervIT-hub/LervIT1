@@ -5108,9 +5108,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bookingMoverId = booking.moverId || booking.preSelectedMoverId || '';
         
         // Build payment intent params - use grossAmountCents for consistent rounding
+        // FlexiPay: include Afterpay and Klarna for buy-now-pay-later (BNPL) at checkout.
+        // For destination charges (mover has connected account) we keep card-only because
+        // Afterpay/Klarna are not supported on destination charges in Stripe.
+        // For platform charges (mover not yet confirmed) BNPL is enabled.
+        const bnplPaymentMethods: Stripe.PaymentIntentCreateParams['payment_method_types'] =
+          moverAccount
+            ? ['card']
+            : ['card', 'afterpay_clearpay', 'klarna'];
+
         const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
           amount: grossAmountCents,
           currency: "cad",
+          payment_method_types: bnplPaymentMethods,
           customer: stripeCustomerId,
           receipt_email: user.email,
           metadata: {
