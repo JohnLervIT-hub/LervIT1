@@ -475,6 +475,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== DEV / TEST HELPERS (development-only) =====
+  // These endpoints are registered ONLY when NODE_ENV === 'development'.
+  // They must never be reachable in staging or production builds.
+  // They exist solely to make e2e test setup deterministic without requiring
+  // real phone-OTP / email verification flows.
+  if (process.env.NODE_ENV === 'development') {
+    /**
+     * POST /api/dev/create-test-user
+     * Creates a customer account that is already phone- and email-verified.
+     * Body: { name, email, password, phone? }
+     * Returns: { id, email, name, role }
+     */
+    app.post("/api/dev/create-test-user", async (req: Request, res: Response) => {
+      try {
+        const schema = z.object({
+          name: z.string().min(1),
+          email: z.string().email(),
+          password: z.string().min(6),
+          phone: z.string().optional(),
+        });
+        const { name, email, password, phone } = validateBody(schema, req.body);
+
+        // Idempotent – return existing user if already registered
+        const existing = await storage.getUserByEmail(email);
+        if (existing) {
+          return res.json({ id: existing.id, email: existing.email, name: existing.name, role: existing.role });
+        }
+
+        const hashedPassword = await hashPassword(password);
+
+        // Generate referral code
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let referralCode = '';
+        for (let i = 0; i < 6; i++) referralCode += chars[Math.floor(Math.random() * chars.length)];
+
+        const user = await storage.createUser({
+          name,
+          email,
+          password: hashedPassword,
+          role: 'customer',
+          phone: phone || '+14035550000',
+          phoneVerified: true,
+          referralCode,
+        });
+
+        // Mark email as verified immediately so payment creation is not blocked
+        await db.update(usersTable)
+          .set({ emailVerified: true, verificationToken: null, verificationTokenExpiry: null })
+          .where(eq(usersTable.id, user.id));
+
+        res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+      } catch (err) {
+        console.error('[dev] create-test-user error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+
+    /**
+     * POST /api/dev/create-test-booking
+     * Creates a minimal booking owned by the authenticated user.
+     * Requires a logged-in session (call /api/auth/login first).
+     */
+    app.post("/api/dev/create-test-booking", async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+
+        const booking = await storage.createBooking({
+          customerId: user.id,
+          pickupAddress: '123 Test Pickup St, Calgary, AB',
+          dropoffAddress: '456 Test Dropoff Ave, Calgary, AB',
+          pickupLat: '51.0447',
+          pickupLng: '-114.0719',
+          dropoffLat: '51.0447',
+          dropoffLng: '-114.0819',
+          preferredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          loadSize: 'small',
+          numberOfMovers: 1,
+          price: '150.00',
+          status: 'pending',
+          paymentStatus: 'pending',
+          pickupDifficulty: 'easy',
+          dropoffDifficulty: 'easy',
+          heavyItem: false,
+          distance: '5',
+        } as any);
+
+        res.status(201).json({ id: booking.id });
+      } catch (err) {
+        console.error('[dev] create-test-booking error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+
+    /**
+     * GET /api/dev/payment-intent/:piId
+     * Retrieves a Stripe PaymentIntent from the test-mode Stripe API.
+     * Used by e2e tests to assert that payment_method_types are correctly set.
+     * Requires authenticated session (the PI must belong to the user's booking).
+     */
+    app.get("/api/dev/payment-intent/:piId", async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const { piId } = req.params;
+        if (!piId || !piId.startsWith('pi_')) {
+          return res.status(400).json({ error: 'Invalid payment intent id' });
+        }
+        const pi = await stripe.paymentIntents.retrieve(piId);
+        res.json({
+          id: pi.id,
+          status: pi.status,
+          currency: pi.currency,
+          amount: pi.amount,
+          payment_method_types: pi.payment_method_types,
+        });
+      } catch (err) {
+        console.error('[dev] get payment-intent error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+
+    /**
+     * POST /api/dev/confirm-test-payment-intent
+     * Confirms a test-mode Stripe PaymentIntent using Stripe's built-in test
+     * card payment method (pm_card_visa) so the real /confirm-payment route can
+     * subsequently verify the PI is in 'succeeded' state.
+     * Body: { paymentIntentId }
+     * Requires authenticated session.
+     */
+    app.post("/api/dev/confirm-test-payment-intent", async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const schema = z.object({ paymentIntentId: z.string().startsWith('pi_') });
+        const { paymentIntentId } = validateBody(schema, req.body);
+
+        // Verify that the PI is real and belongs to the test environment
+        const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+        if (pi.status === 'succeeded') {
+          return res.json({ status: pi.status, paymentIntentId: pi.id });
+        }
+
+        // Confirm using Stripe's test card (pm_card_visa always succeeds in test mode)
+        const confirmed = await stripe.paymentIntents.confirm(paymentIntentId, {
+          payment_method: 'pm_card_visa',
+          return_url: 'http://localhost:5000/my-bookings',
+        } as any);
+
+        res.json({ status: confirmed.status, paymentIntentId: confirmed.id });
+      } catch (err) {
+        console.error('[dev] confirm-test-payment-intent error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+  }
+
   // ===== AUTH ROUTES =====
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {
