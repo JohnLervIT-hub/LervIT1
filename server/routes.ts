@@ -58,6 +58,7 @@ import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stri
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
 import he from "he";
+import heicConvert from "heic-convert";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -318,6 +319,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const objectStorageService = new ObjectStorageService();
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      const [metadata] = await objectFile.getMetadata();
+      const contentType: string = metadata.contentType || "application/octet-stream";
+
+      // HEIC/HEIF images are not supported by Chrome/Firefox — convert to JPEG on the fly
+      const isHeic = contentType === "image/heic" || contentType === "image/heif"
+        || req.path.toLowerCase().endsWith(".heic") || req.path.toLowerCase().endsWith(".heif");
+
+      if (isHeic) {
+        const chunks: Buffer[] = [];
+        const stream = objectFile.createReadStream();
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("error", (err) => {
+          console.error("HEIC stream error:", err);
+          if (!res.headersSent) res.sendStatus(500);
+        });
+        stream.on("end", async () => {
+          try {
+            const inputBuffer = Buffer.concat(chunks);
+            const jpeg = await heicConvert({ buffer: inputBuffer, format: "JPEG", quality: 0.9 });
+            const jpegBuffer = Buffer.from(jpeg);
+            res.set({
+              "Content-Type": "image/jpeg",
+              "Content-Length": jpegBuffer.length,
+              "Cache-Control": "public, max-age=3600",
+            });
+            res.end(jpegBuffer);
+          } catch (convertErr) {
+            console.error("HEIC→JPEG conversion error:", convertErr);
+            if (!res.headersSent) res.sendStatus(500);
+          }
+        });
+        return;
+      }
+
       objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error fetching object:", error);
