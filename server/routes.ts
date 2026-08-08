@@ -318,7 +318,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/objects/:objectPath(*)", async (req: Request, res: Response) => {
     const objectStorageService = new ObjectStorageService();
     try {
-      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      // Strip query params (e.g. ?f=jpg cache-buster) before looking up the file
+      const objectPath = req.path.split("?")[0];
+      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
       const [metadata] = await objectFile.getMetadata();
       const contentType: string = metadata.contentType || "application/octet-stream";
 
@@ -6633,13 +6635,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const file of req.files as Express.Multer.File[]) {
         try {
           // Read the file from local disk (multer saves it temporarily)
-          const fileBuffer = fs.readFileSync(file.path);
-          
+          let fileBuffer = fs.readFileSync(file.path);
+          let { mimetype, originalname } = file;
+
+          // Convert HEIC/HEIF → JPEG at upload time so browsers can display them
+          const isHeic = mimetype === "image/heic" || mimetype === "image/heif"
+            || /\.(heic|heif)$/i.test(originalname);
+          if (isHeic) {
+            try {
+              const jpeg = await heicConvert({ buffer: fileBuffer, format: "JPEG", quality: 0.9 });
+              fileBuffer = Buffer.from(jpeg);
+              mimetype = "image/jpeg";
+              originalname = originalname.replace(/\.(heic|heif)$/i, ".jpg");
+            } catch (convertErr) {
+              console.error("HEIC upload conversion error:", convertErr);
+              // Fall through and upload as-is if conversion fails
+            }
+          }
+
           // Upload to cloud storage
           const cloudPath = await objectStorageService.uploadBuffer(
             fileBuffer,
-            file.originalname,
-            file.mimetype,
+            originalname,
+            mimetype,
             userId
           );
           

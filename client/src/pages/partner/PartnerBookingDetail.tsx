@@ -23,6 +23,17 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+/** Append a cache-busting suffix to HEIC/HEIF URLs so the browser bypasses
+ *  any stale HEIC responses it cached before the server-side JPEG conversion
+ *  was deployed. The server strips query params before looking up the file. */
+function toDisplayUrl(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes(".heic") || lower.includes(".heif")) {
+    return `${url}?f=jpg`;
+  }
+  return url;
+}
+
 const STATUS_COLOR: Record<string, string> = {
   new:               "bg-blue-500/10 text-blue-600 border-blue-500/20",
   under_review:      "bg-amber-500/10 text-amber-600 border-amber-500/20",
@@ -376,7 +387,7 @@ export default function PartnerBookingDetail() {
                     key={index}
                     className="relative aspect-square rounded-md overflow-hidden border cursor-pointer group"
                     onClick={() => {
-                      setPreviewImages(booking.images ?? []);
+                      setPreviewImages((booking.images ?? []).map(toDisplayUrl));
                       setPreviewIndex(index);
                       setShowImagePreview(true);
                     }}
@@ -384,7 +395,7 @@ export default function PartnerBookingDetail() {
                     tabIndex={0}
                     onKeyDown={e => {
                       if (e.key === "Enter" || e.key === " ") {
-                        setPreviewImages(booking.images ?? []);
+                        setPreviewImages((booking.images ?? []).map(toDisplayUrl));
                         setPreviewIndex(index);
                         setShowImagePreview(true);
                       }
@@ -393,7 +404,7 @@ export default function PartnerBookingDetail() {
                     data-testid={`button-preview-image-${index}`}
                   >
                     <img
-                      src={imageUrl}
+                      src={toDisplayUrl(imageUrl)}
                       alt={`Item ${index + 1}`}
                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
                       data-testid={`image-item-${index}`}
