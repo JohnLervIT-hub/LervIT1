@@ -37,6 +37,12 @@ import { MoverWelcomeTutorial } from "@/components/MoverWelcomeTutorial";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { LocationPrompt } from "@/components/LocationPrompt";
 
+function toDisplayUrl(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes(".heic") || lower.includes(".heif")) return `${url}?f=jpg`;
+  return url;
+}
+
 function safeFormatDate(dateStr: string | null | undefined, fmt: string, fallback = "TBD"): string {
   if (!dateStr) return fallback;
   const d = new Date(dateStr);
@@ -1446,7 +1452,7 @@ export default function MoverDashboard() {
                     key={index} 
                     className="relative aspect-square rounded-md overflow-hidden border cursor-pointer group"
                     onClick={() => {
-                      setPreviewImages(booking.images || []);
+                      setPreviewImages((booking.images || []).map(toDisplayUrl));
                       setPreviewIndex(index);
                       setShowImagePreview(true);
                     }}
@@ -1454,7 +1460,7 @@ export default function MoverDashboard() {
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
-                        setPreviewImages(booking.images ?? []);
+                        setPreviewImages((booking.images ?? []).map(toDisplayUrl));
                         setPreviewIndex(index);
                         setShowImagePreview(true);
                       }
@@ -1463,7 +1469,7 @@ export default function MoverDashboard() {
                     data-testid={`button-preview-image-${booking.id}-${index}`}
                   >
                     <img
-                      src={imageUrl}
+                      src={toDisplayUrl(imageUrl)}
                       alt={`Item ${index + 1}`}
                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
                       data-testid={`image-item-${booking.id}-${index}`}

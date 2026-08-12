@@ -1401,7 +1401,7 @@ export default function AdminDashboard() {
                           aria-label={`View load photo ${idx + 1} of ${(selectedBooking.images ?? []).length}`}
                         >
                           <img
-                            src={url}
+                            src={url.toLowerCase().includes(".heic") || url.toLowerCase().includes(".heif") ? `${url}?f=jpg` : url}
                             alt={`Load photo ${idx + 1}`}
                             className="w-full h-full object-cover transition-transform group-hover:scale-105"
                             onError={(e) => {
