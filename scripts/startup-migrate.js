@@ -27,9 +27,23 @@ async function run() {
 
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
-  console.log('[startup-migrate] Connected. Running sync-schema.sql...');
+  console.log('[startup-migrate] Connected.');
 
   try {
+    try {
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS referral_code varchar(6) UNIQUE,
+          ADD COLUMN IF NOT EXISTS referral_credits integer NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS referral_count integer NOT NULL DEFAULT 0;
+      `);
+      console.log('[startup-migrate] ✓ Referral columns ensured on users.');
+    } catch (err) {
+      console.error('[startup-migrate] ✗ Referral column migration FAILED:', err.message);
+      throw err;
+    }
+
+    console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);
   } finally {
