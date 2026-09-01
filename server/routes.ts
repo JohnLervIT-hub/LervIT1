@@ -39,7 +39,8 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { moverWebSocket, customerWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
+import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
+import { registerVoiceRoutes } from "./voice-routes";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -12046,6 +12047,8 @@ Respond with VALID JSON only:
 
   // Register enterprise partner portal routes
   registerPartnerRoutes(app);
+  // Isolated Telnyx voice routes; disabled safely unless voice env is configured.
+  registerVoiceRoutes(app);
 
   const httpServer = createServer(app);
   
@@ -12053,6 +12056,7 @@ Respond with VALID JSON only:
   moverWebSocket.initialize(httpServer);
   // Initialize WebSocket server for real-time customer notifications
   customerWebSocket.initialize(httpServer);
+  adminVoiceWebSocket.initialize(httpServer);
   
   return httpServer;
 }

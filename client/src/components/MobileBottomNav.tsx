@@ -11,6 +11,7 @@ import {
   Users,
   Plus,
   Inbox
+  , Radio
 } from "lucide-react";
 
 interface NavItem {
@@ -62,6 +63,7 @@ export function MobileBottomNav() {
           { href: "/admin",         icon: <LayoutDashboard className="w-5 h-5" />, label: "Dashboard" },
           { href: "/admin/users",   icon: <Users className="w-5 h-5" />,           label: "Users" },
           { href: "/admin/support", icon: <Inbox className="w-5 h-5" />,           label: "Tickets" },
+          { href: "/admin/voice",   icon: <Radio className="w-5 h-5" />,           label: "Voice" },
         ];
       default:
         return [];

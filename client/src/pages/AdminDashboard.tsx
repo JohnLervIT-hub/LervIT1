@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useVoice } from "@/contexts/VoiceContext";
 
 type User = {
   id: string;
@@ -656,6 +657,7 @@ export default function AdminDashboard() {
   const [adminPreviewIndex, setAdminPreviewIndex] = useState(0);
   const [adminShowPreview, setAdminShowPreview] = useState(false);
   const { toast } = useToast();
+  const { dial } = useVoice();
 
   const { data: usersResponse, isLoading: usersLoading, error: usersError } = useQuery<{ data: User[], total: number }>({
     queryKey: ["/api/users?limit=200&offset=0"],
@@ -1280,10 +1282,10 @@ export default function AdminDashboard() {
                           </div>
                         )}
                         {selectedBooking.customer?.phone && (
-                          <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => dial(selectedBooking.customer?.phone || "", selectedBooking.id)} className="flex items-center gap-1 text-primary hover:underline">
                             <Phone className="w-4 h-4" />
-                            <span>{selectedBooking.customer.phone}</span>
-                          </div>
+                            <span>{selectedBooking.customer?.phone}</span>
+                          </button>
                         )}
                       </div>
                     </div>

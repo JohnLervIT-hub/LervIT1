@@ -16,6 +16,8 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageLoader } from "@/components/PageLoader";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import Header from "@/components/Header";
+import { VoiceProvider } from "@/contexts/VoiceContext";
+import AdminVoiceWidget from "@/components/AdminVoiceWidget";
 
 // Import directly to avoid HMR timing issues
 import { JobNotificationSound } from "@/components/JobNotificationSound";
@@ -74,6 +76,7 @@ const AdminVerificationDashboard = lazy(
   () => import("@/pages/AdminVerificationDashboard"),
 );
 const AdminEmailCenter = lazy(() => import("@/pages/AdminEmailCenter"));
+const AdminVoicePage = lazy(() => import("@/pages/AdminVoicePage"));
 const Payment = lazy(() => import("@/pages/Payment"));
 const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
@@ -291,6 +294,11 @@ function Router() {
             <AdminEmailCenter />
           </ProtectedRoute>
         </Route>
+        <Route path="/admin/voice">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminVoicePage />
+          </ProtectedRoute>
+        </Route>
         {ENTERPRISE_ENABLED && (
           <>
             <Route path="/admin/partners/:id">
@@ -369,15 +377,18 @@ function AppShell() {
   return (
     <ErrorBoundary>
       <ScrollToTop />
-      <Header />
-      <AppContent>
-        <PageTransition>
-          <Router />
-        </PageTransition>
-      </AppContent>
-      <MobileBottomNav />
-      <JobNotificationSound />
-      <InstallPrompt />
+      <VoiceProvider>
+        <Header />
+        <AppContent>
+          <PageTransition>
+            <Router />
+          </PageTransition>
+        </AppContent>
+        <MobileBottomNav />
+        <JobNotificationSound />
+        <InstallPrompt />
+        {user?.role === "admin" && <AdminVoiceWidget />}
+      </VoiceProvider>
     </ErrorBoundary>
   );
 }

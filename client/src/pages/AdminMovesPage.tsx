@@ -29,11 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus, Building2 } from "lucide-react";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus, Building2, Phone } from "lucide-react";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useVoice } from "@/contexts/VoiceContext";
 
 type AvailableMover = {
   id: string;
@@ -72,6 +73,7 @@ type Booking = {
     id?: string;
     name?: string;
     email?: string;
+    phone?: string;
   } | null;
   mover: {
     id?: string;
@@ -87,6 +89,7 @@ const PAGE_SIZE = 50;
 export default function AdminMovesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { dial } = useVoice();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get("status") || "all";
 
@@ -477,6 +480,7 @@ export default function AdminMovesPage() {
                         <TableCell>
                           <div className="font-medium">{b.customer?.name || "Unknown"}</div>
                           <div className="text-xs text-muted-foreground font-mono">#{b.id.slice(0, 8)}</div>
+                          {b.customer?.phone && <button type="button" onClick={() => dial(b.customer!.phone!, b.id)} className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"><Phone className="w-3 h-3" />{b.customer.phone}</button>}
                         </TableCell>
                         <TableCell>
                           {b.mover?.name ? (

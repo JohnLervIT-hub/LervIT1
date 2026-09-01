@@ -4,3 +4,5 @@
 - [sed multi-line console.log danger](sed-multiline-log-removal.md) — sed line-by-line removal of multi-line console.log leaves orphaned object literal lines; breaks parse. Use manual edits instead.
 - [partnerUsers import gap](routes-ts-import-gap.md) — partnerUsers table from schema was used in routes.ts messaging logic but missing from the import line; causes TS2552 at runtime.
 - [notificationService sendEmail](notification-service-send-email.md) — correct call is notificationService.sendEmail({to, subject, body, type}); dynamic import of notifications.js sendEmail does not exist.
+- [Voice recording storage](voice-recording-storage.md) — Telnyx recording URLs are temporary; archive audio privately and serve it through authenticated same-origin routes.
+- [Partial unique conflict targets](partial-unique-conflicts.md) — PostgreSQL ON CONFLICT(column) may not match a partial unique index; serialize invariants and use untargeted conflict handling.
