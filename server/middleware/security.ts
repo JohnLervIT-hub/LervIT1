@@ -30,6 +30,7 @@ const allowedOrigins = isProduction
       'https://lervit.com',
       'https://www.lervit.com',
       'https://app.lervit.com',
+      'https://lervit1-production.up.railway.app',
       process.env.APP_BASE_URL,
     ].filter(Boolean) as string[]
   : [

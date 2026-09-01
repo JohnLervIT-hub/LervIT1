@@ -286,6 +286,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const allowedUploadOrigins = [
     'https://app.lervit.com',
     'https://www.lervit.com',
+    'https://lervit1-production.up.railway.app',
+    ...(process.env.APP_BASE_URL ? [process.env.APP_BASE_URL] : []),
     ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:5000'] : []),
   ];
   app.use('/uploads', express.default.static(uploadDir, {
