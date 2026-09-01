@@ -21,11 +21,13 @@ import {
   HelpCircle,
   Phone,
   ChevronRight,
+  ChevronLeft,
   Truck,
   Star,
   RotateCcw,
   AlertCircle
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { format, isToday, isTomorrow, formatDistanceToNow, isValid } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -50,8 +52,9 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { CustomerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { FadeIn, StaggerChildren, StaggerItem, PulseOnHover } from "@/components/PageTransition";
@@ -140,10 +143,14 @@ export default function CustomerDashboard() {
 
   const [surveyDialogOpen, setSurveyDialogOpen] = useState(false);
   const [surveyBooking, setSurveyBooking] = useState<Booking | null>(null);
-  const [surveyNps, setSurveyNps] = useState(9);
-  const [surveyEase, setSurveyEase] = useState(5);
-  const [surveyMover, setSurveyMover] = useState(5);
+  const [surveyStep, setSurveyStep] = useState(0);
+  const [surveySubmitted, setSurveySubmitted] = useState(false);
+  const [surveyNps, setSurveyNps] = useState<number | null>(null);
+  const [surveyEase, setSurveyEase] = useState(0);
+  const [surveyMover, setSurveyMover] = useState(0);
   const [surveyComments, setSurveyComments] = useState('');
+  const surveyedBookingIds = useRef<Set<string>>(new Set());
+  const SURVEY_STEPS = ['nps', 'ease', 'mover', 'comments'] as const;
 
   const { data: bookings, isLoading, isError } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
@@ -187,11 +194,17 @@ export default function CustomerDashboard() {
       if (b.status !== "completed") return false;
       const moved = new Date(b.preferredDate).getTime();
       if (Date.now() - moved < TWENTY_FOUR_H) return false;
-      return !localStorage.getItem(`survey_done_${b.id}`);
+      return !(b as any).hasSurvey && !localStorage.getItem(`survey_done_${b.id}`) && !surveyedBookingIds.current.has(b.id);
     });
     if (!candidate) return;
     const timer = setTimeout(() => {
       setSurveyBooking(candidate);
+      setSurveyStep(0);
+      setSurveySubmitted(false);
+      setSurveyNps(null);
+      setSurveyEase(0);
+      setSurveyMover(0);
+      setSurveyComments('');
       setSurveyDialogOpen(true);
     }, 1200);
     return () => clearTimeout(timer);
@@ -299,19 +312,44 @@ export default function CustomerDashboard() {
 
   const surveyMutation = useMutation({
     mutationFn: async (data: { bookingId: string; npsScore: number; easeRating: number; moverRating: number; comments: string }) => {
-      return await apiRequest("POST", "/api/surveys", data);
+      try {
+        await apiRequest("POST", "/api/surveys", data);
+      } catch (e: any) {
+        // A survey may already exist for this booking (e.g. re-triggered dialog,
+        // duplicate submit). That's not a failure from the user's perspective —
+        // the desired end state (feedback recorded) is already achieved.
+        const alreadySubmitted = typeof e?.message === "string" && e.message.includes("already submitted");
+        if (!alreadySubmitted) throw e;
+      }
+
+      // The survey already collects a mover rating (1-5). If this booking doesn't
+      // have a review yet, save one now so the separate "Rate Your Move" card
+      // doesn't keep reappearing after the survey is completed.
+      const booking = bookings?.find(b => b.id === data.bookingId);
+      if (booking && !booking.hasReview) {
+        try {
+          await apiRequest("POST", "/api/reviews", {
+            bookingId: data.bookingId,
+            moverId: booking.moverId ?? null,
+            customerId: user?.id,
+            rating: data.moverRating,
+            comment: data.comments || null,
+          });
+        } catch (e) {
+          console.log('[Survey] Review already exists or failed to save, continuing...');
+        }
+      }
     },
     onSuccess: () => {
       if (surveyBooking) {
         localStorage.setItem(`survey_done_${surveyBooking.id}`, "1");
+        surveyedBookingIds.current.add(surveyBooking.id);
       }
-      toast({ title: "Thank you!", description: "Your feedback helps us improve LervIT." });
-      setSurveyDialogOpen(false);
-      setSurveyBooking(null);
-      setSurveyNps(9);
-      setSurveyEase(5);
-      setSurveyMover(5);
-      setSurveyComments('');
+      setSurveySubmitted(true);
+      setTimeout(() => setSurveyDialogOpen(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reviews"] });
     },
     onError: () => {
       toast({ title: "Submission failed", description: "Please try again.", variant: "destructive" });
@@ -1073,81 +1111,270 @@ export default function CustomerDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* Post-move feedback survey (NPS + ease + mover rating) */}
-        <Dialog open={surveyDialogOpen} onOpenChange={setSurveyDialogOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="text-center">How was your experience?</DialogTitle>
-              <DialogDescription className="text-center">Quick 3-question survey — takes 30 seconds</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-5 py-2">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">How likely are you to recommend LervIT? (0–10)</Label>
-                <div className="flex flex-wrap gap-1">
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
+        {/* Post-move feedback survey — guided one-question-at-a-time wizard */}
+        <Dialog
+          open={surveyDialogOpen}
+          onOpenChange={(open) => {
+            if (!open && surveyBooking) {
+              localStorage.setItem(`survey_done_${surveyBooking.id}`, "1");
+            }
+            setSurveyDialogOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden" data-testid="dialog-survey">
+            {surveySubmitted ? (
+              <div className="flex flex-col items-center text-center px-6 py-10 gap-3">
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center"
+                >
+                  <CheckCircle2 className="w-9 h-9 text-primary" />
+                </motion.div>
+                <DialogTitle className="text-lg">Thanks for your feedback!</DialogTitle>
+                <DialogDescription className="text-center">
+                  Your input helps us make LervIT better for everyone.
+                </DialogDescription>
+                <Button
+                  className="mt-2 w-full"
+                  onClick={() => setSurveyDialogOpen(false)}
+                  data-testid="button-survey-done"
+                >
+                  Done
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Progress header */}
+                <div className="px-6 pt-5 pb-4 border-b space-y-3">
+                  <div className="flex items-center justify-between">
+                    <DialogTitle className="text-base">How was your experience?</DialogTitle>
                     <button
-                      key={n}
                       type="button"
-                      onClick={() => setSurveyNps(n)}
-                      className={`w-8 h-8 rounded text-xs font-medium border transition-colors ${surveyNps === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
-                      data-testid={`button-nps-${n}`}
-                    >{n}</button>
-                  ))}
+                      className="text-xs text-muted-foreground hover-elevate active-elevate-2 rounded-md px-2 py-1 -mr-2"
+                      onClick={() => {
+                        if (surveyBooking) localStorage.setItem(`survey_done_${surveyBooking.id}`, "1");
+                        setSurveyDialogOpen(false);
+                      }}
+                      data-testid="button-skip-survey"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5" data-testid="progress-survey-steps">
+                    {SURVEY_STEPS.map((step, i) => (
+                      <div
+                        key={step}
+                        className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
+                          i <= surveyStep ? "bg-primary" : "bg-muted"
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">{surveyNps <= 6 ? "Needs improvement" : surveyNps <= 8 ? "Good" : "Excellent!"}</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">How easy was the booking process? (1–5)</Label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setSurveyEase(n)}
-                      className={`w-9 h-9 rounded border text-sm font-medium transition-colors ${surveyEase === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
-                      data-testid={`button-ease-${n}`}
-                    >{n}</button>
-                  ))}
+
+                {/* Step content */}
+                <div className="px-6 py-6 min-h-[220px] flex flex-col justify-center overflow-hidden">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {surveyStep === 0 && (
+                      <motion.div
+                        key="nps"
+                        initial={{ opacity: 0, x: 24 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -24 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="space-y-4"
+                      >
+                        <div className="text-center space-y-1">
+                          <p className="font-medium">How likely are you to recommend LervIT to a friend?</p>
+                          <p className="text-xs text-muted-foreground">0 = Not at all likely · 10 = Extremely likely</p>
+                        </div>
+                        <div className="flex justify-between gap-1">
+                          {Array.from({ length: 11 }, (_, i) => i).map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setSurveyNps(n)}
+                              className={`h-9 flex-1 rounded-md text-xs font-semibold border transition-all ${
+                                surveyNps === n
+                                  ? n <= 6
+                                    ? "bg-destructive text-destructive-foreground border-destructive scale-105"
+                                    : n <= 8
+                                    ? "bg-amber-500 text-white border-amber-500 scale-105"
+                                    : "bg-primary text-primary-foreground border-primary scale-105"
+                                  : "border-border hover-elevate active-elevate-2"
+                              }`}
+                              data-testid={`button-nps-${n}`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-center text-sm font-medium h-5" data-testid="text-nps-label">
+                          {surveyNps === null ? "" : surveyNps <= 6 ? "We'll do better" : surveyNps <= 8 ? "Good to hear" : "Excellent!"}
+                        </p>
+                      </motion.div>
+                    )}
+
+                    {surveyStep === 1 && (
+                      <motion.div
+                        key="ease"
+                        initial={{ opacity: 0, x: 24 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -24 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="space-y-5"
+                      >
+                        <div className="text-center space-y-1">
+                          <p className="font-medium">How easy was the booking process?</p>
+                          <p className="text-xs text-muted-foreground">Tap a star to rate</p>
+                        </div>
+                        <div className="flex justify-center gap-2">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setSurveyEase(n)}
+                              className="hover-elevate active-elevate-2 rounded-md p-1.5"
+                              data-testid={`button-ease-${n}`}
+                            >
+                              <Star
+                                className={`w-9 h-9 transition-colors ${
+                                  n <= surveyEase ? "fill-amber-400 text-amber-400" : "fill-transparent text-muted-foreground"
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-center text-sm font-medium text-muted-foreground h-5">
+                          {surveyEase === 0 ? "" : ["Very difficult", "Difficult", "Okay", "Easy", "Very easy"][surveyEase - 1]}
+                        </p>
+                      </motion.div>
+                    )}
+
+                    {surveyStep === 2 && (
+                      <motion.div
+                        key="mover"
+                        initial={{ opacity: 0, x: 24 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -24 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="space-y-5"
+                      >
+                        <div className="flex flex-col items-center text-center gap-2">
+                          <Avatar className="w-14 h-14">
+                            <AvatarImage src={surveyBooking?.mover?.moverImage || undefined} />
+                            <AvatarFallback>{getMoverName(surveyBooking?.mover?.user).charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <p className="font-medium">Rate your mover, {getMoverName(surveyBooking?.mover?.user)}</p>
+                          <p className="text-xs text-muted-foreground">Tap a star to rate</p>
+                        </div>
+                        <div className="flex justify-center gap-2">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setSurveyMover(n)}
+                              className="hover-elevate active-elevate-2 rounded-md p-1.5"
+                              data-testid={`button-mover-rating-${n}`}
+                            >
+                              <Star
+                                className={`w-9 h-9 transition-colors ${
+                                  n <= surveyMover ? "fill-amber-400 text-amber-400" : "fill-transparent text-muted-foreground"
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-center text-sm font-medium text-muted-foreground h-5">
+                          {surveyMover === 0 ? "" : ["Poor", "Fair", "Good", "Great", "Outstanding"][surveyMover - 1]}
+                        </p>
+                      </motion.div>
+                    )}
+
+                    {surveyStep === 3 && (
+                      <motion.div
+                        key="comments"
+                        initial={{ opacity: 0, x: 24 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -24 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="space-y-3"
+                      >
+                        <div className="text-center space-y-1">
+                          <p className="font-medium">Anything else you'd like to share?</p>
+                          <p className="text-xs text-muted-foreground">Optional</p>
+                        </div>
+                        <Textarea
+                          id="survey-comments"
+                          placeholder="Tell us more about your move..."
+                          value={surveyComments}
+                          onChange={(e) => setSurveyComments(e.target.value)}
+                          rows={4}
+                          autoFocus
+                          data-testid="textarea-survey-comments"
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Rate your mover (1–5)</Label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setSurveyMover(n)}
-                      className={`w-9 h-9 rounded border text-sm font-medium transition-colors ${surveyMover === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
-                      data-testid={`button-mover-rating-${n}`}
-                    >{n}</button>
-                  ))}
+
+                {/* Footer navigation */}
+                <div className="px-6 pb-5 pt-1 flex items-center gap-2">
+                  {surveyStep > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setSurveyStep((s) => s - 1)}
+                      data-testid="button-survey-back"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                  ) : null}
+                  {surveyStep < SURVEY_STEPS.length - 1 ? (
+                    <Button
+                      className="flex-1"
+                      onClick={() => setSurveyStep((s) => s + 1)}
+                      disabled={
+                        (surveyStep === 0 && surveyNps === null) ||
+                        (surveyStep === 1 && surveyEase === 0) ||
+                        (surveyStep === 2 && surveyMover === 0)
+                      }
+                      data-testid="button-survey-next"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  ) : (
+                    <Button
+                      className="flex-1"
+                      onClick={() =>
+                        surveyBooking &&
+                        surveyMutation.mutate({
+                          bookingId: surveyBooking.id,
+                          npsScore: surveyNps ?? 9,
+                          easeRating: surveyEase,
+                          moverRating: surveyMover,
+                          comments: surveyComments,
+                        })
+                      }
+                      disabled={surveyMutation.isPending}
+                      data-testid="button-submit-survey"
+                    >
+                      {surveyMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Submitting...
+                        </>
+                      ) : (
+                        "Submit"
+                      )}
+                    </Button>
+                  )}
                 </div>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="survey-comments" className="text-sm font-medium">Comments (optional)</Label>
-                <Textarea
-                  id="survey-comments"
-                  placeholder="Anything else you'd like to share?"
-                  value={surveyComments}
-                  onChange={(e) => setSurveyComments(e.target.value)}
-                  rows={2}
-                  data-testid="textarea-survey-comments"
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { if (surveyBooking) localStorage.setItem(`survey_done_${surveyBooking.id}`, "1"); setSurveyDialogOpen(false); }}>
-                Skip
-              </Button>
-              <Button
-                onClick={() => surveyBooking && surveyMutation.mutate({ bookingId: surveyBooking.id, npsScore: surveyNps, easeRating: surveyEase, moverRating: surveyMover, comments: surveyComments })}
-                disabled={surveyMutation.isPending}
-                data-testid="button-submit-survey"
-              >
-                {surveyMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Submitting...</> : "Submit"}
-              </Button>
-            </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>

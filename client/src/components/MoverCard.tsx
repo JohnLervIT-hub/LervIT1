@@ -5,8 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket } from "lucide-react";
+import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket, DollarSign } from "lucide-react";
 import { getVehicleDisplayName } from "@/lib/utils";
+
+function getEstimatedStartingPrice(vehicleType: string): number {
+  const v = (vehicleType || '').toLowerCase();
+  if (v.includes('truck')) return 115;
+  if (v.includes('van')) return 95;
+  if (v.includes('pickup')) return 80;
+  return 20;
+}
 
 interface MoverCardProps {
   id: string;
@@ -77,8 +85,8 @@ const MoverCard = memo(function MoverCard({
                     </Badge>
                   )}
                   {isLiveLocation && (
-                    <Badge variant="outline" className="text-xs gap-1 shrink-0 bg-blue-500/10 text-blue-600 border-blue-500/30" data-testid={`badge-live-location-${id}`}>
-                      <MapPin className="w-3 h-3" />
+                    <Badge variant="outline" className="text-xs gap-1.5 shrink-0 bg-blue-500/10 text-blue-600 border-blue-500/30" data-testid={`badge-live-location-${id}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
                       Live
                     </Badge>
                   )}
@@ -91,7 +99,7 @@ const MoverCard = memo(function MoverCard({
         {/* Vehicle Section - Full image display without cropping */}
         <div className="mx-5 mt-4 mb-4 rounded-lg overflow-hidden border bg-muted/30" data-testid={`vehicle-photo-container-${id}`}>
           {/* Vehicle Image Container - 16:9 aspect ratio for full visibility */}
-          <div className="relative aspect-video bg-gradient-to-br from-muted to-muted/70">
+          <div className="relative aspect-[16/7] md:aspect-video bg-gradient-to-br from-muted to-muted/70">
             {vehiclePhoto && !vehicleImageError ? (
               <>
                 {/* Loading skeleton shown while image loads */}
@@ -157,6 +165,14 @@ const MoverCard = memo(function MoverCard({
             <span className="text-muted-foreground" data-testid={`text-distance-${id}`}>
               {distance}
             </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="font-semibold" data-testid={`text-price-estimate-${id}`}>
+              Est. from ${getEstimatedStartingPrice(vehicleType)}
+            </span>
+            <span className="text-xs text-muted-foreground">/ move</span>
           </div>
         </div>
 

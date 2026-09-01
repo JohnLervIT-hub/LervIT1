@@ -11,12 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter, Building2, FileText, BookOpen, Download } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, ChevronLeft, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter, Building2, FileText, BookOpen, Download, ZoomIn, Images } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useVoice } from "@/contexts/VoiceContext";
 
 type User = {
   id: string;
@@ -55,6 +56,7 @@ type Booking = {
   dropoffDifficulty?: string | null;
   heavyItem?: boolean | null;
   paymentStatus?: string | null;
+  images?: string[] | null;
   customer: {
     id?: string;
     name?: string;
@@ -71,6 +73,11 @@ type Booking = {
       name?: string;
     };
   } | null;
+};
+
+type AdminBookingsResponse = {
+  data: Booking[];
+  total: number;
 };
 
 // Growth Metrics Types
@@ -651,7 +658,11 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [bookingFilter, setBookingFilter] = useState<string>("all");
+  const [adminPreviewImages, setAdminPreviewImages] = useState<string[]>([]);
+  const [adminPreviewIndex, setAdminPreviewIndex] = useState(0);
+  const [adminShowPreview, setAdminShowPreview] = useState(false);
   const { toast } = useToast();
+  const { dial } = useVoice();
 
   const { data: usersResponse, isLoading: usersLoading, error: usersError } = useQuery<{ data: User[], total: number }>({
     queryKey: ["/api/users?limit=200&offset=0"],
@@ -664,7 +675,17 @@ export default function AdminDashboard() {
   const movers = Array.isArray(moversData) ? moversData : [];
 
   const { data: bookingsData, isLoading: bookingsLoading, error: bookingsError } = useQuery<Booking[]>({
-    queryKey: ["/api/bookings"],
+    queryKey: ["/api/bookings", { limit: 200, offset: 0 }],
+    queryFn: async () => {
+      const response = await fetch("/api/bookings?limit=200&offset=0", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}`);
+      }
+      const payload: AdminBookingsResponse | Booking[] = await response.json();
+      return Array.isArray(payload) ? payload : payload.data;
+    },
     refetchInterval: 30000,
   });
   const bookings = Array.isArray(bookingsData) ? bookingsData : [];
@@ -1047,10 +1068,10 @@ export default function AdminDashboard() {
                       >
                         <div className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${getStatusColor(booking.status)}`} />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 flex-wrap">
-                            <div>
-                              <p className="font-semibold text-sm">{booking.customer?.name || "Unknown Customer"}</p>
-                              <p className="text-xs text-muted-foreground">{booking.customer?.email}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-sm truncate">{booking.customer?.name || "Unknown Customer"}</p>
+                              <p className="text-xs text-muted-foreground truncate">{booking.customer?.email}</p>
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0">
                               <p className="font-bold text-sm tabular-nums">${booking.price ? parseFloat(booking.price).toFixed(2) : "0.00"}</p>
@@ -1276,10 +1297,10 @@ export default function AdminDashboard() {
                           </div>
                         )}
                         {selectedBooking.customer?.phone && (
-                          <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => dial(selectedBooking.customer?.phone || "", selectedBooking.id)} className="flex items-center gap-1 text-primary hover:underline">
                             <Phone className="w-4 h-4" />
-                            <span>{selectedBooking.customer.phone}</span>
-                          </div>
+                            <span>{selectedBooking.customer?.phone}</span>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1377,6 +1398,42 @@ export default function AdminDashboard() {
                   )}
                 </div>
 
+                {/* Load Photos */}
+                {selectedBooking.images && selectedBooking.images.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide flex items-center gap-2">
+                      <Images className="w-4 h-4" />
+                      Load Photos ({selectedBooking.images.length})
+                    </h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {selectedBooking.images.map((url: string, idx: number) => (
+                        <button
+                          key={idx}
+                          className="relative aspect-square rounded-md overflow-hidden border border-border group focus:outline-none focus:ring-2 focus:ring-primary"
+                          onClick={() => {
+                            setAdminPreviewImages(selectedBooking.images ?? []);
+                            setAdminPreviewIndex(idx);
+                            setAdminShowPreview(true);
+                          }}
+                          aria-label={`View load photo ${idx + 1} of ${(selectedBooking.images ?? []).length}`}
+                        >
+                          <img
+                            src={url.toLowerCase().includes(".heic") || url.toLowerCase().includes(".heif") ? `${url}?f=jpg` : url}
+                            alt={`Load photo ${idx + 1}`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Assigned Mover */}
                 {selectedBooking.mover && (
                   <div>
@@ -1411,6 +1468,46 @@ export default function AdminDashboard() {
                 )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Load photo lightbox */}
+        <Dialog open={adminShowPreview} onOpenChange={setAdminShowPreview}>
+          <DialogContent className="max-w-3xl p-2 bg-black/95 border-none">
+            <DialogTitle className="sr-only">Load photo preview</DialogTitle>
+            <DialogDescription className="sr-only">
+              Photo {adminPreviewIndex + 1} of {adminPreviewImages.length}
+            </DialogDescription>
+            <div className="relative flex items-center justify-center min-h-[60vh]">
+              {adminPreviewImages[adminPreviewIndex] && (
+                <img
+                  src={adminPreviewImages[adminPreviewIndex]}
+                  alt={`Load photo ${adminPreviewIndex + 1}`}
+                  className="max-h-[75vh] max-w-full object-contain rounded"
+                />
+              )}
+              {adminPreviewImages.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setAdminPreviewIndex(i => (i - 1 + adminPreviewImages.length) % adminPreviewImages.length)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white"
+                    aria-label="Previous photo"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setAdminPreviewIndex(i => (i + 1) % adminPreviewImages.length)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white"
+                    aria-label="Next photo"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/70 text-xs">
+                    {adminPreviewIndex + 1} / {adminPreviewImages.length}
+                  </div>
+                </>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>

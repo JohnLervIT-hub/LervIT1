@@ -130,10 +130,7 @@ export default function Header() {
                   variant="ghost"
                   size="icon"
                   className="h-11 w-11 p-0 relative z-[1001]"
-                  onClick={() => {
-                    console.log("mobile menu clicked", !mobileMenuOpen);
-                    setMobileMenuOpen(!mobileMenuOpen);
-                  }}
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   data-testid="button-mobile-menu"
                   aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
                 >

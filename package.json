@@ -10,7 +10,8 @@
     "worker": "tsx server/worker.ts",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "load-test": "k6 run tests/load/k6-booking-flow.js"
+    "load-test": "k6 run tests/load/k6-booking-flow.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",
@@ -65,6 +66,7 @@
     "@stripe/react-stripe-js": "^5.4.0",
     "@stripe/stripe-js": "^8.5.2",
     "@tanstack/react-query": "^5.60.5",
+    "@telnyx/webrtc": "^2.27.10",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -132,6 +134,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",

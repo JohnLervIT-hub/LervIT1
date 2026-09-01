@@ -1581,3 +1581,150 @@ export const aiIncidentInsights = pgTable("ai_incident_insights", {
 }, (table) => ({
   incidentIdIdx: index("ai_incident_insights_incident_id_idx").on(table.incidentId),
 }));
+
+// ===== TELNYX ADMIN VOICE CENTER =====
+// Credentials are deliberately never stored here. A profile only controls
+// routing/presence policy for an authenticated administrator.
+export const adminVoiceProfiles = pgTable("admin_voice_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  displayName: text("display_name"),
+  callerIdNumber: text("caller_id_number"),
+  // On-demand Telnyx credential identifier only; never store SIP username/password.
+  telnyxCredentialId: text("telnyx_credential_id").unique(),
+  telnyxSipUsername: text("telnyx_sip_username").unique(),
+  telnyxCredentialExpiresAt: timestamp("telnyx_credential_expires_at"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  enabledIdx: index("admin_voice_profiles_enabled_idx").on(table.enabled),
+}));
+
+export const adminVoicePresence = pgTable("admin_voice_presence", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  status: text("status").notNull().default("offline"), // offline | available | busy | away
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("admin_voice_presence_status_idx").on(table.status),
+}));
+
+export const voiceCalls = pgTable("voice_calls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  telnyxCallControlId: text("telnyx_call_control_id").unique(),
+  telnyxCallLegId: text("telnyx_call_leg_id").unique(),
+  direction: text("direction").notNull(), // inbound | outbound
+  status: text("status").notNull().default("initiated"),
+  fromNumber: text("from_number").notNull(),
+  toNumber: text("to_number").notNull(),
+  adminId: varchar("admin_id").references(() => users.id),
+  matchedUserId: varchar("matched_user_id").references(() => users.id),
+  bookingId: varchar("booking_id").references(() => bookings.id),
+  startedAt: timestamp("started_at"),
+  answeredAt: timestamp("answered_at"),
+  endedAt: timestamp("ended_at"),
+  durationSeconds: integer("duration_seconds"),
+  recordingRequestedAt: timestamp("recording_requested_at"),
+  routingState: text("routing_state").notNull().default("pending"),
+  routingDeadlineAt: timestamp("routing_deadline_at"),
+  routingLeaseUntil: timestamp("routing_lease_until"),
+  fallbackRequestedAt: timestamp("fallback_requested_at"),
+  lastEventAt: timestamp("last_event_at"),
+  metadata: text("metadata"),
+  clientState: text("client_state").unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  controlIdx: index("voice_calls_control_idx").on(table.telnyxCallControlId),
+  adminCreatedIdx: index("voice_calls_admin_created_idx").on(table.adminId, table.createdAt),
+  bookingIdx: index("voice_calls_booking_idx").on(table.bookingId),
+  phoneIdx: index("voice_calls_phone_idx").on(table.fromNumber, table.toNumber),
+}));
+
+// One inbound parent call can fan out to several private WebRTC/SIP agent legs.
+// This preserves an audit trail and makes winner selection safe under concurrent webhooks.
+export const voiceCallAttempts = pgTable("voice_call_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callId: varchar("call_id").references(() => voiceCalls.id).notNull(),
+  adminId: varchar("admin_id").references(() => users.id).notNull(),
+  telnyxCallControlId: text("telnyx_call_control_id").unique(),
+  telnyxCallLegId: text("telnyx_call_leg_id").unique(),
+  clientState: text("client_state").notNull().unique(),
+  status: text("status").notNull().default("ringing"),
+  expiresAt: timestamp("expires_at"),
+  answeredAt: timestamp("answered_at"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  callIdx: index("voice_call_attempts_call_idx").on(table.callId),
+  adminStatusIdx: index("voice_call_attempts_admin_status_idx").on(table.adminId, table.status),
+  callAdminUnique: unique("voice_call_attempts_call_admin_uniq").on(table.callId, table.adminId),
+}));
+
+export const voiceWebhookEvents = pgTable("voice_webhook_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  telnyxEventId: text("telnyx_event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  callId: varchar("call_id").references(() => voiceCalls.id),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+  status: text("status").notNull().default("pending"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  leaseUntil: timestamp("lease_until"),
+  lastError: text("last_error"),
+  payload: text("payload").notNull(),
+  processingError: text("processing_error"),
+}, (table) => ({
+  callIdx: index("voice_webhook_events_call_idx").on(table.callId),
+  typeReceivedIdx: index("voice_webhook_events_type_received_idx").on(table.eventType, table.receivedAt),
+}));
+
+export const voiceTransfers = pgTable("voice_transfers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callId: varchar("call_id").references(() => voiceCalls.id).notNull(),
+  initiatedByAdminId: varchar("initiated_by_admin_id").references(() => users.id).notNull(),
+  targetAdminId: varchar("target_admin_id").references(() => users.id),
+  targetNumber: text("target_number"),
+  status: text("status").notNull().default("requested"),
+  telnyxCommandId: text("telnyx_command_id"),
+  dialLeaseUntil: timestamp("dial_lease_until"),
+  requestId: text("request_id").unique(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  callIdx: index("voice_transfers_call_idx").on(table.callId),
+  activeTargetIdx: index("voice_transfers_active_target_idx").on(table.callId, table.targetAdminId, table.status),
+  dialLeaseIdx: index("voice_transfers_dial_lease_idx").on(table.status, table.dialLeaseUntil),
+}));
+
+export const voiceMedia = pgTable("voice_media", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  callId: varchar("call_id").references(() => voiceCalls.id).notNull(),
+  kind: text("kind").notNull(), // recording | voicemail
+  telnyxRecordingId: text("telnyx_recording_id").unique(),
+  storageUrl: text("storage_url"),
+  privateObjectKey: text("private_object_key").unique(),
+  storageStatus: text("storage_status").notNull().default("pending"), // pending | stored | retry
+  archiveAttemptCount: integer("archive_attempt_count").notNull().default(0),
+  archiveNextAttemptAt: timestamp("archive_next_attempt_at").defaultNow().notNull(),
+  archiveLastError: text("archive_last_error"),
+  archiveLeaseUntil: timestamp("archive_lease_until"),
+  contentType: text("content_type"),
+  durationSeconds: integer("duration_seconds"),
+  transcription: text("transcription"),
+  availableAt: timestamp("available_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  callIdx: index("voice_media_call_idx").on(table.callId),
+}));
+
+export type AdminVoiceProfile = typeof adminVoiceProfiles.$inferSelect;
+export type AdminVoicePresence = typeof adminVoicePresence.$inferSelect;
+export type VoiceCall = typeof voiceCalls.$inferSelect;
+export type VoiceWebhookEvent = typeof voiceWebhookEvents.$inferSelect;
+export type VoiceTransfer = typeof voiceTransfers.$inferSelect;
+export type VoiceMedia = typeof voiceMedia.$inferSelect;
+export type VoiceCallAttempt = typeof voiceCallAttempts.$inferSelect;

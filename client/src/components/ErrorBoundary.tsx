@@ -19,8 +19,12 @@ const HMR_ERROR_PATTERNS = [
   'dispatcher.useEffect', 
   'dispatcher.useRef',
   'dispatcher.useCallback',
+  'dispatcher.useContext',
   'No QueryClient set',
   'Invalid hook call',
+  "reading 'useContext'",
+  "reading 'useState'",
+  "reading 'useEffect'",
 ];
 
 function isHMRError(error: Error): boolean {

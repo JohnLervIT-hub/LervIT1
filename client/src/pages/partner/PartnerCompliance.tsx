@@ -65,9 +65,12 @@ export default function PartnerCompliance() {
   });
 
   const deleteDoc = useMutation({
-    mutationFn: (id: string) => fetch(`/api/partner/compliance/${id}`, { method: "DELETE", credentials: "include" }),
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/partner/compliance/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Delete failed");
+    },
     onSuccess: () => { toast({ title: "Document removed" }); qc.invalidateQueries({ queryKey: ["/api/partner/compliance"] }); },
-    onError: () => toast({ title: "Cannot delete this document", variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Cannot delete this document", description: e?.message, variant: "destructive" }),
   });
 
   const uploadedTypes = docs.map((d: any) => d.docType);

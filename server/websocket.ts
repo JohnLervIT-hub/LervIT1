@@ -19,6 +19,7 @@ interface ConnectedClient {
 interface WebSocketToken {
   userId: string;
   moverId: string;
+  channel?: 'admin-voice';
   createdAt: number;
   expiresAt: number;
 }
@@ -59,6 +60,14 @@ export function generateWebSocketToken(userId: string, moverId: string): string 
 /** Generate a short-lived token for customer WebSocket connections. */
 export function generateCustomerWebSocketToken(userId: string): string {
   return generateWebSocketToken(userId, '');
+}
+
+/** One-time token exclusively for the operator voice event channel. */
+export function generateAdminVoiceWebSocketToken(userId: string): string {
+  const tokenId = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  tokenStore.set(tokenId, { userId, moverId: '', channel: 'admin-voice', createdAt: now, expiresAt: now + TOKEN_EXPIRY_MS });
+  return tokenId;
 }
 
 /**
@@ -370,3 +379,44 @@ class CustomerWebSocketServer {
 }
 
 export const customerWebSocket = new CustomerWebSocketServer();
+
+class AdminVoiceWebSocketServer {
+  private wss: WebSocketServer | null = null;
+  private clients = new Map<string, ConnectedCustomer>();
+
+  initialize(server: Server) {
+    this.wss = new WebSocketServer({
+      server, path: '/ws/admin-voice',
+      verifyClient: (info, callback) => {
+        const origin = info.origin || info.req.headers.origin;
+        const host = info.req.headers.host || '';
+        const valid = !origin || origin.includes(host) || origin.includes('.replit.') || origin.includes('localhost');
+        callback(valid, valid ? undefined : 403, valid ? undefined : 'Forbidden');
+      },
+    });
+    this.wss.on('connection', (ws, req) => {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const token = url.searchParams.get('token');
+      const data = token ? validateToken(token) : null;
+      if (!data || data.channel !== 'admin-voice') return ws.close(4003, 'Invalid or expired token');
+      const id = `${data.userId}-${Date.now()}`;
+      this.clients.set(id, { ws, userId: data.userId, lastPing: Date.now() });
+      ws.on('close', () => this.clients.delete(id));
+      ws.on('error', () => this.clients.delete(id));
+      ws.on('message', (raw) => {
+        try { if (JSON.parse(raw.toString()).type === 'pong') this.clients.get(id)!.lastPing = Date.now(); } catch (_) {}
+      });
+      ws.send(JSON.stringify({ type: 'connected', channel: 'admin-voice' }));
+    });
+    logger.info('Admin voice WebSocket server initialized');
+  }
+
+  notify(notification: object) {
+    this.clients.forEach((client, id) => {
+      if (client.ws.readyState !== WebSocket.OPEN) { this.clients.delete(id); return; }
+      try { client.ws.send(JSON.stringify({ ...notification, timestamp: new Date().toISOString() })); } catch (_) { this.clients.delete(id); }
+    });
+  }
+}
+
+export const adminVoiceWebSocket = new AdminVoiceWebSocketServer();

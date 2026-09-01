@@ -312,12 +312,17 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/me
   app.get("/api/partner/me", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { user, partnerUser, partner } = (req as any).partnerCtx;
-    res.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
-      partnerUser: { id: partnerUser.id, partnerRole: partnerUser.partnerRole },
-      partner,
-    });
+    try {
+      const { user, partnerUser, partner } = (req as any).partnerCtx;
+      res.json({
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
+        partnerUser: { id: partnerUser.id, partnerRole: partnerUser.partnerRole },
+        partner,
+      });
+    } catch (err) {
+      console.error("[Partner] me error:", err);
+      res.status(500).json({ error: "Failed to fetch partner context" });
+    }
   });
 
   // =========================================================
@@ -326,14 +331,19 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/profile
   app.get("/api/partner/profile", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    res.json(partner);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      res.json(partner);
+    } catch (err) {
+      console.error("[Partner] profile get error:", err);
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
   });
 
   // PUT /api/partner/profile
   app.put("/api/partner/profile", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
     try {
+      const { partner, user } = (req as any).partnerCtx;
       const updateSchema = z.object({
         name: z.string().min(1).optional(),
         legalName: z.string().min(1).optional(),
@@ -374,48 +384,54 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/onboarding
   app.get("/api/partner/onboarding", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    const [zones, docs, team, lastRejection] = await Promise.all([
-      db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id)),
-      db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id)),
-      db.select().from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, partner.id)),
-      db.select({ notes: partnerAuditLog.notes, createdAt: partnerAuditLog.createdAt })
-        .from(partnerAuditLog)
-        .where(and(eq(partnerAuditLog.partnerId, partner.id), eq(partnerAuditLog.action, "partner.rejected")))
-        .orderBy(desc(partnerAuditLog.createdAt))
-        .limit(1),
-    ]);
+      const [zones, docs, team, lastRejection] = await Promise.all([
+        db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id)),
+        db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id)),
+        db.select().from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, partner.id)),
+        db.select({ notes: partnerAuditLog.notes, createdAt: partnerAuditLog.createdAt })
+          .from(partnerAuditLog)
+          .where(and(eq(partnerAuditLog.partnerId, partner.id), eq(partnerAuditLog.action, "partner.rejected")))
+          .orderBy(desc(partnerAuditLog.createdAt))
+          .limit(1),
+      ]);
 
-    const steps = [
-      { key: "profile", label: "Company Profile", complete: partner.profileComplete, description: "Business name, contacts, address" },
-      { key: "coverage", label: "Coverage Zones", complete: partner.coverageComplete, description: "Service areas and capacity" },
-      { key: "compliance", label: "Compliance Documents", complete: partner.complianceComplete, description: "Insurance, registration, certifications" },
-      { key: "dispatch", label: "Dispatch Setup", complete: partner.dispatchComplete, description: "How you receive and handle bookings" },
-      { key: "team", label: "Team Members", complete: team.length > 0, description: "Add your drivers and crews" },
-      { key: "terms", label: "Terms & Agreement", complete: partner.termsAccepted, description: "Partner service agreement" },
-      { key: "review", label: "Lervit Review", complete: partner.status === "active", description: "Lervit reviews your submission" },
-    ];
+      const steps = [
+        { key: "profile", label: "Company Profile", complete: partner.profileComplete, description: "Business name, contacts, address" },
+        { key: "coverage", label: "Coverage Zones", complete: partner.coverageComplete, description: "Service areas and capacity" },
+        { key: "compliance", label: "Compliance Documents", complete: partner.complianceComplete, description: "Insurance, registration, certifications" },
+        { key: "dispatch", label: "Dispatch Setup", complete: partner.dispatchComplete, description: "How you receive and handle bookings" },
+        { key: "team", label: "Team Members", complete: team.length > 0, description: "Add your drivers and crews" },
+        { key: "terms", label: "Terms & Agreement", complete: partner.termsAccepted, description: "Partner service agreement" },
+        { key: "review", label: "Lervit Review", complete: partner.status === "active", description: "Lervit reviews your submission" },
+      ];
 
-    const completedCount = steps.filter(s => s.complete).length;
+      const completedCount = steps.filter(s => s.complete).length;
 
-    res.json({
-      partner,
-      steps,
-      completedCount,
-      totalSteps: steps.length,
-      percentComplete: Math.round((completedCount / steps.length) * 100),
-      zones,
-      docs,
-      team,
-      readyForReview: partner.profileComplete && partner.coverageComplete && partner.complianceComplete && partner.dispatchComplete && partner.termsAccepted,
-      lastRejectionReason: lastRejection[0]?.notes ?? null,
-      lastRejectionAt: lastRejection[0]?.createdAt ?? null,
-    });
+      res.json({
+        partner,
+        steps,
+        completedCount,
+        totalSteps: steps.length,
+        percentComplete: Math.round((completedCount / steps.length) * 100),
+        zones,
+        docs,
+        team,
+        readyForReview: partner.profileComplete && partner.coverageComplete && partner.complianceComplete && partner.dispatchComplete && partner.termsAccepted,
+        lastRejectionReason: lastRejection[0]?.notes ?? null,
+        lastRejectionAt: lastRejection[0]?.createdAt ?? null,
+      });
+    } catch (err) {
+      console.error("[Partner] onboarding get error:", err);
+      res.status(500).json({ error: "Failed to fetch onboarding status" });
+    }
   });
 
   // POST /api/partner/onboarding/submit
   app.post("/api/partner/onboarding/submit", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
+    try {
     const { partner, user } = (req as any).partnerCtx;
     if (!partner.profileComplete || !partner.coverageComplete || !partner.complianceComplete || !partner.termsAccepted) {
       return res.status(400).json({ error: "Complete all required onboarding steps before submitting" });
@@ -452,6 +468,10 @@ export function registerPartnerRoutes(app: Express) {
     }).catch(e => console.error("[onboarding submit] fetch admins failed:", e));
 
     res.json(updated);
+    } catch (err) {
+      console.error("[Partner] onboarding submit error:", err);
+      res.status(500).json({ error: "Failed to submit onboarding" });
+    }
   });
 
   // =========================================================
@@ -460,15 +480,20 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/coverage
   app.get("/api/partner/coverage", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    const zones = await db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id)).orderBy(desc(coverageZones.createdAt));
-    res.json(zones);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const zones = await db.select().from(coverageZones).where(eq(coverageZones.partnerId, partner.id)).orderBy(desc(coverageZones.createdAt));
+      res.json(zones);
+    } catch (err) {
+      console.error("[Partner] coverage list error:", err);
+      res.status(500).json({ error: "Failed to fetch coverage zones" });
+    }
   });
 
   // POST /api/partner/coverage
   app.post("/api/partner/coverage", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
     try {
+      const { partner, user } = (req as any).partnerCtx;
       const data = insertCoverageZoneSchema.omit({ partnerId: true }).parse(req.body);
       const [zone] = await db.insert(coverageZones).values({ ...data, partnerId: partner.id }).returning();
       await db.update(partners).set({ coverageComplete: true, updatedAt: new Date() }).where(eq(partners.id, partner.id));
@@ -482,8 +507,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // PUT /api/partner/coverage/:id
   app.put("/api/partner/coverage/:id", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
     try {
+      const { partner, user } = (req as any).partnerCtx;
       const [zone] = await db.select().from(coverageZones)
         .where(and(eq(coverageZones.id, req.params.id), eq(coverageZones.partnerId, partner.id)))
         .limit(1);
@@ -502,14 +527,19 @@ export function registerPartnerRoutes(app: Express) {
 
   // DELETE /api/partner/coverage/:id
   app.delete("/api/partner/coverage/:id", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [zone] = await db.select().from(coverageZones)
-      .where(and(eq(coverageZones.id, req.params.id), eq(coverageZones.partnerId, partner.id)))
-      .limit(1);
-    if (!zone) return res.status(404).json({ error: "Zone not found" });
-    await db.delete(coverageZones).where(eq(coverageZones.id, zone.id));
-    await logAudit(partner.id, user.id, "coverage.deleted", "coverage_zone", zone.id);
-    res.json({ success: true });
+    try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [zone] = await db.select().from(coverageZones)
+        .where(and(eq(coverageZones.id, req.params.id), eq(coverageZones.partnerId, partner.id)))
+        .limit(1);
+      if (!zone) return res.status(404).json({ error: "Zone not found" });
+      await db.delete(coverageZones).where(eq(coverageZones.id, zone.id));
+      await logAudit(partner.id, user.id, "coverage.deleted", "coverage_zone", zone.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Partner] coverage delete error:", err);
+      res.status(500).json({ error: "Failed to delete coverage zone" });
+    }
   });
 
   // =========================================================
@@ -518,15 +548,20 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/compliance
   app.get("/api/partner/compliance", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    const docs = await db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id)).orderBy(desc(complianceDocs.createdAt));
-    res.json(docs);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const docs = await db.select().from(complianceDocs).where(eq(complianceDocs.partnerId, partner.id)).orderBy(desc(complianceDocs.createdAt));
+      res.json(docs);
+    } catch (err) {
+      console.error("[Partner] compliance list error:", err);
+      res.status(500).json({ error: "Failed to fetch compliance documents" });
+    }
   });
 
   // POST /api/partner/compliance/upload
   app.post("/api/partner/compliance/upload", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), upload.single("file"), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
     try {
+      const { partner, user } = (req as any).partnerCtx;
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
       const docType = z.enum([
@@ -588,15 +623,20 @@ export function registerPartnerRoutes(app: Express) {
 
   // DELETE /api/partner/compliance/:id
   app.delete("/api/partner/compliance/:id", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [doc] = await db.select().from(complianceDocs)
-      .where(and(eq(complianceDocs.id, req.params.id), eq(complianceDocs.partnerId, partner.id)))
-      .limit(1);
-    if (!doc) return res.status(404).json({ error: "Document not found" });
-    if (doc.reviewStatus === "approved") return res.status(400).json({ error: "Cannot delete approved documents" });
-    await db.delete(complianceDocs).where(eq(complianceDocs.id, doc.id));
-    await logAudit(partner.id, user.id, "compliance.deleted", "compliance_doc", doc.id);
-    res.json({ success: true });
+    try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [doc] = await db.select().from(complianceDocs)
+        .where(and(eq(complianceDocs.id, req.params.id), eq(complianceDocs.partnerId, partner.id)))
+        .limit(1);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      if (doc.reviewStatus === "approved") return res.status(400).json({ error: "Cannot delete approved documents" });
+      await db.delete(complianceDocs).where(eq(complianceDocs.id, doc.id));
+      await logAudit(partner.id, user.id, "compliance.deleted", "compliance_doc", doc.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Partner] compliance delete error:", err);
+      res.status(500).json({ error: "Failed to delete compliance document" });
+    }
   });
 
   // =========================================================
@@ -605,8 +645,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // PUT /api/partner/dispatch
   app.put("/api/partner/dispatch", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
     try {
+      const { partner, user } = (req as any).partnerCtx;
       const data = z.object({
         dispatchMethod: z.enum(["manual", "auto", "hybrid"]).optional(),
         dispatchPhone: z.string().optional(),
@@ -632,13 +672,18 @@ export function registerPartnerRoutes(app: Express) {
 
   // POST /api/partner/terms/accept
   app.post("/api/partner/terms/accept", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [updated] = await db.update(partners)
-      .set({ termsAccepted: true, termsAcceptedAt: new Date(), updatedAt: new Date() })
-      .where(eq(partners.id, partner.id))
-      .returning();
-    await logAudit(partner.id, user.id, "terms.accepted", "partner", partner.id);
-    res.json(updated);
+    try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [updated] = await db.update(partners)
+        .set({ termsAccepted: true, termsAcceptedAt: new Date(), updatedAt: new Date() })
+        .where(eq(partners.id, partner.id))
+        .returning();
+      await logAudit(partner.id, user.id, "terms.accepted", "partner", partner.id);
+      res.json(updated);
+    } catch (err) {
+      console.error("[Partner] terms accept error:", err);
+      res.status(500).json({ error: "Failed to accept terms" });
+    }
   });
 
   // =========================================================
@@ -647,17 +692,22 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/team
   app.get("/api/partner/team", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    const team = await db.select().from(partnerTeamMembers)
-      .where(eq(partnerTeamMembers.partnerId, partner.id))
-      .orderBy(desc(partnerTeamMembers.createdAt));
-    res.json(team);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const team = await db.select().from(partnerTeamMembers)
+        .where(eq(partnerTeamMembers.partnerId, partner.id))
+        .orderBy(desc(partnerTeamMembers.createdAt));
+      res.json(team);
+    } catch (err) {
+      console.error("[Partner] team list error:", err);
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
   });
 
   // POST /api/partner/team
   app.post("/api/partner/team", requirePartnerAuth(["partner_admin", "partner_ops_manager", "partner_dispatcher"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
     try {
+      const { partner, user } = (req as any).partnerCtx;
       const data = insertPartnerTeamMemberSchema.omit({ partnerId: true }).parse(req.body);
       const [member] = await db.insert(partnerTeamMembers).values({ ...data, partnerId: partner.id }).returning();
       await logAudit(partner.id, user.id, "team.created", "partner_team_member", member.id);
@@ -670,47 +720,53 @@ export function registerPartnerRoutes(app: Express) {
 
   // PUT /api/partner/team/:id
   app.put("/api/partner/team/:id", requirePartnerAuth(["partner_admin", "partner_ops_manager", "partner_dispatcher"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [member] = await db.select().from(partnerTeamMembers)
-      .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
-      .limit(1);
-    if (!member) return res.status(404).json({ error: "Team member not found" });
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [member] = await db.select().from(partnerTeamMembers)
+        .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
+        .limit(1);
+      if (!member) return res.status(404).json({ error: "Team member not found" });
       const data = insertPartnerTeamMemberSchema.omit({ partnerId: true }).partial().parse(req.body);
       const [updated] = await db.update(partnerTeamMembers).set(data).where(eq(partnerTeamMembers.id, member.id)).returning();
       await logAudit(partner.id, user.id, "team.updated", "partner_team_member", member.id);
       res.json(updated);
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Partner] team update error:", err);
       res.status(500).json({ error: "Failed to update team member" });
     }
   });
 
   // DELETE /api/partner/team/:id
   app.delete("/api/partner/team/:id", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [member] = await db.select().from(partnerTeamMembers)
-      .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
-      .limit(1);
-    if (!member) return res.status(404).json({ error: "Team member not found" });
-    await db.delete(partnerTeamMembers).where(eq(partnerTeamMembers.id, member.id));
-    await logAudit(partner.id, user.id, "team.deleted", "partner_team_member", member.id);
-    res.json({ success: true });
+    try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [member] = await db.select().from(partnerTeamMembers)
+        .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
+        .limit(1);
+      if (!member) return res.status(404).json({ error: "Team member not found" });
+      await db.delete(partnerTeamMembers).where(eq(partnerTeamMembers.id, member.id));
+      await logAudit(partner.id, user.id, "team.deleted", "partner_team_member", member.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Partner] team delete error:", err);
+      res.status(500).json({ error: "Failed to delete team member" });
+    }
   });
 
   // POST /api/partner/team/:id/driver-photo
   app.post("/api/partner/team/:id/driver-photo", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), upload.single("file"), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-    if (!allowed.includes(req.file.mimetype)) return res.status(400).json({ error: "Only image files are accepted" });
-
-    const [member] = await db.select().from(partnerTeamMembers)
-      .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
-      .limit(1);
-    if (!member) return res.status(404).json({ error: "Team member not found" });
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+      if (!allowed.includes(req.file.mimetype)) return res.status(400).json({ error: "Only image files are accepted" });
+
+      const [member] = await db.select().from(partnerTeamMembers)
+        .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
+        .limit(1);
+      if (!member) return res.status(404).json({ error: "Team member not found" });
+
       const objectStorage = new ObjectStorageService();
       const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
       const url = await objectStorage.uploadBuffer(req.file.buffer, `driver.${ext}`, req.file.mimetype, partner.id);
@@ -728,17 +784,17 @@ export function registerPartnerRoutes(app: Express) {
 
   // POST /api/partner/team/:id/vehicle-photo
   app.post("/api/partner/team/:id/vehicle-photo", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), upload.single("file"), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-    if (!allowed.includes(req.file.mimetype)) return res.status(400).json({ error: "Only image files are accepted" });
-
-    const [member] = await db.select().from(partnerTeamMembers)
-      .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
-      .limit(1);
-    if (!member) return res.status(404).json({ error: "Team member not found" });
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+      if (!allowed.includes(req.file.mimetype)) return res.status(400).json({ error: "Only image files are accepted" });
+
+      const [member] = await db.select().from(partnerTeamMembers)
+        .where(and(eq(partnerTeamMembers.id, req.params.id), eq(partnerTeamMembers.partnerId, partner.id)))
+        .limit(1);
+      if (!member) return res.status(404).json({ error: "Team member not found" });
+
       const objectStorage = new ObjectStorageService();
       const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
       const url = await objectStorage.uploadBuffer(req.file.buffer, `vehicle.${ext}`, req.file.mimetype, partner.id);
@@ -760,8 +816,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/bookings
   app.get("/api/partner/bookings", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
     try {
+      const { partner } = (req as any).partnerCtx;
       const statusFilter = req.query.status as string | undefined;
 
       let query = db.select().from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
@@ -780,6 +836,7 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/bookings/:id
   app.get("/api/partner/bookings/:id", requirePartnerAuth(), async (req: Request, res: Response) => {
+    try {
     const { partner } = (req as any).partnerCtx;
     const [booking] = await db.select().from(bookings)
       .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
@@ -842,23 +899,33 @@ export function registerPartnerRoutes(app: Express) {
       .orderBy(desc(proofOfCompletion.uploadedAt));
 
     res.json({ booking, assignment, events, incidents, proofs });
+    } catch (err) {
+      console.error("[Partner] booking detail error:", err);
+      res.status(500).json({ error: "Failed to fetch booking" });
+    }
   });
 
   // GET /api/partner/bookings/:id/events
   app.get("/api/partner/bookings/:id/events", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-    const events = await db.select().from(bookingStatusEvents)
-      .where(eq(bookingStatusEvents.bookingId, booking.id))
-      .orderBy(desc(bookingStatusEvents.createdAt));
-    res.json(events);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
+      const events = await db.select().from(bookingStatusEvents)
+        .where(eq(bookingStatusEvents.bookingId, booking.id))
+        .orderBy(desc(bookingStatusEvents.createdAt));
+      res.json(events);
+    } catch (err) {
+      console.error("[Partner] booking events error:", err);
+      res.status(500).json({ error: "Failed to fetch booking events" });
+    }
   });
 
   // POST /api/partner/bookings/:id/accept
   app.post("/api/partner/bookings/:id/accept", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
+    try {
     const { partner, user } = (req as any).partnerCtx;
     const [booking] = await db.select().from(bookings)
       .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
@@ -897,78 +964,88 @@ export function registerPartnerRoutes(app: Express) {
     }).catch(e => console.error("[Customer notify] fetch customer failed:", e));
 
     res.json(updated);
+    } catch (err) {
+      console.error("[Partner] booking accept error:", err);
+      res.status(500).json({ error: "Failed to accept booking" });
+    }
   });
 
   // POST /api/partner/bookings/:id/reject
   app.post("/api/partner/bookings/:id/reject", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    const allowedStatuses = ["new", "under_review"];
-    if (!allowedStatuses.includes(booking.enterpriseStatus || "")) {
-      return res.status(400).json({ error: `Cannot reject from status: ${booking.enterpriseStatus}` });
-    }
-
-    const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
-    const fromStatus = booking.enterpriseStatus;
-
-    const [updated] = await db.update(bookings)
-      .set({
-        enterpriseStatus: "rejected",
-        enterpriseRejectedAt: new Date(),
-        enterpriseRejectionReason: reason,
-        updatedAt: new Date(),
-      })
-      .where(eq(bookings.id, booking.id))
-      .returning();
-
-    await db.insert(bookingStatusEvents).values({
-      bookingId: booking.id,
-      partnerId: partner.id,
-      fromStatus,
-      toStatus: "rejected",
-      changedBy: user.id,
-      notes: reason,
-      customerVisible: false,
-    });
-
-    await logAudit(partner.id, user.id, "booking.rejected", "booking", booking.id, reason);
-
-    // Notify LervIT admins that partner rejected the job
-    db.select().from(users).where(eq(users.role, "admin")).then((admins) => {
-      for (const admin of admins) {
-        if (admin.email) {
-          notificationService.sendAdminPartnerCancelledAlert({
-            adminEmail: admin.email,
-            partnerName: partner.name,
-            booking: updated,
-            newStatus: "rejected",
-            reason,
-          }).catch(e => console.error("[Admin notify] partner reject alert failed:", e));
-        }
+      const allowedStatuses = ["new", "under_review"];
+      if (!allowedStatuses.includes(booking.enterpriseStatus || "")) {
+        return res.status(400).json({ error: `Cannot reject from status: ${booking.enterpriseStatus}` });
       }
-    }).catch(e => console.error("[Admin notify] fetch admins failed:", e));
 
-    res.json(updated);
+      const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+      const fromStatus = booking.enterpriseStatus;
+
+      const [updated] = await db.update(bookings)
+        .set({
+          enterpriseStatus: "rejected",
+          enterpriseRejectedAt: new Date(),
+          enterpriseRejectionReason: reason,
+          updatedAt: new Date(),
+        })
+        .where(eq(bookings.id, booking.id))
+        .returning();
+
+      await db.insert(bookingStatusEvents).values({
+        bookingId: booking.id,
+        partnerId: partner.id,
+        fromStatus,
+        toStatus: "rejected",
+        changedBy: user.id,
+        notes: reason,
+        customerVisible: false,
+      });
+
+      await logAudit(partner.id, user.id, "booking.rejected", "booking", booking.id, reason);
+
+      // Notify LervIT admins that partner rejected the job
+      db.select().from(users).where(eq(users.role, "admin")).then((admins) => {
+        for (const admin of admins) {
+          if (admin.email) {
+            notificationService.sendAdminPartnerCancelledAlert({
+              adminEmail: admin.email,
+              partnerName: partner.name,
+              booking: updated,
+              newStatus: "rejected",
+              reason,
+            }).catch(e => console.error("[Admin notify] partner reject alert failed:", e));
+          }
+        }
+      }).catch(e => console.error("[Admin notify] fetch admins failed:", e));
+
+      res.json(updated);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Partner] booking reject error:", err);
+      res.status(500).json({ error: "Failed to reject booking" });
+    }
   });
 
   // POST /api/partner/bookings/:id/assign
   app.post("/api/partner/bookings/:id/assign", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-
-    const allowedStatuses = ["accepted", "assigned"];
-    if (!allowedStatuses.includes(booking.enterpriseStatus || "")) {
-      return res.status(400).json({ error: `Cannot assign from status: ${booking.enterpriseStatus}` });
-    }
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+      const allowedStatuses = ["accepted", "assigned"];
+      if (!allowedStatuses.includes(booking.enterpriseStatus || "")) {
+        return res.status(400).json({ error: `Cannot assign from status: ${booking.enterpriseStatus}` });
+      }
+
       const data = z.object({
         teamMemberId: z.string().optional(),
         driverName: z.string().optional(),
@@ -1045,13 +1122,13 @@ export function registerPartnerRoutes(app: Express) {
 
   // POST /api/partner/bookings/:id/status
   app.post("/api/partner/bookings/:id/status", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
+
       const { status, notes } = z.object({
         status: z.string().min(1),
         notes: z.string().optional(),
@@ -1124,22 +1201,26 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/incidents
   app.get("/api/partner/incidents", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    const incidents = await db.select().from(partnerIncidents)
-      .where(eq(partnerIncidents.partnerId, partner.id))
-      .orderBy(desc(partnerIncidents.createdAt));
-    res.json(incidents);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const incidents = await db.select().from(partnerIncidents)
+        .where(eq(partnerIncidents.partnerId, partner.id))
+        .orderBy(desc(partnerIncidents.createdAt));
+      res.json(incidents);
+    } catch (err) {
+      console.error("[Partner] incidents list error:", err);
+      res.status(500).json({ error: "Failed to fetch incidents" });
+    }
   });
 
   // POST /api/partner/bookings/:id/incidents
   app.post("/api/partner/bookings/:id/incidents", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), upload.array("files", 5), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
       const data = insertPartnerIncidentSchema.omit({ partnerId: true, bookingId: true, reportedBy: true }).parse(req.body);
 
       // Upload any attached files
@@ -1185,7 +1266,8 @@ export function registerPartnerRoutes(app: Express) {
 
       // Notify all admin users so the incident appears in their support queue
       const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
-      const severityLabel = data.severity === "critical" ? "CRITICAL" : data.severity.charAt(0).toUpperCase() + data.severity.slice(1);
+      const severity = data.severity ?? "medium";
+      const severityLabel = severity === "critical" ? "CRITICAL" : severity.charAt(0).toUpperCase() + severity.slice(1);
       const preview = `[${severityLabel}] ${partner.name} — ${data.title}`;
       for (const admin of adminUsers) {
         db.insert(inAppNotifications).values({
@@ -1209,12 +1291,12 @@ export function registerPartnerRoutes(app: Express) {
 
   // PUT /api/partner/incidents/:id
   app.put("/api/partner/incidents/:id", requirePartnerAuth(["partner_admin", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [incident] = await db.select().from(partnerIncidents)
-      .where(and(eq(partnerIncidents.id, req.params.id), eq(partnerIncidents.partnerId, partner.id)))
-      .limit(1);
-    if (!incident) return res.status(404).json({ error: "Incident not found" });
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [incident] = await db.select().from(partnerIncidents)
+        .where(and(eq(partnerIncidents.id, req.params.id), eq(partnerIncidents.partnerId, partner.id)))
+        .limit(1);
+      if (!incident) return res.status(404).json({ error: "Incident not found" });
       const data = z.object({
         status: z.enum(["open", "under_review", "resolved", "escalated"]).optional(),
         resolutionNotes: z.string().optional(),
@@ -1241,13 +1323,12 @@ export function registerPartnerRoutes(app: Express) {
 
   // POST /api/partner/bookings/:id/proof
   app.post("/api/partner/bookings/:id/proof", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), upload.single("file"), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
       const proofType = z.enum(["photo", "signature", "document"]).parse(req.body.proofType || "photo");
@@ -1278,14 +1359,32 @@ export function registerPartnerRoutes(app: Express) {
     }
   });
 
+  // GET /api/partner/proof/:proofId/file — signed download/view URL for proof files
+  app.get("/api/partner/proof/:proofId/file", requirePartnerAuth(), async (req: Request, res: Response) => {
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const [proof] = await db.select().from(proofOfCompletion)
+        .where(and(eq(proofOfCompletion.id, req.params.proofId), eq(proofOfCompletion.partnerId, partner.id)))
+        .limit(1);
+      if (!proof) return res.status(404).json({ error: "Proof not found" });
+      if (!proof.fileUrl) return res.status(404).json({ error: "No file attached" });
+      const objectStorage = new ObjectStorageService();
+      const signedUrl = await objectStorage.getSignedDownloadUrl(proof.fileUrl, 900);
+      res.redirect(302, signedUrl);
+    } catch (err) {
+      console.error("[Partner] proof file download error:", err);
+      res.status(500).json({ error: "Could not generate file link" });
+    }
+  });
+
   // =========================================================
   // STRIPE CONNECT
   // =========================================================
 
   // POST /api/partner/stripe/connect — create or resume Stripe Connect Express onboarding
   app.post("/api/partner/stripe/connect", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { user, partner } = (req as any).partnerCtx;
     try {
+      const { user, partner } = (req as any).partnerCtx;
       let stripeAccountId = partner.stripeAccountId;
 
       if (!stripeAccountId) {
@@ -1334,8 +1433,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/stripe/status — return current Stripe Connect status
   app.get("/api/partner/stripe/status", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
     try {
+      const { partner } = (req as any).partnerCtx;
       if (!partner.stripeAccountId) {
         return res.json({ status: "not_connected", payoutsEnabled: false, chargesEnabled: false });
       }
@@ -1370,8 +1469,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/stripe/dashboard-link — Stripe Express dashboard link
   app.get("/api/partner/stripe/dashboard-link", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
     try {
+      const { partner } = (req as any).partnerCtx;
       if (!partner.stripeAccountId) {
         return res.status(400).json({ error: "No Stripe account connected" });
       }
@@ -1385,8 +1484,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/earnings — full earnings history (all completed bookings)
   app.get("/api/partner/earnings", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
     try {
+      const { partner } = (req as any).partnerCtx;
       const allBookings = await db.select().from(bookings)
         .where(and(eq(bookings.enterprisePartnerId, partner.id), eq(bookings.enterpriseStatus, "completed")))
         .orderBy(desc(bookings.updatedAt));
@@ -1423,8 +1522,8 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/dashboard
   app.get("/api/partner/dashboard", requirePartnerAuth(), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
     try {
+      const { partner } = (req as any).partnerCtx;
       const allBookings = await db.select().from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
       const incidents = await db.select().from(partnerIncidents).where(eq(partnerIncidents.partnerId, partner.id));
       const team = await db.select().from(partnerTeamMembers).where(eq(partnerTeamMembers.partnerId, partner.id));
@@ -1657,12 +1756,17 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/audit-log
   app.get("/api/partner/audit-log", requirePartnerAuth(["partner_admin"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
-    const logs = await db.select().from(partnerAuditLog)
-      .where(eq(partnerAuditLog.partnerId, partner.id))
-      .orderBy(desc(partnerAuditLog.createdAt))
-      .limit(100);
-    res.json(logs);
+    try {
+      const { partner } = (req as any).partnerCtx;
+      const logs = await db.select().from(partnerAuditLog)
+        .where(eq(partnerAuditLog.partnerId, partner.id))
+        .orderBy(desc(partnerAuditLog.createdAt))
+        .limit(100);
+      res.json(logs);
+    } catch (err) {
+      console.error("[Partner] audit log error:", err);
+      res.status(500).json({ error: "Failed to fetch audit log" });
+    }
   });
 
   // POST /api/partner/audit-log/:id/analyze
@@ -2360,38 +2464,43 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/admin/partner-incidents — all incidents across all partners
   app.get("/api/admin/partner-incidents", requireAdminAuth, async (_req: Request, res: Response) => {
-    const rows = await db
-      .select({
-        id: partnerIncidents.id,
-        bookingId: partnerIncidents.bookingId,
-        partnerId: partnerIncidents.partnerId,
-        category: partnerIncidents.category,
-        severity: partnerIncidents.severity,
-        status: partnerIncidents.status,
-        title: partnerIncidents.title,
-        notes: partnerIncidents.notes,
-        escalationFlag: partnerIncidents.escalationFlag,
-        fileUrls: partnerIncidents.fileUrls,
-        resolutionNotes: partnerIncidents.resolutionNotes,
-        resolvedAt: partnerIncidents.resolvedAt,
-        createdAt: partnerIncidents.createdAt,
-        updatedAt: partnerIncidents.updatedAt,
-        partnerName: partners.name,
-        reporterName: users.name,
-      })
-      .from(partnerIncidents)
-      .innerJoin(partners, eq(partners.id, partnerIncidents.partnerId))
-      .leftJoin(users, eq(users.id, partnerIncidents.reportedBy))
-      .orderBy(
-        // critical + escalated first, then by date
-        sql`CASE WHEN ${partnerIncidents.severity} = 'critical' THEN 0
-                 WHEN ${partnerIncidents.severity} = 'high' THEN 1
-                 WHEN ${partnerIncidents.severity} = 'medium' THEN 2
-                 ELSE 3 END`,
-        desc(partnerIncidents.createdAt),
-      );
+    try {
+      const rows = await db
+        .select({
+          id: partnerIncidents.id,
+          bookingId: partnerIncidents.bookingId,
+          partnerId: partnerIncidents.partnerId,
+          category: partnerIncidents.category,
+          severity: partnerIncidents.severity,
+          status: partnerIncidents.status,
+          title: partnerIncidents.title,
+          notes: partnerIncidents.notes,
+          escalationFlag: partnerIncidents.escalationFlag,
+          fileUrls: partnerIncidents.fileUrls,
+          resolutionNotes: partnerIncidents.resolutionNotes,
+          resolvedAt: partnerIncidents.resolvedAt,
+          createdAt: partnerIncidents.createdAt,
+          updatedAt: partnerIncidents.updatedAt,
+          partnerName: partners.name,
+          reporterName: users.name,
+        })
+        .from(partnerIncidents)
+        .innerJoin(partners, eq(partners.id, partnerIncidents.partnerId))
+        .leftJoin(users, eq(users.id, partnerIncidents.reportedBy))
+        .orderBy(
+          // critical + escalated first, then by date
+          sql`CASE WHEN ${partnerIncidents.severity} = 'critical' THEN 0
+                   WHEN ${partnerIncidents.severity} = 'high' THEN 1
+                   WHEN ${partnerIncidents.severity} = 'medium' THEN 2
+                   ELSE 3 END`,
+          desc(partnerIncidents.createdAt),
+        );
 
-    res.json(rows);
+      res.json(rows);
+    } catch (err) {
+      console.error("[Admin] partner incidents list error:", err);
+      res.status(500).json({ error: "Failed to fetch incidents" });
+    }
   });
 
   // POST /api/admin/partner-incidents/:id/ai-analyze — AI copilot analysis for an incident
@@ -2467,48 +2576,54 @@ export function registerPartnerRoutes(app: Express) {
 
   // PUT /api/admin/partner-incidents/:id — admin updates status / adds resolution notes
   app.put("/api/admin/partner-incidents/:id", requireAdminAuth, async (req: Request, res: Response) => {
-    const adminUser = (req as any).adminUser;
-    const { status, resolutionNotes } = z.object({
-      status: z.enum(["open", "under_review", "resolved", "escalated"]).optional(),
-      resolutionNotes: z.string().max(2000).optional(),
-    }).parse(req.body);
+    try {
+      const adminUser = (req as any).adminUser;
+      const { status, resolutionNotes } = z.object({
+        status: z.enum(["open", "under_review", "resolved", "escalated"]).optional(),
+        resolutionNotes: z.string().max(2000).optional(),
+      }).parse(req.body);
 
-    const [existing] = await db.select().from(partnerIncidents).where(eq(partnerIncidents.id, req.params.id)).limit(1);
-    if (!existing) return res.status(404).json({ error: "Incident not found" });
+      const [existing] = await db.select().from(partnerIncidents).where(eq(partnerIncidents.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Incident not found" });
 
-    const update: Record<string, any> = { updatedAt: new Date() };
-    if (status) update.status = status;
-    if (resolutionNotes !== undefined) update.resolutionNotes = resolutionNotes;
-    if (status === "resolved" && !existing.resolvedAt) {
-      update.resolvedAt = new Date();
-      update.resolvedBy = adminUser.id;
+      const update: Record<string, any> = { updatedAt: new Date() };
+      if (status) update.status = status;
+      if (resolutionNotes !== undefined) update.resolutionNotes = resolutionNotes;
+      if (status === "resolved" && !existing.resolvedAt) {
+        update.resolvedAt = new Date();
+        update.resolvedBy = adminUser.id;
+      }
+
+      const [updated] = await db.update(partnerIncidents).set(update).where(eq(partnerIncidents.id, req.params.id)).returning();
+
+      // Notify the partner that the incident status changed
+      const partnerUserRows = await db
+        .select({ userId: partnerUsers.userId })
+        .from(partnerUsers)
+        .where(and(
+          eq(partnerUsers.partnerId, existing.partnerId),
+          eq(partnerUsers.isActive, true),
+          inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager"]),
+        ));
+      for (const pu of partnerUserRows) {
+        db.insert(inAppNotifications).values({
+          userId: pu.userId,
+          type: "new_message",
+          title: `Incident Update: ${existing.title.slice(0, 50)}`,
+          message: `Status changed to ${status ?? existing.status}`,
+          bookingId: existing.bookingId,
+          actionUrl: `/partner/incidents`,
+          isRead: false,
+        }).catch(() => {});
+      }
+
+      await logAudit(existing.partnerId, adminUser.id, "incident.status_updated", "partner_incident", existing.id, status);
+      res.json(updated);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Admin] incident update error:", err);
+      res.status(500).json({ error: "Failed to update incident" });
     }
-
-    const [updated] = await db.update(partnerIncidents).set(update).where(eq(partnerIncidents.id, req.params.id)).returning();
-
-    // Notify the partner that the incident status changed
-    const partnerUserRows = await db
-      .select({ userId: partnerUsers.userId })
-      .from(partnerUsers)
-      .where(and(
-        eq(partnerUsers.partnerId, existing.partnerId),
-        eq(partnerUsers.isActive, true),
-        inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager"]),
-      ));
-    for (const pu of partnerUserRows) {
-      db.insert(inAppNotifications).values({
-        userId: pu.userId,
-        type: "new_message",
-        title: `Incident Update: ${existing.title.slice(0, 50)}`,
-        message: `Status changed to ${status ?? existing.status}`,
-        bookingId: existing.bookingId,
-        actionUrl: `/partner/incidents`,
-        isRead: false,
-      }).catch(() => {});
-    }
-
-    await logAudit(existing.partnerId, adminUser.id, "incident.status_updated", "partner_incident", existing.id, status);
-    res.json(updated);
   });
 
   // ============================================================
@@ -2517,81 +2632,96 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/admin/partners/:id/messages — fetch full thread
   app.get("/api/admin/partners/:id/messages", requireAdminAuth, async (req: Request, res: Response) => {
-    const adminUser = (req as any).adminUser;
-    const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
-    if (!partner) return res.status(404).json({ error: "Partner not found" });
+    try {
+      const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
 
-    const msgs = await db
-      .select({
-        id: partnerDirectMessages.id,
-        partnerId: partnerDirectMessages.partnerId,
-        senderId: partnerDirectMessages.senderId,
-        senderRole: partnerDirectMessages.senderRole,
-        text: partnerDirectMessages.text,
-        createdAt: partnerDirectMessages.createdAt,
-        readAt: partnerDirectMessages.readAt,
-        senderName: users.name,
-      })
-      .from(partnerDirectMessages)
-      .innerJoin(users, eq(users.id, partnerDirectMessages.senderId))
-      .where(eq(partnerDirectMessages.partnerId, partner.id))
-      .orderBy(asc(partnerDirectMessages.createdAt));
+      const msgs = await db
+        .select({
+          id: partnerDirectMessages.id,
+          partnerId: partnerDirectMessages.partnerId,
+          senderId: partnerDirectMessages.senderId,
+          senderRole: partnerDirectMessages.senderRole,
+          text: partnerDirectMessages.text,
+          createdAt: partnerDirectMessages.createdAt,
+          readAt: partnerDirectMessages.readAt,
+          senderName: users.name,
+        })
+        .from(partnerDirectMessages)
+        .innerJoin(users, eq(users.id, partnerDirectMessages.senderId))
+        .where(eq(partnerDirectMessages.partnerId, partner.id))
+        .orderBy(asc(partnerDirectMessages.createdAt));
 
-    res.json(msgs);
+      res.json(msgs);
+    } catch (err) {
+      console.error("[Admin] partner messages get error:", err);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
   });
 
   // POST /api/admin/partners/:id/messages — admin sends a message to partner
   app.post("/api/admin/partners/:id/messages", requireAdminAuth, async (req: Request, res: Response) => {
-    const adminUser = (req as any).adminUser;
-    const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
-    if (!partner) return res.status(404).json({ error: "Partner not found" });
+    try {
+      const adminUser = (req as any).adminUser;
+      const [partner] = await db.select().from(partners).where(eq(partners.id, req.params.id)).limit(1);
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
 
-    const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+      const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
 
-    const [msg] = await db.insert(partnerDirectMessages).values({
-      partnerId: partner.id,
-      senderId: adminUser.id,
-      senderRole: "admin",
-      text,
-    }).returning();
+      const [msg] = await db.insert(partnerDirectMessages).values({
+        partnerId: partner.id,
+        senderId: adminUser.id,
+        senderRole: "admin",
+        text,
+      }).returning();
 
-    // Notify all active partner portal users
-    const puRows = await db
-      .select({ userId: partnerUsers.userId })
-      .from(partnerUsers)
-      .where(and(
-        eq(partnerUsers.partnerId, partner.id),
-        eq(partnerUsers.isActive, true),
-        inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager", "partner_dispatcher"]),
-      ));
+      // Notify all active partner portal users
+      const puRows = await db
+        .select({ userId: partnerUsers.userId })
+        .from(partnerUsers)
+        .where(and(
+          eq(partnerUsers.partnerId, partner.id),
+          eq(partnerUsers.isActive, true),
+          inArray(partnerUsers.partnerRole, ["partner_admin", "partner_ops_manager", "partner_dispatcher"]),
+        ));
 
-    const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
-    for (const pu of puRows) {
-      db.insert(inAppNotifications).values({
-        userId: pu.userId,
-        type: "new_message",
-        title: `Message from LervIT Admin`,
-        message: preview,
-        actionUrl: `/partner/messages`,
-        isRead: false,
-      }).catch(e => console.error("[admin→partner notify]", e));
+      const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
+      for (const pu of puRows) {
+        db.insert(inAppNotifications).values({
+          userId: pu.userId,
+          type: "new_message",
+          title: `Message from LervIT Admin`,
+          message: preview,
+          actionUrl: `/partner/messages`,
+          isRead: false,
+        }).catch(e => console.error("[admin→partner notify]", e));
+      }
+
+      res.json({ ...msg, senderName: adminUser.name });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Admin] partner messages post error:", err);
+      res.status(500).json({ error: "Failed to send message" });
     }
-
-    res.json({ ...msg, senderName: adminUser.name });
   });
 
   // POST /api/admin/partners/:id/messages/mark-read — admin marks partner replies as read
   app.post("/api/admin/partners/:id/messages/mark-read", requireAdminAuth, async (req: Request, res: Response) => {
-    const adminUser = (req as any).adminUser;
-    await db
-      .update(partnerDirectMessages)
-      .set({ readAt: new Date() })
-      .where(and(
-        eq(partnerDirectMessages.partnerId, req.params.id),
-        isNull(partnerDirectMessages.readAt),
-        ne(partnerDirectMessages.senderId, adminUser.id),
-      ));
-    res.json({ ok: true });
+    try {
+      const adminUser = (req as any).adminUser;
+      await db
+        .update(partnerDirectMessages)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(partnerDirectMessages.partnerId, req.params.id),
+          isNull(partnerDirectMessages.readAt),
+          ne(partnerDirectMessages.senderId, adminUser.id),
+        ));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[Admin] mark messages read error:", err);
+      res.status(500).json({ error: "Failed to mark messages as read" });
+    }
   });
 
   // ============================================================
@@ -2600,131 +2730,145 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/messages — list all booking conversations for this partner
   app.get("/api/partner/messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    const partnerBookingRows = await db.select({
-      id: bookings.id,
-      pickupAddress: bookings.pickupAddress,
-      dropoffAddress: bookings.dropoffAddress,
-      preferredDate: bookings.preferredDate,
-      status: bookings.status,
-      enterpriseStatus: bookings.enterpriseStatus,
-      customerId: bookings.customerId,
-    }).from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
+      const partnerBookingRows = await db.select({
+        id: bookings.id,
+        pickupAddress: bookings.pickupAddress,
+        dropoffAddress: bookings.dropoffAddress,
+        preferredDate: bookings.preferredDate,
+        status: bookings.status,
+        enterpriseStatus: bookings.enterpriseStatus,
+        customerId: bookings.customerId,
+      }).from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
 
-    if (!partnerBookingRows.length) return res.json([]);
+      if (!partnerBookingRows.length) return res.json([]);
 
-    const bookingIds = partnerBookingRows.map(b => b.id);
+      const bookingIds = partnerBookingRows.map(b => b.id);
 
-    const allMessages = await db.select().from(messages)
-      .where(inArray(messages.bookingId, bookingIds))
-      .orderBy(desc(messages.createdAt));
+      const allMessages = await db.select().from(messages)
+        .where(inArray(messages.bookingId, bookingIds))
+        .orderBy(desc(messages.createdAt));
 
-    if (!allMessages.length) return res.json([]);
+      if (!allMessages.length) return res.json([]);
 
-    // Identify partner user IDs so we can flag incoming (customer) messages
-    const partnerUserRows = await db.select({ userId: partnerUsers.userId })
-      .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
-    const partnerUserIds = new Set(partnerUserRows.map(r => r.userId));
+      // Identify partner user IDs so we can flag incoming (customer) messages
+      const partnerUserRows = await db.select({ userId: partnerUsers.userId })
+        .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
+      const partnerUserIds = new Set(partnerUserRows.map(r => r.userId));
 
-    // Group messages by booking
-    type ConvEntry = { lastMessage: typeof allMessages[0]; unreadCount: number };
-    const convMap = new Map<string, ConvEntry>();
-    for (const msg of allMessages) {
-      if (!convMap.has(msg.bookingId)) {
-        convMap.set(msg.bookingId, { lastMessage: msg, unreadCount: 0 });
+      // Group messages by booking
+      type ConvEntry = { lastMessage: typeof allMessages[0]; unreadCount: number };
+      const convMap = new Map<string, ConvEntry>();
+      for (const msg of allMessages) {
+        if (!convMap.has(msg.bookingId)) {
+          convMap.set(msg.bookingId, { lastMessage: msg, unreadCount: 0 });
+        }
+        if (!partnerUserIds.has(msg.senderId) && !msg.readAt) {
+          convMap.get(msg.bookingId)!.unreadCount++;
+        }
       }
-      if (!partnerUserIds.has(msg.senderId) && !msg.readAt) {
-        convMap.get(msg.bookingId)!.unreadCount++;
-      }
+
+      // Fetch customer names
+      const customerIds = Array.from(new Set(partnerBookingRows.map(b => b.customerId)));
+      const customerRows = await db.select({ id: users.id, name: users.name })
+        .from(users).where(inArray(users.id, customerIds));
+      const customerMap = Object.fromEntries(customerRows.map(u => [u.id, u.name]));
+
+      // Build conversation list (only bookings with messages)
+      const conversations = partnerBookingRows
+        .filter(b => convMap.has(b.id))
+        .map(b => ({
+          bookingId: b.id,
+          booking: b,
+          customerName: customerMap[b.customerId] || "Customer",
+          lastMessage: convMap.get(b.id)!.lastMessage,
+          unreadCount: convMap.get(b.id)!.unreadCount,
+        }))
+        .sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
+
+      res.json(conversations);
+    } catch (err) {
+      console.error("[Partner] messages list error:", err);
+      res.status(500).json({ error: "Failed to fetch conversations" });
     }
-
-    // Fetch customer names
-    const customerIds = [...new Set(partnerBookingRows.map(b => b.customerId))];
-    const customerRows = await db.select({ id: users.id, name: users.name })
-      .from(users).where(inArray(users.id, customerIds));
-    const customerMap = Object.fromEntries(customerRows.map(u => [u.id, u.name]));
-
-    // Build conversation list (only bookings with messages)
-    const conversations = partnerBookingRows
-      .filter(b => convMap.has(b.id))
-      .map(b => ({
-        bookingId: b.id,
-        booking: b,
-        customerName: customerMap[b.customerId] || "Customer",
-        lastMessage: convMap.get(b.id)!.lastMessage,
-        unreadCount: convMap.get(b.id)!.unreadCount,
-      }))
-      .sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
-
-    res.json(conversations);
   });
 
   // GET /api/partner/messages/unread-count — total unread for badge
   app.get("/api/partner/messages/unread-count", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    const partnerBookingIds = await db.select({ id: bookings.id })
-      .from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
-    if (!partnerBookingIds.length) return res.json({ count: 0 });
+      const partnerBookingIds = await db.select({ id: bookings.id })
+        .from(bookings).where(eq(bookings.enterprisePartnerId, partner.id));
+      if (!partnerBookingIds.length) return res.json({ count: 0 });
 
-    const ids = partnerBookingIds.map(b => b.id);
-    const partnerUserRows = await db.select({ userId: partnerUsers.userId })
-      .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
-    const partnerUserIds = partnerUserRows.map(r => r.userId);
+      const ids = partnerBookingIds.map(b => b.id);
+      const partnerUserRows = await db.select({ userId: partnerUsers.userId })
+        .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
+      const partnerUserIds = partnerUserRows.map(r => r.userId);
 
-    const unread = await db.select({ id: messages.id })
-      .from(messages)
-      .where(and(
-        inArray(messages.bookingId, ids),
-        isNull(messages.readAt),
-        partnerUserIds.length > 0 ? sql`${messages.senderId} NOT IN (${sql.join(partnerUserIds.map(id => sql`${id}`), sql`, `)})` : sql`true`,
-      ));
+      const unread = await db.select({ id: messages.id })
+        .from(messages)
+        .where(and(
+          inArray(messages.bookingId, ids),
+          isNull(messages.readAt),
+          partnerUserIds.length > 0 ? sql`${messages.senderId} NOT IN (${sql.join(partnerUserIds.map(id => sql`${id}`), sql`, `)})` : sql`true`,
+        ));
 
-    res.json({ count: unread.length });
+      res.json({ count: unread.length });
+    } catch (err) {
+      console.error("[Partner] messages unread count error:", err);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
   });
 
   // GET /api/partner/bookings/:id/messages — get thread for a booking
   app.get("/api/partner/bookings/:id/messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    const msgs = await db.select().from(messages)
-      .where(eq(messages.bookingId, booking.id))
-      .orderBy(asc(messages.createdAt));
+      const msgs = await db.select().from(messages)
+        .where(eq(messages.bookingId, booking.id))
+        .orderBy(asc(messages.createdAt));
 
-    const userIds = [...new Set(msgs.map(m => m.senderId))];
-    const senderRows = userIds.length
-      ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, userIds))
-      : [];
-    const senderMap = Object.fromEntries(senderRows.map(u => [u.id, u.name]));
+      const userIds = Array.from(new Set(msgs.map(m => m.senderId)));
+      const senderRows = userIds.length
+        ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, userIds))
+        : [];
+      const senderMap = Object.fromEntries(senderRows.map(u => [u.id, u.name]));
 
-    // Get partner user ids to label messages
-    const partnerUserRows = await db.select({ userId: partnerUsers.userId })
-      .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
-    const partnerUserIds = new Set(partnerUserRows.map(r => r.userId));
+      // Get partner user ids to label messages
+      const partnerUserRows = await db.select({ userId: partnerUsers.userId })
+        .from(partnerUsers).where(eq(partnerUsers.partnerId, partner.id));
+      const partnerUserIds = new Set(partnerUserRows.map(r => r.userId));
 
-    res.json(msgs.map(m => ({
-      ...m,
-      senderName: senderMap[m.senderId] || "Unknown",
-      isPartnerMessage: partnerUserIds.has(m.senderId),
-    })));
+      res.json(msgs.map(m => ({
+        ...m,
+        senderName: senderMap[m.senderId] || "Unknown",
+        isPartnerMessage: partnerUserIds.has(m.senderId),
+      })));
+    } catch (err) {
+      console.error("[Partner] booking messages get error:", err);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
   });
 
   // POST /api/partner/bookings/:id/messages — send a message as partner
   app.post("/api/partner/bookings/:id/messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
-
-    const [booking] = await db.select().from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-
     try {
+      const { partner, user } = (req as any).partnerCtx;
+
+      const [booking] = await db.select().from(bookings)
+        .where(and(eq(bookings.id, req.params.id), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
       const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
 
       const [msg] = await db.insert(messages).values({
@@ -2756,111 +2900,137 @@ export function registerPartnerRoutes(app: Express) {
 
   // GET /api/partner/direct-messages — LervIT admin thread for this partner
   app.get("/api/partner/direct-messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    const msgs = await db
-      .select({
-        id: partnerDirectMessages.id,
-        partnerId: partnerDirectMessages.partnerId,
-        senderId: partnerDirectMessages.senderId,
-        senderRole: partnerDirectMessages.senderRole,
-        text: partnerDirectMessages.text,
-        createdAt: partnerDirectMessages.createdAt,
-        readAt: partnerDirectMessages.readAt,
-        senderName: users.name,
-      })
-      .from(partnerDirectMessages)
-      .innerJoin(users, eq(users.id, partnerDirectMessages.senderId))
-      .where(eq(partnerDirectMessages.partnerId, partner.id))
-      .orderBy(asc(partnerDirectMessages.createdAt));
+      const msgs = await db
+        .select({
+          id: partnerDirectMessages.id,
+          partnerId: partnerDirectMessages.partnerId,
+          senderId: partnerDirectMessages.senderId,
+          senderRole: partnerDirectMessages.senderRole,
+          text: partnerDirectMessages.text,
+          createdAt: partnerDirectMessages.createdAt,
+          readAt: partnerDirectMessages.readAt,
+          senderName: users.name,
+        })
+        .from(partnerDirectMessages)
+        .innerJoin(users, eq(users.id, partnerDirectMessages.senderId))
+        .where(eq(partnerDirectMessages.partnerId, partner.id))
+        .orderBy(asc(partnerDirectMessages.createdAt));
 
-    res.json(msgs);
+      res.json(msgs);
+    } catch (err) {
+      console.error("[Partner] direct messages get error:", err);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
   });
 
   // GET /api/partner/direct-messages/unread-count
   app.get("/api/partner/direct-messages/unread-count", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    const [row] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(partnerDirectMessages)
-      .where(and(
-        eq(partnerDirectMessages.partnerId, partner.id),
-        eq(partnerDirectMessages.senderRole, "admin"),
-        isNull(partnerDirectMessages.readAt),
-      ));
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(partnerDirectMessages)
+        .where(and(
+          eq(partnerDirectMessages.partnerId, partner.id),
+          eq(partnerDirectMessages.senderRole, "admin"),
+          isNull(partnerDirectMessages.readAt),
+        ));
 
-    res.json({ count: row?.count ?? 0 });
+      res.json({ count: row?.count ?? 0 });
+    } catch (err) {
+      console.error("[Partner] direct messages unread count error:", err);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
   });
 
   // POST /api/partner/direct-messages — partner sends a reply to admin
   app.post("/api/partner/direct-messages", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
+    try {
+      const { partner, user } = (req as any).partnerCtx;
 
-    const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+      const { text } = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
 
-    const [msg] = await db.insert(partnerDirectMessages).values({
-      partnerId: partner.id,
-      senderId: user.id,
-      senderRole: "partner",
-      text,
-    }).returning();
+      const [msg] = await db.insert(partnerDirectMessages).values({
+        partnerId: partner.id,
+        senderId: user.id,
+        senderRole: "partner",
+        text,
+      }).returning();
 
-    // Notify all admin users
-    const adminRows = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.role, "admin"));
+      // Notify all admin users
+      const adminRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.role, "admin"));
 
-    const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
-    for (const admin of adminRows) {
-      db.insert(inAppNotifications).values({
-        userId: admin.id,
-        type: "new_message",
-        title: `Reply from ${partner.name}`,
-        message: preview,
-        actionUrl: `/admin/partners/${partner.id}`,
-        isRead: false,
-      }).catch(e => console.error("[partner→admin notify]", e));
+      const preview = text.length > 80 ? text.slice(0, 80) + "..." : text;
+      for (const admin of adminRows) {
+        db.insert(inAppNotifications).values({
+          userId: admin.id,
+          type: "new_message",
+          title: `Reply from ${partner.name}`,
+          message: preview,
+          actionUrl: `/admin/partners/${partner.id}`,
+          isRead: false,
+        }).catch(e => console.error("[partner→admin notify]", e));
+      }
+
+      res.json({ ...msg, senderName: user.name });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message });
+      console.error("[Partner] direct message send error:", err);
+      res.status(500).json({ error: "Failed to send message" });
     }
-
-    res.json({ ...msg, senderName: user.name });
   });
 
   // POST /api/partner/direct-messages/mark-read — partner marks admin messages as read
   app.post("/api/partner/direct-messages/mark-read", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner } = (req as any).partnerCtx;
+    try {
+      const { partner } = (req as any).partnerCtx;
 
-    await db
-      .update(partnerDirectMessages)
-      .set({ readAt: new Date() })
-      .where(and(
-        eq(partnerDirectMessages.partnerId, partner.id),
-        eq(partnerDirectMessages.senderRole, "admin"),
-        isNull(partnerDirectMessages.readAt),
-      ));
+      await db
+        .update(partnerDirectMessages)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(partnerDirectMessages.partnerId, partner.id),
+          eq(partnerDirectMessages.senderRole, "admin"),
+          isNull(partnerDirectMessages.readAt),
+        ));
 
-    res.json({ ok: true });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[Partner] direct messages mark-read error:", err);
+      res.status(500).json({ error: "Failed to mark messages as read" });
+    }
   });
 
   // POST /api/partner/messages/:bookingId/mark-read — mark incoming messages as read
   app.post("/api/partner/messages/:bookingId/mark-read", requirePartnerAuth(["partner_admin", "partner_dispatcher", "partner_ops_manager", "partner_viewer"]), async (req: Request, res: Response) => {
-    const { partner, user } = (req as any).partnerCtx;
+    try {
+      const { partner, user } = (req as any).partnerCtx;
 
-    const [booking] = await db.select({ id: bookings.id })
-      .from(bookings)
-      .where(and(eq(bookings.id, req.params.bookingId), eq(bookings.enterprisePartnerId, partner.id)))
-      .limit(1);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
+      const [booking] = await db.select({ id: bookings.id })
+        .from(bookings)
+        .where(and(eq(bookings.id, req.params.bookingId), eq(bookings.enterprisePartnerId, partner.id)))
+        .limit(1);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    await db.update(messages)
-      .set({ readAt: new Date() })
-      .where(and(
-        eq(messages.bookingId, booking.id),
-        isNull(messages.readAt),
-        ne(messages.senderId, user.id),
-      ));
+      await db.update(messages)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(messages.bookingId, booking.id),
+          isNull(messages.readAt),
+          ne(messages.senderId, user.id),
+        ));
 
-    res.json({ ok: true });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[Partner] messages mark-read error:", err);
+      res.status(500).json({ error: "Failed to mark messages as read" });
+    }
   });
 }

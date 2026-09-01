@@ -39,8 +39,9 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { moverWebSocket, customerWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
+import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
+import { registerVoiceRoutes } from "./voice-routes";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -58,6 +59,7 @@ import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stri
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
 import he from "he";
+import heicConvert from "heic-convert";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -317,7 +319,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/objects/:objectPath(*)", async (req: Request, res: Response) => {
     const objectStorageService = new ObjectStorageService();
     try {
-      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      // Strip query params (e.g. ?f=jpg cache-buster) before looking up the file
+      const objectPath = req.path.split("?")[0];
+      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+      const [metadata] = await objectFile.getMetadata();
+      const contentType: string = metadata.contentType || "application/octet-stream";
+
+      // HEIC/HEIF images are not supported by Chrome/Firefox — convert to JPEG on the fly
+      const isHeic = contentType === "image/heic" || contentType === "image/heif"
+        || req.path.toLowerCase().endsWith(".heic") || req.path.toLowerCase().endsWith(".heif");
+
+      if (isHeic) {
+        const chunks: Buffer[] = [];
+        const stream = objectFile.createReadStream();
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("error", (err) => {
+          console.error("HEIC stream error:", err);
+          if (!res.headersSent) res.sendStatus(500);
+        });
+        stream.on("end", async () => {
+          try {
+            const inputBuffer = Buffer.concat(chunks);
+            const jpeg = await heicConvert({ buffer: inputBuffer, format: "JPEG", quality: 0.9 });
+            const jpegBuffer = Buffer.from(jpeg);
+            res.set({
+              "Content-Type": "image/jpeg",
+              "Content-Length": jpegBuffer.length,
+              "Cache-Control": "public, max-age=3600",
+            });
+            res.end(jpegBuffer);
+          } catch (convertErr) {
+            console.error("HEIC→JPEG conversion error:", convertErr);
+            if (!res.headersSent) res.sendStatus(500);
+          }
+        });
+        return;
+      }
+
       objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error fetching object:", error);
@@ -449,7 +487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "API configuration error" });
       }
 
-      async function geocode(resultType?: string): Promise<string | null> {
+      const geocode = async (resultType?: string): Promise<string | null> => {
         const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
         url.searchParams.append('latlng', `${lat},${lng}`);
         url.searchParams.append('key', apiKey!);
@@ -474,6 +512,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // ===== DEV / TEST HELPERS (development-only) =====
+  // These endpoints are registered ONLY when NODE_ENV === 'development'.
+  // They must never be reachable in staging or production builds.
+  // They exist solely to make e2e test setup deterministic without requiring
+  // real phone-OTP / email verification flows.
+  if (process.env.NODE_ENV === 'development') {
+    /**
+     * POST /api/dev/create-test-user
+     * Creates a customer account that is already phone- and email-verified.
+     * Body: { name, email, password, phone? }
+     * Returns: { id, email, name, role }
+     */
+    app.post("/api/dev/create-test-user", async (req: Request, res: Response) => {
+      try {
+        const schema = z.object({
+          name: z.string().min(1),
+          email: z.string().email(),
+          password: z.string().min(6),
+          phone: z.string().optional(),
+        });
+        const { name, email, password, phone } = validateBody(schema, req.body);
+
+        // Idempotent – return existing user if already registered
+        const existing = await storage.getUserByEmail(email);
+        if (existing) {
+          return res.json({ id: existing.id, email: existing.email, name: existing.name, role: existing.role });
+        }
+
+        const hashedPassword = await hashPassword(password);
+
+        // Generate referral code
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let referralCode = '';
+        for (let i = 0; i < 6; i++) referralCode += chars[Math.floor(Math.random() * chars.length)];
+
+        const user = await storage.createUser({
+          name,
+          email,
+          password: hashedPassword,
+          role: 'customer',
+          phone: phone || '+14035550000',
+          phoneVerified: true,
+          referralCode,
+        });
+
+        // Mark email as verified immediately so payment creation is not blocked
+        await db.update(usersTable)
+          .set({ emailVerified: true, verificationToken: null, verificationTokenExpiry: null })
+          .where(eq(usersTable.id, user.id));
+
+        res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+      } catch (err) {
+        console.error('[dev] create-test-user error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+
+    /**
+     * POST /api/dev/create-test-booking
+     * Creates a minimal booking owned by the authenticated user.
+     * Requires a logged-in session (call /api/auth/login first).
+     */
+    app.post("/api/dev/create-test-booking", async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+
+        const booking = await storage.createBooking({
+          customerId: user.id,
+          pickupAddress: '123 Test Pickup St, Calgary, AB',
+          dropoffAddress: '456 Test Dropoff Ave, Calgary, AB',
+          pickupLat: '51.0447',
+          pickupLng: '-114.0719',
+          dropoffLat: '51.0447',
+          dropoffLng: '-114.0819',
+          preferredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          loadSize: 'small',
+          numberOfMovers: 1,
+          price: '150.00',
+          status: 'pending',
+          paymentStatus: 'pending',
+          pickupDifficulty: 'easy',
+          dropoffDifficulty: 'easy',
+          heavyItem: false,
+          distance: '5',
+        } as any);
+
+        res.status(201).json({ id: booking.id });
+      } catch (err) {
+        console.error('[dev] create-test-booking error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+
+    /**
+     * GET /api/dev/payment-intent/:piId
+     * Retrieves a Stripe PaymentIntent from the test-mode Stripe API.
+     * Used by e2e tests to assert that payment_method_types are correctly set.
+     * Requires authenticated session (the PI must belong to the user's booking).
+     */
+    app.get("/api/dev/payment-intent/:piId", async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const { piId } = req.params;
+        if (!piId || !piId.startsWith('pi_')) {
+          return res.status(400).json({ error: 'Invalid payment intent id' });
+        }
+        const pi = await stripe.paymentIntents.retrieve(piId);
+        res.json({
+          id: pi.id,
+          status: pi.status,
+          currency: pi.currency,
+          amount: pi.amount,
+          payment_method_types: pi.payment_method_types,
+        });
+      } catch (err) {
+        console.error('[dev] get payment-intent error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+
+    /**
+     * POST /api/dev/confirm-test-payment-intent
+     * Confirms a test-mode Stripe PaymentIntent using Stripe's built-in test
+     * card payment method (pm_card_visa) so the real /confirm-payment route can
+     * subsequently verify the PI is in 'succeeded' state.
+     * Body: { paymentIntentId }
+     * Requires authenticated session.
+     */
+    app.post("/api/dev/confirm-test-payment-intent", async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const schema = z.object({ paymentIntentId: z.string().startsWith('pi_') });
+        const { paymentIntentId } = validateBody(schema, req.body);
+
+        // Verify that the PI is real and belongs to the test environment
+        const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+        if (pi.status === 'succeeded') {
+          return res.json({ status: pi.status, paymentIntentId: pi.id });
+        }
+
+        // Confirm using Stripe's test card (pm_card_visa always succeeds in test mode)
+        const confirmed = await stripe.paymentIntents.confirm(paymentIntentId, {
+          payment_method: 'pm_card_visa',
+          return_url: 'http://localhost:5000/my-bookings',
+        } as any);
+
+        res.json({ status: confirmed.status, paymentIntentId: confirmed.id });
+      } catch (err) {
+        console.error('[dev] confirm-test-payment-intent error:', err);
+        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    });
+  }
 
   // ===== AUTH ROUTES =====
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
@@ -1663,7 +1856,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           )
         );
 
-      // Enrich with booking details for display
+      // Enrich with booking details for display.
+      // Show the full booked amount charged to the customer, not the post-commission payout.
       const enriched = await Promise.all(
         pendingNotifs.map(async (n) => {
           const booking = await storage.getBooking(n.bookingId);
@@ -1671,7 +1865,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...n,
             pickupAddress: booking?.pickupAddress || '',
             dropoffAddress: booking?.dropoffAddress || '',
-            price: n.estimatedEarnings,
+            price: booking?.price || n.estimatedEarnings,
           };
         })
       );
@@ -1886,21 +2080,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (matched.length > 0) {
             const expiresAt = calculateExpiryTime(10);
+            // Display the full booked amount to the mover (not the post-commission payout).
+            const bookedAmount = parseFloat(pendingBooking.price || '0');
             await storage.createJobNotification({
               bookingId: pendingBooking.id, moverId: mover.id,
               distanceToPickup: toDecimalString(matched[0].distanceToPickup),
-              estimatedEarnings: toDecimalString(matched[0].estimatedEarnings),
+              estimatedEarnings: toDecimalString(bookedAmount),
               status: 'pending', expiresAt,
             });
             moverWebSocket.notifyMover(mover.userId, {
               type: 'job_notification', bookingId: pendingBooking.id,
               pickupAddress: pendingBooking.pickupAddress || '', dropoffAddress: pendingBooking.dropoffAddress || '',
-              price: toDecimalString(matched[0].estimatedEarnings),
+              price: toDecimalString(bookedAmount),
               estimatedTime: `${Math.round(matched[0].distanceToPickup)} km`, expiresAt,
             });
             const moverUser = await storage.getUser(mover.userId);
             if (moverUser) {
-              await notificationService.sendJobAssignment(moverUser, pendingBooking, matched[0].estimatedEarnings.toFixed(2)).catch(() => {});
+              await notificationService.sendJobAssignment(moverUser, pendingBooking, bookedAmount.toFixed(2)).catch(() => {});
             }
             console.log(`[Late Dispatch] Sent pending booking ${pendingBooking.id} to newly-online mover ${mover.id}`);
           }
@@ -3327,7 +3523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const normalizedCode = code.trim().toUpperCase();
 
-      if (normalizedCode !== "LERVIT20") {
+      if (normalizedCode !== "LERVIT10") {
         return res.status(200).json({ valid: false, message: "Invalid promo code" });
       }
 
@@ -3336,17 +3532,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(200).json({ valid: false, message: "User not found" });
       }
 
-      if ((latestUser.promoUsesCount || 0) >= 2) {
-        return res.status(200).json({ valid: false, message: "You've already used this promo code on 2 moves" });
+      if ((latestUser.promoUsesCount || 0) >= 1) {
+        return res.status(200).json({ valid: false, message: "You've already used this promo code on your first Move" });
       }
 
-      const usesRemaining = 2 - (latestUser.promoUsesCount || 0);
+      const usesRemaining = 1 - (latestUser.promoUsesCount || 0);
       return res.status(200).json({
         valid: true,
-        code: "LERVIT20",
-        discountPercent: 20,
+        code: "LERVIT10",
+        discountPercent: 10,
         usesRemaining,
-        message: `20% off applied! ${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining.`
+        message: `10% off applied! Valid on your first Move.`
       });
     } catch (error: any) {
       console.error("Promo validation error:", error);
@@ -3463,13 +3659,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // NOTE: Re-fetches latest user state above to minimize race conditions.
       // For high-concurrency scenarios, consider adding row-level locking.
       const submittedPromo = bookingData.promoCode?.trim().toUpperCase();
-      if (submittedPromo === "LERVIT20" && latestUser && (latestUser.promoUsesCount || 0) < 2) {
-        promoCode = "LERVIT20";
-        discountPercent = 20;
-        discountAmount = Math.round(priceBreakdown.totalCost * 0.20 * 100) / 100;
+      if (submittedPromo === "LERVIT10" && latestUser && (latestUser.promoUsesCount || 0) < 1) {
+        promoCode = "LERVIT10";
+        discountPercent = 10;
+        discountAmount = Math.round(priceBreakdown.totalCost * 0.10 * 100) / 100;
         finalPrice = priceBreakdown.totalCost - discountAmount;
-        const usesRemaining = 2 - (latestUser.promoUsesCount || 0) - 1;
-        discountReason = `LERVIT20 promo - 20% off (${usesRemaining} use${usesRemaining === 1 ? '' : 's'} remaining)`;
+        discountReason = `LERVIT10 promo - 10% off (first Move discount)`;
         // Platform absorbs discount: mover gets 85% of ORIGINAL price
         // Stripe auto-payout gives mover 85% of discounted price
         // Balance owed = 85% of original - 85% of discounted = 85% * discountAmount
@@ -3609,13 +3804,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
-      // For customers, get all their reviews to check which bookings have been reviewed
+      // For customers, get all their reviews and surveys to check which bookings have been reviewed/surveyed
       let reviewedBookingIds = new Set<string>();
+      let surveyedBookingIds = new Set<string>();
       if (user.role === "customer") {
         const customerReviews = await db.select({ bookingId: reviews.bookingId })
           .from(reviews)
           .where(eq(reviews.customerId, user.id));
         reviewedBookingIds = new Set(customerReviews.map(r => r.bookingId));
+
+        const customerSurveys = await db.select({ bookingId: feedbackSurveys.bookingId })
+          .from(feedbackSurveys)
+          .where(eq(feedbackSurveys.userId, user.id));
+        surveyedBookingIds = new Set(customerSurveys.map(s => s.bookingId));
       }
       
       // For movers, look up distanceToPickup from job notifications
@@ -3722,6 +3923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...booking,
             distanceToPickup,
             hasReview: reviewedBookingIds.has(booking.id),
+            hasSurvey: surveyedBookingIds.has(booking.id),
             enterprisePartnerName,
             partnerAvgRating: driverAvgRating,
             customer: customer ? { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone } : null,
@@ -4164,6 +4366,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mover cancels an accepted (confirmed) booking and triggers re-dispatch
+  app.post("/api/bookings/:id/mover-cancel", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.id;
+      const { reason } = req.body as { reason?: string };
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+      // Only the assigned mover can do this
+      const mover = await storage.getMoverByUserId(user.id);
+      if (!mover || booking.moverId !== mover.id) {
+        return res.status(403).json({ error: "You are not assigned to this booking" });
+      }
+
+      // Only allowed before the trip has started (confirmed status only)
+      if (booking.status !== "confirmed") {
+        return res.status(400).json({ error: "You can only cancel before the trip has started" });
+      }
+
+      logEvent.booking('mover_cancelled_confirmed_job', { bookingId, moverId: mover.id, reason });
+
+      // Detach the mover and reset to pending so it can be re-dispatched
+      await storage.updateBooking(bookingId, {
+        moverId: null,
+        status: "pending",
+        preSelectedMoverId: null,
+      });
+
+      // Mark any active job notifications for this mover+booking as declined
+      await db
+        .update(jobNotifications)
+        .set({ status: 'declined', respondedAt: new Date() })
+        .where(
+          and(
+            eq(jobNotifications.bookingId, bookingId),
+            eq(jobNotifications.moverId, mover.id),
+          )
+        );
+
+      // Notify the customer
+      const customer = await storage.getUser(booking.customerId);
+      if (customer) {
+        await storage.createNotification({
+          userId: customer.id,
+          type: 'booking_update',
+          title: 'Your Mover Cancelled',
+          message: "Your mover had to cancel. We're finding another great mover nearby — hang tight!",
+          bookingId: booking.id,
+          actionUrl: '/my-bookings',
+          isRead: false,
+        });
+
+        // Email the customer
+        try {
+          await notificationService.sendEmail({
+            to: customer.email,
+            subject: "Update on your LervIT booking",
+            body: `<p>Hi ${customer.name},</p><p>Unfortunately, your mover had to cancel your upcoming booking. Don't worry — we're actively searching for another available mover in your area.</p><p>You'll receive a notification as soon as a new mover accepts your job. If you have any concerns, please contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+            type: 'booking_confirmation',
+          });
+        } catch (emailErr) {
+          logEvent.error('mover_cancel_customer_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId });
+        }
+      }
+
+      // Re-dispatch to other nearby movers (exclude the cancelling mover)
+      const refreshedBooking = await storage.getBooking(bookingId);
+      if (refreshedBooking) {
+        try {
+          const result = await dispatchJobToMovers(refreshedBooking, { excludeMoverId: mover.id });
+          logEvent.booking('mover_cancel_redispatch', { bookingId, moversNotified: result.dispatched });
+        } catch (dispatchErr) {
+          logEvent.error('mover_cancel_redispatch_failed', dispatchErr instanceof Error ? dispatchErr : new Error('dispatch error'), { bookingId });
+        }
+      }
+
+      res.json({ message: "Booking cancelled and job re-dispatched to other movers" });
+    } catch (error) {
+      logEvent.error('mover_cancel_job_error', error instanceof Error ? error : new Error('Unknown error'), { bookingId: req.params.id });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to cancel booking" });
+    }
+  });
+
   // Delete a failed/cancelled booking (customer only)
   app.delete("/api/bookings/:id", async (req: Request, res: Response) => {
     try {
@@ -4348,7 +4636,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updates.status = newStatus;
         
         // Skip validation for confirmed status (handled by job acceptance flow)
-        if (newStatus !== BOOKING_STATUSES.CONFIRMED && newStatus !== BOOKING_STATUSES.CANCELLED) {
+        if (newStatus === BOOKING_STATUSES.CANCELLED) {
+          // --- Customer cancellation: ownership, timing, refund, mover notification ---
+
+          // 1. Only the booking's customer (or an admin) can cancel
+          if (user.role !== 'admin' && booking.customerId !== user.id) {
+            return res.status(403).json({ error: "You are not authorized to cancel this booking" });
+          }
+
+          // 2. Block cancellation once the trip is physically in progress
+          const inProgressStatuses = [
+            BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+            BOOKING_STATUSES.LOADING,
+            BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
+            BOOKING_STATUSES.UNLOADING,
+          ];
+          if (inProgressStatuses.includes(booking.status as any)) {
+            return res.status(400).json({ error: "Cannot cancel a booking that is already in progress. Please contact support." });
+          }
+
+          // 3. Auto-issue Stripe refund if payment was captured
+          if (booking.stripePaymentIntentId && booking.paymentStatus === 'succeeded') {
+            try {
+              await stripe.refunds.create({
+                payment_intent: booking.stripePaymentIntentId,
+                reason: 'requested_by_customer',
+              });
+              (updates as any).paymentStatus = 'refunded';
+              logEvent.payment('auto_refund_on_customer_cancel', { bookingId: booking.id, intentId: booking.stripePaymentIntentId });
+            } catch (refundErr) {
+              logEvent.error('auto_refund_failed', refundErr instanceof Error ? refundErr : new Error('refund error'), { bookingId: booking.id });
+              return res.status(500).json({ error: "Failed to process your refund. Please contact support." });
+            }
+          } else if (booking.stripePaymentIntentId && booking.paymentStatus === 'pending') {
+            // Payment authorized but not yet captured — void the intent
+            try {
+              await stripe.paymentIntents.cancel(booking.stripePaymentIntentId);
+              (updates as any).paymentStatus = 'cancelled';
+            } catch (_) {
+              // Already cancelled or in non-cancellable state — safe to ignore
+            }
+          }
+
+          // 4. Notify the assigned mover (if any) that the customer cancelled
+          if (booking.moverId) {
+            try {
+              const cancelledMover = await storage.getMover(booking.moverId);
+              if (cancelledMover) {
+                const cancelledMoverUser = await storage.getUser(cancelledMover.userId);
+                await storage.createNotification({
+                  userId: cancelledMover.userId,
+                  type: 'booking_cancelled',
+                  title: 'Booking Cancelled by Customer',
+                  message: 'A customer has cancelled their booking. This job has been removed from your queue.',
+                  bookingId: booking.id,
+                });
+                if (cancelledMoverUser?.email) {
+                  await notificationService.sendEmail({
+                    to: cancelledMoverUser.email,
+                    subject: 'A booking has been cancelled',
+                    body: `<p>Hi ${cancelledMoverUser.name},</p><p>A customer has cancelled their upcoming booking. This job has been removed from your active jobs.</p><p>If you have any questions, contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+                    type: 'status_update',
+                  }).catch((emailErr: unknown) => {
+                    logEvent.error('mover_cancel_notify_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId: booking.id });
+                  });
+                }
+              }
+            } catch (notifyErr) {
+              logEvent.error('mover_cancel_notify_failed', notifyErr instanceof Error ? notifyErr : new Error('notify error'), { bookingId: booking.id });
+            }
+          }
+        } else if (newStatus !== BOOKING_STATUSES.CONFIRMED) {
           // Validate mover authorization for active status changes
           if (!booking.moverId) {
             console.log(`[Status Update] DENIED - No mover assigned. BookingId: ${booking.id}, UserId: ${user.id}, NewStatus: ${newStatus}`);
@@ -4723,9 +5081,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let finalPrice = priceBreakdown.totalCost;
       let moverBalanceOwed = 0;
       
-      if (existingBooking.promoCode === "LERVIT20") {
-        discountPercent = 20;
-        discountAmount = priceBreakdown.totalCost * 0.20;
+      if (existingBooking.promoCode === "LERVIT10") {
+        discountPercent = 10;
+        discountAmount = priceBreakdown.totalCost * 0.10;
         discountReason = existingBooking.discountReason;
         finalPrice = priceBreakdown.totalCost - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
@@ -4950,9 +5308,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bookingMoverId = booking.moverId || booking.preSelectedMoverId || '';
         
         // Build payment intent params - use grossAmountCents for consistent rounding
+        // FlexiPay: include Afterpay and Klarna for buy-now-pay-later (BNPL) at checkout.
+        // For destination charges (mover has connected account) we keep card-only because
+        // Afterpay/Klarna are not supported on destination charges in Stripe.
+        // For platform charges (mover not yet confirmed) BNPL is enabled.
+        const bnplPaymentMethods: Stripe.PaymentIntentCreateParams['payment_method_types'] =
+          moverAccount
+            ? ['card']
+            : ['card', 'afterpay_clearpay', 'klarna'];
+
         const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
           amount: grossAmountCents,
           currency: "cad",
+          payment_method_types: bnplPaymentMethods,
           customer: stripeCustomerId,
           receipt_email: user.email,
           metadata: {
@@ -6268,13 +6636,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const file of req.files as Express.Multer.File[]) {
         try {
           // Read the file from local disk (multer saves it temporarily)
-          const fileBuffer = fs.readFileSync(file.path);
-          
+          let fileBuffer = fs.readFileSync(file.path);
+          let { mimetype, originalname } = file;
+
+          // Convert HEIC/HEIF → JPEG at upload time so browsers can display them
+          const isHeic = mimetype === "image/heic" || mimetype === "image/heif"
+            || /\.(heic|heif)$/i.test(originalname);
+          if (isHeic) {
+            try {
+              const jpeg = await heicConvert({ buffer: fileBuffer, format: "JPEG", quality: 0.9 });
+              fileBuffer = Buffer.from(jpeg);
+              mimetype = "image/jpeg";
+              originalname = originalname.replace(/\.(heic|heif)$/i, ".jpg");
+            } catch (convertErr) {
+              console.error("HEIC upload conversion error:", convertErr);
+              // Fall through and upload as-is if conversion fails
+            }
+          }
+
           // Upload to cloud storage
           const cloudPath = await objectStorageService.uploadBuffer(
             fileBuffer,
-            file.originalname,
-            file.mimetype,
+            originalname,
+            mimetype,
             userId
           );
           
@@ -8480,7 +8864,7 @@ Respond with VALID JSON only:
         bookingId: bookingId,
         moverId: moverId,
         distanceToPickup: "0",
-        estimatedEarnings: ((parseFloat(booking.price || '0')) * 0.85).toFixed(2),
+        estimatedEarnings: (parseFloat(booking.price || '0')).toFixed(2),
         status: 'accepted',
         expiresAt: calculateExpiryTime(10080), // far future — admin assignments don't expire
       });
@@ -8818,7 +9202,6 @@ Respond with VALID JSON only:
               dimensionsWcm: result.dimensionsWcm.toString() as any,
               dimensionsHcm: result.dimensionsHcm.toString() as any,
               volumeCuft: result.volumeCuft.toString() as any,
-              estimatedPrice: result.estimatedPrice.toString() as any,
               handlingComplexity: result.handlingComplexity,
               vehicleType: result.vehicleType,
               recommendedMovers: result.recommendedMovers,
@@ -11638,8 +12021,34 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== ONE-TIME ADMIN PASSWORD RESET =====
+  // Only active when ADMIN_RESET_TOKEN env var is set. Remove after use.
+  app.post("/api/internal/reset-admin-password", async (req: Request, res: Response) => {
+    const token = process.env.ADMIN_RESET_TOKEN;
+    if (!token) return res.status(404).json({ error: "Not found" });
+    const provided = req.headers['x-reset-token'] as string | undefined;
+    if (!provided || provided !== token) return res.status(403).json({ error: "Forbidden" });
+    try {
+      const bcrypt = await import('bcryptjs');
+      const { newPassword } = req.body;
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+        return res.status(400).json({ error: "newPassword must be at least 8 characters" });
+      }
+      const hash = await bcrypt.hash(newPassword, 12);
+      const result = await db
+        .update(usersTable)
+        .set({ password: hash })
+        .where(and(eq(usersTable.role, 'admin'), eq(usersTable.email, 'admin12@lervit.com')));
+      return res.json({ ok: true, message: "Admin password updated. Remove ADMIN_RESET_TOKEN now." });
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to update password" });
+    }
+  });
+
   // Register enterprise partner portal routes
   registerPartnerRoutes(app);
+  // Isolated Telnyx voice routes; disabled safely unless voice env is configured.
+  registerVoiceRoutes(app);
 
   const httpServer = createServer(app);
   
@@ -11647,6 +12056,7 @@ Respond with VALID JSON only:
   moverWebSocket.initialize(httpServer);
   // Initialize WebSocket server for real-time customer notifications
   customerWebSocket.initialize(httpServer);
+  adminVoiceWebSocket.initialize(httpServer);
   
   return httpServer;
 }

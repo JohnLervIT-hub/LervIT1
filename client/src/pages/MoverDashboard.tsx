@@ -37,6 +37,12 @@ import { MoverWelcomeTutorial } from "@/components/MoverWelcomeTutorial";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { LocationPrompt } from "@/components/LocationPrompt";
 
+function toDisplayUrl(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes(".heic") || lower.includes(".heif")) return `${url}?f=jpg`;
+  return url;
+}
+
 function safeFormatDate(dateStr: string | null | undefined, fmt: string, fallback = "TBD"): string {
   if (!dateStr) return fallback;
   const d = new Date(dateStr);
@@ -366,15 +372,9 @@ export default function MoverDashboard() {
     retry: 2,
   });
 
-  // Client-side filtering: separate assigned from available bookings
-  // Auto-filter expired bookings and sort by preferredDate (soonest first)
-  const now = new Date();
-  
-  // Active bookings: assigned to this mover, not completed/cancelled, and not past-dated
-  // Hide jobs with past dates to keep the list clean
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  
+  // Client-side filtering: separate assigned from available bookings.
+  // Assigned work remains visible until it reaches a terminal status, even if
+  // its scheduled date has passed (for example, after an admin reassigns it).
   const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
     ?.filter((b) => {
@@ -382,22 +382,6 @@ export default function MoverDashboard() {
       if (b.status === BOOKING_STATUSES.COMPLETED || b.status === BOOKING_STATUSES.CANCELLED) return false;
       const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
       if (!isActiveStatus) return false;
-      
-      // Always show jobs that are mid-trip (milestones must stay accessible regardless of date)
-      const midTrip = [
-        "in_transit",
-        "en_route_to_pickup",
-        "loading",
-        "en_route_to_dropoff",
-        "unloading",
-      ].includes(b.status);
-      if (midTrip) return true;
-      
-      // For confirmed-but-not-started jobs, hide if the scheduled date has passed
-      const jobDate = new Date(b.preferredDate);
-      jobDate.setHours(0, 0, 0, 0);
-      if (jobDate < todayStart) return false;
-      
       return true;
     })
     ?.sort((a, b) => {
@@ -556,6 +540,34 @@ export default function MoverDashboard() {
     const timer = setTimeout(() => setOverlayCountdown((c) => c - 1), 1000);
     return () => clearTimeout(timer);
   }, [overlayJob, overlayCountdown]);
+
+  const [cancelJobDialogBookingId, setCancelJobDialogBookingId] = useState<string | null>(null);
+
+  const moverCancelMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/mover-cancel`, {});
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to cancel booking");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setCancelJobDialogBookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({
+        title: "Job cancelled",
+        description: "The job has been cancelled. We're finding another mover for the customer.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to cancel job",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const completeBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
@@ -1418,7 +1430,7 @@ export default function MoverDashboard() {
                     key={index} 
                     className="relative aspect-square rounded-md overflow-hidden border cursor-pointer group"
                     onClick={() => {
-                      setPreviewImages(booking.images || []);
+                      setPreviewImages((booking.images || []).map(toDisplayUrl));
                       setPreviewIndex(index);
                       setShowImagePreview(true);
                     }}
@@ -1426,7 +1438,7 @@ export default function MoverDashboard() {
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
-                        setPreviewImages(booking.images ?? []);
+                        setPreviewImages((booking.images ?? []).map(toDisplayUrl));
                         setPreviewIndex(index);
                         setShowImagePreview(true);
                       }
@@ -1435,7 +1447,7 @@ export default function MoverDashboard() {
                     data-testid={`button-preview-image-${booking.id}-${index}`}
                   >
                     <img
-                      src={imageUrl}
+                      src={toDisplayUrl(imageUrl)}
                       alt={`Item ${index + 1}`}
                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
                       data-testid={`image-item-${booking.id}-${index}`}
@@ -1492,17 +1504,29 @@ export default function MoverDashboard() {
               
               {/* Start Trip - Confirmed status AND assigned to this mover (not available jobs) */}
               {booking.status === "confirmed" && booking.moverId && !showActions && (
-                <Button
-                  variant="default"
-                  onClick={() => startTripMutation.mutate(booking.id)}
-                  disabled={startTripMutation.isPending || hasActiveTrip}
-                  data-testid={`button-start-trip-${booking.id}`}
-                  className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
-                  title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
-                >
-                  <Truck className="w-4 h-4 mr-2" />
-                  {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
-                </Button>
+                <>
+                  <Button
+                    variant="default"
+                    onClick={() => startTripMutation.mutate(booking.id)}
+                    disabled={startTripMutation.isPending || hasActiveTrip}
+                    data-testid={`button-start-trip-${booking.id}`}
+                    className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
+                    title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
+                  >
+                    <Truck className="w-4 h-4 mr-2" />
+                    {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCancelJobDialogBookingId(booking.id)}
+                    disabled={moverCancelMutation.isPending}
+                    data-testid={`button-cancel-job-${booking.id}`}
+                    className="flex-1 sm:flex-none text-destructive border-destructive/40 hover:bg-destructive/10"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Cancel Job
+                  </Button>
+                </>
               )}
               
               {/* En Route to Pickup → Loading */}
@@ -1653,11 +1677,10 @@ export default function MoverDashboard() {
                   <p className="font-bold text-lg capitalize">{overlayJob.loadSize}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Your Earnings</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Booked Amount</p>
                   <p className="font-bold text-lg text-green-600">
-                    ${overlayJob.price ? (parseFloat(overlayJob.price) * 0.85).toFixed(2) : "—"}
+                    ${overlayJob.price ? parseFloat(overlayJob.price).toFixed(2) : "—"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">after 15% fee</p>
                 </div>
               </div>
             </div>
@@ -1943,6 +1966,48 @@ export default function MoverDashboard() {
           </DialogContent>
         </Dialog>
 
+        {/* ── Mover cancel confirmed job confirmation ───────────────────── */}
+        <AlertDialog
+          open={!!cancelJobDialogBookingId}
+          onOpenChange={(open) => { if (!open) setCancelJobDialogBookingId(null); }}
+        >
+          <AlertDialogContent data-testid="dialog-cancel-job">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-destructive" />
+                Cancel this job?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  Are you sure you want to cancel this booking? The customer will be notified and we'll find another mover for them right away.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You can only cancel before the trip has started.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel
+                onClick={() => setCancelJobDialogBookingId(null)}
+                data-testid="button-cancel-job-dismiss"
+                className="w-full sm:w-auto"
+              >
+                Keep Job
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (cancelJobDialogBookingId) moverCancelMutation.mutate(cancelJobDialogBookingId);
+                }}
+                disabled={moverCancelMutation.isPending}
+                data-testid="button-cancel-job-confirm"
+                className="w-full sm:w-auto bg-destructive text-destructive-foreground"
+              >
+                {moverCancelMutation.isPending ? "Cancelling..." : "Yes, Cancel Job"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* ── Soft nudge: go online without vehicle photo ───────────────── */}
         <AlertDialog open={showOnlineNudgeDialog} onOpenChange={setShowOnlineNudgeDialog}>
           <AlertDialogContent data-testid="dialog-online-nudge">
@@ -2038,16 +2103,16 @@ export default function MoverDashboard() {
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">Jobs</span>
               {availableBookings && availableBookings.length > 0 && (
-                <Badge variant="secondary" className="no-default-hover-elevate h-5 px-1.5 text-xs bg-primary-foreground/20 text-inherit">
+                <Badge variant="secondary" className="no-default-hover-elevate no-default-active-elevate h-5 px-1.5 text-xs bg-red-500 text-white border-transparent" data-testid="badge-available-count">
                   {availableBookings.length}
                 </Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="my-bookings" data-testid="tab-my-bookings" className="gap-2 py-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm">
               <Calendar className="w-4 h-4" />
-              <span className="hidden sm:inline">Bookings</span>
+              <span className="hidden sm:inline">Active</span>
               {bookings && bookings.length > 0 && (
-                <Badge variant="secondary" className="no-default-hover-elevate h-5 px-1.5 text-xs bg-primary-foreground/20 text-inherit">
+                <Badge variant="secondary" className="no-default-hover-elevate no-default-active-elevate h-5 px-1.5 text-xs bg-green-500 text-white border-transparent" data-testid="badge-bookings-count">
                   {bookings.length}
                 </Badge>
               )}
@@ -2129,7 +2194,7 @@ export default function MoverDashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Your Bookings</h2>
+                  <h2 className="text-lg font-semibold">Your Active Bookings</h2>
                   <Badge variant="outline">
                     {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'}
                   </Badge>

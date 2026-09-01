@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, HelpCircle, MessageSquare, FileCheck, LayoutDashboard, Users, Truck, Calendar, DollarSign, Handshake } from "lucide-react";
+import { Shield, MessageSquare, FileCheck, LayoutDashboard, Users, Truck, Calendar, DollarSign, Handshake, Radio } from "lucide-react";
 
 const ENTERPRISE_ENABLED = import.meta.env.VITE_ENABLE_ENTERPRISE === "true";
 
@@ -33,6 +33,7 @@ export function AdminNav() {
     { path: "/admin/verification", label: "Verify", icon: FileCheck, testId: "link-admin-verification" },
     ...(ENTERPRISE_ENABLED ? [{ path: "/admin/partners", label: "Partners", icon: Handshake, testId: "link-admin-partners", badgeCount: pendingPartnersCount?.count }] : []),
     { path: "/admin/support", label: "Support", icon: MessageSquare, testId: "link-admin-support", badgeCount: supportCount?.count },
+    { path: "/admin/voice", label: "Voice", icon: Radio, testId: "link-admin-voice" },
   ];
 
   return (

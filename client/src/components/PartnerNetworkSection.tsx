@@ -1,9 +1,36 @@
-import { Mail, Lock, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Mail, Lock, ChevronRight, Copy, Check } from "lucide-react";
 import truckImg from "../assets/generated_images/partner_network_truck.png";
 import dashboardImg from "../assets/generated_images/partner_analytics_dashboard.png";
 import trustedNetworkImg from "../assets/generated_images/partner_trusted_network.png";
 
+const PARTNER_EMAIL = "partnership@lervit.com";
+
 export default function PartnerNetworkSection() {
+  const [copied, setCopied] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
+
+  function handleCtaClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    // Try to open the mail client
+    window.location.href = `mailto:${PARTNER_EMAIL}`;
+    // Also reveal the email address as a fallback for desktop users
+    // whose browser can't open a mail client
+    setShowEmail(true);
+  }
+
+  function handleCopy(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(PARTNER_EMAIL).then(() => {
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        setShowEmail(false);
+      }, 1500);
+    });
+  }
+
   return (
     <section
       data-testid="section-partner-network"
@@ -124,14 +151,14 @@ export default function PartnerNetworkSection() {
 
         {/* CTA card */}
         <a
-          href="#"
-          onClick={(e) => { e.preventDefault(); window.location.href = ["mailto", "partnership@lervit.com"].join(":"); }}
+          href={`mailto:${PARTNER_EMAIL}`}
+          onClick={handleCtaClick}
           aria-label="Email the LervIT team to learn more about the Partner Network"
           data-testid="link-partner-network-cta"
           className="block"
         >
           <div
-            className="rounded-[20px] p-5 md:p-6 flex items-center gap-4 cursor-pointer transition-opacity hover:opacity-90 active:opacity-80 mb-6"
+            className="rounded-[20px] p-5 md:p-6 flex items-center gap-4 cursor-pointer transition-opacity hover:opacity-90 active:opacity-80"
             style={{
               background: "linear-gradient(135deg, #101720 0%, #151C26 100%)",
               border: "1px solid rgba(255,255,255,0.10)",
@@ -155,8 +182,39 @@ export default function PartnerNetworkSection() {
           </div>
         </a>
 
+        {/* Email fallback — shown after click so desktop users without a mail client can copy the address */}
+        {showEmail && (
+          <div
+            className="mt-3 rounded-2xl px-5 py-4 flex items-center justify-between gap-4"
+            style={{
+              background: "rgba(37,99,235,0.10)",
+              border: "1px solid rgba(37,99,235,0.35)",
+            }}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Mail className="w-4 h-4 shrink-0" style={{ color: "#93B4F8" }} />
+              <span className="text-sm font-mono" style={{ color: "#93B4F8" }}>
+                {PARTNER_EMAIL}
+              </span>
+            </div>
+            <button
+              onClick={handleCopy}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+              style={{
+                background: copied ? "rgba(34,197,94,0.15)" : "rgba(37,99,235,0.25)",
+                color: copied ? "#86efac" : "#93B4F8",
+                border: `1px solid ${copied ? "rgba(34,197,94,0.3)" : "rgba(37,99,235,0.4)"}`,
+              }}
+              aria-label="Copy email address"
+            >
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        )}
+
         {/* Footer note */}
-        <div className="flex items-center justify-center gap-2" style={{ color: "#6B7280" }}>
+        <div className="flex items-center justify-center gap-2 mt-6" style={{ color: "#6B7280" }}>
           <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <p className="text-xs">By invitation only. Not accepting direct sign-ups.</p>
         </div>

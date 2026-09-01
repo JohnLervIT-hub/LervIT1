@@ -182,7 +182,7 @@ function JobNotificationSoundContent() {
   const showBrowserNotification = useCallback((notification: JobNotification) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       const browserNotif = new Notification('New Job Available!', {
-        body: `Pickup: ${notification.pickupAddress}\nEarnings: $${notification.price}`,
+        body: `Pickup: ${notification.pickupAddress}\nBooked Amount: $${notification.price}`,
         icon: '/favicon.ico',
         tag: notification.bookingId,
         requireInteraction: true,
@@ -221,7 +221,7 @@ function JobNotificationSoundContent() {
     // Show toast
     toast({
       title: "New Job Available!",
-      description: `Earn $${notification.price} - tap to view details`,
+      description: `Booking worth $${notification.price} - tap to view details`,
       duration: 10000,
     });
     
@@ -255,6 +255,21 @@ function JobNotificationSoundContent() {
       handleJobNotification({ ...notif, type: 'job_notification' });
     }
   }, [polledNotifications, handleJobNotification]);
+
+  // Auto-dismiss the notification card once it's no longer pending — e.g. it was
+  // accepted/declined elsewhere (available jobs list, another device) or expired
+  // and was taken by another mover. Without this the dialog can linger indefinitely.
+  useEffect(() => {
+    if (!showNotificationDialog || !currentNotification?.bookingId) return;
+    const stillPending = (polledNotifications || []).some(
+      (n) => n.bookingId === currentNotification.bookingId
+    );
+    if (!stillPending) {
+      setShowNotificationDialog(false);
+      setHasNewNotification(false);
+      setCurrentNotification(null);
+    }
+  }, [polledNotifications, showNotificationDialog, currentNotification]);
 
   // Request permission on first interaction
   useEffect(() => {
@@ -351,7 +366,7 @@ function JobNotificationSoundContent() {
                   </div>
                 )}
                 <div className="pt-2 border-t">
-                  <p className="text-sm text-muted-foreground">Your Earnings</p>
+                  <p className="text-sm text-muted-foreground">Booked Amount</p>
                   <p className="text-2xl font-bold text-green-600">
                     ${parseFloat(currentNotification.price || '0').toFixed(2)}
                   </p>

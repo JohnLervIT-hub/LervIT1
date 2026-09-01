@@ -19,6 +19,12 @@ import { useState, useEffect, useCallback } from "react";
 import { generatePriceExplanation, AI_FEATURES } from "@shared/ai";
 import EditBookingForm from "@/components/EditBookingForm";
 
+function toDisplayUrl(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes(".heic") || lower.includes(".heif")) return `${url}?f=jpg`;
+  return url;
+}
+
 function safeFormatDate(dateStr: string | null | undefined, fmt: string, fallback = "TBD"): string {
   if (!dateStr) return fallback;
   const d = new Date(dateStr);
@@ -905,7 +911,7 @@ export default function MyBookings() {
                         Item Photos ({booking.images.length})
                         <button
                           type="button"
-                          onClick={() => handleImageClick(booking.images!, 0)}
+                          onClick={() => handleImageClick(booking.images!.map(toDisplayUrl), 0)}
                           className="text-xs text-primary hover:underline ml-1 cursor-pointer"
                           data-testid={`button-click-to-enlarge-${booking.id}`}
                         >
@@ -917,13 +923,13 @@ export default function MyBookings() {
                           <button
                             key={index}
                             type="button"
-                            onClick={() => handleImageClick(booking.images!, index)}
+                            onClick={() => handleImageClick(booking.images!.map(toDisplayUrl), index)}
                             className="relative aspect-square rounded-lg overflow-hidden border hover-elevate bg-muted cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                             data-testid={`button-image-${booking.id}-${index}`}
                             aria-label={`View item photo ${index + 1} of ${booking.images!.length}`}
                           >
                             <img
-                              src={imageUrl}
+                              src={toDisplayUrl(imageUrl)}
                               alt={`Item ${index + 1}`}
                               className="w-full h-full object-cover transition-transform group-hover:scale-105"
                               data-testid={`image-item-${booking.id}-${index}`}
