@@ -1355,19 +1355,13 @@ export default function AdminDashboard() {
                     <div className="p-4 border rounded-lg">
                       <div className="flex items-center gap-2 mb-1">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Pickup Date &amp; Time</span>
+                        <span className="text-sm text-muted-foreground">Scheduled Date</span>
                       </div>
                       <p className="font-medium">
                         {selectedBooking.preferredDate 
                           ? format(new Date(selectedBooking.preferredDate), "EEEE, MMM d, yyyy")
                           : "Not scheduled"}
                       </p>
-                      {selectedBooking.preferredDate && (
-                        <p className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          {format(new Date(selectedBooking.preferredDate), "h:mm a")}
-                        </p>
-                      )}
                     </div>
                     <div className="p-4 border rounded-lg">
                       <div className="flex items-center gap-2 mb-1">
