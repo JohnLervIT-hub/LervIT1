@@ -4,17 +4,13 @@ import ws from "ws";
 import * as schema from "@shared/schema";
 neonConfig.webSocketConstructor = ws;
 
-const connectionString = process.env.PGHOST
-  ? `postgresql://${process.env.PGUSER}@${process.env.PGHOST}/${process.env.PGDATABASE}?sslmode=require`
-  : process.env.DATABASE_URL;
-
-if (!connectionString) {
+if (!process.env.DATABASE_URL) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
-export const pool = new Pool({ connectionString });
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 pool.on('error', (err) => {
   console.error('[DB Pool] Connection error — will recover on next query:', err.message);
