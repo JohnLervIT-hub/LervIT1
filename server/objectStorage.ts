@@ -1,5 +1,15 @@
-// Object Storage Service for Replit App Storage
-// Based on blueprint:javascript_object_storage
+/**
+ * Object Storage Service
+ *
+ * REPLIT SIDECAR DEPENDENCY — MIGRATION REQUIRED BEFORE RAILWAY DEPLOY
+ * ======================================================================
+ * This module authenticates to Google Cloud Storage via a local sidecar
+ * process that Replit injects at http://127.0.0.1:1106. That sidecar will
+ * NOT exist on Railway, Vercel, or any non-Replit host.
+ *
+ * Migration plan: docs/OBJECT_STORAGE_MIGRATION.md
+ * ======================================================================
+ */
 
 import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
@@ -12,6 +22,8 @@ import {
   setObjectAclPolicy,
 } from "./objectAcl";
 
+// Replit injects a local sidecar at this address for GCS credential exchange.
+// Replace with direct service-account auth when migrating off Replit.
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
 export const objectStorageClient = new Storage({

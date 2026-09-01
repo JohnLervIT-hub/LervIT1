@@ -179,9 +179,7 @@ function UploadDocumentDialog({
     mutationFn: async (data: FormData) => {
       const response = await fetch(`/api/movers/${moverId}/verification/${itemConfig.type}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        credentials: 'include',
         body: data,
       });
 

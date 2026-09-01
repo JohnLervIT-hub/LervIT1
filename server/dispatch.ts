@@ -55,9 +55,10 @@ import { logEvent, logger } from './logger';
 import { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } from '@shared/matching';
 import { toDecimalString } from '@shared/utils';
 import { storage } from './storage';
+import { calculatePlatformFee } from './config/stripe';
+import { getBaseUrl } from './utils/urls';
 
-const BASE_URL = process.env.BASE_URL ||
-  (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+const BASE_URL = getBaseUrl();
 
 /** Shape expected by findNearestMovers */
 interface MoverData {
@@ -145,39 +146,31 @@ async function notifyMover(
   expiresAt: Date,
   opts: { isPriority?: boolean } = {}
 ): Promise<void> {
-  // Display the full booked amount to the mover (not the post-commission payout).
-  const bookedAmountStr = toDecimalString(parseFloat(booking.price ?? '0'));
+  const earningsStr = toDecimalString(mover.estimatedEarnings);
 
   // WebSocket (AC-9: always include expiresAt)
-  const wsSent = moverWebSocket.notifyMover(mover.userId, {
+  moverWebSocket.notifyMover(mover.userId, {
     type: 'job_notification',
     bookingId: booking.id,
     pickupAddress: booking.pickupAddress ?? '',
     dropoffAddress: booking.dropoffAddress ?? '',
-    price: bookedAmountStr,
+    price: earningsStr,
     estimatedTime: `${Math.round(mover.distanceToPickup)} km`,
     expiresAt,
     isPriority: opts.isPriority,
   });
-  if (wsSent === 0) {
-    logger.info({ moverId: mover.moverId, userId: mover.userId, bookingId: booking.id },
-      'Mover offline at dispatch — WS missed, SMS/email will cover');
-  }
 
-  // Email + SMS + in-app fallback
+  // Email
   try {
     const [moverUser] = await db.select().from(users).where(eq(users.id, mover.userId)).limit(1);
     if (moverUser) {
-      // Fix 1: Respect user notification preferences before sending each channel
-      if (moverUser.emailJobAlerts !== false) {
-        await notificationService.sendJobAssignment(moverUser, booking as any, bookedAmountStr);
-      }
+      await notificationService.sendJobAssignment(moverUser, booking as any, earningsStr);
 
-      // Fix 1: Respect smsJobAlerts preference (AC-4 still fires when opted-in)
-      if (moverUser.smsJobAlerts !== false && moverUser.phone) {
+      // SMS (AC-4)
+      if (moverUser.phone) {
         const smsText = opts.isPriority
-          ? `LervIT PRIORITY: A customer selected YOU! Booking worth $${bookedAmountStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`
-          : `LervIT New Job! Booking worth $${bookedAmountStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`;
+          ? `LervIT PRIORITY: A customer selected YOU! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`
+          : `LervIT New Job! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`;
         await notificationService.sendSMS({ to: moverUser.phone, message: smsText, type: 'job_alert' });
       }
     }
@@ -229,13 +222,15 @@ export async function dispatchJobToMovers(
 
   const expiresAt = calculateExpiryTime(10);
 
-  // Notifications display the full booked amount charged to the customer
-  // (not the post-commission mover payout), matching the admin assign-mover logic.
+  // Derive mover earnings from the actual booking price charged to the customer
+  // (not from findNearestMovers' recalculated estimate), matching the admin assign-mover logic.
   const bookingPrice = parseFloat(booking.price ?? '0');
+  const feeBreakdown = calculatePlatformFee(bookingPrice);
+  const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
 
   const moversWithActualEarnings = nearestMovers.map((mover) => ({
     ...mover,
-    estimatedEarnings: bookingPrice,
+    estimatedEarnings: moverNetAmount,
   }));
 
   // Create DB notification records (AC-10: onConflictDoNothing prevents duplicates)
@@ -280,10 +275,10 @@ export async function dispatchPreSelectedMover(booking: DispatchableBooking): Pr
   const preSelectedMover = await storage.getMover(booking.preSelectedMoverId);
   if (!preSelectedMover) return false;
 
-  // Notifications display the full booked amount charged to the customer
-  // (not the post-commission mover payout).
   const bookingPrice = parseFloat(booking.price ?? '0');
-  const bookedAmountStr = bookingPrice.toFixed(2);
+  const feeBreakdown = calculatePlatformFee(bookingPrice);
+  const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
+  const earningsStr = moverNetAmount.toFixed(2);
   const expiresAt = calculateExpiryTime(10);
 
   // DB record
@@ -291,7 +286,7 @@ export async function dispatchPreSelectedMover(booking: DispatchableBooking): Pr
     bookingId: booking.id,
     moverId: booking.preSelectedMoverId,
     distanceToPickup: toDecimalString(0),
-    estimatedEarnings: toDecimalString(bookingPrice),
+    estimatedEarnings: toDecimalString(moverNetAmount),
     status: 'pending',
     expiresAt,
   });
@@ -308,7 +303,7 @@ export async function dispatchPreSelectedMover(booking: DispatchableBooking): Pr
     latitude: 0,
     longitude: 0,
     distanceToPickup: 0,
-    estimatedEarnings: bookingPrice,
+    estimatedEarnings: moverNetAmount,
   };
 
   await notifyMover(moverData, booking, expiresAt, { isPriority: true });
@@ -321,7 +316,7 @@ export async function dispatchPreSelectedMover(booking: DispatchableBooking): Pr
         userId: moverUser.id,
         type: 'job_opportunity',
         title: 'Priority Job Request!',
-        message: `A customer specifically chose you! Booking worth $${bookedAmountStr} CAD. Accept within 10 minutes.`,
+        message: `A customer specifically chose you! Earn $${earningsStr} CAD. Accept within 10 minutes.`,
         bookingId: booking.id,
         actionUrl: '/mover-dashboard',
         isRead: false,
@@ -334,7 +329,7 @@ export async function dispatchPreSelectedMover(booking: DispatchableBooking): Pr
   logEvent.notification('dispatch_preselected_complete', {
     bookingId: booking.id,
     moverId: booking.preSelectedMoverId,
-    bookedAmount: bookedAmountStr,
+    earnings: earningsStr,
   });
 
   return true;

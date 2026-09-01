@@ -1,6 +1,6 @@
 import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
-import { logger } from './logger';
+import { getBaseUrl } from './utils/urls';
 
 // Calgary timezone used for all date formatting in emails, SMS, and logs
 const CALGARY_TZ = 'America/Edmonton';
@@ -78,37 +78,6 @@ class EmailRateLimiter {
 }
 
 const emailRateLimiter = new EmailRateLimiter();
-
-// SMS Rate Limiter — Telnyx allows ~3 req/sec; we use 400ms intervals (~2.5/sec) for safety
-class SmsRateLimiter {
-  private queue: Array<() => Promise<any>> = [];
-  private isProcessing = false;
-  private lastSendTime = 0;
-  private readonly minIntervalMs = 400;
-
-  async enqueue<T>(smsFn: () => Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      this.queue.push(async () => {
-        try { resolve(await smsFn()); } catch (error) { reject(error); }
-      });
-      this.processQueue();
-    });
-  }
-
-  private async processQueue() {
-    if (this.isProcessing || this.queue.length === 0) return;
-    this.isProcessing = true;
-    while (this.queue.length > 0) {
-      const wait = this.minIntervalMs - (Date.now() - this.lastSendTime);
-      if (wait > 0) await new Promise(r => setTimeout(r, wait));
-      const smsFn = this.queue.shift();
-      if (smsFn) { this.lastSendTime = Date.now(); await smsFn(); }
-    }
-    this.isProcessing = false;
-  }
-}
-
-const smsRateLimiter = new SmsRateLimiter();
 
 // Email notification service with Resend integration
 export interface EmailNotification {
@@ -267,56 +236,73 @@ class NotificationService {
   async sendSMS(notification: SMSNotification): Promise<boolean> {
     // Normalize phone number to E.164 format
     const formattedPhone = normalizeToE164(notification.to);
-
+    
+    console.log('\n[SMS] Sending notification:');
+    console.log('To (original):', notification.to);
+    console.log('To (E.164):', formattedPhone || 'INVALID');
+    console.log('From:', telnyxPhoneNumber ? `${telnyxPhoneNumber.slice(0, 4)}****${telnyxPhoneNumber.slice(-2)}` : 'NOT SET');
+    console.log('Type:', notification.type);
+    
     // Block SMS in development mode (except OTP verification codes needed for login testing)
     // Set FORCE_SMS=true in env to bypass this block for testing real SMS delivery
     const forceSms = process.env.FORCE_SMS === 'true';
     if (process.env.NODE_ENV === 'development' && notification.type !== 'phone_verification' && !forceSms) {
-      logger.debug({ type: notification.type }, 'SMS blocked in development mode');
+      const maskedMessage = notification.message.length > 80 
+        ? notification.message.substring(0, 80) + '...' 
+        : notification.message;
+      console.log('[SMS] BLOCKED in development mode (set FORCE_SMS=true to override)');
+      console.log('Message preview:', maskedMessage);
+      console.log('---\n');
       return true;
     }
-
+    
     if (!formattedPhone) {
-      logger.warn({ to: notification.to, type: notification.type }, 'SMS send skipped: invalid phone number');
+      console.log('[SMS] Invalid phone number - cannot send');
+      console.log('---\n');
       return false;
     }
-
+    
     if (!telnyxApiKey || !telnyxPhoneNumber) {
-      logger.warn({ type: notification.type }, 'SMS send skipped: Telnyx not configured');
+      console.log('[SMS] Telnyx not configured - SMS logged only');
+      // Mask verification codes in logs for security
+      const maskedMessage = notification.type === 'phone_verification' 
+        ? notification.message.replace(/\d{6}/, '******')
+        : notification.message;
+      console.log('Message:', maskedMessage);
+      console.log('---\n');
       return false;
     }
-
-    // Enqueue through rate limiter to prevent Telnyx rate limit errors on burst dispatch
-    return smsRateLimiter.enqueue(async () => {
-      try {
-        const response = await fetch('https://api.telnyx.com/v2/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${telnyxApiKey}`,
-          },
-          body: JSON.stringify({
-            from: telnyxPhoneNumber,
-            to: formattedPhone,
-            text: notification.message,
-            ...(telnyxMessagingProfileId && { messaging_profile_id: telnyxMessagingProfileId }),
-          }),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          logger.error({ type: notification.type, to: formattedPhone, status: response.status, telnyxError: result }, 'SMS Telnyx API error');
-          return false;
-        }
-
-        logger.info({ type: notification.type, to: formattedPhone, messageId: result.data?.id }, 'SMS sent successfully');
-        return true;
-      } catch (error: any) {
-        logger.error({ type: notification.type, to: formattedPhone, error: error.message }, 'SMS send failed');
+    
+    try {
+      const response = await fetch('https://api.telnyx.com/v2/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${telnyxApiKey}`,
+        },
+        body: JSON.stringify({
+          from: telnyxPhoneNumber,
+          to: formattedPhone,
+          text: notification.message,
+          ...(telnyxMessagingProfileId && { messaging_profile_id: telnyxMessagingProfileId }),
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('[SMS] Telnyx API error:', result);
         return false;
       }
-    });
+      
+      console.log('[SMS] Sent successfully! ID:', result.data?.id);
+      console.log('---\n');
+      return true;
+    } catch (error: any) {
+      console.error('[SMS] Failed to send:', error.message);
+      console.log('---\n');
+      return false;
+    }
   }
   
   async sendEmail(notification: EmailNotification): Promise<void> {
@@ -420,14 +406,13 @@ class NotificationService {
   }
 
   // Job assignment email to mover - urgent notification with 10min expiry
-  async sendJobAssignment(mover: User, booking: Partial<Booking>, bookedAmount: string, distanceToPickup?: string): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+  async sendJobAssignment(mover: User, booking: Partial<Booking>, estimatedEarnings: string, distanceToPickup?: string): Promise<void> {
+    const baseUrl = getBaseUrl();
     const dashboardUrl = `${baseUrl}/mover-dashboard`;
-    
+
     const formattedDate = formatCalgaryDate(booking.preferredDate, 'ASAP');
     
-    const subject = `[URGENT] NEW JOB - $${bookedAmount} CAD Booking (Expires in 10 min)`;
+    const subject = `[URGENT] NEW JOB - Earn $${estimatedEarnings} CAD (Expires in 10 min)`;
     const body = `
 <!DOCTYPE html>
 <html>
@@ -443,11 +428,11 @@ class NotificationService {
               <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">TIME SENSITIVE - This opportunity expires in 10 minutes</p>
             </td>
           </tr>
-          <!-- Booking amount highlight -->
+          <!-- Earnings highlight -->
           <tr>
             <td style="background-color:#FFF7ED;padding:20px;text-align:center;border-bottom:1px solid #EA580C;">
-              <p style="color:#9A3412;margin:0;font-size:14px;">Total Booked Amount</p>
-              <p style="color:#EA580C;margin:5px 0 0 0;font-size:36px;font-weight:bold;">$${bookedAmount} CAD</p>
+              <p style="color:#9A3412;margin:0;font-size:14px;">Your Estimated Earnings</p>
+              <p style="color:#EA580C;margin:5px 0 0 0;font-size:36px;font-weight:bold;">$${estimatedEarnings} CAD</p>
             </td>
           </tr>
           <!-- Content -->
@@ -518,7 +503,7 @@ class NotificationService {
     
     // Also send SMS if mover has a phone number
     if (mover.phone) {
-      const smsMessage = `LervIT: NEW JOB - $${bookedAmount} CAD booking. ${booking.loadSize || 'Standard'} load. Expires in 10 min! Open app to accept: ${dashboardUrl}`;
+      const smsMessage = `LervIT: NEW JOB - $${estimatedEarnings} CAD. ${booking.loadSize || 'Standard'} load. Expires in 10 min! Open app to accept: ${dashboardUrl}`;
       await this.sendSMS({
         to: mover.phone,
         message: smsMessage,
@@ -595,7 +580,7 @@ class NotificationService {
   // Payment reminder email/SMS to customer (15 minutes before expiry)
   async sendPaymentReminder(customer: User, booking: Partial<Booking>): Promise<void> {
     const subject = `Complete Payment - Your booking expires in 15 minutes!`;
-    const paymentUrl = `https://lervit.replit.app/payment/${booking.id}`;
+    const paymentUrl = `${getBaseUrl()}/payment/${booking.id}`;
     const firstName = getFirstName(customer.name);
     
     const body = `
@@ -848,17 +833,12 @@ class NotificationService {
 
   // Password reset email
   async sendPasswordReset(email: string, name: string, resetToken: string): Promise<void> {
-    // In development, prioritize the dev domain to ensure tokens work correctly
-    const isProduction = process.env.NODE_ENV === 'production';
-    const baseUrl = isProduction 
-      ? (process.env.BASE_URL || 'https://app.lervit.com')
-      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
+    const baseUrl = getBaseUrl();
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
-    
+
     console.log('[PASSWORD_RESET] Sending password reset email:', {
       to: email,
       name,
-      isProduction,
       baseUrl,
       resetUrl: resetUrl.substring(0, 60) + '...',
     });
@@ -927,11 +907,7 @@ class NotificationService {
   // Email verification email
   async sendVerificationEmail(email: string, name: string, verificationToken: string): Promise<void> {
     // In development, prioritize the dev domain to ensure tokens work correctly
-    const isProduction = process.env.NODE_ENV === 'production';
-    const baseUrl = isProduction 
-      ? (process.env.BASE_URL || 'https://app.lervit.com')
-      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
-    const verifyUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
+    const verifyUrl = `${getBaseUrl()}/verify-email?token=${verificationToken}`;
     const subject = 'Verify Your LervIT Email Address';
     const body = `
 <!DOCTYPE html>
@@ -997,9 +973,8 @@ class NotificationService {
 
   // Welcome email after verification - different templates for customers and movers
   async sendWelcomeEmail(email: string, name: string, role: string = 'customer'): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-    
+    const baseUrl = getBaseUrl();
+
     const isMover = role === 'mover';
     const subject = isMover 
       ? 'Welcome to LervIT - Start Earning Today!'
@@ -1137,8 +1112,7 @@ class NotificationService {
     newStatus: string, 
     notes?: string
   ): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    const baseUrl = getBaseUrl();
     const dashboardUrl = `${baseUrl}/mover-dashboard`;
 
     const statusMessages: Record<string, { title: string; message: string; color: string }> = {
@@ -1389,7 +1363,7 @@ class NotificationService {
           'Review the mover guidelines and terms of service',
         ],
         cta: 'Go to Mover Dashboard',
-        ctaUrl: 'https://lervit.replit.app/mover-profile',
+        ctaUrl: `${getBaseUrl()}/mover-profile`,
       },
       admin: {
         title: 'Admin Access Granted',
@@ -1401,7 +1375,7 @@ class NotificationService {
           'Check the verification queue for pending documents',
         ],
         cta: 'Go to Admin Dashboard',
-        ctaUrl: 'https://lervit.replit.app/admin',
+        ctaUrl: `${getBaseUrl()}/admin`,
       },
     };
 

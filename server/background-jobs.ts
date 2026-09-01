@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { db } from './db';
+import { getBaseUrl } from './utils/urls';
 import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
@@ -731,7 +732,7 @@ async function sendAbandonedBookingReminders() {
       // Send email reminder if we have email
       if (abandoned.email) {
         try {
-          const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com';
+          const baseUrl = getBaseUrl();
           // Build URL with all saved booking data for restoration
           const params = new URLSearchParams();
           params.set('abandonedId', abandoned.id);
@@ -840,7 +841,7 @@ async function sendAbandonedBookingReminders() {
       // Send SMS reminder if we have phone (only for first reminder)
       if (abandoned.phone && abandoned.reminderCount === 0) {
         try {
-          const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 'https://app.lervit.com';
+          const baseUrl = getBaseUrl();
           // Build short URL with abandoned ID (SMS char limit)
           const smsUrl = `${baseUrl}/request-move?abandonedId=${abandoned.id}&resumeStep=2`;
           await notificationService.sendSMS({
@@ -1014,9 +1015,8 @@ async function sendStripeOnboardingReminders() {
           ).join(', ')
         : 'a few more details';
       
-      const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-      
+      const baseUrl = getBaseUrl();
+
       // Customize message based on reminder count
       const reminderNumber = account.reminderCount + 1;
       let subject: string;
@@ -1209,9 +1209,8 @@ async function sendProfileCompletionReminders() {
         ? missingItems.slice(0, 3).join(', ')
         : 'complete your profile';
       
-      const baseUrl = process.env.REPLIT_DEPLOYMENT_URL || 
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-      
+      const baseUrl = getBaseUrl();
+
       // Customize message based on reminder count
       const reminderNumber = mover.profileReminderCount + 1;
       let subject: string;
