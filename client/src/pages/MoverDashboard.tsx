@@ -372,15 +372,9 @@ export default function MoverDashboard() {
     retry: 2,
   });
 
-  // Client-side filtering: separate assigned from available bookings
-  // Auto-filter expired bookings and sort by preferredDate (soonest first)
-  const now = new Date();
-  
-  // Active bookings: assigned to this mover, not completed/cancelled, and not past-dated
-  // Hide jobs with past dates to keep the list clean
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  
+  // Client-side filtering: separate assigned from available bookings.
+  // Assigned work remains visible until it reaches a terminal status, even if
+  // its scheduled date has passed (for example, after an admin reassigns it).
   const activeBookings = allBookings
     ?.filter((b) => b.moverId === mover?.id)
     ?.filter((b) => {
@@ -388,22 +382,6 @@ export default function MoverDashboard() {
       if (b.status === BOOKING_STATUSES.COMPLETED || b.status === BOOKING_STATUSES.CANCELLED) return false;
       const isActiveStatus = ["confirmed", "in_transit", ...ACTIVE_STATUSES].includes(b.status);
       if (!isActiveStatus) return false;
-      
-      // Always show jobs that are mid-trip (milestones must stay accessible regardless of date)
-      const midTrip = [
-        "in_transit",
-        "en_route_to_pickup",
-        "loading",
-        "en_route_to_dropoff",
-        "unloading",
-      ].includes(b.status);
-      if (midTrip) return true;
-      
-      // For confirmed-but-not-started jobs, hide if the scheduled date has passed
-      const jobDate = new Date(b.preferredDate);
-      jobDate.setHours(0, 0, 0, 0);
-      if (jobDate < todayStart) return false;
-      
       return true;
     })
     ?.sort((a, b) => {
