@@ -794,7 +794,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: z.string().min(1),
       });
       const { email, password } = validateBody(loginSchema, req.body);
-      
+
+      const colCheck = await db.execute(
+        sql`SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'users'
+            AND column_name = 'referral_code'`
+      );
+      console.log('[login] referral_code column check:',
+        colCheck.rows?.length > 0 ? 'EXISTS' : 'MISSING');
+
       const user = await storage.getUserByEmail(email);
       
       if (!user || !user.password) {
