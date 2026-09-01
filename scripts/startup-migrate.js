@@ -22,13 +22,16 @@ async function run() {
 
   const sql = readFileSync(SCHEMA_PATH, 'utf8');
 
+  const host = process.env.DATABASE_URL?.split('@')[1]?.split('/')[0];
+  console.log('Connecting to:', host);
+
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   console.log('[startup-migrate] Connected. Running sync-schema.sql...');
 
   try {
     await client.query(sql);
-    console.log('[startup-migrate] Schema sync complete.');
+    console.log('Schema sync complete on:', host);
   } finally {
     await client.end();
   }
