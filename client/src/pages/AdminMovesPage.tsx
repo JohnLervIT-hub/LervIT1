@@ -65,7 +65,7 @@ type Booking = {
   price: string | null;
   pickupAddress: string;
   dropoffAddress: string;
-  scheduledDate: string;
+  preferredDate: string;
   createdAt: string;
   enterprisePartnerId?: string | null;
   enterprisePartnerName?: string | null;
@@ -507,7 +507,7 @@ export default function AdminMovesPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {b.scheduledDate ? format(new Date(b.scheduledDate), "MMM d, yy") : "N/A"}
+                          {b.preferredDate ? format(new Date(b.preferredDate), "MMM d, yy") : "N/A"}
                         </TableCell>
                         <TableCell className="font-medium tabular-nums">
                           {b.price ? `$${parseFloat(b.price).toFixed(0)}` : "—"}
