@@ -43,6 +43,15 @@ async function run() {
       throw err;
     }
 
+    const verify = await client.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'users'
+      AND column_name LIKE 'referral%'
+    `);
+    console.log('[startup-migrate] Referral columns found:',
+      verify.rows.map(r => r.column_name));
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);
