@@ -75,6 +75,11 @@ type Booking = {
   } | null;
 };
 
+type AdminBookingsResponse = {
+  data: Booking[];
+  total: number;
+};
+
 // Growth Metrics Types
 type GrowthMetrics = {
   overview: {
@@ -670,7 +675,17 @@ export default function AdminDashboard() {
   const movers = Array.isArray(moversData) ? moversData : [];
 
   const { data: bookingsData, isLoading: bookingsLoading, error: bookingsError } = useQuery<Booking[]>({
-    queryKey: ["/api/bookings"],
+    queryKey: ["/api/bookings", { limit: 200, offset: 0 }],
+    queryFn: async () => {
+      const response = await fetch("/api/bookings?limit=200&offset=0", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}`);
+      }
+      const payload: AdminBookingsResponse | Booking[] = await response.json();
+      return Array.isArray(payload) ? payload : payload.data;
+    },
     refetchInterval: 30000,
   });
   const bookings = Array.isArray(bookingsData) ? bookingsData : [];
