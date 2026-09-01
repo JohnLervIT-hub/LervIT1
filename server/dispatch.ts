@@ -56,9 +56,9 @@ import { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } from
 import { toDecimalString } from '@shared/utils';
 import { storage } from './storage';
 import { calculatePlatformFee } from './config/stripe';
+import { getBaseUrl } from './utils/urls';
 
-const BASE_URL = process.env.BASE_URL ||
-  (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+const BASE_URL = getBaseUrl();
 
 /** Shape expected by findNearestMovers */
 interface MoverData {

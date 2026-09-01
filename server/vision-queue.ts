@@ -1,156 +1,190 @@
 /**
  * Vision Engine Background Queue
- * 
- * Processes photo analysis asynchronously to prevent blocking API requests.
- * Photos are queued and processed in the background while the user gets
- * immediate feedback that their upload was received.
+ *
+ * When REDIS_URL is set: jobs are enqueued in BullMQ (Redis-backed, durable).
+ * When REDIS_URL is absent: falls back to the original in-memory queue with a warning.
+ *
+ * Public API is identical in both modes: visionQueue.enqueue(id, bookingId, photoUrl)
  */
 
-import { identifyItemV2, VisionEngineResult } from "./vision-engine-v2";
-import { storage } from "./storage";
-import { logEvent } from "./logger";
+import { Queue, Worker } from 'bullmq';
+import { getRedisConnection, QUEUE_NAMES } from './queue';
+import { identifyItemV2 } from './vision-engine-v2';
+import { storage } from './storage';
+import { logEvent, logger } from './logger';
 
-interface QueuedItem {
+interface JobData {
   identifiedItemId: string;
   bookingId: string;
   photoUrl: string;
-  retries: number;
-  addedAt: Date;
 }
 
-class VisionQueue {
-  private queue: QueuedItem[] = [];
-  private processing = false;
-  private maxRetries = 2;
-  private processingDelay = 100; // ms between items
+// ---------------------------------------------------------------------------
+// Shared processing logic (used by both BullMQ worker and in-memory fallback)
+// ---------------------------------------------------------------------------
 
-  /**
-   * Add a photo to the processing queue
-   * Returns immediately so the API can respond quickly
-   */
-  async enqueue(identifiedItemId: string, bookingId: string, photoUrl: string): Promise<void> {
-    this.queue.push({
-      identifiedItemId,
-      bookingId,
-      photoUrl,
-      retries: 0,
-      addedAt: new Date(),
-    });
+async function processVisionJob(
+  identifiedItemId: string,
+  _bookingId: string,
+  photoUrl: string,
+): Promise<void> {
+  await storage.updateIdentifiedItem(identifiedItemId, { processingStatus: 'processing' });
+  logEvent.vision('processing_start', { identifiedItemId, photoUrl });
 
-    logEvent.vision("queue_enqueue", {
-      identifiedItemId,
-      bookingId,
-      queueLength: this.queue.length,
-    });
+  const startTime = Date.now();
+  const result = await identifyItemV2(photoUrl);
+  const processingTime = Date.now() - startTime;
 
-    // Start processing if not already running
-    if (!this.processing) {
-      this.processQueue();
+  await storage.updateIdentifiedItem(identifiedItemId, {
+    processingStatus: 'completed',
+    itemName: result.itemName,
+    category: result.category,
+    weightKg: result.weight_kg.toString(),
+    dimensionsLcm: result.dimensions.length_cm.toString(),
+    dimensionsWcm: result.dimensions.width_cm.toString(),
+    dimensionsHcm: result.dimensions.height_cm.toString(),
+    volumeCuft: result.volume_ft3.toString(),
+    handlingComplexity: result.handling_complexity,
+    vehicleType: result.vehicle,
+    recommendedMovers: result.movers_required,
+    insuranceLevel: result.insurance_level,
+    confidence: result.confidence.toString(),
+    sourceMetadata: JSON.stringify({
+      source: result.source,
+      matchedItem: result.matchedItem,
+      corrections: result.corrections,
+      processingTime: result.processingTime,
+    }),
+    errorMessage: null,
+  });
+
+  logEvent.vision('processing_complete', {
+    identifiedItemId,
+    itemName: result.itemName,
+    confidence: result.confidence,
+    processingTime,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// BullMQ setup (only when REDIS_URL is configured)
+// ---------------------------------------------------------------------------
+
+const redisConn = getRedisConnection();
+
+const bullQueue = redisConn
+  ? new Queue<JobData>(QUEUE_NAMES.VISION, {
+      connection: redisConn,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+      },
+    })
+  : null;
+
+if (redisConn && bullQueue) {
+  // Worker runs in the same process as the queue producer.
+  // For production scale, move to server/worker.ts for process isolation.
+  const worker = new Worker<JobData>(
+    QUEUE_NAMES.VISION,
+    async (job) => {
+      const { identifiedItemId, bookingId, photoUrl } = job.data;
+      await processVisionJob(identifiedItemId, bookingId, photoUrl);
+    },
+    { connection: redisConn, concurrency: 1 },
+  );
+
+  worker.on('failed', (job, err) => {
+    logger.error({ jobId: job?.id, err }, 'Vision BullMQ job failed after all retries');
+    if (job?.data.identifiedItemId) {
+      storage
+        .updateIdentifiedItem(job.data.identifiedItemId, {
+          processingStatus: 'failed',
+          errorMessage: err.message,
+        })
+        .catch(() => {});
     }
+  });
+
+  logger.info('Vision queue: BullMQ / Redis mode active');
+} else {
+  logger.warn(
+    'REDIS_URL not set — vision queue running in-memory. Jobs will be lost on process restart.',
+  );
+}
+
+// ---------------------------------------------------------------------------
+// In-memory fallback (used when Redis is unavailable)
+// ---------------------------------------------------------------------------
+
+class InMemoryVisionQueue {
+  private queue: Array<JobData & { retries: number }> = [];
+  private processing = false;
+  private readonly maxRetries = 2;
+
+  async enqueue(identifiedItemId: string, bookingId: string, photoUrl: string): Promise<void> {
+    this.queue.push({ identifiedItemId, bookingId, photoUrl, retries: 0 });
+    logEvent.vision('queue_enqueue', { identifiedItemId, bookingId, queueLength: this.queue.length });
+    if (!this.processing) this.processQueue();
   }
 
-  /**
-   * Process items in the queue one at a time
-   * This runs in the background without blocking the main thread
-   */
   private async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
-      return;
-    }
-
+    if (this.processing || this.queue.length === 0) return;
     this.processing = true;
 
     while (this.queue.length > 0) {
       const item = this.queue.shift()!;
-      
       try {
-        // Update status to processing
-        await storage.updateIdentifiedItem(item.identifiedItemId, {
-          processingStatus: "processing",
-        });
-
-        logEvent.vision("processing_start", {
+        await processVisionJob(item.identifiedItemId, item.bookingId, item.photoUrl);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        logEvent.vision('processing_error', {
           identifiedItemId: item.identifiedItemId,
-          photoUrl: item.photoUrl,
-        });
-
-        const startTime = Date.now();
-
-        // Run the Vision Engine analysis
-        const result = await identifyItemV2(item.photoUrl);
-
-        const processingTime = Date.now() - startTime;
-
-        // Update the identified item with results
-        await storage.updateIdentifiedItem(item.identifiedItemId, {
-          processingStatus: "completed",
-          itemName: result.itemName,
-          category: result.category,
-          weightKg: result.weight_kg.toString(),
-          dimensionsLcm: result.dimensions.length_cm.toString(),
-          dimensionsWcm: result.dimensions.width_cm.toString(),
-          dimensionsHcm: result.dimensions.height_cm.toString(),
-          volumeCuft: result.volume_ft3.toString(),
-          handlingComplexity: result.handling_complexity,
-          vehicleType: result.vehicle,
-          recommendedMovers: result.movers_required,
-          insuranceLevel: result.insurance_level,
-          confidence: result.confidence.toString(),
-          sourceMetadata: JSON.stringify({
-            source: result.source,
-            matchedItem: result.matchedItem,
-            corrections: result.corrections,
-            processingTime: result.processingTime,
-          }),
-          errorMessage: null,
-        });
-
-        logEvent.vision("processing_complete", {
-          identifiedItemId: item.identifiedItemId,
-          itemName: result.itemName,
-          confidence: result.confidence,
-          processingTime,
-        });
-
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        
-        logEvent.vision("processing_error", {
-          identifiedItemId: item.identifiedItemId,
-          error: errorMessage,
+          error: msg,
           retries: item.retries,
         });
-
         if (item.retries < this.maxRetries) {
-          // Retry later
           item.retries++;
           this.queue.push(item);
         } else {
-          // Max retries reached, mark as failed
           await storage.updateIdentifiedItem(item.identifiedItemId, {
-            processingStatus: "failed",
-            errorMessage: errorMessage,
+            processingStatus: 'failed',
+            errorMessage: msg,
           });
         }
       }
-
-      // Small delay between processing items to prevent CPU spikes
-      await new Promise(resolve => setTimeout(resolve, this.processingDelay));
+      await new Promise((r) => setTimeout(r, 100));
     }
 
     this.processing = false;
   }
 
-  /**
-   * Get the current queue status
-   */
   getStatus(): { queueLength: number; processing: boolean } {
-    return {
-      queueLength: this.queue.length,
-      processing: this.processing,
-    };
+    return { queueLength: this.queue.length, processing: this.processing };
   }
 }
 
-// Singleton instance
-export const visionQueue = new VisionQueue();
+// ---------------------------------------------------------------------------
+// Public adapter — same API regardless of backend
+// ---------------------------------------------------------------------------
+
+class VisionQueueAdapter {
+  private inMemory: InMemoryVisionQueue | null = bullQueue ? null : new InMemoryVisionQueue();
+
+  async enqueue(identifiedItemId: string, bookingId: string, photoUrl: string): Promise<void> {
+    if (bullQueue) {
+      await bullQueue.add('identify', { identifiedItemId, bookingId, photoUrl });
+      logEvent.vision('queue_enqueue', { identifiedItemId, bookingId, engine: 'bullmq' });
+    } else {
+      await this.inMemory!.enqueue(identifiedItemId, bookingId, photoUrl);
+    }
+  }
+
+  getStatus(): { queueLength: number; processing: boolean } {
+    return this.inMemory ? this.inMemory.getStatus() : { queueLength: 0, processing: false };
+  }
+}
+
+export const visionQueue = new VisionQueueAdapter();

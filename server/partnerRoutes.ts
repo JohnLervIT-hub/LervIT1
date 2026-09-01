@@ -47,6 +47,7 @@ import {
 import { analyzeIncident, analyzeAuditEntry } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
+import { getBaseUrl } from "./utils/urls";
 
 // ============================================================
 // Multer setup for file uploads
@@ -427,8 +428,7 @@ export function registerPartnerRoutes(app: Express) {
     await logAudit(partner.id, user.id, "onboarding.submitted", "partner", partner.id);
 
     // Notify all admin users about the pending application
-    const baseUrl = process.env.BASE_URL ||
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    const baseUrl = getBaseUrl();
     db.select({ id: users.id, email: users.email }).from(users).where(eq(users.role, "admin")).then((admins) => {
       for (const admin of admins) {
         if (admin.email) {
@@ -1581,10 +1581,7 @@ export function registerPartnerRoutes(app: Express) {
       await logAudit(partner.id, inviter.id, "user.invited", "partner_user", invite.id,
         `Invited ${data.email} as ${data.role}`);
 
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : (process.env.BASE_URL || 'https://app.lervit.com');
-      const activationUrl = `${baseUrl}/partner/activate?token=${token}`;
+      const activationUrl = `${getBaseUrl()}/partner/activate?token=${token}`;
 
       // Fire-and-forget — don't block response on email delivery
       notificationService.sendPartnerUserInvite({
@@ -1745,8 +1742,7 @@ export function registerPartnerRoutes(app: Express) {
 
       await logAudit(partner.id, adminUser.id, "partner.invited", "partner", partner.id, `Invited: ${data.adminEmail}`);
 
-      const baseUrl = process.env.BASE_URL ||
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const baseUrl = getBaseUrl();
       const activationUrl = `${baseUrl}/partner/activate?token=${token}`;
 
       notificationService.sendPartnerAdminInvite({
@@ -1930,8 +1926,7 @@ export function registerPartnerRoutes(app: Express) {
       await logAudit(partner.id, adminUser.id, "partner.activated", "partner", partner.id);
 
       // Notify partner admin users that they are now live
-      const baseUrl = process.env.BASE_URL ||
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const baseUrl = getBaseUrl();
       db
         .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
         .from(partnerUsers)
@@ -1989,8 +1984,7 @@ export function registerPartnerRoutes(app: Express) {
       // Notify all active partner_admin users of the rejection.
       // Notifications are awaited so the admin gets a 500 if delivery fails rather than
       // a silent success that leaves partners uninformed of the rejection reason.
-      const baseUrl = process.env.BASE_URL ||
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const baseUrl = getBaseUrl();
 
       const puRows = await db
         .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
@@ -2075,8 +2069,7 @@ export function registerPartnerRoutes(app: Express) {
         invitedBy: adminUser.id,
       }).returning();
 
-      const baseUrl = process.env.BASE_URL ||
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const baseUrl = getBaseUrl();
       const activationUrl = `${baseUrl}/partner/activate?token=${token}`;
 
       notificationService.sendPartnerUserInvite({
@@ -2120,8 +2113,7 @@ export function registerPartnerRoutes(app: Express) {
 
       // Notify partner admin users about the compliance doc review
       if (data.reviewStatus === "approved" || data.reviewStatus === "rejected") {
-        const baseUrl = process.env.BASE_URL ||
-          (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+        const baseUrl = getBaseUrl();
         const puRows = await db
           .select({ userId: partnerUsers.userId, email: users.email, name: users.name })
           .from(partnerUsers)
@@ -2299,8 +2291,7 @@ export function registerPartnerRoutes(app: Express) {
       await logAudit(partnerId, adminUser.id, "booking.routed", "booking", booking.id, `Routed by admin`);
 
       // Notify partner users + configured ops/dispatch contacts about the new job
-      const baseUrl = process.env.BASE_URL ||
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+      const baseUrl = getBaseUrl();
       db.select({ userId: partnerUsers.userId })
         .from(partnerUsers)
         .where(and(

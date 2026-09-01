@@ -1,26 +1,14 @@
 import { Client, TravelMode, UnitSystem } from "@googlemaps/google-maps-services-js";
 import { Coordinates } from "@shared/geocoding";
+import { getBaseUrl } from './utils/urls';
 
 const GOOGLE_MAPS_API_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 const client = new Client({});
 
-// Server-side calls to Google Maps must include a Referer header that matches
-// the HTTP Referrer restrictions configured on the API key in Google Cloud Console.
-// We derive the app URL from Replit environment variables.
-function getAppReferer(): string {
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}/`;
-  }
-  if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
-    return `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/`;
-  }
-  return "https://lervit.replit.app/";
-}
-
 const AXIOS_CONFIG = {
   headers: {
-    Referer: getAppReferer(),
+    Referer: `${getBaseUrl()}/`,
     "User-Agent": "Mozilla/5.0 LervIT-Server/1.0",
   },
 };

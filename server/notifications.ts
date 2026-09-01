@@ -1,5 +1,6 @@
 import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
+import { getBaseUrl } from './utils/urls';
 
 // Calgary timezone used for all date formatting in emails, SMS, and logs
 const CALGARY_TZ = 'America/Edmonton';
@@ -406,10 +407,9 @@ class NotificationService {
 
   // Job assignment email to mover - urgent notification with 10min expiry
   async sendJobAssignment(mover: User, booking: Partial<Booking>, estimatedEarnings: string, distanceToPickup?: string): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    const baseUrl = getBaseUrl();
     const dashboardUrl = `${baseUrl}/mover-dashboard`;
-    
+
     const formattedDate = formatCalgaryDate(booking.preferredDate, 'ASAP');
     
     const subject = `[URGENT] NEW JOB - Earn $${estimatedEarnings} CAD (Expires in 10 min)`;
@@ -580,7 +580,7 @@ class NotificationService {
   // Payment reminder email/SMS to customer (15 minutes before expiry)
   async sendPaymentReminder(customer: User, booking: Partial<Booking>): Promise<void> {
     const subject = `Complete Payment - Your booking expires in 15 minutes!`;
-    const paymentUrl = `https://lervit.replit.app/payment/${booking.id}`;
+    const paymentUrl = `${getBaseUrl()}/payment/${booking.id}`;
     const firstName = getFirstName(customer.name);
     
     const body = `
@@ -833,17 +833,12 @@ class NotificationService {
 
   // Password reset email
   async sendPasswordReset(email: string, name: string, resetToken: string): Promise<void> {
-    // In development, prioritize the dev domain to ensure tokens work correctly
-    const isProduction = process.env.NODE_ENV === 'production';
-    const baseUrl = isProduction 
-      ? (process.env.BASE_URL || 'https://app.lervit.com')
-      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
+    const baseUrl = getBaseUrl();
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
-    
+
     console.log('[PASSWORD_RESET] Sending password reset email:', {
       to: email,
       name,
-      isProduction,
       baseUrl,
       resetUrl: resetUrl.substring(0, 60) + '...',
     });
@@ -912,11 +907,7 @@ class NotificationService {
   // Email verification email
   async sendVerificationEmail(email: string, name: string, verificationToken: string): Promise<void> {
     // In development, prioritize the dev domain to ensure tokens work correctly
-    const isProduction = process.env.NODE_ENV === 'production';
-    const baseUrl = isProduction 
-      ? (process.env.BASE_URL || 'https://app.lervit.com')
-      : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : (process.env.BASE_URL || 'https://app.lervit.com'));
-    const verifyUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
+    const verifyUrl = `${getBaseUrl()}/verify-email?token=${verificationToken}`;
     const subject = 'Verify Your LervIT Email Address';
     const body = `
 <!DOCTYPE html>
@@ -982,9 +973,8 @@ class NotificationService {
 
   // Welcome email after verification - different templates for customers and movers
   async sendWelcomeEmail(email: string, name: string, role: string = 'customer'): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
-    
+    const baseUrl = getBaseUrl();
+
     const isMover = role === 'mover';
     const subject = isMover 
       ? 'Welcome to LervIT - Start Earning Today!'
@@ -1122,8 +1112,7 @@ class NotificationService {
     newStatus: string, 
     notes?: string
   ): Promise<void> {
-    const baseUrl = process.env.BASE_URL || 
-      (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://app.lervit.com');
+    const baseUrl = getBaseUrl();
     const dashboardUrl = `${baseUrl}/mover-dashboard`;
 
     const statusMessages: Record<string, { title: string; message: string; color: string }> = {
@@ -1374,7 +1363,7 @@ class NotificationService {
           'Review the mover guidelines and terms of service',
         ],
         cta: 'Go to Mover Dashboard',
-        ctaUrl: 'https://lervit.replit.app/mover-profile',
+        ctaUrl: `${getBaseUrl()}/mover-profile`,
       },
       admin: {
         title: 'Admin Access Granted',
@@ -1386,7 +1375,7 @@ class NotificationService {
           'Check the verification queue for pending documents',
         ],
         cta: 'Go to Admin Dashboard',
-        ctaUrl: 'https://lervit.replit.app/admin',
+        ctaUrl: `${getBaseUrl()}/admin`,
       },
     };
 
