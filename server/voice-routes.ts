@@ -10,13 +10,10 @@ import { logger } from "./logger";
 import { adminVoiceWebSocket, generateAdminVoiceWebSocketToken } from "./websocket";
 import { ObjectStorageService } from "./objectStorage";
 
-const enabled = () => !!(process.env.TELNYX_API_KEY && process.env.TELNYX_PHONE_NUMBER && process.env.TELNYX_VOICE_CONNECTION_ID && process.env.TELNYX_PUBLIC_KEY);
+const enabled = () => !!(process.env.TELNYX_API_KEY && process.env.TELNYX_PHONE_NUMBER && process.env.TELNYX_VOICE_CONNECTION_ID && process.env.TELNYX_PUBLIC_KEY && process.env.TELNYX_SIP_USERNAME && process.env.TELNYX_SIP_PASSWORD);
 const callerId = () => normalize(process.env.TELNYX_PHONE_NUMBER) || "";
 export const encodeClientState = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64");
 export const PREPARE_TTL_MS = 2 * 60_000;
-export function credentialNeedsRefresh(expiresAt: Date | null | undefined, now = new Date(), safetyMs = 5 * 60_000) {
-  return !expiresAt || expiresAt.getTime() <= now.getTime() + safetyMs;
-}
 export function isStalePreparedCall(status: string, createdAt: Date, now = new Date()) {
   return status === "prepared" && createdAt.getTime() <= now.getTime() - PREPARE_TTL_MS;
 }
@@ -58,22 +55,6 @@ async function enrich(call: typeof voiceCalls.$inferSelect) {
   return { ...publicCall(call, customer[0], booking[0]), recordingId: media.find((item) => item.kind === "recording")?.id || null, voicemail: safeMedia.find((item) => item.kind === "voicemail") || null, media: safeMedia };
 }
 function sdk() { return new Telnyx({ apiKey: process.env.TELNYX_API_KEY! }); }
-function isInvalidCredentialError(error: unknown) {
-  const candidate = error as { status?: number; message?: string };
-  return [401, 403, 404, 422].includes(candidate?.status || 0) || /not.?found|expired|authentication|credential/i.test(candidate?.message || "");
-}
-async function createCredential(user: any) {
-  const requestedExpiry = new Date(Date.now() + 24 * 60 * 60_000);
-  const created = await circuitBreakers.telnyx.execute(() => sdk().telephonyCredentials.create({
-    connection_id: process.env.TELNYX_VOICE_CONNECTION_ID!, name: `lervit-admin-${user.id}`, tag: "lervit-admin-voice", expires_at: requestedExpiry.toISOString(),
-  }));
-  if (!created.data?.id) throw new Error("Telnyx did not return a credential id");
-  return {
-    id: created.data.id,
-    sipUsername: created.data.sip_username || null,
-    expiresAt: created.data.expires_at ? new Date(created.data.expires_at) : requestedExpiry,
-  };
-}
 async function requestCallRecording(call: typeof voiceCalls.$inferSelect, eventType: string) {
   if (!call.telnyxCallControlId || !shouldRequestCallRecording(eventType, process.env.TELNYX_VOICE_RECORDING_ENABLED === "true", call.recordingRequestedAt)) return;
   const requestedAt = new Date();
@@ -373,7 +354,7 @@ export function registerVoiceRoutes(app: Express) {
   startVoiceRetryWorker();
   app.get("/api/admin/voice/config", (req, res) => {
     if (!admin(req, res)) return;
-    const missing = ["TELNYX_API_KEY", "TELNYX_PHONE_NUMBER", "TELNYX_VOICE_CONNECTION_ID", "TELNYX_PUBLIC_KEY"].filter((key) => !process.env[key]);
+    const missing = ["TELNYX_API_KEY", "TELNYX_PHONE_NUMBER", "TELNYX_VOICE_CONNECTION_ID", "TELNYX_PUBLIC_KEY", "TELNYX_SIP_USERNAME", "TELNYX_SIP_PASSWORD"].filter((key) => !process.env[key]);
     res.json({ enabled: missing.length === 0, callerId: callerId(), recordingEnabled: process.env.TELNYX_VOICE_RECORDING_ENABLED === "true", fallbackEnabled: true, ...(missing.length ? { reason: `Missing ${missing.join(", ")}` } : {}) });
   });
   app.get("/api/admin/voice/presence", async (req, res) => {
@@ -406,34 +387,12 @@ export function registerVoiceRoutes(app: Express) {
   app.post("/api/admin/voice/token", async (req, res) => {
     if (!admin(req, res)) return;
     if (!enabled()) return res.status(503).json({ error: "Telnyx voice is disabled" });
-    const user = (req as any).user, expiry = new Date(Date.now() + 5 * 60_000);
-    try {
-      const token = await db.transaction(async (tx) => {
-        // Transaction-scoped advisory lock serializes provider credential creation
-        // for this admin across all server instances.
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`voice-credential:${user.id}`}))`);
-        let profile = (await tx.select().from(adminVoiceProfiles).where(eq(adminVoiceProfiles.userId, user.id)).limit(1))[0];
-        if (profile && !profile.enabled) throw new Error("Voice profile is disabled");
-        let credential = profile?.telnyxCredentialId && !credentialNeedsRefresh(profile.telnyxCredentialExpiresAt)
-          ? { id: profile.telnyxCredentialId, sipUsername: profile.telnyxSipUsername, expiresAt: profile.telnyxCredentialExpiresAt! }
-          : await createCredential(user);
-        if (!profile || credential.id !== profile.telnyxCredentialId) {
-          const now = new Date();
-          profile = (await tx.insert(adminVoiceProfiles).values({ userId: user.id, displayName: user.name, callerIdNumber: callerId(), telnyxCredentialId: credential.id, telnyxSipUsername: credential.sipUsername, telnyxCredentialExpiresAt: credential.expiresAt, updatedAt: now })
-            .onConflictDoUpdate({ target: adminVoiceProfiles.userId, set: { telnyxCredentialId: credential.id, telnyxSipUsername: credential.sipUsername, telnyxCredentialExpiresAt: credential.expiresAt, updatedAt: now } }).returning())[0];
-        }
-        try {
-          return await circuitBreakers.telnyx.execute(() => sdk().telephonyCredentials.createToken(credential.id));
-        } catch (error) {
-          if (!isInvalidCredentialError(error)) throw error;
-          // Exactly one replacement/retry for stale or provider-invalid credentials.
-          credential = await createCredential(user);
-          await tx.update(adminVoiceProfiles).set({ telnyxCredentialId: credential.id, telnyxSipUsername: credential.sipUsername, telnyxCredentialExpiresAt: credential.expiresAt, updatedAt: new Date() }).where(eq(adminVoiceProfiles.userId, user.id));
-          return circuitBreakers.telnyx.execute(() => sdk().telephonyCredentials.createToken(credential.id));
-        }
-      });
-      res.json({ token, expiresAt: expiry.toISOString(), callerId: callerId() });
-    } catch (error) { logger.error({ err: error, adminId: user.id }, "Voice token issuance failed"); res.status(502).json({ error: "Unable to issue voice token" }); }
+    res.json({
+      sipUsername: process.env.TELNYX_SIP_USERNAME,
+      sipPassword: process.env.TELNYX_SIP_PASSWORD,
+      callerId: callerId(),
+      expiresAt: null,
+    });
   });
   app.post("/api/admin/voice/calls/prepare", async (req, res) => {
     if (!admin(req, res)) return;

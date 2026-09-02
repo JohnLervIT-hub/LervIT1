@@ -12,9 +12,6 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-console.log('[db] Pool connecting to:',
-  process.env.DATABASE_URL?.split('@')[1]?.split('/')[0]);
-
 pool.on('error', (err) => {
   console.error('[DB Pool] Connection error — will recover on next query:', err.message);
 });
