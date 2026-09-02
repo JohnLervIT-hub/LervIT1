@@ -12053,7 +12053,15 @@ Respond with VALID JSON only:
   registerVoiceRoutes(app);
 
   const httpServer = createServer(app);
-  
+
+  // Diagnostic: log every HTTP upgrade the process receives, before any
+  // WebSocketServer attaches. If this fires but the per-channel
+  // "connection opened" log doesn't, ws is dropping the socket between
+  // handshake and connection event.
+  httpServer.on('upgrade', (req, socket) => {
+    console.log('[http] upgrade request:', req.url, 'from', socket.remoteAddress);
+  });
+
   // Initialize WebSocket server for real-time mover notifications
   moverWebSocket.initialize(httpServer);
   // Initialize WebSocket server for real-time customer notifications
