@@ -397,6 +397,7 @@ class AdminVoiceWebSocketServer {
     });
     console.log('[ws] admin-voice WebSocket initialized on /ws/admin-voice');
     this.wss.on('connection', (ws, req) => {
+      console.log('[ws/admin-voice] connection opened');
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       const token = url.searchParams.get('token');
       const data = token ? validateToken(token) : null;
@@ -408,11 +409,20 @@ class AdminVoiceWebSocketServer {
       if (!data || data.channel !== 'admin-voice') return ws.close(4003, 'Invalid or expired token');
       const id = `${data.userId}-${Date.now()}`;
       this.clients.set(id, { ws, userId: data.userId, lastPing: Date.now() });
+      // Protocol-level pings every 20s keep Railway's proxy from
+      // reaping the socket after ~60s of app-layer silence.
+      const pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          try { ws.ping(); } catch (_) { /* socket dying — close handler will clean up */ }
+        }
+      }, 20000);
       ws.on('close', (code, reason) => {
         console.log('[ws/admin-voice] closed:', { code, reason: reason.toString() });
+        clearInterval(pingInterval);
         this.clients.delete(id);
       });
-      ws.on('error', () => this.clients.delete(id));
+      ws.on('error', () => { clearInterval(pingInterval); this.clients.delete(id); });
+      ws.on('pong', () => { const c = this.clients.get(id); if (c) c.lastPing = Date.now(); });
       ws.on('message', (raw) => {
         try { if (JSON.parse(raw.toString()).type === 'pong') this.clients.get(id)!.lastPing = Date.now(); } catch (_) {}
       });
