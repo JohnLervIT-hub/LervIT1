@@ -386,7 +386,7 @@ class AdminVoiceWebSocketServer {
 
   initialize(server: Server) {
     this.wss = new WebSocketServer({
-      server, path: '/ws/admin-voice',
+      server, path: '/admin-voice-ws',
       verifyClient: (info, callback) => {
         const origin = info.origin || info.req.headers.origin;
         const host = info.req.headers.host || '';
@@ -395,7 +395,7 @@ class AdminVoiceWebSocketServer {
         callback(valid, valid ? undefined : 403, valid ? undefined : 'Forbidden');
       },
     });
-    console.log('[ws] admin-voice WebSocket initialized on /ws/admin-voice');
+    console.log('[ws] admin-voice WebSocket initialized on /admin-voice-ws');
     this.wss.on('connection', (ws, req) => {
       console.log('[ws/admin-voice] connection opened');
       const url = new URL(req.url || '', `http://${req.headers.host}`);
