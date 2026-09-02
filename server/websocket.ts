@@ -22,6 +22,7 @@ interface WebSocketToken {
   channel?: 'admin-voice';
   createdAt: number;
   expiresAt: number;
+  used?: boolean;
 }
 
 // In-memory token store (tokens expire after 5 minutes)
@@ -72,21 +73,19 @@ export function generateAdminVoiceWebSocketToken(userId: string): string {
 
 /**
  * Validate a WebSocket token and return the associated user info.
+ * Reusable within the TTL window — a single token can back multiple
+ * connection attempts (initial connect, reconnect after transient
+ * drop, etc.) until it expires. Marked `used` for observability;
+ * eviction is done by the periodic sweeper above.
  */
 function validateToken(token: string): WebSocketToken | null {
   const tokenData = tokenStore.get(token);
-  
-  if (!tokenData) {
-    return null;
-  }
-  
+  if (!tokenData) return null;
   if (tokenData.expiresAt < Date.now()) {
     tokenStore.delete(token);
     return null;
   }
-  
-  // Token is valid - remove it (one-time use)
-  tokenStore.delete(token);
+  tokenData.used = true;
   return tokenData;
 }
 
