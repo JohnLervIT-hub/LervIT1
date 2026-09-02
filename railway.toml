@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+nixpacksConfigPath = "nixpacks.toml"
+
+[deploy]
+startCommand = "node scripts/startup-migrate.js && node dist/index.js"
