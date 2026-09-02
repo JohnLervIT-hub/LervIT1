@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
+import { Server as IOServer, type Namespace, type Socket as IOSocket } from 'socket.io';
 import { logger } from './logger';
 import crypto from 'crypto';
 
@@ -379,63 +380,47 @@ class CustomerWebSocketServer {
 
 export const customerWebSocket = new CustomerWebSocketServer();
 
-class AdminVoiceWebSocketServer {
-  private wss: WebSocketServer | null = null;
-  private clients = new Map<string, ConnectedCustomer>();
+// Admin-voice channel runs on Socket.io because Railway's proxy was
+// silently dropping raw ws connections between the upgrade handshake
+// and the ws library's 'connection' event. Socket.io's polling
+// fallback survives that; namespace-based auth keeps the same
+// one-token/one-connection semantics we had before.
+class AdminVoiceSocketServer {
+  private io: IOServer | null = null;
+  private nsp: Namespace | null = null;
 
   initialize(server: Server) {
-    this.wss = new WebSocketServer({
-      server, path: '/admin-voice-ws',
-      verifyClient: (info, callback) => {
-        const origin = info.origin || info.req.headers.origin;
-        const host = info.req.headers.host || '';
-        const valid = !origin || origin.includes(host) || origin.includes('.replit.') || origin.includes('localhost');
-        console.log('[ws/admin-voice] upgrade attempt:', { origin, host, valid });
-        callback(valid, valid ? undefined : 403, valid ? undefined : 'Forbidden');
-      },
+    this.io = new IOServer(server, {
+      cors: { origin: true, credentials: true },
+      transports: ['websocket', 'polling'],
     });
-    console.log('[ws] admin-voice WebSocket initialized on /admin-voice-ws');
-    this.wss.on('connection', (ws, req) => {
-      console.log('[ws/admin-voice] connection opened');
-      const url = new URL(req.url || '', `http://${req.headers.host}`);
-      const token = url.searchParams.get('token');
+    this.nsp = this.io.of('/admin-voice');
+    this.nsp.use((socket, next) => {
+      const token = (socket.handshake.auth as { token?: string } | undefined)?.token;
       const data = token ? validateToken(token) : null;
-      console.log('[ws/admin-voice] token validation:', {
-        token: token?.substring(0, 8),
-        valid: !!data,
-        channel: data?.channel,
-      });
-      if (!data || data.channel !== 'admin-voice') return ws.close(4003, 'Invalid or expired token');
-      const id = `${data.userId}-${Date.now()}`;
-      this.clients.set(id, { ws, userId: data.userId, lastPing: Date.now() });
-      // Protocol-level pings every 20s keep Railway's proxy from
-      // reaping the socket after ~60s of app-layer silence.
-      const pingInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          try { ws.ping(); } catch (_) { /* socket dying — close handler will clean up */ }
-        }
-      }, 20000);
-      ws.on('close', (code, reason) => {
-        console.log('[ws/admin-voice] closed:', { code, reason: reason.toString() });
-        clearInterval(pingInterval);
-        this.clients.delete(id);
-      });
-      ws.on('error', () => { clearInterval(pingInterval); this.clients.delete(id); });
-      ws.on('pong', () => { const c = this.clients.get(id); if (c) c.lastPing = Date.now(); });
-      ws.on('message', (raw) => {
-        try { if (JSON.parse(raw.toString()).type === 'pong') this.clients.get(id)!.lastPing = Date.now(); } catch (_) {}
-      });
-      ws.send(JSON.stringify({ type: 'connected', channel: 'admin-voice' }));
+      console.log('[socket.io/admin-voice] auth:', { token: token?.substring(0, 8), valid: !!data, channel: data?.channel });
+      if (!data || data.channel !== 'admin-voice') return next(new Error('Invalid or expired token'));
+      socket.data.userId = data.userId;
+      next();
     });
-    logger.info('Admin voice WebSocket server initialized');
+    this.nsp.on('connection', (socket: IOSocket) => {
+      console.log('[socket.io/admin-voice] connected:', { userId: socket.data.userId, id: socket.id, transport: socket.conn.transport.name });
+      socket.emit('connected', { channel: 'admin-voice' });
+      socket.conn.on('upgrade', (t: { name: string }) => {
+        console.log('[socket.io/admin-voice] transport upgraded:', { id: socket.id, transport: t.name });
+      });
+      socket.on('disconnect', (reason) => {
+        console.log('[socket.io/admin-voice] disconnected:', { userId: socket.data.userId, id: socket.id, reason });
+      });
+    });
+    console.log('[socket.io] admin-voice namespace initialized at /admin-voice');
+    logger.info('Admin voice Socket.io namespace initialized');
   }
 
   notify(notification: object) {
-    this.clients.forEach((client, id) => {
-      if (client.ws.readyState !== WebSocket.OPEN) { this.clients.delete(id); return; }
-      try { client.ws.send(JSON.stringify({ ...notification, timestamp: new Date().toISOString() })); } catch (_) { this.clients.delete(id); }
-    });
+    if (!this.nsp) return;
+    this.nsp.emit('message', { ...notification, timestamp: new Date().toISOString() });
   }
 }
 
-export const adminVoiceWebSocket = new AdminVoiceWebSocketServer();
+export const adminVoiceWebSocket = new AdminVoiceSocketServer();
