@@ -52,6 +52,34 @@ async function run() {
     console.log('[startup-migrate] Referral columns found:',
       verify.rows.map(r => r.column_name));
 
+    // Reviews: enforce one review per (booking, customer). Dedupe existing rows
+    // first so the ALTER does not fail on prod data left behind by the review
+    // dialog loop. Guarded on constraint existence so we do not re-scan the
+    // table on every deploy.
+    try {
+      const { rows: existing } = await client.query(`
+        SELECT 1 FROM pg_constraint WHERE conname = 'reviews_booking_customer_unique'
+      `);
+      if (existing.length === 0) {
+        const dedupe = await client.query(`
+          DELETE FROM reviews a USING reviews b
+          WHERE a.id > b.id
+            AND a.booking_id  = b.booking_id
+            AND a.customer_id = b.customer_id
+        `);
+        await client.query(`
+          ALTER TABLE reviews
+            ADD CONSTRAINT reviews_booking_customer_unique UNIQUE (booking_id, customer_id)
+        `);
+        console.log(`[startup-migrate] ✓ Added reviews_booking_customer_unique (removed ${dedupe.rowCount} duplicate rows).`);
+      } else {
+        console.log('[startup-migrate] ✓ reviews_booking_customer_unique already present.');
+      }
+    } catch (err) {
+      console.error('[startup-migrate] ✗ Reviews unique constraint FAILED:', err.message);
+      throw err;
+    }
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);

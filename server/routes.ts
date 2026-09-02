@@ -6583,9 +6583,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log('[Reviews] Creating review in database...');
-      const review = await storage.createReview(reviewData);
-      console.log('[Reviews] Review created with id:', review.id);
-      
+      let review;
+      try {
+        review = await storage.createReview(reviewData);
+        console.log('[Reviews] Review created with id:', review.id);
+      } catch (err: any) {
+        // Unique-violation on (booking_id, customer_id) — customer already reviewed this
+        // booking. Treat as success (idempotent) and return the existing row so the client
+        // stops re-prompting, matching how POST /api/surveys handles the same case.
+        if (err?.code !== '23505') throw err;
+        const [existing] = await db.select().from(reviews)
+          .where(and(eq(reviews.bookingId, reviewData.bookingId), eq(reviews.customerId, reviewData.customerId)))
+          .limit(1);
+        if (!existing) throw err;
+        console.log('[Reviews] Duplicate submission (23505) — returning existing review', existing.id);
+        const customer = await storage.getUser(existing.customerId);
+        return res.json({ ...existing, customer: customer ? { id: customer.id, name: customer.name } : null });
+      }
+
       // IMPORTANT: Update mover's average rating after new review (skip for partner bookings with no mover)
       if (review.moverId) {
         const allReviews = await storage.getReviewsByMover(review.moverId);

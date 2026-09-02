@@ -243,6 +243,7 @@ export const reviews = pgTable("reviews", {
 }, (table) => ({
   moverIdIdx: index("reviews_mover_id_idx").on(table.moverId),
   bookingIdIdx: index("reviews_booking_id_idx").on(table.bookingId),
+  bookingCustomerUnique: unique("reviews_booking_customer_unique").on(table.bookingId, table.customerId),
 }));
 
 export const jobNotifications = pgTable("job_notifications", {

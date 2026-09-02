@@ -170,9 +170,11 @@ export default function CustomerDashboard() {
     if (!bookings || isLoading || showTutorial || feedbackDialogOpen) return;
     
     // Find completed bookings that need reviews (no review yet)
-    // Only prompt when mover has successfully completed the job (status === "completed")
+    // Only prompt when mover has successfully completed the job (status === "completed").
+    // The localStorage gate closes the door synchronously on submit so the dialog does not
+    // re-fire during the React Query stale-cache window before /api/bookings refetches.
     const pendingReviewBooking = bookings.find(
-      (b) => b.status === "completed" && !b.hasReview && b.moverId
+      (b) => b.status === "completed" && !b.hasReview && b.moverId && !localStorage.getItem(`feedback_done_${b.id}`)
     );
     
     if (pendingReviewBooking) {
@@ -293,6 +295,7 @@ export default function CustomerDashboard() {
         title: "Review Submitted!",
         description: "Thank you for your feedback. The mover's rating has been updated.",
       });
+      if (feedbackBooking) localStorage.setItem(`feedback_done_${feedbackBooking.id}`, "1");
       setFeedbackDialogOpen(false);
       setFeedbackBooking(null);
       resetFeedbackForm();

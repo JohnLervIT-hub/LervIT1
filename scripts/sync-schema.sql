@@ -264,7 +264,8 @@ CREATE TABLE IF NOT EXISTS "reviews" (
   "customer_id" varchar     NOT NULL REFERENCES "users"("id"),
   "rating"      integer     NOT NULL,
   "comment"     text,
-  "created_at"  timestamp   NOT NULL DEFAULT now()
+  "created_at"  timestamp   NOT NULL DEFAULT now(),
+  CONSTRAINT "reviews_booking_customer_unique" UNIQUE ("booking_id", "customer_id")
 );
 
 -- ─── job_notifications ───────────────────────────────────────────────────────
