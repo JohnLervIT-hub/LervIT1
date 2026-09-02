@@ -94,7 +94,7 @@ app.use(session({
     secure: 'auto', // Automatically set based on connection (respects trust proxy)
     httpOnly: true,
     maxAge: 8 * 60 * 60 * 1000, // 8 hours absolute expiry
-    sameSite: 'strict',
+    sameSite: 'lax',
   },
   name: 'lervit.sid',
 }));

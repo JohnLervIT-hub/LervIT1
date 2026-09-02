@@ -913,17 +913,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userData = user;
       req.session.regenerate((err) => {
         if (err) {
+          console.error('[login] session.regenerate FAILED', { userId: userData.id, error: err instanceof Error ? err.message : String(err) });
           return res.status(500).json({ error: "Session error" });
         }
-        
+
         // Set session data after regeneration
         req.session.userId = userData.id;
         req.session.userRole = userData.role;
-        
+
+        console.log('[login] calling session.save', { userId: userData.id, sessionID: req.sessionID });
         req.session.save((saveErr) => {
           if (saveErr) {
+            console.error('[login] session.save FAILED', { userId: userData.id, sessionID: req.sessionID, error: saveErr instanceof Error ? saveErr.message : String(saveErr) });
             return res.status(500).json({ error: "Session save error" });
           }
+          console.log('[login] session.save OK', {
+            userId: userData.id,
+            sessionID: req.sessionID,
+            cookieSecure: req.session.cookie.secure,
+            cookieSameSite: req.session.cookie.sameSite,
+            cookieDomain: req.session.cookie.domain,
+            reqSecure: req.secure,
+            xForwardedProto: req.headers['x-forwarded-proto'],
+          });
+          res.on('finish', () => {
+            const setCookie = res.getHeader('Set-Cookie');
+            console.log('[login] response finished', {
+              userId: userData.id,
+              setCookiePresent: !!setCookie,
+              setCookieCount: Array.isArray(setCookie) ? setCookie.length : (setCookie ? 1 : 0),
+            });
+          });
           const { password: _, ...userWithoutPassword } = userData;
           res.json(userWithoutPassword);
         });
