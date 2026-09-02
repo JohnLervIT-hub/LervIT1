@@ -391,10 +391,11 @@ class AdminVoiceWebSocketServer {
         const origin = info.origin || info.req.headers.origin;
         const host = info.req.headers.host || '';
         const valid = !origin || origin.includes(host) || origin.includes('.replit.') || origin.includes('localhost');
-        if (!valid) console.log('[ws/admin-voice] rejected:', { origin, host, valid });
+        console.log('[ws/admin-voice] upgrade attempt:', { origin, host, valid });
         callback(valid, valid ? undefined : 403, valid ? undefined : 'Forbidden');
       },
     });
+    console.log('[ws] admin-voice WebSocket initialized on /ws/admin-voice');
     this.wss.on('connection', (ws, req) => {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       const token = url.searchParams.get('token');
