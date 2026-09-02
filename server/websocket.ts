@@ -400,10 +400,18 @@ class AdminVoiceWebSocketServer {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       const token = url.searchParams.get('token');
       const data = token ? validateToken(token) : null;
+      console.log('[ws/admin-voice] token validation:', {
+        token: token?.substring(0, 8),
+        valid: !!data,
+        channel: data?.channel,
+      });
       if (!data || data.channel !== 'admin-voice') return ws.close(4003, 'Invalid or expired token');
       const id = `${data.userId}-${Date.now()}`;
       this.clients.set(id, { ws, userId: data.userId, lastPing: Date.now() });
-      ws.on('close', () => this.clients.delete(id));
+      ws.on('close', (code, reason) => {
+        console.log('[ws/admin-voice] closed:', { code, reason: reason.toString() });
+        this.clients.delete(id);
+      });
       ws.on('error', () => this.clients.delete(id));
       ws.on('message', (raw) => {
         try { if (JSON.parse(raw.toString()).type === 'pong') this.clients.get(id)!.lastPing = Date.now(); } catch (_) {}
