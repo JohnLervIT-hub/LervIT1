@@ -391,6 +391,7 @@ class AdminVoiceWebSocketServer {
         const origin = info.origin || info.req.headers.origin;
         const host = info.req.headers.host || '';
         const valid = !origin || origin.includes(host) || origin.includes('.replit.') || origin.includes('localhost');
+        if (!valid) console.log('[ws/admin-voice] rejected:', { origin, host, valid });
         callback(valid, valid ? undefined : 403, valid ? undefined : 'Forbidden');
       },
     });

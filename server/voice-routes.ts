@@ -14,6 +14,12 @@ const enabled = () => !!(process.env.TELNYX_API_KEY && process.env.TELNYX_PHONE_
 const callerId = () => normalize(process.env.TELNYX_PHONE_NUMBER) || "";
 export const encodeClientState = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64");
 export const PREPARE_TTL_MS = 2 * 60_000;
+// Live call rows (initiated/ringing/answered/held) that have not received any
+// webhook or client command update within this window are treated as orphaned
+// (usually a crashed browser / dropped WebRTC session) and auto-expired so
+// they don't block the admin's next prepare with a 409 "active" response.
+export const ACTIVE_STALE_TTL_MS = 15 * 60_000;
+const ACTIVE_LIVE_STATUSES = ["initiated", "ringing", "answered", "held"] as const;
 export function isStalePreparedCall(status: string, createdAt: Date, now = new Date()) {
   return status === "prepared" && createdAt.getTime() <= now.getTime() - PREPARE_TTL_MS;
 }
@@ -410,8 +416,15 @@ export function registerVoiceRoutes(app: Express) {
         const profile = (await tx.select().from(adminVoiceProfiles).where(and(eq(adminVoiceProfiles.userId, userId), eq(adminVoiceProfiles.enabled, true))).limit(1))[0];
         if (!profile) return { kind: "profile-disabled" as const };
         const now = new Date();
+        const activeStaleCutoff = new Date(now.getTime() - ACTIVE_STALE_TTL_MS);
         await tx.update(voiceCalls).set({ status: "expired", endedAt: now, updatedAt: now })
-          .where(and(eq(voiceCalls.adminId, userId), eq(voiceCalls.status, "prepared"), lte(voiceCalls.createdAt, new Date(now.getTime() - PREPARE_TTL_MS))));
+          .where(and(
+            eq(voiceCalls.adminId, userId),
+            or(
+              and(eq(voiceCalls.status, "prepared"), lte(voiceCalls.createdAt, new Date(now.getTime() - PREPARE_TTL_MS))),
+              and(inArray(voiceCalls.status, [...ACTIVE_LIVE_STATUSES]), lte(voiceCalls.updatedAt, activeStaleCutoff)),
+            ),
+          ));
         const prior = (await tx.select().from(voiceCalls).where(eq(voiceCalls.clientState, clientState)).limit(1))[0];
         if (prior) {
           if (prior.adminId !== userId) return { kind: "foreign-key" as const };
@@ -445,6 +458,19 @@ export function registerVoiceRoutes(app: Express) {
       .where(and(eq(voiceCalls.id, req.params.id), eq(voiceCalls.adminId, userId), eq(voiceCalls.status, "prepared"))).returning();
     if (!cancelled[0]) return res.status(404).json({ error: "Owned prepared call not found" });
     res.json({ call: await enrich(cancelled[0]) });
+  });
+  // Manual escape hatch when a prior call is stuck in prepared/initiated/ringing/
+  // answered/held (e.g. browser crashed before a terminating webhook arrived).
+  // Marks all of the requesting admin's such rows as expired so the next prepare
+  // is not blocked with a 409 "active" response.
+  app.post("/api/admin/voice/calls/clear-active", async (req, res) => {
+    if (!admin(req, res)) return;
+    const userId = (req as any).user.id;
+    const now = new Date();
+    const cleared = await db.update(voiceCalls).set({ status: "expired", endedAt: now, updatedAt: now })
+      .where(and(eq(voiceCalls.adminId, userId), inArray(voiceCalls.status, ["prepared", ...ACTIVE_LIVE_STATUSES])))
+      .returning({ id: voiceCalls.id });
+    res.json({ clearedCount: cleared.length, clearedIds: cleared.map((c) => c.id) });
   });
   app.post("/api/admin/voice/calls/:id/commands", async (req, res) => {
     if (!admin(req, res)) return;
