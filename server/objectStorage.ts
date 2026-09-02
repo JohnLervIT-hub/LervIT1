@@ -6,11 +6,11 @@
  * is no proxy sidecar or provider-specific dependency.
  *
  * Env:
- *   S3_ENDPOINT           https://<accountid>.r2.cloudflarestorage.com
- *   S3_BUCKET             destination bucket (single bucket for private + public)
- *   S3_ACCESS_KEY_ID
- *   S3_SECRET_ACCESS_KEY
- *   S3_REGION             defaults to "auto" (R2)
+ *   R2_ENDPOINT           https://<accountid>.r2.cloudflarestorage.com
+ *   R2_BUCKET             destination bucket (single bucket for private + public)
+ *   R2_ACCESS_KEY
+ *   R2_SECRET
+ *   R2_REGION             defaults to "auto" (R2)
  */
 
 import { Response } from "express";
@@ -69,11 +69,11 @@ function requireEnv(name: string): string {
 function s3(): S3Client {
   if (cachedClient) return cachedClient;
   cachedClient = new S3Client({
-    region: process.env.S3_REGION || "auto",
-    endpoint: requireEnv("S3_ENDPOINT"),
+    region: process.env.R2_REGION || "auto",
+    endpoint: requireEnv("R2_ENDPOINT"),
     credentials: {
-      accessKeyId: requireEnv("S3_ACCESS_KEY_ID"),
-      secretAccessKey: requireEnv("S3_SECRET_ACCESS_KEY"),
+      accessKeyId: requireEnv("R2_ACCESS_KEY"),
+      secretAccessKey: requireEnv("R2_SECRET"),
     },
     forcePathStyle: true,
   });
@@ -82,7 +82,7 @@ function s3(): S3Client {
 
 function bucket(): string {
   if (cachedBucket) return cachedBucket;
-  cachedBucket = requireEnv("S3_BUCKET");
+  cachedBucket = requireEnv("R2_BUCKET");
   return cachedBucket;
 }
 

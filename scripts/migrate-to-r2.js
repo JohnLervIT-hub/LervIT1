@@ -8,10 +8,10 @@
  * everything.
  *
  * Required env:
- *   S3_ENDPOINT           e.g. https://<accountid>.r2.cloudflarestorage.com
- *   S3_BUCKET             R2 bucket name (destination)
- *   S3_ACCESS_KEY_ID      R2 API token access key
- *   S3_SECRET_ACCESS_KEY  R2 API token secret
+ *   R2_ENDPOINT           e.g. https://<accountid>.r2.cloudflarestorage.com
+ *   R2_BUCKET             R2 bucket name (destination)
+ *   R2_ACCESS_KEY         R2 API token access key
+ *   R2_SECRET             R2 API token secret
  *
  * Usage:
  *   node scripts/migrate-to-r2.js
@@ -25,7 +25,7 @@ import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s
 const REPLIT_SIDECAR_ENDPOINT = 'http://127.0.0.1:1106';
 const SOURCE_BUCKET = 'replit-objstore-6a8aef56-1468-48fe-8766-aff0350d0678';
 
-const requiredEnv = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'];
+const requiredEnv = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY', 'R2_SECRET'];
 for (const key of requiredEnv) {
   if (!process.env[key]) {
     console.error(`[migrate-to-r2] FATAL: ${key} is not set.`);
@@ -49,15 +49,15 @@ const gcs = new Storage({
 });
 
 const s3 = new S3Client({
-  region: 'auto',
-  endpoint: process.env.S3_ENDPOINT,
+  region: process.env.R2_REGION || 'auto',
+  endpoint: process.env.R2_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    accessKeyId: process.env.R2_ACCESS_KEY,
+    secretAccessKey: process.env.R2_SECRET,
   },
 });
 
-const R2_BUCKET = process.env.S3_BUCKET;
+const R2_BUCKET = process.env.R2_BUCKET;
 
 async function existsInR2(key, expectedSize) {
   try {
@@ -90,7 +90,7 @@ async function migrate() {
   const bucket = gcs.bucket(SOURCE_BUCKET);
 
   console.log(`[migrate-to-r2] Source: gs://${SOURCE_BUCKET}`);
-  console.log(`[migrate-to-r2] Target: s3://${R2_BUCKET} (${process.env.S3_ENDPOINT})`);
+  console.log(`[migrate-to-r2] Target: s3://${R2_BUCKET} (${process.env.R2_ENDPOINT})`);
   console.log('[migrate-to-r2] Listing source objects...');
 
   const [files] = await bucket.getFiles({ autoPaginate: true });

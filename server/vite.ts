@@ -1,10 +1,17 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+
+// import.meta.dirname was only added in Node 20.11. Railway's Nixpacks default
+// can land on an older Node where it evaluates to undefined, and
+// path.resolve(undefined, ...) throws "paths[0] must be of type string" at
+// serveStatic() during boot. fileURLToPath works on every supported Node.
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 const viteLogger = createLogger();
 
@@ -46,7 +53,7 @@ export async function setupVite(app: Express, server: Server) {
 
     try {
       const clientTemplate = path.resolve(
-        import.meta.dirname,
+        moduleDir,
         "..",
         "client",
         "index.html",
@@ -68,7 +75,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  const distPath = path.resolve(moduleDir, "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
