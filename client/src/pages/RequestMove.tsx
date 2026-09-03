@@ -62,30 +62,9 @@ function countHeavyItems(items: IdentifiedItem[]): number {
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
 const MAX_NEARBY_TRUCKS = 8;
-
-// Data-URL truck icon — multi-color side-view (cab + trailer + wheels + windshield).
-// Uses a URL-based Icon rather than a Symbol path so it renders as a real image on
-// every device (the single-fill Symbol was showing as a solid blue square in some
-// Google Maps builds on the imperative API).
-function makeTruckIconUrl(body: string, cab: string): string {
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'>` +
-      `<ellipse cx='20' cy='36' rx='11' ry='1.8' fill='rgba(0,0,0,0.2)'/>` +
-      `<rect x='4' y='14' width='30' height='20' rx='3' fill='${body}' stroke='#ffffff' stroke-width='2'/>` +
-      `<rect x='9' y='6' width='22' height='10' rx='2' fill='${cab}' stroke='#ffffff' stroke-width='2'/>` +
-      `<rect x='12' y='8' width='16' height='4' rx='1' fill='#dbeafe'/>` +
-      `<circle cx='11' cy='34' r='2.5' fill='#1f2937' stroke='#ffffff' stroke-width='1'/>` +
-      `<circle cx='29' cy='34' r='2.5' fill='#1f2937' stroke='#ffffff' stroke-width='1'/>` +
-    `</svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-const TRUCK_ICON_AVAILABLE = makeTruckIconUrl("#2563eb", "#1e40af");
-const TRUCK_ICON_HIGHLIGHTED = makeTruckIconUrl("#f59e0b", "#d97706");
-const PULSE_COLOR = "#2563eb";
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
-}
+const PULSE_COLOR = "#1a56db";
+const TRUCK_BADGE_COLOR_DEFAULT = "#1a56db";
+const TRUCK_BADGE_COLOR_HIGHLIGHT = "#d97706";
 
 // Premium logistics map style — clear roads, reduced clutter, strong visual hierarchy
 const BOOKING_MAP_STYLES = [
@@ -286,10 +265,15 @@ export default function RequestMove() {
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
   const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Nearby-mover markers rendered on the booking map. Kept in a ref so we can
-  // clear them without triggering re-renders.
-  const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
-  const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  // Nearby-mover overlays (HTML div badges via google.maps.OverlayView).
+  // Each handle exposes setHighlighted so the highlight effect can update the
+  // marker without rebuilding it.
+  type TruckOverlayHandle = {
+    moverId: string;
+    overlay: google.maps.OverlayView;
+    setHighlighted: (h: boolean) => void;
+  };
+  const step1MoverOverlaysRef = useRef<TruckOverlayHandle[]>([]);
   // Pulsing halo shown beneath the single nearest available truck.
   const step1PulseMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1PulseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -638,10 +622,8 @@ export default function RequestMove() {
       if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
       step1AnimPolylineRef.current?.setMap(null);
       step1AnimPolylineRef.current = null;
-      step1MoverMarkersRef.current.forEach((m) => m.setMap(null));
-      step1MoverMarkersRef.current = [];
-      step1MoverInfoWindowRef.current?.close();
-      step1MoverInfoWindowRef.current = null;
+      step1MoverOverlaysRef.current.forEach((h) => h.overlay.setMap(null));
+      step1MoverOverlaysRef.current = [];
       step1PulseMarkerRef.current?.setMap(null);
       step1PulseMarkerRef.current = null;
       if (step1PulseIntervalRef.current) {
@@ -726,47 +708,14 @@ export default function RequestMove() {
             );
           }
           if (map && leg) {
-            // ── Smart camera framing ─────────────────────────────────────
-            // Centre on the route midpoint.
-            const centerLat = (leg.start_location.lat() + leg.end_location.lat()) / 2;
-            const centerLng = (leg.start_location.lng() + leg.end_location.lng()) / 2;
-
-            // Measure the full route span (all path points, not just endpoints).
+            // Frame the whole route via fitBounds with generous vertical padding
+            // so the endpoint chips (Pickup / Dropoff) aren't clipped at the top
+            // or bottom of the map viewport.
             const tripBounds = new google.maps.LatLngBounds();
             tripBounds.extend(leg.start_location);
             tripBounds.extend(leg.end_location);
-            (result.routes[0]?.overview_path ?? []).forEach(pt => tripBounds.extend(pt));
-            const ne = tripBounds.getNorthEast();
-            const sw = tripBounds.getSouthWest();
-            const latSpan = Math.max(ne.lat() - sw.lat(), 0);
-            const lngSpan = Math.max(ne.lng() - sw.lng(), 0);
-
-            // km per degree at Calgary's latitude (51°), cos(51°) ≈ 0.629
-            const COS_LAT = 0.629;
-            const routeKmH = Math.max(latSpan * 111.0, 2); // min 2 km guard
-            const routeKmW = Math.max(lngSpan *  69.0, 2);
-
-            // Mercator viewport size in km at zoom-0 for this screen.
-            // formula: km_visible = pixels × 156.543 × cos(lat) / 2^Z
-            // → at Z=0: C = pixels × 156.543 × cos(lat)
-            const mapDiv = step1MapDivRef.current;
-            const vW = mapDiv?.clientWidth  || 375;
-            const vH = mapDiv?.clientHeight || 439;
-            const C_H = vH * 156.543 * COS_LAT; // km visible vertically   at Z=0
-            const C_W = vW * 156.543 * COS_LAT; // km visible horizontally at Z=0
-
-            // Pick the zoom where the route fills 72 % of the constraining
-            // viewport dimension.  Using the SMALLER of the two zoom values
-            // guarantees both endpoints are always visible.
-            const FILL = 0.72;
-            const zoomH = Math.log2((C_H * FILL) / routeKmH);
-            const zoomW = Math.log2((C_W * FILL) / routeKmW);
-            // Add 0.5 before rounding to bias toward a slightly tighter frame
-            const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW) + 0.15)));
-
-            map.setCenter({ lat: centerLat, lng: centerLng });
-            map.setZoom(finalZoom);
-            // ─────────────────────────────────────────────────────────────
+            (result.routes[0]?.overview_path ?? []).forEach((pt) => tripBounds.extend(pt));
+            map.fitBounds(tripBounds, { top: 80, bottom: 80, left: 40, right: 40 });
 
             // ── Flowing dash animation over the route ──────────────────────
             // Clear any previous animation before drawing a new one
@@ -816,13 +765,15 @@ export default function RequestMove() {
               step1PickupMarkerRef.current?.setMap(null);
               step1DropoffMarkerRef.current?.setMap(null);
 
-              // Pickup — branded green marker chip
+              // Pickup — branded green marker chip.
+              // zIndex must beat the DirectionsRenderer polyline and the animated
+              // dash overlay (zIndex 5) so the chip always sits above the route.
               step1PickupMarkerRef.current = new google.maps.Marker({
                 position: leg.start_location,
                 map,
                 icon: makeRouteMarkerIcon("Pickup", "#16a34a", "#16a34a", "#ffffff"),
                 title: pickupAddress,
-                zIndex: 10,
+                zIndex: 100,
               });
 
               // Dropoff — branded dark marker chip
@@ -831,7 +782,7 @@ export default function RequestMove() {
                 map,
                 icon: makeRouteMarkerIcon("Dropoff", "#111827", "#111827", "#ffffff"),
                 title: dropoffAddress,
-                zIndex: 10,
+                zIndex: 100,
               });
             }
           }
@@ -910,9 +861,9 @@ export default function RequestMove() {
     const map = step1MapInstanceRef.current;
     if (!map || !step1DivReady) return;
 
-    // Tear down previous markers + pulse first — cheaper than diffing for a max of 8.
-    step1MoverMarkersRef.current.forEach((m) => m.setMap(null));
-    step1MoverMarkersRef.current = [];
+    // Tear down previous overlays + pulse first — cheaper than diffing for a max of 8.
+    step1MoverOverlaysRef.current.forEach((h) => h.overlay.setMap(null));
+    step1MoverOverlaysRef.current = [];
     step1PulseMarkerRef.current?.setMap(null);
     step1PulseMarkerRef.current = null;
     if (step1PulseIntervalRef.current) {
@@ -920,57 +871,132 @@ export default function RequestMove() {
       step1PulseIntervalRef.current = null;
     }
 
-    if (!step1MoverInfoWindowRef.current) {
-      step1MoverInfoWindowRef.current = new google.maps.InfoWindow({ disableAutoPan: true });
+    // Custom HTML overlay — circular blue badge with a 🚛 emoji. Defined here
+    // (inside the effect) because it must extend google.maps.OverlayView, which
+    // only exists after the Maps API script has loaded.
+    class TruckBadgeOverlay extends google.maps.OverlayView {
+      private position: google.maps.LatLng;
+      private staggerMs: number;
+      private moverName: string;
+      private moverRating: number;
+      private onClickHandler: () => void;
+      private outer: HTMLDivElement | null = null;
+      private inner: HTMLDivElement | null = null;
+      private tooltip: HTMLDivElement | null = null;
+      private highlighted = false;
+
+      constructor(
+        pos: google.maps.LatLng,
+        staggerMs: number,
+        moverName: string,
+        moverRating: number,
+        onClick: () => void
+      ) {
+        super();
+        this.position = pos;
+        this.staggerMs = staggerMs;
+        this.moverName = moverName;
+        this.moverRating = moverRating;
+        this.onClickHandler = onClick;
+      }
+
+      onAdd() {
+        const outer = document.createElement("div");
+        outer.style.cssText = "position:absolute;cursor:pointer;transform:translate(-50%,-50%);z-index:10;";
+
+        const inner = document.createElement("div");
+        inner.style.cssText =
+          "background:" + TRUCK_BADGE_COLOR_DEFAULT + ";border-radius:50%;width:36px;height:36px;" +
+          "display:flex;align-items:center;justify-content:center;" +
+          "box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid #ffffff;" +
+          "font-size:18px;line-height:1;opacity:0;" +
+          "transition:opacity 350ms ease-out,background 200ms,width 150ms,height 150ms,font-size 150ms;";
+        inner.textContent = "🚛";
+
+        // Tooltip (name + rating) shown on hover — pure DOM, no InfoWindow
+        const tooltip = document.createElement("div");
+        tooltip.style.cssText =
+          "position:absolute;bottom:44px;left:50%;transform:translateX(-50%);" +
+          "background:#111827;color:#ffffff;padding:4px 8px;border-radius:6px;" +
+          "font-family:system-ui,-apple-system,sans-serif;font-size:11px;line-height:1.3;" +
+          "white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 150ms;" +
+          "box-shadow:0 2px 6px rgba(0,0,0,0.2);";
+        const nameEl = document.createElement("div");
+        nameEl.style.fontWeight = "600";
+        nameEl.textContent = this.moverName;
+        const ratingEl = document.createElement("div");
+        ratingEl.style.cssText = "color:#f59e0b;font-size:10px;margin-top:1px;";
+        ratingEl.textContent = "★ " + this.moverRating.toFixed(1);
+        tooltip.appendChild(nameEl);
+        tooltip.appendChild(ratingEl);
+
+        outer.appendChild(inner);
+        outer.appendChild(tooltip);
+
+        outer.addEventListener("click", this.onClickHandler);
+        outer.addEventListener("mouseenter", () => { tooltip.style.opacity = "1"; });
+        outer.addEventListener("mouseleave", () => { tooltip.style.opacity = "0"; });
+
+        this.outer = outer;
+        this.inner = inner;
+        this.tooltip = tooltip;
+        this.getPanes()!.overlayMouseTarget.appendChild(outer);
+
+        // Staggered fade-in
+        window.setTimeout(() => {
+          if (this.inner) this.inner.style.opacity = "1";
+        }, this.staggerMs);
+      }
+
+      draw() {
+        const projection = this.getProjection();
+        if (!projection || !this.outer) return;
+        const px = projection.fromLatLngToDivPixel(this.position);
+        if (!px) return;
+        this.outer.style.left = px.x + "px";
+        this.outer.style.top = px.y + "px";
+      }
+
+      onRemove() {
+        this.outer?.remove();
+        this.outer = null;
+        this.inner = null;
+        this.tooltip = null;
+      }
+
+      setHighlighted(h: boolean) {
+        if (!this.inner || this.highlighted === h) return;
+        this.highlighted = h;
+        this.inner.style.background = h ? TRUCK_BADGE_COLOR_HIGHLIGHT : TRUCK_BADGE_COLOR_DEFAULT;
+        this.inner.style.width = h ? "44px" : "36px";
+        this.inner.style.height = h ? "44px" : "36px";
+        this.inner.style.fontSize = h ? "22px" : "18px";
+        if (this.outer) this.outer.style.zIndex = h ? "20" : "10";
+      }
     }
-    const infoWindow = step1MoverInfoWindowRef.current;
 
     nearbyMovers.forEach((mover, index) => {
       if (mover.latitude == null || mover.longitude == null) return;
 
-      const marker = new google.maps.Marker({
-        position: { lat: mover.latitude, lng: mover.longitude },
-        map,
-        icon: {
-          url: TRUCK_ICON_AVAILABLE,
-          scaledSize: new google.maps.Size(40, 40),
-          anchor: new google.maps.Point(20, 20),
-        },
-        zIndex: 8,
-        opacity: 0,
-      });
-      marker.set("moverId", mover.id);
+      const pos = new google.maps.LatLng(mover.latitude, mover.longitude);
+      const moverName = mover.user?.name || "Available mover";
+      const moverRating = (typeof mover.rating === "string" ? parseFloat(mover.rating) : mover.rating) ?? 0;
+      const moverId = mover.id;
 
-      // Staggered fade-in — subtle "trucks appearing" effect
-      const delay = index * 80;
-      setTimeout(() => {
-        const start = performance.now();
-        const duration = 350;
-        const step = (t: number) => {
-          const p = Math.min((t - start) / duration, 1);
-          marker.setOpacity(p);
-          if (p < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }, delay);
+      const overlay = new TruckBadgeOverlay(
+        pos,
+        index * 80,
+        moverName,
+        moverRating,
+        () => setHighlightedMoverId((prev) => (prev === moverId ? null : moverId))
+      );
+      overlay.setMap(map);
 
-      const name = escapeHtml(mover.user?.name || "Available mover");
-      const rating = (typeof mover.rating === "string" ? parseFloat(mover.rating) : mover.rating) ?? 0;
-      marker.addListener("mouseover", () => {
-        infoWindow.setContent(
-          `<div style="padding:2px 4px;font-family:system-ui;line-height:1.3;">
-            <div style="font-weight:600;color:#111827;font-size:13px;">${name}</div>
-            <div style="color:#f59e0b;font-size:11px;margin-top:2px;">★ ${rating.toFixed(1)}</div>
-          </div>`
-        );
-        infoWindow.open({ anchor: marker, map });
+      step1MoverOverlaysRef.current.push({
+        moverId,
+        overlay,
+        setHighlighted: (h: boolean) => overlay.setHighlighted(h),
       });
-      marker.addListener("mouseout", () => infoWindow.close());
-      marker.addListener("click", () => {
-        setHighlightedMoverId((prev) => (prev === mover.id ? null : mover.id));
-      });
-
-      step1MoverMarkersRef.current.push(marker);
     });
 
     // Pulsing halo beneath the *nearest* available mover (movers are sorted by
@@ -1013,17 +1039,10 @@ export default function RequestMove() {
     }
   }, [nearbyMovers, step1DivReady]);
 
-  // Apply highlight styling without recreating markers (keeps fade-in state).
+  // Apply highlight styling without recreating overlays (keeps fade-in state).
   useEffect(() => {
-    step1MoverMarkersRef.current.forEach((marker) => {
-      const isHighlighted = marker.get("moverId") === highlightedMoverId;
-      const size = isHighlighted ? 48 : 40;
-      marker.setIcon({
-        url: isHighlighted ? TRUCK_ICON_HIGHLIGHTED : TRUCK_ICON_AVAILABLE,
-        scaledSize: new google.maps.Size(size, size),
-        anchor: new google.maps.Point(size / 2, size / 2),
-      });
-      marker.setZIndex(isHighlighted ? 20 : 8);
+    step1MoverOverlaysRef.current.forEach((h) => {
+      h.setHighlighted(h.moverId === highlightedMoverId);
     });
   }, [highlightedMoverId, nearbyMovers]);
 
@@ -2115,10 +2134,10 @@ export default function RequestMove() {
         </div>
 
         {/* Desktop Step Indicator - hidden on mobile.
-            relative + z-20 + bg-background keeps it visually above the sticky
-            map column when scrolling (the map has z-index'd overlays that would
-            otherwise bleed over the numbered circles on the right edge). */}
-        <div className="relative z-20 bg-background mb-6 hidden md:block">
+            relative + z-30 + bg-background keeps it above the sticky map column
+            when scrolling — the map has HTML overlays that would otherwise bleed
+            over the numbered circles on the right edge. */}
+        <div className="relative z-30 bg-background mb-6 hidden md:block">
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((stepNum) => (
               <div key={stepNum} className="flex items-center flex-1">
@@ -2152,7 +2171,7 @@ export default function RequestMove() {
         }>
           {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
-            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[52vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
+            <div className="relative z-0 order-first lg:order-last rounded-2xl overflow-hidden h-[52vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-24 lg:mt-2 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
               <div ref={mapDivRefCallback} className="absolute inset-0" />
               {!mapsIsLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-sm">
