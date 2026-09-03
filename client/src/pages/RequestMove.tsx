@@ -20,7 +20,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2, ChevronRight } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -61,24 +61,97 @@ function countHeavyItems(items: IdentifiedItem[]): number {
 // Calgary city center – default map position before addresses are entered
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
-const MAX_NEARBY_TRUCKS = 8;
-const PULSE_COLOR = "#1a56db";
-const TRUCK_BADGE_COLOR_DEFAULT = "#1a56db";
-const TRUCK_BADGE_COLOR_HIGHLIGHT = "#d97706";
-
-// Uber-style minimal map — light background, hidden POIs/transit, thin roads.
+// Premium logistics map style — clear roads, reduced clutter, strong visual hierarchy
 const BOOKING_MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#dadada" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9e8f7" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  // ── Base & Landscape ──────────────────────────────────────────────────────
+  { elementType: "geometry",                                  stylers: [{ color: "#edecea" }] },
+  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#e8e6e3" }] },
+  { featureType: "landscape.natural",  elementType: "geometry", stylers: [{ color: "#e4e8dc" }] },
+
+  // ── Roads — local ─────────────────────────────────────────────────────────
+  { featureType: "road.local",  elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.local",  elementType: "geometry.stroke",  stylers: [{ color: "#d6d3cf" }, { weight: 0.8 }] },
+  { featureType: "road.local",  elementType: "labels.text.fill", stylers: [{ color: "#888480" }] },
+
+  // ── Roads — arterial ─────────────────────────────────────────────────────
+  { featureType: "road.arterial", elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry.stroke",  stylers: [{ color: "#b8b4ae" }, { weight: 1.2 }] },
+  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#5a5652" }] },
+  { featureType: "road.arterial", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+
+  // ── Roads — highway ───────────────────────────────────────────────────────
+  { featureType: "road.highway", elementType: "geometry",          stylers: [{ color: "#f5d97a" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke",    stylers: [{ color: "#c9aa48" }, { weight: 1 }] },
+  { featureType: "road.highway", elementType: "labels.text.fill",   stylers: [{ color: "#3d3520" }] },
+  { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
+  { featureType: "road.highway.controlled_access", elementType: "geometry", stylers: [{ color: "#e8c84e" }] },
+
+  // ── Global label styles ───────────────────────────────────────────────────
+  { elementType: "labels.text.fill",   stylers: [{ color: "#4a4744" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 2.5 }] },
+
+  // ── Administrative ────────────────────────────────────────────────────────
+  { featureType: "administrative.locality",      elementType: "labels.text.fill",   stylers: [{ color: "#2a2725" }] },
+  { featureType: "administrative.neighborhood",  elementType: "labels.text.fill",   stylers: [{ color: "#6b6764" }] },
+
+  // ── Water ─────────────────────────────────────────────────────────────────
+  { featureType: "water", elementType: "geometry",           stylers: [{ color: "#b8d4e8" }] },
+  { featureType: "water", elementType: "labels.text.fill",   stylers: [{ color: "#5a8aaa" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#daeaf5" }] },
+
+  // ── Parks & green ─────────────────────────────────────────────────────────
+  { featureType: "poi.park", elementType: "geometry",           stylers: [{ color: "#c8dfc0" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill",   stylers: [{ color: "#4a7040" }] },
+  { featureType: "poi.park", elementType: "labels.text.stroke", stylers: [{ color: "#e8f4e0" }] },
+
+  // ── POI — hide distracting business icons, keep labels subtle ────────────
+  { featureType: "poi",          elementType: "labels.icon",       stylers: [{ visibility: "off" }] },
+  { featureType: "poi.business", elementType: "labels",            stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", elementType: "labels",          stylers: [{ visibility: "off" }] },
+
+  // ── Transit — hide ────────────────────────────────────────────────────────
+  { featureType: "transit",      stylers: [{ visibility: "off" }] },
 ];
+
+// Branded map marker: clean dot + short label chip (Pickup / Dropoff)
+function makeRouteMarkerIcon(label: string, dotColor: string, labelBg: string, labelFg: string): google.maps.Icon {
+  const dotR = 7;
+  const fontSize = 10;
+  const padX = 8;
+  const padY = 5;
+  const chipH = fontSize + padY * 2;
+  const chipW = Math.round(label.length * 6.2 + padX * 2);
+  const chipR = chipH / 2;
+  const gap = 4;
+  // Total SVG: dot on bottom, chip floating above
+  const totalW = Math.max(dotR * 2, chipW);
+  const chipX = (totalW - chipW) / 2;
+  const dotCX = totalW / 2;
+  const totalH = chipH + gap + dotR * 2;
+  const chipY = 0;
+  const dotCY = chipH + gap + dotR;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}">
+    <defs>
+      <filter id="s${label}" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="rgba(0,0,0,0.25)"/>
+      </filter>
+    </defs>
+    <rect x="${chipX}" y="${chipY}" width="${chipW}" height="${chipH}"
+      rx="${chipR}" ry="${chipR}" fill="${labelBg}" filter="url(#s${label})"/>
+    <text x="${dotCX}" y="${chipY + chipH / 2 + fontSize / 2 - 1}" text-anchor="middle"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+      font-size="${fontSize}" font-weight="700" fill="${labelFg}" letter-spacing="0.3">${label.toUpperCase()}</text>
+    <circle cx="${dotCX}" cy="${dotCY}" r="${dotR}" fill="${dotColor}"
+      stroke="white" stroke-width="2" filter="url(#s${label})"/>
+  </svg>`;
+
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    anchor: new google.maps.Point(dotCX, totalH) as google.maps.Point,
+    scaledSize: new google.maps.Size(totalW, totalH),
+  };
+}
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -185,20 +258,8 @@ export default function RequestMove() {
   const step1LastAddressesRef = useRef<string>("");
   const step1PickupMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
-  // Nearby-mover overlays (HTML div badges via google.maps.OverlayView).
-  // Each handle exposes setHighlighted so the highlight effect can update the
-  // marker without rebuilding it.
-  type TruckOverlayHandle = {
-    moverId: string;
-    overlay: google.maps.OverlayView;
-    setHighlighted: (h: boolean) => void;
-  };
-  const step1MoverOverlaysRef = useRef<TruckOverlayHandle[]>([]);
-  // Pulsing halo shown beneath the single nearest available truck.
-  const step1PulseMarkerRef = useRef<google.maps.Marker | null>(null);
-  const step1PulseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [highlightedMoverId, setHighlightedMoverId] = useState<string | null>(null);
+  const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
+  const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -539,14 +600,9 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current?.setMap(null);
       step1PickupMarkerRef.current = null;
       step1DropoffMarkerRef.current = null;
-      step1MoverOverlaysRef.current.forEach((h) => h.overlay.setMap(null));
-      step1MoverOverlaysRef.current = [];
-      step1PulseMarkerRef.current?.setMap(null);
-      step1PulseMarkerRef.current = null;
-      if (step1PulseIntervalRef.current) {
-        clearInterval(step1PulseIntervalRef.current);
-        step1PulseIntervalRef.current = null;
-      }
+      if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
+      step1AnimPolylineRef.current?.setMap(null);
+      step1AnimPolylineRef.current = null;
       step1MapInstanceRef.current = null;
       step1DirRendererRef.current = null;
       step1DirServiceRef.current = null;
@@ -574,7 +630,7 @@ export default function RequestMove() {
     const renderer = new google.maps.DirectionsRenderer({
       suppressMarkers: true,
       preserveViewport: true,   // prevent renderer from overriding our custom fitBounds
-      polylineOptions: { strokeColor: "#000000", strokeWeight: 5, strokeOpacity: 0.9 },
+      polylineOptions: { strokeColor: "#2563eb", strokeWeight: 4, strokeOpacity: 0.9 },
     });
     renderer.setMap(map);
     step1DirRendererRef.current = renderer;
@@ -615,24 +671,90 @@ export default function RequestMove() {
 
           const map = step1MapInstanceRef.current;
           const leg = result.routes[0]?.legs[0];
-          if (leg?.start_location) {
-            const startLat = leg.start_location.lat();
-            const startLng = leg.start_location.lng();
-            setPickupCoords((prev) =>
-              prev && Math.abs(prev.lat - startLat) < 1e-6 && Math.abs(prev.lng - startLng) < 1e-6
-                ? prev
-                : { lat: startLat, lng: startLng }
-            );
-          }
           if (map && leg) {
-            // Frame the whole route via fitBounds with generous vertical padding
-            // so the endpoint chips (Pickup / Dropoff) aren't clipped at the top
-            // or bottom of the map viewport.
+            // ── Smart camera framing ─────────────────────────────────────
+            // Centre on the route midpoint.
+            const centerLat = (leg.start_location.lat() + leg.end_location.lat()) / 2;
+            const centerLng = (leg.start_location.lng() + leg.end_location.lng()) / 2;
+
+            // Measure the full route span (all path points, not just endpoints).
             const tripBounds = new google.maps.LatLngBounds();
             tripBounds.extend(leg.start_location);
             tripBounds.extend(leg.end_location);
-            (result.routes[0]?.overview_path ?? []).forEach((pt) => tripBounds.extend(pt));
-            map.fitBounds(tripBounds, { top: 80, bottom: 80, left: 40, right: 40 });
+            (result.routes[0]?.overview_path ?? []).forEach(pt => tripBounds.extend(pt));
+            const ne = tripBounds.getNorthEast();
+            const sw = tripBounds.getSouthWest();
+            const latSpan = Math.max(ne.lat() - sw.lat(), 0);
+            const lngSpan = Math.max(ne.lng() - sw.lng(), 0);
+
+            // km per degree at Calgary's latitude (51°), cos(51°) ≈ 0.629
+            const COS_LAT = 0.629;
+            const routeKmH = Math.max(latSpan * 111.0, 2); // min 2 km guard
+            const routeKmW = Math.max(lngSpan *  69.0, 2);
+
+            // Mercator viewport size in km at zoom-0 for this screen.
+            // formula: km_visible = pixels × 156.543 × cos(lat) / 2^Z
+            // → at Z=0: C = pixels × 156.543 × cos(lat)
+            const mapDiv = step1MapDivRef.current;
+            const vW = mapDiv?.clientWidth  || 375;
+            const vH = mapDiv?.clientHeight || 439;
+            const C_H = vH * 156.543 * COS_LAT; // km visible vertically   at Z=0
+            const C_W = vW * 156.543 * COS_LAT; // km visible horizontally at Z=0
+
+            // Pick the zoom where the route fills 72 % of the constraining
+            // viewport dimension.  Using the SMALLER of the two zoom values
+            // guarantees both endpoints are always visible.
+            const FILL = 0.72;
+            const zoomH = Math.log2((C_H * FILL) / routeKmH);
+            const zoomW = Math.log2((C_W * FILL) / routeKmW);
+            // Add 0.5 before rounding to bias toward a slightly tighter frame
+            const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW) + 0.15)));
+
+            map.setCenter({ lat: centerLat, lng: centerLng });
+            map.setZoom(finalZoom);
+            // ─────────────────────────────────────────────────────────────
+
+            // ── Flowing dash animation over the route ──────────────────────
+            // Clear any previous animation before drawing a new one
+            if (step1AnimIntervalRef.current) {
+              clearInterval(step1AnimIntervalRef.current);
+              step1AnimIntervalRef.current = null;
+            }
+            step1AnimPolylineRef.current?.setMap(null);
+            step1AnimPolylineRef.current = null;
+
+            const routePath = result.routes[0]?.overview_path ?? [];
+            if (routePath.length > 0) {
+              // Invisible stroke so only the dashes show — white dashes over the blue base line
+              const animLine = new google.maps.Polyline({
+                path: routePath,
+                strokeOpacity: 0,
+                icons: [{
+                  icon: {
+                    path: "M 0,-1 0,1",
+                    strokeOpacity: 0.55,
+                    strokeColor: "#ffffff",
+                    strokeWeight: 2,
+                    scale: 3,
+                  },
+                  offset: "0%",
+                  repeat: "18px",
+                }],
+                map,
+                zIndex: 5,
+              });
+              step1AnimPolylineRef.current = animLine;
+
+              // Animate: increment the offset each tick → dashes flow forward
+              let tick = 0;
+              step1AnimIntervalRef.current = setInterval(() => {
+                tick = (tick + 1) % 200;
+                const icons = animLine.get("icons");
+                icons[0].offset = (tick / 2) + "%";
+                animLine.set("icons", icons);
+              }, 60);
+            }
+            // ──────────────────────────────────────────────────────────────
 
             // Place branded marker chips at the confirmed geocoded endpoints
             {
@@ -640,36 +762,22 @@ export default function RequestMove() {
               step1PickupMarkerRef.current?.setMap(null);
               step1DropoffMarkerRef.current?.setMap(null);
 
-              // Pickup — clean green dot (12px diameter, white border).
+              // Pickup — branded green marker chip
               step1PickupMarkerRef.current = new google.maps.Marker({
                 position: leg.start_location,
                 map,
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 6,
-                  fillColor: "#16a34a",
-                  fillOpacity: 1,
-                  strokeColor: "#ffffff",
-                  strokeWeight: 2,
-                },
+                icon: makeRouteMarkerIcon("Pickup", "#16a34a", "#16a34a", "#ffffff"),
                 title: pickupAddress,
-                zIndex: 100,
+                zIndex: 10,
               });
 
-              // Dropoff — clean black dot (12px diameter, white border).
+              // Dropoff — branded dark marker chip
               step1DropoffMarkerRef.current = new google.maps.Marker({
                 position: leg.end_location,
                 map,
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 6,
-                  fillColor: "#111827",
-                  fillOpacity: 1,
-                  strokeColor: "#ffffff",
-                  strokeWeight: 2,
-                },
+                icon: makeRouteMarkerIcon("Dropoff", "#111827", "#111827", "#ffffff"),
                 title: dropoffAddress,
-                zIndex: 100,
+                zIndex: 10,
               });
             }
           }
@@ -677,261 +785,6 @@ export default function RequestMove() {
       }
     );
   }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
-
-  // Pickup-only geocode — populates pickupCoords when the user has entered a pickup
-  // but not yet a dropoff. Once dropoff is entered, the directions callback above
-  // takes over and provides more precise geocoded coords from the route leg.
-  useEffect(() => {
-    if (!mapsIsLoaded || !pickupAddress || dropoffAddress) return;
-    const geocoder = new google.maps.Geocoder();
-    const requestedAddr = pickupAddress;
-    geocoder.geocode({ address: pickupAddress, region: "CA" }, (results, status) => {
-      // Stale-response guard
-      if (requestedAddr !== pickupAddress) return;
-      if (status !== google.maps.GeocoderStatus.OK || !results?.[0]) return;
-      const loc = results[0].geometry.location;
-      const lat = loc.lat();
-      const lng = loc.lng();
-      setPickupCoords((prev) =>
-        prev && Math.abs(prev.lat - lat) < 1e-6 && Math.abs(prev.lng - lng) < 1e-6
-          ? prev
-          : { lat, lng }
-      );
-    });
-  }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
-
-  // Pickup-only camera — centers on pickup with a neighborhood-level zoom so the
-  // user sees the immediate area (with nearby trucks) before entering a dropoff.
-  useEffect(() => {
-    const map = step1MapInstanceRef.current;
-    if (!map || !pickupCoords || dropoffAddress) return;
-    map.setCenter(pickupCoords);
-    if ((map.getZoom() ?? 0) < 13) map.setZoom(14);
-  }, [pickupCoords, dropoffAddress, step1DivReady]);
-
-  // Fetch up to 8 nearest available movers around the pickup location.
-  // Also filters by the selected date if one has been chosen.
-  type NearbyMover = {
-    id: string;
-    userId: string;
-    latitude: number | null;
-    longitude: number | null;
-    rating?: number | string | null;
-    user?: { name?: string | null } | null;
-  };
-  const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
-  const { data: nearbyMovers = [] } = useQuery<NearbyMover[]>({
-    queryKey: ["/api/movers", "nearby", pickupCoords?.lat, pickupCoords?.lng, validDate],
-    queryFn: async () => {
-      if (!pickupCoords) return [];
-      const params = new URLSearchParams({
-        isAvailable: "true",
-        lat: String(pickupCoords.lat),
-        lng: String(pickupCoords.lng),
-      });
-      if (validDate) params.set("date", validDate);
-      const res = await fetch(`/api/movers?${params.toString()}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      // Endpoint returns an array unless pagination params were sent (they weren't)
-      const list: NearbyMover[] = Array.isArray(data) ? data : (data?.data ?? []);
-      return list.filter((m) => m.latitude != null && m.longitude != null).slice(0, MAX_NEARBY_TRUCKS);
-    },
-    enabled: !!pickupCoords,
-    staleTime: 30_000,
-  });
-
-  // Render nearby-mover truck markers on the map. Rebuilds whenever the mover
-  // list changes; individual highlight state is applied by a follow-up effect
-  // so we don't destroy/recreate markers on every click.
-  useEffect(() => {
-    const map = step1MapInstanceRef.current;
-    if (!map || !step1DivReady) return;
-
-    // Tear down previous overlays + pulse first — cheaper than diffing for a max of 8.
-    step1MoverOverlaysRef.current.forEach((h) => h.overlay.setMap(null));
-    step1MoverOverlaysRef.current = [];
-    step1PulseMarkerRef.current?.setMap(null);
-    step1PulseMarkerRef.current = null;
-    if (step1PulseIntervalRef.current) {
-      clearInterval(step1PulseIntervalRef.current);
-      step1PulseIntervalRef.current = null;
-    }
-
-    // Custom HTML overlay — circular blue badge with a 🚛 emoji. Defined here
-    // (inside the effect) because it must extend google.maps.OverlayView, which
-    // only exists after the Maps API script has loaded.
-    class TruckBadgeOverlay extends google.maps.OverlayView {
-      private position: google.maps.LatLng;
-      private staggerMs: number;
-      private moverName: string;
-      private moverRating: number;
-      private onClickHandler: () => void;
-      private outer: HTMLDivElement | null = null;
-      private inner: HTMLDivElement | null = null;
-      private tooltip: HTMLDivElement | null = null;
-      private highlighted = false;
-
-      constructor(
-        pos: google.maps.LatLng,
-        staggerMs: number,
-        moverName: string,
-        moverRating: number,
-        onClick: () => void
-      ) {
-        super();
-        this.position = pos;
-        this.staggerMs = staggerMs;
-        this.moverName = moverName;
-        this.moverRating = moverRating;
-        this.onClickHandler = onClick;
-      }
-
-      onAdd() {
-        const outer = document.createElement("div");
-        outer.style.cssText = "position:absolute;cursor:pointer;transform:translate(-50%,-50%);z-index:10;";
-
-        const inner = document.createElement("div");
-        inner.style.cssText =
-          "background:" + TRUCK_BADGE_COLOR_DEFAULT + ";border-radius:50%;width:36px;height:36px;" +
-          "display:flex;align-items:center;justify-content:center;" +
-          "box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid #ffffff;" +
-          "font-size:18px;line-height:1;opacity:0;" +
-          "transition:opacity 350ms ease-out,background 200ms,width 150ms,height 150ms,font-size 150ms;";
-        inner.textContent = "🚛";
-
-        // Tooltip (name + rating) shown on hover — pure DOM, no InfoWindow
-        const tooltip = document.createElement("div");
-        tooltip.style.cssText =
-          "position:absolute;bottom:44px;left:50%;transform:translateX(-50%);" +
-          "background:#111827;color:#ffffff;padding:4px 8px;border-radius:6px;" +
-          "font-family:system-ui,-apple-system,sans-serif;font-size:11px;line-height:1.3;" +
-          "white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 150ms;" +
-          "box-shadow:0 2px 6px rgba(0,0,0,0.2);";
-        const nameEl = document.createElement("div");
-        nameEl.style.fontWeight = "600";
-        nameEl.textContent = this.moverName;
-        const ratingEl = document.createElement("div");
-        ratingEl.style.cssText = "color:#f59e0b;font-size:10px;margin-top:1px;";
-        ratingEl.textContent = "★ " + this.moverRating.toFixed(1);
-        tooltip.appendChild(nameEl);
-        tooltip.appendChild(ratingEl);
-
-        outer.appendChild(inner);
-        outer.appendChild(tooltip);
-
-        outer.addEventListener("click", this.onClickHandler);
-        outer.addEventListener("mouseenter", () => { tooltip.style.opacity = "1"; });
-        outer.addEventListener("mouseleave", () => { tooltip.style.opacity = "0"; });
-
-        this.outer = outer;
-        this.inner = inner;
-        this.tooltip = tooltip;
-        this.getPanes()!.overlayMouseTarget.appendChild(outer);
-
-        // Staggered fade-in
-        window.setTimeout(() => {
-          if (this.inner) this.inner.style.opacity = "1";
-        }, this.staggerMs);
-      }
-
-      draw() {
-        const projection = this.getProjection();
-        if (!projection || !this.outer) return;
-        const px = projection.fromLatLngToDivPixel(this.position);
-        if (!px) return;
-        this.outer.style.left = px.x + "px";
-        this.outer.style.top = px.y + "px";
-      }
-
-      onRemove() {
-        this.outer?.remove();
-        this.outer = null;
-        this.inner = null;
-        this.tooltip = null;
-      }
-
-      setHighlighted(h: boolean) {
-        if (!this.inner || this.highlighted === h) return;
-        this.highlighted = h;
-        this.inner.style.background = h ? TRUCK_BADGE_COLOR_HIGHLIGHT : TRUCK_BADGE_COLOR_DEFAULT;
-        this.inner.style.width = h ? "44px" : "36px";
-        this.inner.style.height = h ? "44px" : "36px";
-        this.inner.style.fontSize = h ? "22px" : "18px";
-        if (this.outer) this.outer.style.zIndex = h ? "20" : "10";
-      }
-    }
-
-    nearbyMovers.forEach((mover, index) => {
-      if (mover.latitude == null || mover.longitude == null) return;
-
-      const pos = new google.maps.LatLng(mover.latitude, mover.longitude);
-      const moverName = mover.user?.name || "Available mover";
-      const moverRating = (typeof mover.rating === "string" ? parseFloat(mover.rating) : mover.rating) ?? 0;
-      const moverId = mover.id;
-
-      const overlay = new TruckBadgeOverlay(
-        pos,
-        index * 80,
-        moverName,
-        moverRating,
-        () => setHighlightedMoverId((prev) => (prev === moverId ? null : moverId))
-      );
-      overlay.setMap(map);
-
-      step1MoverOverlaysRef.current.push({
-        moverId,
-        overlay,
-        setHighlighted: (h: boolean) => overlay.setHighlighted(h),
-      });
-    });
-
-    // Pulsing halo beneath the *nearest* available mover (movers are sorted by
-    // driving distance by the /api/movers endpoint, so index 0 is nearest).
-    const nearest = nearbyMovers[0];
-    if (nearest && nearest.latitude != null && nearest.longitude != null) {
-      const pulseMarker = new google.maps.Marker({
-        position: { lat: nearest.latitude, lng: nearest.longitude },
-        map,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 14,
-          fillColor: PULSE_COLOR,
-          fillOpacity: 0.45,
-          strokeColor: PULSE_COLOR,
-          strokeOpacity: 0.6,
-          strokeWeight: 1,
-        },
-        zIndex: 5,
-        clickable: false,
-      });
-      step1PulseMarkerRef.current = pulseMarker;
-
-      // ~30fps expand-and-fade loop. Cheap: one setIcon per frame on one marker.
-      let tick = 0;
-      const framesPerCycle = 60;
-      step1PulseIntervalRef.current = setInterval(() => {
-        tick = (tick + 1) % framesPerCycle;
-        const p = tick / framesPerCycle;
-        pulseMarker.setIcon({
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 14 + p * 22,
-          fillColor: PULSE_COLOR,
-          fillOpacity: 0.5 * (1 - p),
-          strokeColor: PULSE_COLOR,
-          strokeOpacity: 0.6 * (1 - p),
-          strokeWeight: 1,
-        });
-      }, 33);
-    }
-  }, [nearbyMovers, step1DivReady]);
-
-  // Apply highlight styling without recreating overlays (keeps fade-in state).
-  useEffect(() => {
-    step1MoverOverlaysRef.current.forEach((h) => {
-      h.setHighlighted(h.moverId === highlightedMoverId);
-    });
-  }, [highlightedMoverId, nearbyMovers]);
 
   // Calculate real distance estimate when addresses change using geocoding
   useEffect(() => {
@@ -2020,11 +1873,8 @@ export default function RequestMove() {
           <p className="text-muted-foreground text-sm">Tell us what you need moved</p>
         </div>
 
-        {/* Desktop Step Indicator - hidden on mobile.
-            relative + z-30 + bg-background keeps it above the sticky map column
-            when scrolling — the map has HTML overlays that would otherwise bleed
-            over the numbered circles on the right edge. */}
-        <div className="relative z-30 bg-background mb-6 hidden md:block">
+        {/* Desktop Step Indicator - hidden on mobile */}
+        <div className="mb-6 hidden md:block">
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((stepNum) => (
               <div key={stepNum} className="flex items-center flex-1">
@@ -2058,46 +1908,13 @@ export default function RequestMove() {
         }>
           {/* Map panel — mobile: stacked above form · desktop: fills right column */}
           {step === 1 && (
-            <div className="relative z-0 order-first lg:order-last rounded-2xl overflow-hidden h-[52vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-24 lg:mt-2 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
+            <div className="relative order-first lg:order-last rounded-2xl overflow-hidden h-[52vh] lg:h-[calc(100vh-200px)] lg:max-h-[700px] lg:sticky lg:top-20 bg-muted/40 mb-4 lg:mb-0 shadow-sm">
               <div ref={mapDivRefCallback} className="absolute inset-0" />
               {!mapsIsLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-sm">
                   <div className="text-center text-muted-foreground">
                     <MapPin className="w-7 h-7 mx-auto mb-2 opacity-30" />
                     <p className="text-xs tracking-wide uppercase font-medium">Loading map…</p>
-                  </div>
-                </div>
-              )}
-              {/* Uber-style "movers nearby" pill — top-right corner of the map */}
-              {nearbyMovers.length > 0 && (
-                <div
-                  className="absolute top-3 right-3 z-10 bg-black/85 text-white rounded-full px-3 py-1.5 shadow-lg backdrop-blur-sm flex items-center gap-1.5 text-xs font-medium"
-                  data-testid="pill-movers-nearby"
-                >
-                  <Truck className="w-3.5 h-3.5" />
-                  <span>{nearbyMovers.length} {nearbyMovers.length === 1 ? "mover" : "movers"} available nearby</span>
-                </div>
-              )}
-              {/* Bottom address cards — Uber-style sheet stack anchored to
-                  the bottom of the map. Only visible once both endpoints are set. */}
-              {pickupAddress && dropoffAddress && (
-                <div className="absolute bottom-0 left-0 right-0 z-10 flex flex-col" data-testid="bottom-address-cards">
-                  {/* Origin (pickup) — white card, rounded top */}
-                  <div className="bg-white rounded-t-2xl shadow-[0_-4px_16px_rgba(0,0,0,0.08)] px-4 py-3 flex items-center gap-3">
-                    <div className="w-3 h-3 bg-black shrink-0" />
-                    <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate" data-testid="text-card-origin">
-                      {pickupAddress}
-                    </p>
-                  </div>
-                  {/* Destination (dropoff) — dark card, sits directly beneath */}
-                  <div className="bg-gray-900 text-white px-4 py-3 flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] uppercase tracking-widest text-gray-400">To</p>
-                      <p className="text-sm font-semibold truncate" data-testid="text-card-destination">
-                        {dropoffAddress}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
                   </div>
                 </div>
               )}
@@ -2305,23 +2122,6 @@ export default function RequestMove() {
                           </p>
                         </div>
                       </div>
-                    )}
-
-                    {/* Movers available — links to browse-movers */}
-                    {nearbyMovers.length > 0 && (
-                      <a
-                        href="/browse-movers"
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/15 hover:bg-primary/10 transition-colors"
-                        data-testid="link-movers-available"
-                      >
-                        <Users className="w-4 h-4 text-primary flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-foreground">
-                            {nearbyMovers.length} {nearbyMovers.length === 1 ? "mover" : "movers"} available{validDate ? " for your date" : ""}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Tap to browse and pre-select</p>
-                        </div>
-                      </a>
                     )}
                   </>
                 )}
