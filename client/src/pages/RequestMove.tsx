@@ -61,6 +61,15 @@ function countHeavyItems(items: IdentifiedItem[]): number {
 // Calgary city center – default map position before addresses are entered
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
+// Top-down box-truck silhouette pointing "up" — matches TrackTrip.tsx marker.
+// Parked trucks don't rotate, so we keep bearing 0 here.
+const TRUCK_PATH = "M -6,-10 L 6,-10 L 8,-4 L 8,10 L -8,10 L -8,-4 Z";
+const MAX_NEARBY_TRUCKS = 8;
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
+}
+
 // Premium logistics map style — clear roads, reduced clutter, strong visual hierarchy
 const BOOKING_MAP_STYLES = [
   // ── Base & Landscape ──────────────────────────────────────────────────────
@@ -260,6 +269,12 @@ export default function RequestMove() {
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
   const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Nearby-mover markers rendered on the booking map. Kept in a ref so we can
+  // clear them without triggering re-renders.
+  const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
+  const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [highlightedMoverId, setHighlightedMoverId] = useState<string | null>(null);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -603,6 +618,10 @@ export default function RequestMove() {
       if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
       step1AnimPolylineRef.current?.setMap(null);
       step1AnimPolylineRef.current = null;
+      step1MoverMarkersRef.current.forEach((m) => m.setMap(null));
+      step1MoverMarkersRef.current = [];
+      step1MoverInfoWindowRef.current?.close();
+      step1MoverInfoWindowRef.current = null;
       step1MapInstanceRef.current = null;
       step1DirRendererRef.current = null;
       step1DirServiceRef.current = null;
@@ -671,6 +690,15 @@ export default function RequestMove() {
 
           const map = step1MapInstanceRef.current;
           const leg = result.routes[0]?.legs[0];
+          if (leg?.start_location) {
+            const startLat = leg.start_location.lat();
+            const startLng = leg.start_location.lng();
+            setPickupCoords((prev) =>
+              prev && Math.abs(prev.lat - startLat) < 1e-6 && Math.abs(prev.lng - startLng) < 1e-6
+                ? prev
+                : { lat: startLat, lng: startLng }
+            );
+          }
           if (map && leg) {
             // ── Smart camera framing ─────────────────────────────────────
             // Centre on the route midpoint.
@@ -785,6 +813,155 @@ export default function RequestMove() {
       }
     );
   }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
+
+  // Pickup-only geocode — populates pickupCoords when the user has entered a pickup
+  // but not yet a dropoff. Once dropoff is entered, the directions callback above
+  // takes over and provides more precise geocoded coords from the route leg.
+  useEffect(() => {
+    if (!mapsIsLoaded || !pickupAddress || dropoffAddress) return;
+    const geocoder = new google.maps.Geocoder();
+    const requestedAddr = pickupAddress;
+    geocoder.geocode({ address: pickupAddress, region: "CA" }, (results, status) => {
+      // Stale-response guard
+      if (requestedAddr !== pickupAddress) return;
+      if (status !== google.maps.GeocoderStatus.OK || !results?.[0]) return;
+      const loc = results[0].geometry.location;
+      const lat = loc.lat();
+      const lng = loc.lng();
+      setPickupCoords((prev) =>
+        prev && Math.abs(prev.lat - lat) < 1e-6 && Math.abs(prev.lng - lng) < 1e-6
+          ? prev
+          : { lat, lng }
+      );
+    });
+  }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
+
+  // Pickup-only camera — centers on pickup with a neighborhood-level zoom so the
+  // user sees the immediate area (with nearby trucks) before entering a dropoff.
+  useEffect(() => {
+    const map = step1MapInstanceRef.current;
+    if (!map || !pickupCoords || dropoffAddress) return;
+    map.setCenter(pickupCoords);
+    if ((map.getZoom() ?? 0) < 13) map.setZoom(14);
+  }, [pickupCoords, dropoffAddress, step1DivReady]);
+
+  // Fetch up to 8 nearest available movers around the pickup location.
+  // Also filters by the selected date if one has been chosen.
+  type NearbyMover = {
+    id: string;
+    userId: string;
+    latitude: number | null;
+    longitude: number | null;
+    rating?: number | string | null;
+    user?: { name?: string | null } | null;
+  };
+  const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
+  const { data: nearbyMovers = [] } = useQuery<NearbyMover[]>({
+    queryKey: ["/api/movers", "nearby", pickupCoords?.lat, pickupCoords?.lng, validDate],
+    queryFn: async () => {
+      if (!pickupCoords) return [];
+      const params = new URLSearchParams({
+        isAvailable: "true",
+        lat: String(pickupCoords.lat),
+        lng: String(pickupCoords.lng),
+      });
+      if (validDate) params.set("date", validDate);
+      const res = await fetch(`/api/movers?${params.toString()}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      // Endpoint returns an array unless pagination params were sent (they weren't)
+      const list: NearbyMover[] = Array.isArray(data) ? data : (data?.data ?? []);
+      return list.filter((m) => m.latitude != null && m.longitude != null).slice(0, MAX_NEARBY_TRUCKS);
+    },
+    enabled: !!pickupCoords,
+    staleTime: 30_000,
+  });
+
+  // Render nearby-mover truck markers on the map. Rebuilds whenever the mover
+  // list changes; individual highlight state is applied by a follow-up effect
+  // so we don't destroy/recreate markers on every click.
+  useEffect(() => {
+    const map = step1MapInstanceRef.current;
+    if (!map || !step1DivReady) return;
+
+    // Tear down previous markers first — cheaper than diffing for a max of 8.
+    step1MoverMarkersRef.current.forEach((m) => m.setMap(null));
+    step1MoverMarkersRef.current = [];
+
+    if (!step1MoverInfoWindowRef.current) {
+      step1MoverInfoWindowRef.current = new google.maps.InfoWindow({ disableAutoPan: true });
+    }
+    const infoWindow = step1MoverInfoWindowRef.current;
+
+    nearbyMovers.forEach((mover, index) => {
+      if (mover.latitude == null || mover.longitude == null) return;
+
+      const marker = new google.maps.Marker({
+        position: { lat: mover.latitude, lng: mover.longitude },
+        map,
+        icon: {
+          path: TRUCK_PATH,
+          fillColor: "#2563eb",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+          scale: 1.2,
+          anchor: new google.maps.Point(0, 0),
+        },
+        zIndex: 8,
+        opacity: 0,
+      });
+      marker.set("moverId", mover.id);
+
+      // Staggered fade-in — subtle "trucks appearing" effect
+      const delay = index * 80;
+      setTimeout(() => {
+        const start = performance.now();
+        const duration = 350;
+        const step = (t: number) => {
+          const p = Math.min((t - start) / duration, 1);
+          marker.setOpacity(p);
+          if (p < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }, delay);
+
+      const name = escapeHtml(mover.user?.name || "Available mover");
+      const rating = (typeof mover.rating === "string" ? parseFloat(mover.rating) : mover.rating) ?? 0;
+      marker.addListener("mouseover", () => {
+        infoWindow.setContent(
+          `<div style="padding:2px 4px;font-family:system-ui;line-height:1.3;">
+            <div style="font-weight:600;color:#111827;font-size:13px;">${name}</div>
+            <div style="color:#f59e0b;font-size:11px;margin-top:2px;">★ ${rating.toFixed(1)}</div>
+          </div>`
+        );
+        infoWindow.open({ anchor: marker, map });
+      });
+      marker.addListener("mouseout", () => infoWindow.close());
+      marker.addListener("click", () => {
+        setHighlightedMoverId((prev) => (prev === mover.id ? null : mover.id));
+      });
+
+      step1MoverMarkersRef.current.push(marker);
+    });
+  }, [nearbyMovers, step1DivReady]);
+
+  // Apply highlight styling without recreating markers (keeps fade-in state).
+  useEffect(() => {
+    step1MoverMarkersRef.current.forEach((marker) => {
+      const isHighlighted = marker.get("moverId") === highlightedMoverId;
+      marker.setIcon({
+        path: TRUCK_PATH,
+        fillColor: isHighlighted ? "#f59e0b" : "#2563eb",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: isHighlighted ? 3 : 2,
+        scale: isHighlighted ? 1.4 : 1.2,
+        anchor: new google.maps.Point(0, 0),
+      });
+      marker.setZIndex(isHighlighted ? 20 : 8);
+    });
+  }, [highlightedMoverId, nearbyMovers]);
 
   // Calculate real distance estimate when addresses change using geocoding
   useEffect(() => {
@@ -1918,6 +2095,16 @@ export default function RequestMove() {
                   </div>
                 </div>
               )}
+              {/* Uber-style "movers nearby" pill — top-right corner of the map */}
+              {nearbyMovers.length > 0 && (
+                <div
+                  className="absolute top-3 right-3 z-10 bg-black/85 text-white rounded-full px-3 py-1.5 shadow-lg backdrop-blur-sm flex items-center gap-1.5 text-xs font-medium"
+                  data-testid="pill-movers-nearby"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>{nearbyMovers.length} {nearbyMovers.length === 1 ? "mover" : "movers"} available nearby</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -2122,6 +2309,23 @@ export default function RequestMove() {
                           </p>
                         </div>
                       </div>
+                    )}
+
+                    {/* Movers available — links to browse-movers */}
+                    {nearbyMovers.length > 0 && (
+                      <a
+                        href="/browse-movers"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/15 hover:bg-primary/10 transition-colors"
+                        data-testid="link-movers-available"
+                      >
+                        <Users className="w-4 h-4 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground">
+                            {nearbyMovers.length} {nearbyMovers.length === 1 ? "mover" : "movers"} available{validDate ? " for your date" : ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Tap to browse and pre-select</p>
+                        </div>
+                      </a>
                     )}
                   </>
                 )}
