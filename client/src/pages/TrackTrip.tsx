@@ -58,17 +58,8 @@ const LIGHT_MAP_STYLES = [
   { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
 ];
 
-// Car icon SVG - Dark car on light background for visibility
-const CAR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <circle cx="24" cy="24" r="22" fill="#1a1a2e"/>
-  <circle cx="24" cy="24" r="19" fill="#2d2d44"/>
-  <path d="M15 27 L15 22 L18 15 L30 15 L33 22 L33 27 L30 30 L18 30 Z" fill="#ffffff"/>
-  <rect x="17" y="16" width="14" height="6" rx="1" fill="#87CEEB"/>
-  <circle cx="18" cy="27" r="2" fill="#333"/>
-  <circle cx="30" cy="27" r="2" fill="#333"/>
-</svg>`;
-
-const CAR_ICON_URL = `data:image/svg+xml;base64,${btoa(CAR_ICON_SVG)}`;
+// Top-down box-truck silhouette pointing "up" (north). Bearing rotates it clockwise around the anchor.
+const TRUCK_PATH = "M -6,-10 L 6,-10 L 8,-4 L 8,10 L -8,10 L -8,-4 Z";
 
 // Status-based messaging
 function getStatusMessage(status: string, moverName?: string): { title: string; subtitle: string } {
@@ -101,6 +92,22 @@ function interpolatePosition(
     lat: from.lat + (to.lat - from.lat) * progress,
     lng: from.lng + (to.lng - from.lng) * progress,
   };
+}
+
+// Initial bearing (0-360°, clockwise from north) between two lat/lng points.
+// Standard great-circle formula — inputs converted to radians.
+function calculateBearing(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+): number {
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 // Haversine distance in km between two lat/lng points
@@ -182,6 +189,8 @@ export default function TrackTrip() {
   
   // Animation state
   const [animatedPosition, setAnimatedPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [bearing, setBearing] = useState<number>(0);
+  const [isTrackingMode, setIsTrackingMode] = useState<boolean>(false);
   const targetPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const currentAnimatedRef = useRef<{ lat: number; lng: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -258,6 +267,14 @@ export default function TrackTrip() {
 
     // Update React state once (at poll time) so marker mounts/ETA badge positions correctly
     setAnimatedPosition(newPosition);
+
+    // Compute bearing from previous target → new position (skip if movement is < ~2m to avoid jitter)
+    if (targetPositionRef.current) {
+      const movedKm = haversineKm(targetPositionRef.current, newPosition);
+      if (movedKm > 0.002) {
+        setBearing(calculateBearing(targetPositionRef.current, newPosition));
+      }
+    }
     targetPositionRef.current = newPosition;
 
     // First position — snap immediately, no animation needed
@@ -277,7 +294,7 @@ export default function TrackTrip() {
 
     const startPosition = { ...currentAnimatedRef.current };
     const startTime = performance.now();
-    const duration = 2500;
+    const duration = 1000;
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
@@ -363,28 +380,29 @@ export default function TrackTrip() {
     );
   }, [locationData, isLoaded]);
 
-  // Fit map bounds once when both map and data are ready (on mount/remount)
+  // Fit map bounds once when both map and data are ready (on mount/remount).
+  // Skipped once we've entered proximity tracking mode — panTo takes over.
   useEffect(() => {
-    if (!map || !locationData || hasFittedBoundsRef.current) return;
+    if (!map || !locationData || hasFittedBoundsRef.current || isTrackingMode) return;
     // Skip if pickup/dropoff coordinates are missing
     if (locationData.pickup.latitude == null || locationData.pickup.longitude == null) return;
     if (locationData.dropoff.latitude == null || locationData.dropoff.longitude == null) return;
-    
+
     const bounds = new google.maps.LatLngBounds();
     bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
     bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
-    
+
     if (locationData.currentLocation && locationData.currentLocation.latitude != null) {
-      bounds.extend({ 
-        lat: locationData.currentLocation.latitude, 
-        lng: locationData.currentLocation.longitude 
+      bounds.extend({
+        lat: locationData.currentLocation.latitude,
+        lng: locationData.currentLocation.longitude
       });
     }
-    
+
     map.fitBounds(bounds, { top: 100, bottom: isSheetExpanded ? 380 : 200, left: 40, right: 40 });
     hasFittedBoundsRef.current = true;
-  }, [map, locationData, isSheetExpanded]);
-  
+  }, [map, locationData, isSheetExpanded, isTrackingMode]);
+
   // Adjust map padding when bottom sheet expands/collapses (without re-centering on every poll)
   const prevSheetExpandedRef = useRef(isSheetExpanded);
   useEffect(() => {
@@ -392,20 +410,56 @@ export default function TrackTrip() {
     if (locationData.pickup.latitude == null || locationData.pickup.longitude == null) return;
     if (locationData.dropoff.latitude == null || locationData.dropoff.longitude == null) return;
     prevSheetExpandedRef.current = isSheetExpanded;
-    
+    if (isTrackingMode) return; // Tracking mode owns the camera — don't re-frame on sheet toggle
+
     const bounds = new google.maps.LatLngBounds();
     bounds.extend({ lat: locationData.pickup.latitude, lng: locationData.pickup.longitude });
     bounds.extend({ lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude });
-    
+
     if (locationData.currentLocation && locationData.currentLocation.latitude != null) {
-      bounds.extend({ 
-        lat: locationData.currentLocation.latitude, 
-        lng: locationData.currentLocation.longitude 
+      bounds.extend({
+        lat: locationData.currentLocation.latitude,
+        lng: locationData.currentLocation.longitude
       });
     }
-    
+
     map.fitBounds(bounds, { top: 100, bottom: isSheetExpanded ? 380 : 200, left: 40, right: 40 });
-  }, [map, locationData, isSheetExpanded]);
+  }, [map, locationData, isSheetExpanded, isTrackingMode]);
+
+  // Proximity-based camera: once the mover is within 0.5 km of the active target
+  // (pickup while en_route_to_pickup, otherwise dropoff), stop fitting bounds and
+  // smoothly pan-follow the mover at a closer zoom. panTo is animated by Google Maps.
+  useEffect(() => {
+    if (!map || !locationData?.currentLocation) return;
+    if (locationData.pickup.latitude == null || locationData.dropoff.latitude == null) return;
+
+    const target =
+      locationData.status === "en_route_to_pickup"
+        ? { lat: locationData.pickup.latitude, lng: locationData.pickup.longitude }
+        : { lat: locationData.dropoff.latitude, lng: locationData.dropoff.longitude };
+
+    const moverPos = {
+      lat: locationData.currentLocation.latitude,
+      lng: locationData.currentLocation.longitude,
+    };
+    const distanceKm = haversineKm(moverPos, target);
+
+    if (distanceKm < 0.5) {
+      if (!isTrackingMode) setIsTrackingMode(true);
+      map.panTo(moverPos);
+      if ((map.getZoom() ?? 0) < 16) map.setZoom(16);
+    } else if (isTrackingMode && distanceKm > 0.7) {
+      // Small hysteresis band so we don't flap on/off at the boundary
+      setIsTrackingMode(false);
+      hasFittedBoundsRef.current = false;
+    }
+  }, [
+    map,
+    locationData?.currentLocation?.latitude,
+    locationData?.currentLocation?.longitude,
+    locationData?.status,
+    isTrackingMode,
+  ]);
 
   const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
@@ -540,14 +594,20 @@ export default function TrackTrip() {
           data-testid="marker-dropoff"
         />
 
-        {/* Vehicle marker - uses ref for direct position updates */}
+        {/* Vehicle marker — Symbol path so we can rotate to travel bearing.
+            Position is animated directly via markerRef.setPosition() at 60fps (no re-renders). */}
         {animatedPosition && (
           <Marker
             position={animatedPosition}
             icon={{
-              url: CAR_ICON_URL,
-              scaledSize: new google.maps.Size(48, 48),
-              anchor: new google.maps.Point(24, 24),
+              path: TRUCK_PATH,
+              fillColor: "#1a1a2e",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+              scale: 1.6,
+              rotation: bearing,
+              anchor: new google.maps.Point(0, 0),
             }}
             zIndex={1000}
             onLoad={(marker) => {
@@ -601,6 +661,41 @@ export default function TrackTrip() {
             </span>
           </div>
         )}
+      </div>
+
+      {/* Origin (pickup) pill — floats below top bar */}
+      <div
+        className="absolute top-16 left-4 right-4 z-10 flex justify-center pointer-events-none"
+        data-testid="card-origin"
+      >
+        <div className="bg-black/85 backdrop-blur-sm text-white rounded-full px-4 py-2 shadow-lg max-w-[92%] flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-white shrink-0" />
+          <span className="text-xs uppercase tracking-wide text-white/60 shrink-0">From</span>
+          <span className="text-sm font-medium truncate">{pickup.address}</span>
+        </div>
+      </div>
+
+      {/* ETA + destination card — floats just above the bottom sheet */}
+      <div
+        className={`absolute left-4 right-4 z-10 transition-all duration-300 pointer-events-none ${
+          isSheetExpanded ? "bottom-[360px]" : "bottom-[200px]"
+        }`}
+        data-testid="card-destination"
+      >
+        <div className="bg-black/90 backdrop-blur-sm text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3">
+          {routeInfo && (
+            <div className="flex flex-col items-center justify-center bg-white/10 rounded-xl px-3 py-2 min-w-[64px] shrink-0">
+              <span className="text-2xl font-bold leading-none" data-testid="text-eta-badge">
+                {routeInfo.durationMinutes}
+              </span>
+              <span className="text-[10px] uppercase tracking-widest text-white/70 mt-1">min</span>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] uppercase tracking-widest text-white/60">To</p>
+            <p className="text-sm font-semibold truncate">{dropoff.address}</p>
+          </div>
+        </div>
       </div>
 
       {/* Task 4: Chat panel — collapsible slide-up drawer */}
