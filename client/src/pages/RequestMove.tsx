@@ -61,10 +61,27 @@ function countHeavyItems(items: IdentifiedItem[]): number {
 // Calgary city center – default map position before addresses are entered
 const CALGARY_CENTER = { lat: 51.0447, lng: -114.0719 };
 
-// Top-down box-truck silhouette pointing "up" — matches TrackTrip.tsx marker.
-// Parked trucks don't rotate, so we keep bearing 0 here.
-const TRUCK_PATH = "M -6,-10 L 6,-10 L 8,-4 L 8,10 L -8,10 L -8,-4 Z";
 const MAX_NEARBY_TRUCKS = 8;
+
+// Data-URL truck icon — multi-color side-view (cab + trailer + wheels + windshield).
+// Uses a URL-based Icon rather than a Symbol path so it renders as a real image on
+// every device (the single-fill Symbol was showing as a solid blue square in some
+// Google Maps builds on the imperative API).
+function makeTruckIconUrl(body: string, cab: string): string {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'>` +
+      `<ellipse cx='20' cy='36' rx='11' ry='1.8' fill='rgba(0,0,0,0.2)'/>` +
+      `<rect x='4' y='14' width='30' height='20' rx='3' fill='${body}' stroke='#ffffff' stroke-width='2'/>` +
+      `<rect x='9' y='6' width='22' height='10' rx='2' fill='${cab}' stroke='#ffffff' stroke-width='2'/>` +
+      `<rect x='12' y='8' width='16' height='4' rx='1' fill='#dbeafe'/>` +
+      `<circle cx='11' cy='34' r='2.5' fill='#1f2937' stroke='#ffffff' stroke-width='1'/>` +
+      `<circle cx='29' cy='34' r='2.5' fill='#1f2937' stroke='#ffffff' stroke-width='1'/>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+const TRUCK_ICON_AVAILABLE = makeTruckIconUrl("#2563eb", "#1e40af");
+const TRUCK_ICON_HIGHLIGHTED = makeTruckIconUrl("#f59e0b", "#d97706");
+const PULSE_COLOR = "#2563eb";
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
@@ -273,6 +290,9 @@ export default function RequestMove() {
   // clear them without triggering re-renders.
   const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
   const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  // Pulsing halo shown beneath the single nearest available truck.
+  const step1PulseMarkerRef = useRef<google.maps.Marker | null>(null);
+  const step1PulseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [highlightedMoverId, setHighlightedMoverId] = useState<string | null>(null);
 
@@ -622,6 +642,12 @@ export default function RequestMove() {
       step1MoverMarkersRef.current = [];
       step1MoverInfoWindowRef.current?.close();
       step1MoverInfoWindowRef.current = null;
+      step1PulseMarkerRef.current?.setMap(null);
+      step1PulseMarkerRef.current = null;
+      if (step1PulseIntervalRef.current) {
+        clearInterval(step1PulseIntervalRef.current);
+        step1PulseIntervalRef.current = null;
+      }
       step1MapInstanceRef.current = null;
       step1DirRendererRef.current = null;
       step1DirServiceRef.current = null;
@@ -884,9 +910,15 @@ export default function RequestMove() {
     const map = step1MapInstanceRef.current;
     if (!map || !step1DivReady) return;
 
-    // Tear down previous markers first — cheaper than diffing for a max of 8.
+    // Tear down previous markers + pulse first — cheaper than diffing for a max of 8.
     step1MoverMarkersRef.current.forEach((m) => m.setMap(null));
     step1MoverMarkersRef.current = [];
+    step1PulseMarkerRef.current?.setMap(null);
+    step1PulseMarkerRef.current = null;
+    if (step1PulseIntervalRef.current) {
+      clearInterval(step1PulseIntervalRef.current);
+      step1PulseIntervalRef.current = null;
+    }
 
     if (!step1MoverInfoWindowRef.current) {
       step1MoverInfoWindowRef.current = new google.maps.InfoWindow({ disableAutoPan: true });
@@ -900,13 +932,9 @@ export default function RequestMove() {
         position: { lat: mover.latitude, lng: mover.longitude },
         map,
         icon: {
-          path: TRUCK_PATH,
-          fillColor: "#2563eb",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-          scale: 1.2,
-          anchor: new google.maps.Point(0, 0),
+          url: TRUCK_ICON_AVAILABLE,
+          scaledSize: new google.maps.Size(40, 40),
+          anchor: new google.maps.Point(20, 20),
         },
         zIndex: 8,
         opacity: 0,
@@ -944,20 +972,56 @@ export default function RequestMove() {
 
       step1MoverMarkersRef.current.push(marker);
     });
+
+    // Pulsing halo beneath the *nearest* available mover (movers are sorted by
+    // driving distance by the /api/movers endpoint, so index 0 is nearest).
+    const nearest = nearbyMovers[0];
+    if (nearest && nearest.latitude != null && nearest.longitude != null) {
+      const pulseMarker = new google.maps.Marker({
+        position: { lat: nearest.latitude, lng: nearest.longitude },
+        map,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 14,
+          fillColor: PULSE_COLOR,
+          fillOpacity: 0.45,
+          strokeColor: PULSE_COLOR,
+          strokeOpacity: 0.6,
+          strokeWeight: 1,
+        },
+        zIndex: 5,
+        clickable: false,
+      });
+      step1PulseMarkerRef.current = pulseMarker;
+
+      // ~30fps expand-and-fade loop. Cheap: one setIcon per frame on one marker.
+      let tick = 0;
+      const framesPerCycle = 60;
+      step1PulseIntervalRef.current = setInterval(() => {
+        tick = (tick + 1) % framesPerCycle;
+        const p = tick / framesPerCycle;
+        pulseMarker.setIcon({
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 14 + p * 22,
+          fillColor: PULSE_COLOR,
+          fillOpacity: 0.5 * (1 - p),
+          strokeColor: PULSE_COLOR,
+          strokeOpacity: 0.6 * (1 - p),
+          strokeWeight: 1,
+        });
+      }, 33);
+    }
   }, [nearbyMovers, step1DivReady]);
 
   // Apply highlight styling without recreating markers (keeps fade-in state).
   useEffect(() => {
     step1MoverMarkersRef.current.forEach((marker) => {
       const isHighlighted = marker.get("moverId") === highlightedMoverId;
+      const size = isHighlighted ? 48 : 40;
       marker.setIcon({
-        path: TRUCK_PATH,
-        fillColor: isHighlighted ? "#f59e0b" : "#2563eb",
-        fillOpacity: 1,
-        strokeColor: "#ffffff",
-        strokeWeight: isHighlighted ? 3 : 2,
-        scale: isHighlighted ? 1.4 : 1.2,
-        anchor: new google.maps.Point(0, 0),
+        url: isHighlighted ? TRUCK_ICON_HIGHLIGHTED : TRUCK_ICON_AVAILABLE,
+        scaledSize: new google.maps.Size(size, size),
+        anchor: new google.maps.Point(size / 2, size / 2),
       });
       marker.setZIndex(isHighlighted ? 20 : 8);
     });
@@ -2050,8 +2114,11 @@ export default function RequestMove() {
           <p className="text-muted-foreground text-sm">Tell us what you need moved</p>
         </div>
 
-        {/* Desktop Step Indicator - hidden on mobile */}
-        <div className="mb-6 hidden md:block">
+        {/* Desktop Step Indicator - hidden on mobile.
+            relative + z-20 + bg-background keeps it visually above the sticky
+            map column when scrolling (the map has z-index'd overlays that would
+            otherwise bleed over the numbered circles on the right edge). */}
+        <div className="relative z-20 bg-background mb-6 hidden md:block">
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((stepNum) => (
               <div key={stepNum} className="flex items-center flex-1">
