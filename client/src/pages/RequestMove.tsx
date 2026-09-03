@@ -20,7 +20,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2, ChevronRight } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -66,97 +66,19 @@ const PULSE_COLOR = "#1a56db";
 const TRUCK_BADGE_COLOR_DEFAULT = "#1a56db";
 const TRUCK_BADGE_COLOR_HIGHLIGHT = "#d97706";
 
-// Premium logistics map style — clear roads, reduced clutter, strong visual hierarchy
+// Uber-style minimal map — light background, hidden POIs/transit, thin roads.
 const BOOKING_MAP_STYLES = [
-  // ── Base & Landscape ──────────────────────────────────────────────────────
-  { elementType: "geometry",                                  stylers: [{ color: "#edecea" }] },
-  { featureType: "landscape.man_made", elementType: "geometry", stylers: [{ color: "#e8e6e3" }] },
-  { featureType: "landscape.natural",  elementType: "geometry", stylers: [{ color: "#e4e8dc" }] },
-
-  // ── Roads — local ─────────────────────────────────────────────────────────
-  { featureType: "road.local",  elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.local",  elementType: "geometry.stroke",  stylers: [{ color: "#d6d3cf" }, { weight: 0.8 }] },
-  { featureType: "road.local",  elementType: "labels.text.fill", stylers: [{ color: "#888480" }] },
-
-  // ── Roads — arterial ─────────────────────────────────────────────────────
-  { featureType: "road.arterial", elementType: "geometry",        stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.arterial", elementType: "geometry.stroke",  stylers: [{ color: "#b8b4ae" }, { weight: 1.2 }] },
-  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#5a5652" }] },
-  { featureType: "road.arterial", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-
-  // ── Roads — highway ───────────────────────────────────────────────────────
-  { featureType: "road.highway", elementType: "geometry",          stylers: [{ color: "#f5d97a" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke",    stylers: [{ color: "#c9aa48" }, { weight: 1 }] },
-  { featureType: "road.highway", elementType: "labels.text.fill",   stylers: [{ color: "#3d3520" }] },
-  { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
-  { featureType: "road.highway.controlled_access", elementType: "geometry", stylers: [{ color: "#e8c84e" }] },
-
-  // ── Global label styles ───────────────────────────────────────────────────
-  { elementType: "labels.text.fill",   stylers: [{ color: "#4a4744" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 2.5 }] },
-
-  // ── Administrative ────────────────────────────────────────────────────────
-  { featureType: "administrative.locality",      elementType: "labels.text.fill",   stylers: [{ color: "#2a2725" }] },
-  { featureType: "administrative.neighborhood",  elementType: "labels.text.fill",   stylers: [{ color: "#6b6764" }] },
-
-  // ── Water ─────────────────────────────────────────────────────────────────
-  { featureType: "water", elementType: "geometry",           stylers: [{ color: "#b8d4e8" }] },
-  { featureType: "water", elementType: "labels.text.fill",   stylers: [{ color: "#5a8aaa" }] },
-  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#daeaf5" }] },
-
-  // ── Parks & green ─────────────────────────────────────────────────────────
-  { featureType: "poi.park", elementType: "geometry",           stylers: [{ color: "#c8dfc0" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill",   stylers: [{ color: "#4a7040" }] },
-  { featureType: "poi.park", elementType: "labels.text.stroke", stylers: [{ color: "#e8f4e0" }] },
-
-  // ── POI — hide distracting business icons, keep labels subtle ────────────
-  { featureType: "poi",          elementType: "labels.icon",       stylers: [{ visibility: "off" }] },
-  { featureType: "poi.business", elementType: "labels",            stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", elementType: "labels",          stylers: [{ visibility: "off" }] },
-
-  // ── Transit — hide ────────────────────────────────────────────────────────
-  { featureType: "transit",      stylers: [{ visibility: "off" }] },
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#dadada" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9e8f7" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
 ];
-
-// Branded map marker: clean dot + short label chip (Pickup / Dropoff)
-function makeRouteMarkerIcon(label: string, dotColor: string, labelBg: string, labelFg: string): google.maps.Icon {
-  const dotR = 7;
-  const fontSize = 10;
-  const padX = 8;
-  const padY = 5;
-  const chipH = fontSize + padY * 2;
-  const chipW = Math.round(label.length * 6.2 + padX * 2);
-  const chipR = chipH / 2;
-  const gap = 4;
-  // Total SVG: dot on bottom, chip floating above
-  const totalW = Math.max(dotR * 2, chipW);
-  const chipX = (totalW - chipW) / 2;
-  const dotCX = totalW / 2;
-  const totalH = chipH + gap + dotR * 2;
-  const chipY = 0;
-  const dotCY = chipH + gap + dotR;
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}">
-    <defs>
-      <filter id="s${label}" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="rgba(0,0,0,0.25)"/>
-      </filter>
-    </defs>
-    <rect x="${chipX}" y="${chipY}" width="${chipW}" height="${chipH}"
-      rx="${chipR}" ry="${chipR}" fill="${labelBg}" filter="url(#s${label})"/>
-    <text x="${dotCX}" y="${chipY + chipH / 2 + fontSize / 2 - 1}" text-anchor="middle"
-      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-      font-size="${fontSize}" font-weight="700" fill="${labelFg}" letter-spacing="0.3">${label.toUpperCase()}</text>
-    <circle cx="${dotCX}" cy="${dotCY}" r="${dotR}" fill="${dotColor}"
-      stroke="white" stroke-width="2" filter="url(#s${label})"/>
-  </svg>`;
-
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    anchor: new google.maps.Point(dotCX, totalH) as google.maps.Point,
-    scaledSize: new google.maps.Size(totalW, totalH),
-  };
-}
 
 // Helper functions for load size validation
 const loadSizeOrder = ['boxes', 'medium', 'large', 'apartment'];
@@ -263,8 +185,6 @@ export default function RequestMove() {
   const step1LastAddressesRef = useRef<string>("");
   const step1PickupMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
-  const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
-  const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Nearby-mover overlays (HTML div badges via google.maps.OverlayView).
   // Each handle exposes setHighlighted so the highlight effect can update the
   // marker without rebuilding it.
@@ -619,9 +539,6 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current?.setMap(null);
       step1PickupMarkerRef.current = null;
       step1DropoffMarkerRef.current = null;
-      if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
-      step1AnimPolylineRef.current?.setMap(null);
-      step1AnimPolylineRef.current = null;
       step1MoverOverlaysRef.current.forEach((h) => h.overlay.setMap(null));
       step1MoverOverlaysRef.current = [];
       step1PulseMarkerRef.current?.setMap(null);
@@ -657,7 +574,7 @@ export default function RequestMove() {
     const renderer = new google.maps.DirectionsRenderer({
       suppressMarkers: true,
       preserveViewport: true,   // prevent renderer from overriding our custom fitBounds
-      polylineOptions: { strokeColor: "#2563eb", strokeWeight: 4, strokeOpacity: 0.9 },
+      polylineOptions: { strokeColor: "#000000", strokeWeight: 5, strokeOpacity: 0.9 },
     });
     renderer.setMap(map);
     step1DirRendererRef.current = renderer;
@@ -717,70 +634,40 @@ export default function RequestMove() {
             (result.routes[0]?.overview_path ?? []).forEach((pt) => tripBounds.extend(pt));
             map.fitBounds(tripBounds, { top: 80, bottom: 80, left: 40, right: 40 });
 
-            // ── Flowing dash animation over the route ──────────────────────
-            // Clear any previous animation before drawing a new one
-            if (step1AnimIntervalRef.current) {
-              clearInterval(step1AnimIntervalRef.current);
-              step1AnimIntervalRef.current = null;
-            }
-            step1AnimPolylineRef.current?.setMap(null);
-            step1AnimPolylineRef.current = null;
-
-            const routePath = result.routes[0]?.overview_path ?? [];
-            if (routePath.length > 0) {
-              // Invisible stroke so only the dashes show — white dashes over the blue base line
-              const animLine = new google.maps.Polyline({
-                path: routePath,
-                strokeOpacity: 0,
-                icons: [{
-                  icon: {
-                    path: "M 0,-1 0,1",
-                    strokeOpacity: 0.55,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                    scale: 3,
-                  },
-                  offset: "0%",
-                  repeat: "18px",
-                }],
-                map,
-                zIndex: 5,
-              });
-              step1AnimPolylineRef.current = animLine;
-
-              // Animate: increment the offset each tick → dashes flow forward
-              let tick = 0;
-              step1AnimIntervalRef.current = setInterval(() => {
-                tick = (tick + 1) % 200;
-                const icons = animLine.get("icons");
-                icons[0].offset = (tick / 2) + "%";
-                animLine.set("icons", icons);
-              }, 60);
-            }
-            // ──────────────────────────────────────────────────────────────
-
             // Place branded marker chips at the confirmed geocoded endpoints
             {
               // Remove old custom markers
               step1PickupMarkerRef.current?.setMap(null);
               step1DropoffMarkerRef.current?.setMap(null);
 
-              // Pickup — branded green marker chip.
-              // zIndex must beat the DirectionsRenderer polyline and the animated
-              // dash overlay (zIndex 5) so the chip always sits above the route.
+              // Pickup — clean green dot (12px diameter, white border).
               step1PickupMarkerRef.current = new google.maps.Marker({
                 position: leg.start_location,
                 map,
-                icon: makeRouteMarkerIcon("Pickup", "#16a34a", "#16a34a", "#ffffff"),
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 6,
+                  fillColor: "#16a34a",
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 2,
+                },
                 title: pickupAddress,
                 zIndex: 100,
               });
 
-              // Dropoff — branded dark marker chip
+              // Dropoff — clean black dot (12px diameter, white border).
               step1DropoffMarkerRef.current = new google.maps.Marker({
                 position: leg.end_location,
                 map,
-                icon: makeRouteMarkerIcon("Dropoff", "#111827", "#111827", "#ffffff"),
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 6,
+                  fillColor: "#111827",
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 2,
+                },
                 title: dropoffAddress,
                 zIndex: 100,
               });
@@ -2189,6 +2076,29 @@ export default function RequestMove() {
                 >
                   <Truck className="w-3.5 h-3.5" />
                   <span>{nearbyMovers.length} {nearbyMovers.length === 1 ? "mover" : "movers"} available nearby</span>
+                </div>
+              )}
+              {/* Bottom address cards — Uber-style sheet stack anchored to
+                  the bottom of the map. Only visible once both endpoints are set. */}
+              {pickupAddress && dropoffAddress && (
+                <div className="absolute bottom-0 left-0 right-0 z-10 flex flex-col" data-testid="bottom-address-cards">
+                  {/* Origin (pickup) — white card, rounded top */}
+                  <div className="bg-white rounded-t-2xl shadow-[0_-4px_16px_rgba(0,0,0,0.08)] px-4 py-3 flex items-center gap-3">
+                    <div className="w-3 h-3 bg-black shrink-0" />
+                    <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate" data-testid="text-card-origin">
+                      {pickupAddress}
+                    </p>
+                  </div>
+                  {/* Destination (dropoff) — dark card, sits directly beneath */}
+                  <div className="bg-gray-900 text-white px-4 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] uppercase tracking-widest text-gray-400">To</p>
+                      <p className="text-sm font-semibold truncate" data-testid="text-card-destination">
+                        {dropoffAddress}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
+                  </div>
                 </div>
               )}
             </div>
