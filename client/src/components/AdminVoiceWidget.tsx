@@ -24,15 +24,15 @@ export default function AdminVoiceWidget() {
 
   if (!v.config) return null;
   if (!v.config.enabled) return setupDismissed
-    ? <button onClick={() => setSetupDismissed(false)} className="fixed bottom-4 right-4 z-[4000] rounded-full bg-card border shadow-xl p-3 text-amber-700" aria-label="Show voice setup status"><Settings2 className="h-4 w-4" /></button>
-    : <div className="fixed bottom-4 right-4 z-[4000] max-w-xs rounded-xl border bg-card p-3 shadow-xl text-xs text-muted-foreground"><div className="flex items-start gap-2"><Settings2 className="h-4 w-4 text-amber-600 shrink-0" /><span>Voice setup required{v.config.reason ? `: ${v.config.reason}` : "."}</span><button onClick={() => setSetupDismissed(true)} aria-label="Dismiss voice setup message" className="ml-auto text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div></div>;
+    ? <button onClick={() => setSetupDismissed(false)} className="fixed bottom-6 right-6 z-[9999] rounded-full bg-card border shadow-xl p-3 text-amber-700" aria-label="Show voice setup status"><Settings2 className="h-4 w-4" /></button>
+    : <div className="fixed bottom-6 right-6 z-[9999] max-w-xs rounded-xl border bg-card p-3 shadow-xl text-xs text-muted-foreground"><div className="flex items-start gap-2"><Settings2 className="h-4 w-4 text-amber-600 shrink-0" /><span>Voice setup required{v.config.reason ? `: ${v.config.reason}` : "."}</span><button onClick={() => setSetupDismissed(true)} aria-label="Dismiss voice setup message" className="ml-auto text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button></div></div>;
 
   if (minimized && !active) {
     return (
       <button
         onClick={() => setMinimized(false)}
         aria-label={v.missedUnread > 0 ? `Expand LervIT voice — ${v.missedUnread} missed` : "Expand LervIT voice"}
-        className="fixed bottom-4 right-4 z-[4000] flex items-center justify-center gap-2 rounded-full shadow-2xl voice-shell text-slate-100 px-4 transition-all hover:scale-105 relative"
+        className="fixed bottom-6 right-6 z-[9999] flex items-center justify-center gap-2 rounded-full shadow-2xl voice-shell text-slate-100 px-4 transition-all hover:scale-105 relative"
         style={{ width: 120, height: 40 }}
         data-testid="voice-widget-pill"
       >
@@ -50,7 +50,7 @@ export default function AdminVoiceWidget() {
     );
   }
 
-  return <div className={`fixed bottom-4 right-4 z-[4000] w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border shadow-2xl voice-shell text-slate-100 transition-all ${active ? "ring-2 ring-teal-300/40" : ""}`}>
+  return <div className={`fixed bottom-6 right-6 z-[9999] w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border shadow-2xl voice-shell text-slate-100 transition-all ${active ? "ring-2 ring-teal-300/40" : ""}`}>
     <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
       <div className="flex items-center gap-2 min-w-0">
         <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-rose-400 voice-pulse" : v.status === "available" ? "bg-teal-300 voice-pulse" : "bg-slate-500"}`} />
