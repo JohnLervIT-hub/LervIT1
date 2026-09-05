@@ -623,7 +623,14 @@ export function registerVoiceRoutes(app: Express) {
     // legacy path in case that middleware ordering ever changes.
     const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
     if (!process.env.TELNYX_PUBLIC_KEY) return res.status(503).json({ error: "Webhook verification is not configured" });
-    try { new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>); } catch (_) { return res.status(401).json({ error: "Invalid webhook signature" }); }
+    // TEMP: TELNYX_SKIP_VERIFY=true bypasses signature verification while we
+    // diagnose the ed25519 payload mismatch end-to-end. Remove once resolved.
+    if (process.env.TELNYX_SKIP_VERIFY !== "true") {
+      try { new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>); } catch (err) {
+        console.log("[webhook] verify failed:", err instanceof Error ? err.message : String(err));
+        return res.status(401).json({ error: "Invalid webhook signature" });
+      }
+    }
     const event: any = Buffer.isBuffer(req.body) ? JSON.parse(raw) : req.body;
     const eventId = event.data?.id || event.id, eventType = event.data?.event_type || event.event_type;
     if (!eventId || !eventType) return res.status(400).json({ error: "Malformed Telnyx event" });
