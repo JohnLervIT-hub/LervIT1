@@ -576,9 +576,13 @@ export function registerVoiceRoutes(app: Express) {
   });
   app.get("/api/admin/voice/calls/missed-today", async (req, res) => {
     if (!admin(req, res)) return;
-    const start = new Date(); start.setHours(0, 0, 0, 0);
+    // "Today" is anchored to America/Edmonton (business timezone) regardless of
+    // the Node process TZ — computed by Postgres so DST transitions are correct.
     const rows = await db.select({ id: voiceCalls.id }).from(voiceCalls)
-      .where(and(eq(voiceCalls.status, "missed"), gte(voiceCalls.missedAt, start)));
+      .where(and(
+        eq(voiceCalls.status, "missed"),
+        sql`${voiceCalls.missedAt} >= date_trunc('day', (now() AT TIME ZONE 'America/Edmonton'))`,
+      ));
     res.json({ count: rows.length });
   });
   app.get("/api/admin/voice/calls/:id", async (req, res) => {

@@ -8,9 +8,28 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useVoice } from "@/contexts/VoiceContext";
-type Row = { id: string; direction?: string; outcome?: string; status?: string; from?: string; to?: string; customer?: { name?: string; phone?: string }; booking?: { id?: string }; startedAt?: string; duration?: number; durationSeconds?: number; recordingId?: string; recording?: { id?: string }; media?: Array<{ id?: string; recordingId?: string }> ; voicemail?: boolean };
+type Row = { id: string; direction?: string; outcome?: string; status?: string; from?: string; to?: string; customer?: { name?: string; phone?: string }; booking?: { id?: string }; startedAt?: string | null; answeredAt?: string | null; missedAt?: string | null; createdAt?: string | null; duration?: number; durationSeconds?: number; recordingId?: string; recording?: { id?: string }; media?: Array<{ id?: string; recordingId?: string }> ; voicemail?: boolean };
 const fmt = (n = 0) => `${Math.floor(n / 60)}m ${String(n % 60).padStart(2, "0")}s`;
 const isMissed = (row: Row) => row.outcome === "missed" || row.status === "missed";
+const formatCallTime = (timestamp?: string | null) => {
+  if (!timestamp) return "—";
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-CA", {
+    timeZone: "America/Edmonton",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+// Per-outcome anchor: missed uses missed_at, answered uses answered_at, everything
+// else falls back through started_at → created_at so live/expired rows still show.
+const rowTimestamp = (row: Row) =>
+  (isMissed(row) ? row.missedAt : (row.status === "answered" || row.outcome === "answered") ? row.answeredAt : row.startedAt)
+  ?? row.startedAt ?? row.createdAt ?? null;
 export default function AdminVoicePage() {
   const voice = useVoice();
   const [search, setSearch] = useState("");
@@ -63,7 +82,10 @@ export default function AdminVoicePage() {
             {row.booking?.id ? ` · Booking #${row.booking.id.slice(0, 8)}` : ""}
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">{fmt(row.duration ?? row.durationSeconds)}</span>
+        <div className="text-right text-xs text-muted-foreground shrink-0">
+          <div className={missed ? "text-rose-600 font-medium" : ""} data-testid={`voice-call-time-${row.id}`}>{formatCallTime(rowTimestamp(row))}</div>
+          <div className="mt-0.5">{fmt(row.duration ?? row.durationSeconds)}</div>
+        </div>
       </button>;
     })}</div>}</CardContent></Card></div>{selected && <CallDetail row={selected} onClose={() => setSelected(null)} onCall={() => voice.dial(selected.customer?.phone || selected.from || selected.to || "", selected.booking?.id)} />}</main>;
 }
