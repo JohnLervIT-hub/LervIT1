@@ -288,7 +288,12 @@ export async function processVoiceWebhookEvent(row: typeof voiceWebhookEvents.$i
     // row directly into 'missed' so it isn't buried under a generic 'completed'.
     const isMissedInbound = isHangup && call.direction === "inbound" && !call.answeredAt && call.status !== "missed"
       && ["pending", "ringing", "fallback_pending", "fallback_processing"].includes(call.routingState);
-    const nextStatus = isMissedInbound ? "missed" : state(eventType);
+    // Terminal outcomes must not be overwritten by later provider events —
+    // e.g. Telnyx sends call.hangup after markInboundMissed hangs up the ring,
+    // and that hangup was silently downgrading status from 'missed' to 'completed'.
+    const nextStatus = ["missed", "declined", "cancelled"].includes(call.status)
+      ? call.status
+      : (isMissedInbound ? "missed" : state(eventType));
     call = (await db.update(voiceCalls).set({ telnyxCallControlId: control || call.telnyxCallControlId, telnyxCallLegId: leg || call.telnyxCallLegId, status: nextStatus, missedAt: isMissedInbound ? (call.missedAt || now) : call.missedAt, fromNumber: from, toNumber: to, lastEventAt: now, answeredAt: eventType.includes("answered") ? (call.answeredAt || now) : call.answeredAt, endedAt: isHangup ? now : call.endedAt, durationSeconds: Number.isFinite(duration) ? Math.round(duration) : call.durationSeconds, updatedAt: now }).where(eq(voiceCalls.id, call.id)).returning())[0];
     if (isMissedInbound && call) {
       await db.update(voiceCallAttempts).set({ status: "cancelled", endedAt: now })
