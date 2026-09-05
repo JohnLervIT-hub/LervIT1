@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { io, type Socket } from "socket.io-client";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 export type VoiceStatus = "available" | "unavailable";
 export type VoiceCall = {
@@ -13,8 +15,8 @@ export type VoiceCall = {
 };
 type VoiceConfig = { enabled: boolean; callerId?: string; recordingEnabled?: boolean; fallbackEnabled?: boolean; reason?: string };
 type Admin = { id: string; name?: string; email?: string; status?: string };
-type VoiceContextValue = { config: VoiceConfig; status: VoiceStatus; call: VoiceCall | null; isReady: boolean; isMuted: boolean; isHeld: boolean; elapsed: number; error: string | null; transferPending: boolean; admins: Admin[];
-  setStatus: (status: VoiceStatus) => Promise<void>; dial: (to: string, bookingId?: string) => Promise<void>; command: (command: string, digits?: string) => Promise<void>; transfer: (adminId: string) => Promise<void>; clearCall: () => void; requestDevices: () => Promise<void>; };
+type VoiceContextValue = { config: VoiceConfig; status: VoiceStatus; call: VoiceCall | null; isReady: boolean; isMuted: boolean; isHeld: boolean; elapsed: number; error: string | null; transferPending: boolean; admins: Admin[]; missedUnread: number;
+  setStatus: (status: VoiceStatus) => Promise<void>; dial: (to: string, bookingId?: string) => Promise<void>; command: (command: string, digits?: string) => Promise<void>; transfer: (adminId: string) => Promise<void>; clearCall: () => void; requestDevices: () => Promise<void>; resetMissed: () => void; };
 const VoiceContext = createContext<VoiceContextValue | null>(null);
 const canonicalId = (raw: any) => raw?.appCallId || raw?.callRecordId || raw?.id || raw?.callId || "";
 const decodeClientState = (value?: unknown) => { if (typeof value !== "string" || !value) return null; try { const parsed = JSON.parse(atob(value)); return (parsed?.kind === "inbound" || parsed?.kind === "transfer") && typeof parsed.callId === "string" && parsed.callId.trim() ? parsed : null; } catch { return null; } };
@@ -30,7 +32,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const { data: fetchedConfig } = useQuery<VoiceConfig>({ queryKey: ["/api/admin/voice/config"], enabled: isAdmin, retry: false }); const config = fetchedConfig || { enabled: false };
   const { data: presence } = useQuery<{ status: VoiceStatus }>({ queryKey: ["/api/admin/voice/presence"], enabled: isAdmin && config.enabled, refetchInterval: 30000 });
   const { data: admins = [] } = useQuery<Admin[]>({ queryKey: ["/api/admin/voice/available-admins"], enabled: isAdmin && config.enabled });
-  const [status, setStatusState] = useState<VoiceStatus>("unavailable"); const [call, setCall] = useState<VoiceCall | null>(null); const [isReady, setReady] = useState(false); const [isMuted, setMuted] = useState(false); const [isHeld, setHeld] = useState(false); const [elapsed, setElapsed] = useState(0); const [error, setError] = useState<string | null>(null); const [transferPending, setTransferPending] = useState(false);
+  const [status, setStatusState] = useState<VoiceStatus>("unavailable"); const [call, setCall] = useState<VoiceCall | null>(null); const [isReady, setReady] = useState(false); const [isMuted, setMuted] = useState(false); const [isHeld, setHeld] = useState(false); const [elapsed, setElapsed] = useState(0); const [error, setError] = useState<string | null>(null); const [transferPending, setTransferPending] = useState(false); const [missedUnread, setMissedUnread] = useState(0);
+  const resetMissed = useCallback(() => setMissedUnread(0), []);
   const sdkRef = useRef<any>(null); const sdkCallRef = useRef<any>(null); const callIdRef = useRef<string | null>(null); const wsRef = useRef<Socket | null>(null); const wsConnectingRef = useRef(false); const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null); const startedRef = useRef<number | null>(null); const dialingRef = useRef(false); const dialKeyRef = useRef<string | null>(null);
   useEffect(() => { if (presence?.status) setStatusState(presence.status); }, [presence?.status]);
   useEffect(() => { if (!call) return; const started = startedRef.current || (call.startedAt ? new Date(call.startedAt).getTime() : Date.now()); const tick = () => setElapsed(Math.floor((Date.now() - started) / 1000)); tick(); const t = window.setInterval(tick, 1000); return () => window.clearInterval(t); }, [call?.appCallId, call?.startedAt]);
@@ -45,12 +48,56 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     (async () => { try { const { sipUsername, sipPassword } = await (await apiRequest("POST", "/api/admin/voice/token")).json(); if (cancelled || !sipUsername || !sipPassword) return; const mod: any = await import("@telnyx/webrtc"); const client = new mod.TelnyxRTC({ login: sipUsername, password: sipPassword }); client.remoteElement = "lervit-voice-audio"; client.on?.("telnyx.ready", () => { setReady(true); setError(null); }); client.on?.("telnyx.error", () => setError("Voice connection needs attention.")); client.on?.("telnyx.notification", (n: any) => { const sdk = n?.call || n?.data?.call; if (sdk) bindSdkCall(sdk, { ...n, ...(n?.data || {}), sdkOptions: sdk?.options }); }); client.connect(); sdkRef.current = client; } catch { if (!cancelled) setError("Microphone connection unavailable. Check browser permissions."); } })();
     return () => { cancelled = true; sdkRef.current?.disconnect?.(); sdkRef.current = null; };
   }, [isAdmin, config.enabled, status, bindSdkCall]);
-  const connectWs = useCallback(async () => { if (!isAdmin || !config.enabled) return; if (wsConnectingRef.current) return; if (wsRef.current?.connected) return; wsConnectingRef.current = true; try { const auth = await (await apiRequest("GET", "/api/admin/voice/ws-token")).json(); if (!auth?.token) throw new Error("no token"); const socket = io("/admin-voice", { auth: { token: auth.token }, transports: ["polling", "websocket"], reconnection: true, reconnectionDelayMax: 30000, withCredentials: true }); wsRef.current = socket; socket.on("connect", () => setError(null)); socket.on("message", (d: any) => { if (d?.call) setCall(old => { if (!old || matches(old, d.call)) { const id = old?.appCallId || canonicalId(d.call); const next = normalize(d.call, id); if (["ended", "hangup", "terminated"].includes(next.status || "")) { clearCall(); void clearActiveOnServer(); return null; } return { ...old, ...next, appCallId: id, id }; } return old; }); }); socket.on("connect_error", () => setError("Live call updates are reconnecting.")); } catch { reconnectTimer.current = setTimeout(connectWs, 5000); } finally { wsConnectingRef.current = false; } }, [isAdmin, config.enabled, clearCall, clearActiveOnServer]);
+  const connectWs = useCallback(async () => {
+    if (!isAdmin || !config.enabled) return;
+    if (wsConnectingRef.current) return;
+    if (wsRef.current?.connected) return;
+    wsConnectingRef.current = true;
+    try {
+      const auth = await (await apiRequest("GET", "/api/admin/voice/ws-token")).json();
+      if (!auth?.token) throw new Error("no token");
+      const socket = io("/admin-voice", { auth: { token: auth.token }, transports: ["polling", "websocket"], reconnection: true, reconnectionDelayMax: 30000, withCredentials: true });
+      wsRef.current = socket;
+      socket.on("connect", () => setError(null));
+      socket.on("message", (d: any) => {
+        if (d?.type === "missed_call" && d?.call) {
+          setMissedUnread(n => n + 1);
+          qc.invalidateQueries({ queryKey: ["/api/admin/voice/calls/missed-today"] });
+          qc.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin/voice/calls") });
+          const callId = d.call.id || d.call.appCallId;
+          const label = d.call.customer?.name || d.call.from || d.call.fromNumber || "Unknown caller";
+          toast({
+            title: "Missed call",
+            description: `From ${label}`,
+            duration: Infinity,
+            action: callId ? (
+              <ToastAction altText="Open call" onClick={() => { window.location.assign(`/admin/voice?callId=${encodeURIComponent(callId)}`); }}>Open</ToastAction>
+            ) : undefined,
+          });
+          return;
+        }
+        if (d?.call) setCall(old => {
+          if (!old || matches(old, d.call)) {
+            const id = old?.appCallId || canonicalId(d.call);
+            const next = normalize(d.call, id);
+            if (["ended", "hangup", "terminated"].includes(next.status || "")) { clearCall(); void clearActiveOnServer(); return null; }
+            return { ...old, ...next, appCallId: id, id };
+          }
+          return old;
+        });
+      });
+      socket.on("connect_error", () => setError("Live call updates are reconnecting."));
+    } catch {
+      reconnectTimer.current = setTimeout(connectWs, 5000);
+    } finally {
+      wsConnectingRef.current = false;
+    }
+  }, [isAdmin, config.enabled, clearCall, clearActiveOnServer, qc]);
   useEffect(() => { connectWs(); return () => { if (reconnectTimer.current) clearTimeout(reconnectTimer.current); wsRef.current?.disconnect(); wsRef.current = null; }; }, [connectWs]);
   const dial = useCallback(async (to: string, bookingId?: string) => { if (dialingRef.current || call || !config.enabled || status !== "available") { if (!call) setError("Set your status to Available before calling."); return; } dialingRef.current = true; const idempotencyKey = dialKeyRef.current || (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`); dialKeyRef.current = idempotencyKey; let preparedId = ""; try { const metadata = await (await apiRequest("POST", "/api/admin/voice/calls/prepare", { to, bookingId, idempotencyKey })).json(); preparedId = metadata?.call?.id || ""; if (!preparedId) throw new Error("prepare response did not include a call id"); const prepared = metadata.call; if (prepared.status === "active" || prepared.status === "connected") { setCall(normalize(prepared, preparedId)); startedRef.current = new Date(prepared.startedAt || Date.now()).getTime(); setError(null); dialKeyRef.current = null; return; } const sdk = sdkRef.current?.newCall?.({ destinationNumber: to, clientState: metadata.clientState }); if (!sdk) throw new Error("SDK unavailable"); bindSdkCall(sdk, { ...prepared, clientState: metadata.clientState, direction: "outbound", to }, preparedId); setError(null); dialKeyRef.current = null; } catch { if (preparedId) await cancelPrepared(preparedId); void clearActiveOnServer(); clearCall(); dialKeyRef.current = null; setError("Call could not be started."); } finally { dialingRef.current = false; } }, [call, config.enabled, status, bindSdkCall, cancelPrepared, clearCall, clearActiveOnServer]);
    const command = useCallback(async (name: string, digits?: string) => { const sdk = sdkCallRef.current; if (!call || !sdk || !call.appCallId || call.appCallId.startsWith("pending-")) { setError("Call context is still syncing."); return; } try { const method = resolveVoiceSdkMethod(name); if (name === "hold" && typeof sdk.toggleHold === "function") await sdk.toggleHold(); else if (typeof sdk[method] === "function") await sdk[method](...(name === "dtmf" ? [digits] : [])); else throw new Error("Unsupported call command"); if (name === "mute" || name === "unmute") setMuted(name === "mute"); if (name === "hold" || name === "resume") setHeld(name === "hold"); if (["hangup", "decline"].includes(name)) { clearCall(); void clearActiveOnServer(); } setError(null); } catch { setError(`Could not ${name} this call.`); return; } try { await apiRequest("POST", `/api/admin/voice/calls/${call.appCallId}/commands`, { command: name, ...(digits ? { digits } : {}) }); } catch { /* local SDK state remains authoritative */ } }, [call, clearCall, clearActiveOnServer]);
    const transfer = useCallback(async (adminId: string) => { if (!call || !adminId || !call.appCallId || call.appCallId.startsWith("pending-")) { setError("Call context is still syncing."); return; } setTransferPending(true); try { if (typeof sdkCallRef.current?.transfer === "function") await sdkCallRef.current.transfer(adminId); await apiRequest("POST", `/api/admin/voice/calls/${call.appCallId}/transfer`, { adminId }); setError(null); } catch { setError("Transfer could not be completed."); } finally { setTransferPending(false); } }, [call]);
-  const value = useMemo(() => ({ config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, setStatus, dial, command, transfer, clearCall, requestDevices }), [config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, setStatus, dial, command, transfer, clearCall, requestDevices]);
+  const value = useMemo(() => ({ config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, missedUnread, setStatus, dial, command, transfer, clearCall, requestDevices, resetMissed }), [config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, missedUnread, setStatus, dial, command, transfer, clearCall, requestDevices, resetMissed]);
   return <VoiceContext.Provider value={value}><audio id="lervit-voice-audio" autoPlay /><>{children}</></VoiceContext.Provider>;
 }
 export function useVoice() { const value = useContext(VoiceContext); if (!value) throw new Error("useVoice must be used within VoiceProvider"); return value; }

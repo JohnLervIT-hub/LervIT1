@@ -1626,6 +1626,7 @@ export const voiceCalls = pgTable("voice_calls", {
   startedAt: timestamp("started_at"),
   answeredAt: timestamp("answered_at"),
   endedAt: timestamp("ended_at"),
+  missedAt: timestamp("missed_at"),
   durationSeconds: integer("duration_seconds"),
   recordingRequestedAt: timestamp("recording_requested_at"),
   routingState: text("routing_state").notNull().default("pending"),

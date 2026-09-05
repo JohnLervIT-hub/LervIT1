@@ -283,7 +283,18 @@ export async function processVoiceWebhookEvent(row: typeof voiceWebhookEvents.$i
     if (eventType === "call.initiated" && call.direction === "inbound") await fanOutInbound(call);
   } else {
     const now = new Date(), duration = Number(p.duration_secs || p.duration_seconds || p.duration_millis / 1000);
-    call = (await db.update(voiceCalls).set({ telnyxCallControlId: control || call.telnyxCallControlId, telnyxCallLegId: leg || call.telnyxCallLegId, status: state(eventType), fromNumber: from, toNumber: to, lastEventAt: now, answeredAt: eventType.includes("answered") ? (call.answeredAt || now) : call.answeredAt, endedAt: eventType.includes("hangup") || eventType.includes("ended") ? now : call.endedAt, durationSeconds: Number.isFinite(duration) ? Math.round(duration) : call.durationSeconds, updatedAt: now }).where(eq(voiceCalls.id, call.id)).returning())[0];
+    const isHangup = eventType.includes("hangup") || eventType.includes("ended");
+    // Caller hangs up while ringing (before any admin bridges): route the parent
+    // row directly into 'missed' so it isn't buried under a generic 'completed'.
+    const isMissedInbound = isHangup && call.direction === "inbound" && !call.answeredAt && call.status !== "missed"
+      && ["pending", "ringing", "fallback_pending", "fallback_processing"].includes(call.routingState);
+    const nextStatus = isMissedInbound ? "missed" : state(eventType);
+    call = (await db.update(voiceCalls).set({ telnyxCallControlId: control || call.telnyxCallControlId, telnyxCallLegId: leg || call.telnyxCallLegId, status: nextStatus, missedAt: isMissedInbound ? (call.missedAt || now) : call.missedAt, fromNumber: from, toNumber: to, lastEventAt: now, answeredAt: eventType.includes("answered") ? (call.answeredAt || now) : call.answeredAt, endedAt: isHangup ? now : call.endedAt, durationSeconds: Number.isFinite(duration) ? Math.round(duration) : call.durationSeconds, updatedAt: now }).where(eq(voiceCalls.id, call.id)).returning())[0];
+    if (isMissedInbound && call) {
+      await db.update(voiceCallAttempts).set({ status: "cancelled", endedAt: now })
+        .where(and(eq(voiceCallAttempts.callId, call.id), inArray(voiceCallAttempts.status, ["ringing", "timed_out"])));
+      adminVoiceWebSocket.notify({ type: "missed_call", call: await enrich(call) });
+    }
   }
   await db.update(voiceWebhookEvents).set({ callId: call.id }).where(eq(voiceWebhookEvents.id, row.id));
   if (eventType === "call.recording.saved") {
@@ -316,20 +327,43 @@ async function startFallback(call: typeof voiceCalls.$inferSelect) {
     routingLeaseUntil: new Date(now.getTime() + 60_000), updatedAt: now,
   }).where(and(eq(voiceCalls.id, call.id), inArray(voiceCalls.routingState, ["pending", "ringing", "fallback_pending", "fallback_processing"]), or(isNull(voiceCalls.routingLeaseUntil), lte(voiceCalls.routingLeaseUntil, now)))).returning())[0];
   if (!claimed) return;
+  const fallback = process.env.TELNYX_VOICE_FALLBACK_URI;
   try {
     await circuitBreakers.telnyx.execute(async () => {
       const client = sdk();
-      const fallback = process.env.TELNYX_VOICE_FALLBACK_URI;
       if (fallback) return client.calls.actions.transfer(claimed.telnyxCallControlId!, { to: fallback, command_id: `lervit-fallback-${claimed.id}` });
-      // Answer before starting provider-side voicemail recording. `play_beep` makes
-      // the recording boundary explicit; greeting playback remains provider-configured.
-      await client.calls.actions.answer(claimed.telnyxCallControlId!, { command_id: `lervit-voicemail-answer-${claimed.id}` });
-      return client.calls.actions.startRecording(claimed.telnyxCallControlId!, { format: "mp3", channels: "single", play_beep: true, command_id: `lervit-voicemail-${claimed.id}` });
+      // No voicemail/fallback configured — end the ring so it doesn't collapse
+      // to auto-answered voicemail; the row is then marked 'missed' below.
+      return client.calls.actions.hangup(claimed.telnyxCallControlId!, { command_id: `lervit-missed-${claimed.id}` });
     });
-    await db.update(voiceCalls).set({ status: process.env.TELNYX_VOICE_FALLBACK_URI ? "fallback" : "voicemail", routingState: "fallback_started", routingLeaseUntil: null, updatedAt: new Date() }).where(eq(voiceCalls.id, call.id));
+    if (fallback) {
+      await db.update(voiceCalls).set({ status: "fallback", routingState: "fallback_started", routingLeaseUntil: null, updatedAt: new Date() }).where(eq(voiceCalls.id, call.id));
+    } else {
+      await markInboundMissed(claimed.id);
+    }
   } catch (error) {
     await db.update(voiceCalls).set({ routingState: "fallback_pending", routingLeaseUntil: null, updatedAt: new Date() }).where(eq(voiceCalls.id, call.id));
     logger.error({ err: error, callId: call.id }, "Voice fallback deferred");
+  }
+}
+/**
+ * Atomically transition an inbound call to status='missed' and emit a real-time
+ * notification. Idempotent: the conditional update guarantees the notification
+ * fires at most once even when the fallback retry loop re-enters.
+ */
+async function markInboundMissed(callId: string) {
+  const now = new Date();
+  const missed = (await db.update(voiceCalls).set({
+    status: "missed", missedAt: now, endedAt: now,
+    routingState: "fallback_started", routingLeaseUntil: null, updatedAt: now,
+  }).where(and(eq(voiceCalls.id, callId), sql`${voiceCalls.status} <> 'missed'`)).returning())[0];
+  if (!missed) return;
+  await db.update(voiceCallAttempts).set({ status: "cancelled", endedAt: now })
+    .where(and(eq(voiceCallAttempts.callId, callId), inArray(voiceCallAttempts.status, ["ringing", "timed_out"])));
+  try {
+    adminVoiceWebSocket.notify({ type: "missed_call", call: await enrich(missed) });
+  } catch (error) {
+    logger.error({ err: error, callId }, "Missed-call notification deferred");
   }
 }
 async function fanOutInbound(call: typeof voiceCalls.$inferSelect) {
@@ -534,6 +568,13 @@ export function registerVoiceRoutes(app: Express) {
     if (typeof req.query.search === "string" && req.query.search.length <= 100) conditions.push(or(ilike(voiceCalls.fromNumber, `%${req.query.search}%`), ilike(voiceCalls.toNumber, `%${req.query.search}%`)));
     const rows = await db.select().from(voiceCalls).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(voiceCalls.createdAt)).limit(limit);
     res.json(await Promise.all(rows.map(enrich)));
+  });
+  app.get("/api/admin/voice/calls/missed-today", async (req, res) => {
+    if (!admin(req, res)) return;
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const rows = await db.select({ id: voiceCalls.id }).from(voiceCalls)
+      .where(and(eq(voiceCalls.status, "missed"), gte(voiceCalls.missedAt, start)));
+    res.json({ count: rows.length });
   });
   app.get("/api/admin/voice/calls/:id", async (req, res) => {
     if (!admin(req, res)) return;

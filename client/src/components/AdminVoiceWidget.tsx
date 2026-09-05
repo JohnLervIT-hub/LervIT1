@@ -31,12 +31,21 @@ export default function AdminVoiceWidget() {
     return (
       <button
         onClick={() => setMinimized(false)}
-        aria-label="Expand LervIT voice"
-        className="fixed bottom-4 right-4 z-[4000] flex items-center justify-center gap-2 rounded-full shadow-2xl voice-shell text-slate-100 px-4 transition-all hover:scale-105"
+        aria-label={v.missedUnread > 0 ? `Expand LervIT voice — ${v.missedUnread} missed` : "Expand LervIT voice"}
+        className="fixed bottom-4 right-4 z-[4000] flex items-center justify-center gap-2 rounded-full shadow-2xl voice-shell text-slate-100 px-4 transition-all hover:scale-105 relative"
         style={{ width: 120, height: 40 }}
+        data-testid="voice-widget-pill"
       >
         <span className={`h-2.5 w-2.5 rounded-full ${v.status === "available" ? "bg-teal-300 voice-pulse" : "bg-slate-500"}`} />
         <span className="text-sm font-semibold">Voice</span>
+        {v.missedUnread > 0 && (
+          <span
+            className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-slate-900"
+            data-testid="voice-widget-missed-badge"
+          >
+            {v.missedUnread > 9 ? "9+" : v.missedUnread}
+          </span>
+        )}
       </button>
     );
   }
@@ -49,7 +58,23 @@ export default function AdminVoiceWidget() {
         <span className="text-[11px] text-slate-300 truncate">{active ? "On call" : v.status === "available" ? "Available" : "Unavailable"}</span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <Link href="/admin/voice" className="text-slate-300 hover:text-white" aria-label="Open voice console"><Radio className="h-4 w-4" /></Link>
+        <Link
+          href="/admin/voice"
+          className="relative text-slate-300 hover:text-white"
+          aria-label={v.missedUnread > 0 ? `Open voice console — ${v.missedUnread} missed` : "Open voice console"}
+          onClick={() => v.resetMissed()}
+          data-testid="voice-widget-open-console"
+        >
+          <Radio className="h-4 w-4" />
+          {v.missedUnread > 0 && (
+            <span
+              className="absolute -top-2 -right-2 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-slate-900"
+              data-testid="voice-widget-missed-badge-header"
+            >
+              {v.missedUnread > 9 ? "9+" : v.missedUnread}
+            </span>
+          )}
+        </Link>
         {!active && <button onClick={() => setMinimized(true)} aria-label="Minimize voice" className="text-slate-300 hover:text-white"><X className="h-4 w-4" /></button>}
       </div>
     </div>

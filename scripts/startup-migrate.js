@@ -80,6 +80,17 @@ async function run() {
       throw err;
     }
 
+    try {
+      await client.query(`
+        ALTER TABLE voice_calls ADD COLUMN IF NOT EXISTS missed_at timestamp;
+        CREATE INDEX IF NOT EXISTS voice_calls_missed_at_idx ON voice_calls(missed_at);
+      `);
+      console.log('[startup-migrate] ✓ voice_calls.missed_at ensured.');
+    } catch (err) {
+      console.error('[startup-migrate] ✗ voice_calls.missed_at migration FAILED:', err.message);
+      throw err;
+    }
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);
