@@ -618,20 +618,14 @@ export function registerVoiceRoutes(app: Express) {
   app.post("/api/admin/voice/websocket-token", (req, res) => res.redirect(307, "/api/admin/voice/ws-token"));
 
   app.post("/api/telnyx/voice-webhook", async (req, res) => {
-    const raw = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body);
-    console.log("[webhook] headers:", {
-      signature: req.headers["telnyx-signature-ed25519"],
-      timestamp: req.headers["telnyx-timestamp"],
-      publicKey: process.env.TELNYX_PUBLIC_KEY?.substring(0, 20),
-      rawBodyPresent: Buffer.isBuffer((req as any).rawBody),
-      rawLength: raw.length,
-    });
+    // express.raw runs for this path (server/index.ts) so req.body is a Buffer
+    // holding the exact signed bytes. JSON.stringify fallback preserves the
+    // legacy path in case that middleware ordering ever changes.
+    const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
     if (!process.env.TELNYX_PUBLIC_KEY) return res.status(503).json({ error: "Webhook verification is not configured" });
-    try { new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>); } catch (err) {
-      console.log("[webhook] signature verification FAILED", { message: err instanceof Error ? err.message : String(err) });
-      return res.status(401).json({ error: "Invalid webhook signature" });
-    }
-    const event: any = req.body, eventId = event.data?.id || event.id, eventType = event.data?.event_type || event.event_type;
+    try { new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>); } catch (_) { return res.status(401).json({ error: "Invalid webhook signature" }); }
+    const event: any = Buffer.isBuffer(req.body) ? JSON.parse(raw) : req.body;
+    const eventId = event.data?.id || event.id, eventType = event.data?.event_type || event.event_type;
     if (!eventId || !eventType) return res.status(400).json({ error: "Malformed Telnyx event" });
     const inserted = await db.insert(voiceWebhookEvents).values({ telnyxEventId: eventId, eventType, payload: raw, status: "pending", nextAttemptAt: new Date() }).onConflictDoNothing().returning();
     const existing = inserted[0] || (await db.select().from(voiceWebhookEvents).where(eq(voiceWebhookEvents.telnyxEventId, eventId)).limit(1))[0];
