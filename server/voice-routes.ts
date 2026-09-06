@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
-import Telnyx, { TelnyxWebhook } from "telnyx";
+import Telnyx from "telnyx";
+import nacl from "tweetnacl";
 import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
@@ -43,6 +44,22 @@ export function normalize(value?: string | null) {
   if (/^\+\d{8,15}$/.test(clean)) return clean;
   if (/^\d{10}$/.test(clean)) return `+1${clean}`;
   return /^\d{11,15}$/.test(clean) ? `+${clean}` : null;
+}
+// The Telnyx SDK's TelnyxWebhook.verify() is unusable under ESM: `webhooks.mjs`
+// does `import * as nacl from 'tweetnacl'` against a CJS module, so `nacl.sign`
+// resolves to undefined and verification throws before touching the signature.
+// This reimplements the ed25519 check against the raw request bytes directly.
+function verifyTelnyxWebhook(rawBody: Buffer, headers: Record<string, any>): boolean {
+  const publicKey = process.env.TELNYX_PUBLIC_KEY;
+  const signature = headers["telnyx-signature-ed25519"] as string | undefined;
+  const timestamp = headers["telnyx-timestamp"] as string | undefined;
+  if (!signature || !timestamp || !publicKey) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - parseInt(timestamp, 10)) > 300) return false;
+  const payload = Buffer.concat([Buffer.from(timestamp), Buffer.from("|"), rawBody]);
+  const keyBytes = Buffer.from(publicKey.trim(), "base64");
+  const sigBytes = Buffer.from(signature, "base64");
+  return nacl.sign.detached.verify(new Uint8Array(payload), new Uint8Array(sigBytes), new Uint8Array(keyBytes));
 }
 function admin(req: Request, res: Response) {
   if ((req as any).user?.role === "admin") return true;
@@ -644,31 +661,7 @@ export function registerVoiceRoutes(app: Express) {
       : Buffer.from(JSON.stringify(req.body ?? {}), "utf8");
     const raw = rawBody.toString("utf8");
     if (!process.env.TELNYX_PUBLIC_KEY) return res.status(503).json({ error: "Webhook verification is not configured" });
-    // TEMP DIAGNOSTIC — kept until a successful verify is observed in Railway.
-    const sigHeader = req.headers["telnyx-signature-ed25519"];
-    const tsHeader = req.headers["telnyx-timestamp"];
-    console.log("[webhook-debug] verify attempt:", {
-      rawType: typeof rawBody,
-      rawIsBuffer: Buffer.isBuffer(rawBody),
-      rawLength: rawBody.length,
-      reqBodyType: typeof req.body,
-      reqBodyIsBuffer: Buffer.isBuffer(req.body),
-      publicKeyPrefix: process.env.TELNYX_PUBLIC_KEY?.substring(0, 20),
-      sigHeader: typeof sigHeader === "string" ? sigHeader.substring(0, 20) : sigHeader,
-      timestampHeader: tsHeader,
-    });
-    try {
-      // Pass the Buffer directly — the ed25519 verifier operates on bytes,
-      // not on the utf8-decoded string.
-      new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(rawBody as any, req.headers as unknown as Record<string, string>);
-      console.log("[webhook-debug] verify PASSED");
-    } catch (err) {
-      console.log("[webhook-debug] verify FAILED:", err instanceof Error ? err.message : String(err));
-      if (process.env.TELNYX_SKIP_VERIFY !== "true") {
-        return res.status(401).json({ error: "Invalid webhook signature" });
-      }
-      // fall through: TELNYX_SKIP_VERIFY=true bypass is still active
-    }
+    if (!verifyTelnyxWebhook(rawBody, req.headers)) return res.status(401).json({ error: "Invalid webhook signature" });
     const event: any = JSON.parse(raw);
     const eventId = event.data?.id || event.id, eventType = event.data?.event_type || event.event_type;
     if (!eventId || !eventType) return res.status(400).json({ error: "Malformed Telnyx event" });
