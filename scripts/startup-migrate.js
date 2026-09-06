@@ -153,6 +153,18 @@ async function run() {
       throw err;
     }
 
+    // Gap 1 — Auto-dispatch columns on bookings
+    await client.query(`
+      ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS auto_routed
+          boolean DEFAULT false,
+        ADD COLUMN IF NOT EXISTS auto_routed_at
+          timestamp,
+        ADD COLUMN IF NOT EXISTS routing_attempts
+          integer DEFAULT 0;
+    `);
+    console.log('[startup-migrate] ✓ bookings auto_routed columns ensured.');
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);
