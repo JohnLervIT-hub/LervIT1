@@ -632,13 +632,28 @@ export function registerVoiceRoutes(app: Express) {
     // legacy path in case that middleware ordering ever changes.
     const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
     if (!process.env.TELNYX_PUBLIC_KEY) return res.status(503).json({ error: "Webhook verification is not configured" });
-    // TEMP: TELNYX_SKIP_VERIFY=true bypasses signature verification while we
-    // diagnose the ed25519 payload mismatch end-to-end. Remove once resolved.
-    if (process.env.TELNYX_SKIP_VERIFY !== "true") {
-      try { new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>); } catch (err) {
-        console.log("[webhook] verify failed:", err instanceof Error ? err.message : String(err));
+    // TEMP DIAGNOSTIC: always attempt verify + log the outcome so we can see
+    // exactly what the ed25519 verifier objects to. TELNYX_SKIP_VERIFY still
+    // gates whether a FAILED result short-circuits with 401.
+    const sigHeader = req.headers["telnyx-signature-ed25519"];
+    const tsHeader = req.headers["telnyx-timestamp"];
+    console.log("[webhook-debug] verify attempt:", {
+      rawType: typeof raw,
+      rawLength: raw?.length,
+      isBuffer: Buffer.isBuffer(req.body),
+      publicKeyPrefix: process.env.TELNYX_PUBLIC_KEY?.substring(0, 20),
+      sigHeader: typeof sigHeader === "string" ? sigHeader.substring(0, 20) : sigHeader,
+      timestampHeader: tsHeader,
+    });
+    try {
+      new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>);
+      console.log("[webhook-debug] verify PASSED");
+    } catch (err) {
+      console.log("[webhook-debug] verify FAILED:", err instanceof Error ? err.message : String(err));
+      if (process.env.TELNYX_SKIP_VERIFY !== "true") {
         return res.status(401).json({ error: "Invalid webhook signature" });
       }
+      // fall through: TELNYX_SKIP_VERIFY=true bypass is still active
     }
     const event: any = Buffer.isBuffer(req.body) ? JSON.parse(raw) : req.body;
     const eventId = event.data?.id || event.id, eventType = event.data?.event_type || event.event_type;
