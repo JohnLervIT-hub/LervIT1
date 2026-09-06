@@ -41,7 +41,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -58,6 +58,8 @@ import { logger, logEvent } from "./logger";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
+import { circuitBreakers } from "./circuit-breaker";
+import { calculatePartnerNet } from "@shared/pricing";
 import he from "he";
 import heicConvert from "heic-convert";
 
@@ -5841,18 +5843,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * =========================================================================
    */
   app.post("/api/stripe-webhook", async (req: Request, res: Response) => {
+    // Hoisted above the outer try so the outer catch can reference the event id
+    // for the dedup-row error-message update.
+    let webhookEventId: string | undefined;
     try {
       const sig = req.headers['stripe-signature'] as string;
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-      
+
       // SECURITY: Require stripe-signature header
       if (!sig) {
         logEvent.error('stripe_webhook', new Error('Missing stripe signature - possible spoofing attempt'));
         return res.status(400).json({ error: 'No stripe signature' });
       }
-      
+
       let event: Stripe.Event;
-      
+
       // SECURITY: Always verify webhook signature in production
       if (webhookSecret) {
         try {
@@ -5878,7 +5883,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.warn({ event: 'stripe_webhook' }, 'DEV MODE: STRIPE_WEBHOOK_SECRET not set - skipping signature verification');
         event = req.body as Stripe.Event;
       }
-      
+
+      // Dedup: Stripe retries deliver the same event.id. INSERT ... ON CONFLICT
+      // DO NOTHING; if 0 rows were inserted, the event was already processed
+      // (or is being processed concurrently) — short-circuit with 200 so Stripe
+      // stops retrying. Placed AFTER signature verify so unverified events
+      // can't pollute the dedup table.
+      //
+      // Best-effort: a crash between this insert and the switch statement
+      // loses the event. Acceptable for current scope; a two-phase claim
+      // (like server/voice-routes.ts) is an option if the blast radius grows.
+      webhookEventId = event.id;
+      try {
+        const dedupResult: any = await db.execute(sql`
+          INSERT INTO stripe_webhook_events (id, type, received_at)
+          VALUES (${event.id}, ${event.type}, NOW())
+          ON CONFLICT (id) DO NOTHING
+        `);
+        const inserted = dedupResult?.rowCount ?? dedupResult?.rows?.length ?? 0;
+        if (inserted === 0) {
+          logEvent.payment('webhook_dedup_skipped', { eventId: event.id, eventType: event.type });
+          return res.json({ received: true, skipped: true });
+        }
+      } catch (dedupErr) {
+        // If the dedup table doesn't exist yet or the query fails, log and
+        // continue — dedup is a hardening layer, not a correctness prerequisite.
+        logEvent.error('stripe_webhook_dedup', dedupErr instanceof Error ? dedupErr : new Error('dedup error'), { eventId: event.id });
+      }
+
       // Handle the event
       switch (event.type) {
         case 'payment_intent.succeeded':
@@ -6164,20 +6196,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const { moverPayoutCents, platformFeeCents, platformFeePercent } = feeCalc;
                   
                   // Create transfer to mover's connected account
-                  const transfer = await stripe.transfers.create({
-                    amount: moverPayoutCents,
-                    currency: 'cad',
-                    destination: updatedAccount.id,
-                    metadata: {
-                      bookingId: earning.bookingId,
-                      moverId: moverAccount.moverId,
-                      grossAmount: grossAmount.toFixed(2),
-                      platformFee: (platformFeeCents / 100).toFixed(2),
-                      processedBy: 'auto_onboarding_complete',
-                    },
-                  }, {
-                    idempotencyKey: `auto-transfer-onboard-${earning.bookingId}`,
-                  });
+                  const transfer = await circuitBreakers.stripe.execute(() =>
+                    stripe.transfers.create({
+                      amount: moverPayoutCents,
+                      currency: 'cad',
+                      destination: updatedAccount.id,
+                      metadata: {
+                        bookingId: earning.bookingId,
+                        moverId: moverAccount.moverId,
+                        grossAmount: grossAmount.toFixed(2),
+                        platformFee: (platformFeeCents / 100).toFixed(2),
+                        processedBy: 'auto_onboarding_complete',
+                      },
+                    }, {
+                      idempotencyKey: `auto-transfer-onboard-${earning.bookingId}`,
+                    }),
+                  );
                   
                   // Update earnings record
                   await db.update(moverEarnings)
@@ -6223,8 +6257,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
           }
+
+          // Enterprise partner branch: same Stripe account webhook stream is
+          // used for both movers and partners. If no mover account matches,
+          // look up a partner. Delegates transfer creation to recordPartnerEarnings
+          // for a single source of truth.
+          {
+            const [partnerRow] = await db.select().from(partners)
+              .where(eq(partners.stripeAccountId, updatedAccount.id))
+              .limit(1);
+
+            if (partnerRow) {
+              const nextPayoutsEnabled = !!updatedAccount.payouts_enabled;
+              const nextStatus = updatedAccount.details_submitted && nextPayoutsEnabled
+                ? 'active'
+                : (updatedAccount.details_submitted ? 'restricted' : 'pending');
+
+              await db.update(partners)
+                .set({
+                  stripePayoutsEnabled: nextPayoutsEnabled,
+                  stripeDetailsSubmitted: !!updatedAccount.details_submitted,
+                  stripeConnectStatus: nextStatus,
+                  updatedAt: new Date(),
+                })
+                .where(eq(partners.id, partnerRow.id));
+
+              logEvent.payment('partner_connect_status_synced', {
+                partnerId: partnerRow.id,
+                stripeAccountId: updatedAccount.id,
+                payoutsEnabled: nextPayoutsEnabled,
+                status: nextStatus,
+              });
+
+              // Auto-drive pending partner earnings once payouts turn on.
+              const wasFullyOnboarded = partnerRow.stripePayoutsEnabled && partnerRow.stripeDetailsSubmitted;
+              const isNowFullyOnboarded = nextPayoutsEnabled && !!updatedAccount.details_submitted;
+
+              if (!wasFullyOnboarded && isNowFullyOnboarded) {
+                logEvent.payment('partner_onboarding_complete_auto_transfer_check', {
+                  partnerId: partnerRow.id,
+                  stripeAccountId: updatedAccount.id,
+                });
+
+                const pendingPartnerEarnings = await db.select().from(partnerEarnings)
+                  .where(and(
+                    eq(partnerEarnings.partnerId, partnerRow.id),
+                    eq(partnerEarnings.status, 'pending'),
+                  ));
+
+                for (const earning of pendingPartnerEarnings) {
+                  const booking = await storage.getBooking(earning.bookingId);
+                  if (!booking || booking.paymentStatus !== 'succeeded') continue;
+                  try {
+                    await recordPartnerEarnings(earning.bookingId, partnerRow.id, booking);
+                  } catch (partnerTransferErr: any) {
+                    logEvent.error('partner_auto_transfer_on_onboarding_failed', partnerTransferErr, {
+                      partnerId: partnerRow.id,
+                      bookingId: earning.bookingId,
+                    });
+                  }
+                }
+              }
+            }
+          }
           break;
-        
+
         case 'charge.refunded':
           const refundedCharge = event.data.object as Stripe.Charge;
           const refundedAmountDollars = refundedCharge.amount_refunded / 100;
@@ -6295,10 +6392,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         default:
           logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
       }
-      
+
+      // Mark the dedup row processed so re-scans can distinguish "seen" from
+      // "successfully handled". Best-effort — a failure here is not fatal.
+      try {
+        await db.execute(sql`UPDATE stripe_webhook_events SET processed_at = NOW() WHERE id = ${event.id}`);
+      } catch (_) { /* dedup table optional at runtime */ }
+
       res.json({ received: true });
     } catch (error: any) {
       logEvent.error('stripe_webhook', error);
+      // Record the failure on the dedup row so ops has an audit trail.
+      if (webhookEventId) {
+        try {
+          await db.execute(sql`UPDATE stripe_webhook_events SET error_message = ${String(error?.message ?? 'unknown').slice(0, 500)} WHERE id = ${webhookEventId}`);
+        } catch (_) { /* best-effort */ }
+      }
       res.status(400).json({ error: error.message });
     }
   });
@@ -8273,9 +8382,11 @@ Respond with VALID JSON only:
             transferParams.source_transaction = sourceChargeId;
           }
           
-          const transfer = await stripe.transfers.create(transferParams, {
-            idempotencyKey: `transfer-${bookingId}-v2`,
-          });
+          const transfer = await circuitBreakers.stripe.execute(() =>
+            stripe.transfers.create(transferParams, {
+              idempotencyKey: `transfer-${bookingId}-v2`,
+            }),
+          );
           
           stripeTransferId = transfer.id;
           earningsStatus = 'available';
@@ -8334,10 +8445,178 @@ Respond with VALID JSON only:
       status: earningsStatus,
       availableAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // Available after 2 days
     }).returning();
-    
+
     return earnings;
   }
-  
+
+  /**
+   * Record enterprise partner earnings when a booking routed to a partner
+   * completes. Mirrors recordMoverEarnings.
+   *
+   * Fee resolution: partner override (partners.platform_fee_percent) → booking
+   * absolute fee (bookings.platform_fee_amount if > 0) → booking percent → 15%.
+   *
+   * Transfer path (only when partner has payouts_enabled):
+   *   - Wrap stripe.transfers.create in circuitBreakers.stripe.execute
+   *   - idempotencyKey: `partner-transfer-${bookingId}-v1` (deterministic; safe on retry)
+   *   - On success: row is inserted/updated with status='paid', stripeTransferId set,
+   *     and bookings.partner_stripe_transfer_id set for cross-reference
+   *   - On StripeInvalidRequestError (e.g. account restricted): row stored
+   *     with status='failed' and failureReason recorded — never optimistically 'paid'
+   *   - On any other Stripe error: row stored with status='pending' so the
+   *     next account.updated tick or admin retry can re-drive
+   *
+   * Idempotent on retry: the booking_id UNIQUE constraint routes the second
+   * call into an UPDATE, so processing a pending row after onboarding does
+   * not violate the unique index.
+   */
+  async function recordPartnerEarnings(bookingId: string, partnerId: string, booking: any) {
+    const [partner] = await db.select().from(partners).where(eq(partners.id, partnerId)).limit(1);
+    if (!partner) {
+      logEvent.error('partner_earnings_missing_partner', new Error(`Partner ${partnerId} not found for booking ${bookingId}`));
+      return null;
+    }
+
+    const grossAmount = parseFloat(booking?.price ?? '0');
+    const bookingFeePercent = booking?.platformFeePercent != null ? parseFloat(booking.platformFeePercent) : null;
+    const bookingFeeAmount  = booking?.platformFeeAmount  != null ? parseFloat(booking.platformFeeAmount)  : null;
+    const partnerFeeOverride = partner.platformFeePercent != null ? parseFloat(partner.platformFeePercent as any) : null;
+
+    const calc = calculatePartnerNet(grossAmount, bookingFeePercent, partnerFeeOverride, bookingFeeAmount);
+
+    // If payouts are not yet enabled, persist a pending row and return early.
+    // account.updated will re-drive when the partner finishes onboarding.
+    if (!partner.stripePayoutsEnabled || !partner.stripeAccountId) {
+      const [row] = await db.insert(partnerEarnings).values({
+        partnerId,
+        bookingId,
+        grossAmount: calc.grossAmount.toFixed(2),
+        platformFeePercent: calc.platformFeePercent.toFixed(2),
+        platformFeeAmount: calc.platformFeeAmount.toFixed(2),
+        partnerNetAmount: calc.partnerNet.toFixed(2),
+        status: 'pending',
+      }).onConflictDoUpdate({
+        target: partnerEarnings.bookingId,
+        set: {
+          grossAmount: calc.grossAmount.toFixed(2),
+          platformFeePercent: calc.platformFeePercent.toFixed(2),
+          platformFeeAmount: calc.platformFeeAmount.toFixed(2),
+          partnerNetAmount: calc.partnerNet.toFixed(2),
+          updatedAt: new Date(),
+        },
+      }).returning();
+
+      logEvent.payment('partner_transfer_skipped', {
+        bookingId,
+        partnerId,
+        reason: partner.stripeAccountId ? 'Payouts not enabled' : 'No Stripe Connect account',
+        amount: calc.partnerNet,
+      });
+      return row;
+    }
+
+    // Payouts enabled — attempt transfer via circuit breaker.
+    const transferAmountCents = Math.round(calc.partnerNet * 100);
+
+    try {
+      const transfer = await circuitBreakers.stripe.execute(() =>
+        stripe.transfers.create({
+          amount: transferAmountCents,
+          currency: 'cad',
+          destination: partner.stripeAccountId!,
+          transfer_group: bookingId,
+          metadata: {
+            bookingId,
+            partnerId,
+            grossAmount: calc.grossAmount.toFixed(2),
+            platformFee: calc.platformFeeAmount.toFixed(2),
+            processedBy: 'booking_completion',
+          },
+        }, {
+          idempotencyKey: `partner-transfer-${bookingId}-v1`,
+        }),
+      );
+
+      const [row] = await db.insert(partnerEarnings).values({
+        partnerId,
+        bookingId,
+        grossAmount: calc.grossAmount.toFixed(2),
+        platformFeePercent: calc.platformFeePercent.toFixed(2),
+        platformFeeAmount: calc.platformFeeAmount.toFixed(2),
+        partnerNetAmount: calc.partnerNet.toFixed(2),
+        stripeTransferId: transfer.id,
+        status: 'paid',
+        paidAt: new Date(),
+        failureReason: null,
+      }).onConflictDoUpdate({
+        target: partnerEarnings.bookingId,
+        set: {
+          grossAmount: calc.grossAmount.toFixed(2),
+          platformFeePercent: calc.platformFeePercent.toFixed(2),
+          platformFeeAmount: calc.platformFeeAmount.toFixed(2),
+          partnerNetAmount: calc.partnerNet.toFixed(2),
+          stripeTransferId: transfer.id,
+          status: 'paid',
+          paidAt: new Date(),
+          failureReason: null,
+          updatedAt: new Date(),
+        },
+      }).returning();
+
+      await db.update(bookings)
+        .set({ partnerStripeTransferId: transfer.id })
+        .where(eq(bookings.id, bookingId));
+
+      logEvent.payment('partner_transfer_created', {
+        bookingId,
+        partnerId,
+        transferId: transfer.id,
+        amount: calc.partnerNet,
+      });
+
+      return row;
+    } catch (err: any) {
+      // StripeInvalidRequestError → capability-level failure (destination account
+      // restricted, currency mismatch, etc.). Record 'failed' so it does NOT get
+      // auto-retried by the onboarding webhook — it needs admin attention first.
+      const isInvalidRequest = err?.type === 'StripeInvalidRequestError';
+      const status = isInvalidRequest ? 'failed' : 'pending';
+      const failureReason = err?.message ? String(err.message).slice(0, 500) : 'Transfer failed';
+
+      const [row] = await db.insert(partnerEarnings).values({
+        partnerId,
+        bookingId,
+        grossAmount: calc.grossAmount.toFixed(2),
+        platformFeePercent: calc.platformFeePercent.toFixed(2),
+        platformFeeAmount: calc.platformFeeAmount.toFixed(2),
+        partnerNetAmount: calc.partnerNet.toFixed(2),
+        status,
+        failureReason,
+      }).onConflictDoUpdate({
+        target: partnerEarnings.bookingId,
+        set: {
+          grossAmount: calc.grossAmount.toFixed(2),
+          platformFeePercent: calc.platformFeePercent.toFixed(2),
+          platformFeeAmount: calc.platformFeeAmount.toFixed(2),
+          partnerNetAmount: calc.partnerNet.toFixed(2),
+          status,
+          failureReason,
+          updatedAt: new Date(),
+        },
+      }).returning();
+
+      logEvent.payment('partner_transfer_failed', {
+        bookingId,
+        partnerId,
+        status,
+        errorType: err?.type ?? 'unknown',
+        errorMessage: failureReason,
+      });
+
+      return row;
+    }
+  }
+
   // Calculate and set commission on booking before completion
   async function calculateBookingCommission(bookingId: string) {
     const booking = await storage.getBooking(bookingId);
@@ -8419,7 +8698,19 @@ Respond with VALID JSON only:
       
       // Record earnings using persisted commission data from booking
       const earnings = await recordMoverEarnings(bookingId, booking.moverId!, updatedBooking);
-      
+
+      // If the booking was routed to an enterprise partner, record + settle
+      // partner earnings on the same completion event. Non-blocking on the
+      // mover-completion response: any transfer failure is captured on the
+      // partner_earnings row (status='pending'|'failed') for admin retry.
+      if (updatedBooking?.enterprisePartnerId) {
+        try {
+          await recordPartnerEarnings(bookingId, updatedBooking.enterprisePartnerId, updatedBooking);
+        } catch (partnerErr) {
+          logEvent.error('partner_earnings_unhandled', partnerErr instanceof Error ? partnerErr : new Error('partner earnings error'), { bookingId, partnerId: updatedBooking.enterprisePartnerId });
+        }
+      }
+
       // Increment mover's completed trips AND total moves using SQL to avoid null issues
       const mover = movers[0];
       await db.execute(sql`
@@ -10085,8 +10376,12 @@ Respond with VALID JSON only:
             transferParams.source_transaction = sourceChargeId;
           }
           
-          const transfer = await stripe.transfers.create(transferParams);
-          
+          const transfer = await circuitBreakers.stripe.execute(() =>
+            stripe.transfers.create(transferParams, {
+              idempotencyKey: `batch-payout-${earning.id}-v1`,
+            }),
+          );
+
           // Update earnings status to paid
           await db.update(moverEarnings)
             .set({
@@ -10260,6 +10555,131 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Get mover earnings error:', error);
       res.status(500).json({ error: "Failed to get mover earnings" });
+    }
+  });
+
+  // ===== ADMIN: PARTNER PAYOUTS =====
+  // Mirrors the mover admin payout endpoints. Partner earnings are populated
+  // by recordPartnerEarnings on booking completion; these endpoints let ops
+  // list them and retry failed/pending transfers.
+
+  // List partner earnings with the owning partner + booking snapshot.
+  // Query params: status, partnerId, from (ISO), to (ISO).
+  app.get("/api/admin/partner-payouts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const conditions: any[] = [];
+      if (typeof req.query.status === 'string' && req.query.status.length) {
+        conditions.push(eq(partnerEarnings.status, req.query.status));
+      }
+      if (typeof req.query.partnerId === 'string' && req.query.partnerId.length) {
+        conditions.push(eq(partnerEarnings.partnerId, req.query.partnerId));
+      }
+      if (typeof req.query.from === 'string' && req.query.from.length) {
+        const d = new Date(req.query.from);
+        if (!isNaN(d.getTime())) conditions.push(sql`${partnerEarnings.createdAt} >= ${d}`);
+      }
+      if (typeof req.query.to === 'string' && req.query.to.length) {
+        const d = new Date(req.query.to);
+        if (!isNaN(d.getTime())) conditions.push(sql`${partnerEarnings.createdAt} <= ${d}`);
+      }
+
+      const rows = await db.select({
+        earning: partnerEarnings,
+        partner: {
+          id: partners.id,
+          name: partners.name,
+          legalName: partners.legalName,
+          stripeAccountId: partners.stripeAccountId,
+          stripePayoutsEnabled: partners.stripePayoutsEnabled,
+        },
+        booking: {
+          id: bookings.id,
+          price: bookings.price,
+          pickupAddress: bookings.pickupAddress,
+          dropoffAddress: bookings.dropoffAddress,
+          enterpriseStatus: bookings.enterpriseStatus,
+          partnerStripeTransferId: bookings.partnerStripeTransferId,
+        },
+      })
+        .from(partnerEarnings)
+        .leftJoin(partners, eq(partners.id, partnerEarnings.partnerId))
+        .leftJoin(bookings, eq(bookings.id, partnerEarnings.bookingId))
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(partnerEarnings.createdAt))
+        .limit(500);
+
+      res.json(rows.map(r => ({ ...r.earning, partner: r.partner, booking: r.booking })));
+    } catch (error) {
+      console.error('[Admin] partner-payouts list error:', error);
+      res.status(500).json({ error: "Failed to load partner payouts" });
+    }
+  });
+
+  // Batch process all pending partner earnings. Mirrors the mover batch endpoint.
+  // Skips rows where the owning partner does not have stripePayoutsEnabled.
+  app.post("/api/admin/partner-payouts/process", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const pending = await db.select().from(partnerEarnings)
+        .where(eq(partnerEarnings.status, 'pending'));
+
+      const processed: Array<{ earningsId: string; partnerId: string; transferId: string; amount: string }> = [];
+      const failed: Array<{ earningsId: string; partnerId: string; reason: string }> = [];
+      const skipped: Array<{ earningsId: string; partnerId: string; reason: string }> = [];
+
+      for (const earning of pending) {
+        const booking = await storage.getBooking(earning.bookingId);
+        if (!booking || booking.paymentStatus !== 'succeeded') {
+          skipped.push({ earningsId: earning.id, partnerId: earning.partnerId, reason: 'Booking not paid' });
+          continue;
+        }
+        try {
+          const row = await recordPartnerEarnings(earning.bookingId, earning.partnerId, booking);
+          if (row?.status === 'paid') {
+            processed.push({
+              earningsId: earning.id,
+              partnerId: earning.partnerId,
+              transferId: row.stripeTransferId ?? '',
+              amount: row.partnerNetAmount,
+            });
+          } else if (row?.status === 'failed') {
+            failed.push({ earningsId: earning.id, partnerId: earning.partnerId, reason: row.failureReason ?? 'Transfer failed' });
+          } else {
+            skipped.push({ earningsId: earning.id, partnerId: earning.partnerId, reason: 'Payouts not enabled' });
+          }
+        } catch (err: any) {
+          failed.push({ earningsId: earning.id, partnerId: earning.partnerId, reason: err?.message ?? 'Unknown error' });
+        }
+      }
+
+      const totalPaid = processed.reduce((s, p) => s + parseFloat(p.amount || '0'), 0);
+      res.json({ success: true, processed, failed, skipped, totalPaid: totalPaid.toFixed(2) });
+    } catch (error) {
+      console.error('[Admin] partner-payouts batch error:', error);
+      res.status(500).json({ error: "Failed to process partner payouts" });
+    }
+  });
+
+  // Retry a single failed or pending partner earning row.
+  app.post("/api/admin/partner-payouts/:earningId/retry", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const [earning] = await db.select().from(partnerEarnings)
+        .where(eq(partnerEarnings.id, req.params.earningId)).limit(1);
+      if (!earning) return res.status(404).json({ error: "Earning row not found" });
+      if (!['pending', 'failed'].includes(earning.status)) {
+        return res.status(400).json({ error: `Cannot retry earnings in status ${earning.status}` });
+      }
+      const booking = await storage.getBooking(earning.bookingId);
+      if (!booking || booking.paymentStatus !== 'succeeded') {
+        return res.status(400).json({ error: "Booking is not paid" });
+      }
+      const row = await recordPartnerEarnings(earning.bookingId, earning.partnerId, booking);
+      res.json({ earning: row });
+    } catch (error: any) {
+      console.error('[Admin] partner-payouts retry error:', error);
+      res.status(500).json({ error: error?.message ?? "Failed to retry partner payout" });
     }
   });
 
@@ -10438,20 +10858,22 @@ Respond with VALID JSON only:
       const netAmount = moverPayoutCents / 100;
       
       // Create Stripe Transfer (use moverPayoutCents from fee calculation)
-      const transfer = await stripe.transfers.create({
-        amount: moverPayoutCents,
-        currency: 'cad',
-        destination: moverAccount.stripeAccountId,
-        metadata: {
-          bookingId,
-          moverId: booking.moverId,
-          grossAmount: grossAmount.toFixed(2),
-          platformFee: platformFeeAmount.toFixed(2),
-          processedBy: 'admin_manual_transfer',
-        },
-      }, {
-        idempotencyKey: `manual-transfer-${bookingId}`,
-      });
+      const transfer = await circuitBreakers.stripe.execute(() =>
+        stripe.transfers.create({
+          amount: moverPayoutCents,
+          currency: 'cad',
+          destination: moverAccount.stripeAccountId,
+          metadata: {
+            bookingId,
+            moverId: booking.moverId,
+            grossAmount: grossAmount.toFixed(2),
+            platformFee: platformFeeAmount.toFixed(2),
+            processedBy: 'admin_manual_transfer',
+          },
+        }, {
+          idempotencyKey: `manual-transfer-${bookingId}`,
+        }),
+      );
       
       // Create or update earnings record
       if (existingEarnings.length > 0) {
@@ -10721,21 +11143,25 @@ Respond with VALID JSON only:
           const feeCalc = calculatePlatformFee(grossAmount, booking.loadSize);
           const { moverPayoutCents, platformFeeCents } = feeCalc;
           
-          // Create transfer to mover's connected account
-          const transfer = await stripe.transfers.create({
-            amount: moverPayoutCents,
-            currency: 'cad',
-            destination: moverAccount.stripeAccountId,
-            metadata: {
-              bookingId: earning.bookingId,
-              moverId,
-              grossAmount: grossAmount.toFixed(2),
-              platformFee: (platformFeeCents / 100).toFixed(2),
-              processedBy: 'test_auto_transfer',
-            },
-          }, {
-            idempotencyKey: `test-auto-transfer-${earning.bookingId}-${Date.now()}`,
-          });
+          // Create transfer to mover's connected account.
+          // Idempotency key is deterministic per earning (previously included
+          // Date.now(), which defeated retry-safety).
+          const transfer = await circuitBreakers.stripe.execute(() =>
+            stripe.transfers.create({
+              amount: moverPayoutCents,
+              currency: 'cad',
+              destination: moverAccount.stripeAccountId,
+              metadata: {
+                bookingId: earning.bookingId,
+                moverId,
+                grossAmount: grossAmount.toFixed(2),
+                platformFee: (platformFeeCents / 100).toFixed(2),
+                processedBy: 'test_auto_transfer',
+              },
+            }, {
+              idempotencyKey: `test-auto-transfer-${earning.id}-v1`,
+            }),
+          );
           
           // Update earnings record
           await db.update(moverEarnings)

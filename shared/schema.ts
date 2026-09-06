@@ -211,6 +211,8 @@ export const bookings = pgTable("bookings", {
   enterpriseAcceptedAt: timestamp("enterprise_accepted_at"),
   enterpriseRejectedAt: timestamp("enterprise_rejected_at"),
   enterpriseRejectionReason: text("enterprise_rejection_reason"),
+  // Stripe transfer to the enterprise partner (set by recordPartnerEarnings)
+  partnerStripeTransferId: text("partner_stripe_transfer_id"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -1148,6 +1150,8 @@ export const partners = pgTable("partners", {
   stripeConnectStatus: text("stripe_connect_status").default("not_connected"), // not_connected | pending | active | restricted
   stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false),
   stripeDetailsSubmitted: boolean("stripe_details_submitted").default(false),
+  // Per-partner platform fee override (null → falls back to booking or default 15%)
+  platformFeePercent: decimal("platform_fee_percent", { precision: 5, scale: 2 }),
   // Branding
   logoUrl: text("logo_url"),
   // Notes from Lervit admin
@@ -1461,6 +1465,66 @@ export const partnerDirectMessages = pgTable("partner_direct_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   readAt: timestamp("read_at"),
 });
+
+// ─── Partner Payouts (mirrors mover payout tables) ──────────────────────────
+// Per-completed-booking partner earnings row. Populated by recordPartnerEarnings
+// at booking completion; transitions pending → paid (or failed) when a Stripe
+// transfer succeeds. The booking_id unique constraint makes the insert idempotent
+// on retry — subsequent calls UPDATE the existing row in place.
+export const partnerEarnings = pgTable("partner_earnings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id),
+  bookingId: varchar("booking_id").notNull().unique().references(() => bookings.id),
+  grossAmount: decimal("gross_amount", { precision: 10, scale: 2 }).notNull(),
+  platformFeePercent: decimal("platform_fee_percent", { precision: 5, scale: 2 }).notNull().default("15.00"),
+  platformFeeAmount: decimal("platform_fee_amount", { precision: 10, scale: 2 }).notNull(),
+  partnerNetAmount: decimal("partner_net_amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("cad"),
+  stripeTransferId: text("stripe_transfer_id"),
+  status: text("status").notNull().default("pending"), // pending | processing | paid | failed
+  paidAt: timestamp("paid_at"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  partnerIdIdx: index("partner_earnings_partner_id_idx").on(table.partnerId),
+  bookingIdIdx: index("partner_earnings_booking_id_idx").on(table.bookingId),
+  statusIdx: index("partner_earnings_status_idx").on(table.status),
+}));
+
+// Batch-payout envelope for future settlement flows. Not populated by the
+// current per-transfer path; reserved for admin batch-payout endpoints.
+export const partnerPayouts = pgTable("partner_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id),
+  stripePayoutId: text("stripe_payout_id"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("cad"),
+  status: text("status").notNull().default("pending"), // pending | in_transit | paid | failed | canceled
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  bookingCount: integer("booking_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  partnerIdIdx: index("partner_payouts_partner_id_idx").on(table.partnerId),
+  statusIdx: index("partner_payouts_status_idx").on(table.status),
+}));
+
+// ─── Stripe Webhook Event Dedup ─────────────────────────────────────────────
+// Primary key = Stripe event id. INSERT ... ON CONFLICT DO NOTHING at the top
+// of the webhook handler; if 0 rows affected, the event was already seen and
+// we short-circuit. Best-effort dedup — a crash between insert and processing
+// loses the event. Sufficient hardening for two-transfer-paths blast radius.
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+  errorMessage: text("error_message"),
+}, (table) => ({
+  typeIdx: index("stripe_webhook_events_type_idx").on(table.type),
+  receivedAtIdx: index("stripe_webhook_events_received_at_idx").on(table.receivedAt),
+}));
 
 export const ENTERPRISE_STATUS_TRANSITIONS: Record<string, string[]> = {
   new: ['under_review', 'accepted', 'rejected', 'cancelled'],

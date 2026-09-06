@@ -43,11 +43,13 @@ import {
   partnerDirectMessages,
   aiIncidentInsights,
   reviews,
+  partnerEarnings,
 } from "@shared/schema";
 import { analyzeIncident, analyzeAuditEntry } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
 import { notificationService } from "./notifications";
 import { getBaseUrl } from "./utils/urls";
+import { calculatePartnerNet } from "@shared/pricing";
 
 // ============================================================
 // Multer setup for file uploads
@@ -1483,6 +1485,11 @@ export function registerPartnerRoutes(app: Express) {
   });
 
   // GET /api/partner/earnings — full earnings history (all completed bookings)
+  //
+  // Merges the booking snapshot (address, price) with the partnerEarnings row
+  // (Stripe transfer state) when one exists. Completed bookings without a
+  // partnerEarnings row (older data, or a partner that has not yet had
+  // recordPartnerEarnings run) still appear with computed net + payoutStatus="not_recorded".
   app.get("/api/partner/earnings", requirePartnerAuth(), async (req: Request, res: Response) => {
     try {
       const { partner } = (req as any).partnerCtx;
@@ -1490,24 +1497,41 @@ export function registerPartnerRoutes(app: Express) {
         .where(and(eq(bookings.enterprisePartnerId, partner.id), eq(bookings.enterpriseStatus, "completed")))
         .orderBy(desc(bookings.updatedAt));
 
-      const partnerNet = (b: typeof allBookings[0]): number => {
-        const price = parseFloat(b.price ?? "0");
-        const fee = parseFloat((b as any).platformFeeAmount ?? "0");
-        if (fee > 0) return Math.max(0, price - fee);
-        const feePercent = parseFloat((b as any).platformFeePercent ?? "15");
-        return Math.max(0, price * (1 - feePercent / 100));
-      };
+      const partnerFeeOverride = partner.platformFeePercent != null ? parseFloat(partner.platformFeePercent as any) : null;
+      const partnerNet = (b: typeof allBookings[0]): number => calculatePartnerNet(
+        parseFloat(b.price ?? "0"),
+        parseFloat((b as any).platformFeePercent ?? "15"),
+        partnerFeeOverride,
+        parseFloat((b as any).platformFeeAmount ?? "0"),
+      ).partnerNet;
 
-      const earnings = allBookings.map(b => ({
-        id: b.id,
-        pickupAddress: b.pickupAddress,
-        dropoffAddress: b.dropoffAddress,
-        price: b.price,
-        partnerNet: partnerNet(b).toFixed(2),
-        platformFeePercent: (b as any).platformFeePercent ?? "15.00",
-        platformFeeAmount: (b as any).platformFeeAmount ?? null,
-        completedAt: b.updatedAt,
-      }));
+      const earningsRows = allBookings.length > 0
+        ? await db.select().from(partnerEarnings)
+            .where(and(
+              eq(partnerEarnings.partnerId, partner.id),
+              inArray(partnerEarnings.bookingId, allBookings.map(b => b.id)),
+            ))
+        : [];
+      const earningByBookingId = new Map(earningsRows.map(r => [r.bookingId, r]));
+
+      const earnings = allBookings.map(b => {
+        const row = earningByBookingId.get(b.id);
+        return {
+          id: b.id,
+          pickupAddress: b.pickupAddress,
+          dropoffAddress: b.dropoffAddress,
+          price: b.price,
+          partnerNet: row?.partnerNetAmount ?? partnerNet(b).toFixed(2),
+          platformFeePercent: row?.platformFeePercent ?? (b as any).platformFeePercent ?? "15.00",
+          platformFeeAmount: row?.platformFeeAmount ?? (b as any).platformFeeAmount ?? null,
+          completedAt: b.updatedAt,
+          // Payout tracking (only populated once recordPartnerEarnings has run)
+          payoutStatus: row?.status ?? "not_recorded", // pending | processing | paid | failed | not_recorded
+          stripeTransferId: row?.stripeTransferId ?? null,
+          paidAt: row?.paidAt ?? null,
+          failureReason: row?.failureReason ?? null,
+        };
+      });
 
       res.json({ earnings });
     } catch (err) {
@@ -1531,13 +1555,13 @@ export function registerPartnerRoutes(app: Express) {
       const activeStatuses = ["new", "under_review", "accepted", "assigned", "en_route_to_pickup", "arrived_at_pickup", "picked_up", "in_transit", "arrived_at_dropoff", "delivered", "delayed", "issue_reported"];
 
       // Earnings helpers — partner net = price minus platform fee
-      const partnerNet = (b: typeof allBookings[0]): number => {
-        const price = parseFloat(b.price ?? "0");
-        const fee = parseFloat((b as any).platformFeeAmount ?? "0");
-        if (fee > 0) return Math.max(0, price - fee);
-        const feePercent = parseFloat((b as any).platformFeePercent ?? "15");
-        return Math.max(0, price * (1 - feePercent / 100));
-      };
+      const partnerFeeOverride = partner.platformFeePercent != null ? parseFloat(partner.platformFeePercent as any) : null;
+      const partnerNet = (b: typeof allBookings[0]): number => calculatePartnerNet(
+        parseFloat(b.price ?? "0"),
+        parseFloat((b as any).platformFeePercent ?? "15"),
+        partnerFeeOverride,
+        parseFloat((b as any).platformFeeAmount ?? "0"),
+      ).partnerNet;
 
       const completedBookings = allBookings.filter(b => b.enterpriseStatus === "completed");
       const activeBookingsList = allBookings.filter(b => activeStatuses.includes(b.enterpriseStatus || ""));
@@ -1900,13 +1924,13 @@ export function registerPartnerRoutes(app: Express) {
           .from(bookings)
           .where(and(eq(bookings.enterprisePartnerId, p.id), eq(bookings.enterpriseStatus, "completed")));
 
-        const calcNet = (b: any): number => {
-          const price = parseFloat(b.price ?? "0");
-          const fee = parseFloat(b.platformFeeAmount ?? "0");
-          if (fee > 0) return Math.max(0, price - fee);
-          const feePercent = parseFloat(b.platformFeePercent ?? "15");
-          return Math.max(0, price * (1 - feePercent / 100));
-        };
+        const partnerFeeOverride = p.platformFeePercent != null ? parseFloat(p.platformFeePercent as any) : null;
+        const calcNet = (b: any): number => calculatePartnerNet(
+          parseFloat(b.price ?? "0"),
+          parseFloat(b.platformFeePercent ?? "15"),
+          partnerFeeOverride,
+          parseFloat(b.platformFeeAmount ?? "0"),
+        ).partnerNet;
 
         const totalEarned = completedBookings.reduce((sum, b) => sum + parseFloat(b.price ?? "0"), 0);
         const totalPartnerNet = completedBookings.reduce((sum, b) => sum + calcNet(b), 0);
@@ -1963,13 +1987,13 @@ export function registerPartnerRoutes(app: Express) {
       const completedForEarnings = await db.select().from(bookings)
         .where(and(eq(bookings.enterprisePartnerId, partner.id), eq(bookings.enterpriseStatus, "completed")));
 
-      const calcPartnerNet = (b: any): number => {
-        const price = parseFloat(b.price ?? "0");
-        const fee = parseFloat(b.platformFeeAmount ?? "0");
-        if (fee > 0) return Math.max(0, price - fee);
-        const feePercent = parseFloat(b.platformFeePercent ?? "15");
-        return Math.max(0, price * (1 - feePercent / 100));
-      };
+      const partnerFeeOverride = partner.platformFeePercent != null ? parseFloat(partner.platformFeePercent as any) : null;
+      const calcPartnerNet = (b: any): number => calculatePartnerNet(
+        parseFloat(b.price ?? "0"),
+        parseFloat(b.platformFeePercent ?? "15"),
+        partnerFeeOverride,
+        parseFloat(b.platformFeeAmount ?? "0"),
+      ).partnerNet;
 
       const totalEarned = completedForEarnings.reduce((s, b) => s + parseFloat(b.price ?? "0"), 0);
       const totalPartnerNet = completedForEarnings.reduce((s, b) => s + calcPartnerNet(b), 0);

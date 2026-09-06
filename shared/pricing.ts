@@ -313,9 +313,9 @@ export function calculatePrice(
 /**
  * Calculate mover earnings after platform commission
  */
-export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): { 
-  gross: number; 
-  platformFee: number; 
+export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): {
+  gross: number;
+  platformFee: number;
   net: number;
   platformFeePercent: number;
 } {
@@ -323,12 +323,60 @@ export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): {
   const platformFeePercent = PRICING_CONFIG.PLATFORM_FEE_PERCENT;
   const platformFee = gross * (platformFeePercent / 100);
   const net = gross - platformFee;
-  
+
   return {
     gross: Math.round(gross * 100) / 100,
     platformFee: Math.round(platformFee * 100) / 100,
     net: Math.round(net * 100) / 100,
     platformFeePercent,
+  };
+}
+
+/**
+ * Calculate an enterprise partner's net earnings on a booking after platform commission.
+ *
+ * Fee resolution order (higher precedence first):
+ *   1. `partnerFeeOverride` — a per-partner negotiated rate (e.g. partners.platformFeePercent)
+ *   2. `platformFeeAmount`  — absolute fee already computed on the booking row (only when > 0)
+ *   3. `platformFeePercent` — percentage on the booking row
+ *   4. Default PRICING_CONFIG.PLATFORM_FEE_PERCENT (15%)
+ *
+ * The absolute-amount case exists because bookings persist both `platformFeeAmount`
+ * and `platformFeePercent`; when an admin has overridden the absolute amount, that
+ * wins over the derived percent value. Result never goes below zero.
+ */
+export function calculatePartnerNet(
+  grossAmount: number,
+  platformFeePercent?: number | null,
+  partnerFeeOverride?: number | null,
+  platformFeeAmount?: number | null,
+): { grossAmount: number; platformFeeAmount: number; partnerNet: number; platformFeePercent: number } {
+  const gross = Number.isFinite(grossAmount) ? grossAmount : 0;
+
+  let feeAmount: number;
+  let feePercent: number;
+
+  if (partnerFeeOverride != null && Number.isFinite(partnerFeeOverride)) {
+    feePercent = partnerFeeOverride;
+    feeAmount = gross * (feePercent / 100);
+  } else if (platformFeeAmount != null && Number.isFinite(platformFeeAmount) && platformFeeAmount > 0) {
+    feeAmount = platformFeeAmount;
+    feePercent = gross > 0 ? (feeAmount / gross) * 100 : PRICING_CONFIG.PLATFORM_FEE_PERCENT;
+  } else if (platformFeePercent != null && Number.isFinite(platformFeePercent)) {
+    feePercent = platformFeePercent;
+    feeAmount = gross * (feePercent / 100);
+  } else {
+    feePercent = PRICING_CONFIG.PLATFORM_FEE_PERCENT;
+    feeAmount = gross * (feePercent / 100);
+  }
+
+  const partnerNet = Math.max(0, gross - feeAmount);
+
+  return {
+    grossAmount: Math.round(gross * 100) / 100,
+    platformFeeAmount: Math.round(feeAmount * 100) / 100,
+    partnerNet: Math.round(partnerNet * 100) / 100,
+    platformFeePercent: Math.round(feePercent * 100) / 100,
   };
 }
 

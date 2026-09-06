@@ -91,6 +91,68 @@ async function run() {
       throw err;
     }
 
+    // 0008 — Partner payouts + Stripe webhook dedup.
+    // Mirrors mover payout tables. Guarded per-statement with IF NOT EXISTS so
+    // the block is safe on every deploy.
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS partner_earnings (
+          id                    varchar         PRIMARY KEY DEFAULT gen_random_uuid(),
+          partner_id            varchar         NOT NULL REFERENCES partners(id),
+          booking_id            varchar         NOT NULL UNIQUE REFERENCES bookings(id),
+          gross_amount          decimal(10, 2)  NOT NULL,
+          platform_fee_percent  decimal(5, 2)   NOT NULL DEFAULT 15.00,
+          platform_fee_amount   decimal(10, 2)  NOT NULL,
+          partner_net_amount    decimal(10, 2)  NOT NULL,
+          currency              text            NOT NULL DEFAULT 'cad',
+          stripe_transfer_id    text,
+          status                text            NOT NULL DEFAULT 'pending',
+          paid_at               timestamp,
+          failure_reason        text,
+          created_at            timestamp       NOT NULL DEFAULT now(),
+          updated_at            timestamp       NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS partner_earnings_partner_id_idx ON partner_earnings(partner_id);
+        CREATE INDEX IF NOT EXISTS partner_earnings_booking_id_idx ON partner_earnings(booking_id);
+        CREATE INDEX IF NOT EXISTS partner_earnings_status_idx     ON partner_earnings(status);
+
+        CREATE TABLE IF NOT EXISTS partner_payouts (
+          id                varchar         PRIMARY KEY DEFAULT gen_random_uuid(),
+          partner_id        varchar         NOT NULL REFERENCES partners(id),
+          stripe_payout_id  text,
+          amount            decimal(10, 2)  NOT NULL,
+          currency          text            NOT NULL DEFAULT 'cad',
+          status            text            NOT NULL DEFAULT 'pending',
+          period_start      timestamp,
+          period_end        timestamp,
+          booking_count     integer         NOT NULL DEFAULT 0,
+          created_at        timestamp       NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS partner_payouts_partner_id_idx ON partner_payouts(partner_id);
+        CREATE INDEX IF NOT EXISTS partner_payouts_status_idx     ON partner_payouts(status);
+
+        CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+          id             text        PRIMARY KEY,
+          type           text        NOT NULL,
+          received_at    timestamp   NOT NULL DEFAULT now(),
+          processed_at   timestamp,
+          error_message  text
+        );
+        CREATE INDEX IF NOT EXISTS stripe_webhook_events_type_idx        ON stripe_webhook_events(type);
+        CREATE INDEX IF NOT EXISTS stripe_webhook_events_received_at_idx ON stripe_webhook_events(received_at);
+
+        ALTER TABLE partners
+          ADD COLUMN IF NOT EXISTS platform_fee_percent decimal(5, 2);
+
+        ALTER TABLE bookings
+          ADD COLUMN IF NOT EXISTS partner_stripe_transfer_id text;
+      `);
+      console.log('[startup-migrate] ✓ partner_earnings / partner_payouts / stripe_webhook_events ensured.');
+    } catch (err) {
+      console.error('[startup-migrate] ✗ partner payouts migration FAILED:', err.message);
+      throw err;
+    }
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);
