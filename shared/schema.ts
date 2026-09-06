@@ -255,6 +255,12 @@ export const bookings = pgTable("bookings", {
   // any analytics that need "when did the move end" rather than "when was the
   // row last touched" (updatedAt bumps on review-related mutations).
   completedAt: timestamp("completed_at"),
+
+  // Auto-dispatch tracking (Gap 1)
+  autoRouted: boolean("auto_routed").default(false).notNull(),
+  autoRoutedAt: timestamp("auto_routed_at"),
+  routingAttempts: integer("routing_attempts").default(0).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

@@ -51,6 +51,8 @@ import { optimizeImageBuffer } from "./image-optimizer";
 import { notificationService, formatCalgaryDate } from "./notifications";
 import { getBaseUrl } from "./utils/urls";
 import { calculatePartnerNet } from "@shared/pricing";
+import { autoDispatchToPartner, notifyAdminsOfDispatchFailure } from "./partner-dispatch";
+import { dispatchBooking } from "./dispatch";
 
 // ============================================================
 // Multer setup for file uploads
@@ -991,6 +993,8 @@ export function registerPartnerRoutes(app: Express) {
       const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
       const fromStatus = booking.enterpriseStatus;
 
+      // Record the rejection event (before clearing partner assignment so the
+      // audit trail keeps the "which partner rejected" link).
       const [updated] = await db.update(bookings)
         .set({
           enterpriseStatus: "rejected",
@@ -1027,6 +1031,43 @@ export function registerPartnerRoutes(app: Express) {
           }
         }
       }).catch(e => console.error("[Admin notify] fetch admins failed:", e));
+
+      // Auto re-route (Gap 1): reset the routing state, then try the next
+      // eligible partner. Cap at 3 partner attempts before falling back to movers.
+      const MAX_PARTNER_ATTEMPTS = 3;
+      const currentAttempts = updated.routingAttempts ?? 0;
+
+      const [reset] = await db.update(bookings)
+        .set({
+          enterprisePartnerId: null,
+          enterpriseStatus: null,
+          routedToPartnerAt: null,
+          autoRouted: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(bookings.id, booking.id))
+        .returning();
+
+      if (currentAttempts >= MAX_PARTNER_ATTEMPTS) {
+        try {
+          await dispatchBooking(reset);
+        } catch (e) {
+          console.error("[reject] mover fallback dispatch failed:", e);
+        }
+        await notifyAdminsOfDispatchFailure(reset, currentAttempts);
+      } else {
+        const retry = await autoDispatchToPartner(reset, {
+          notifyAdmin: currentAttempts + 1 >= MAX_PARTNER_ATTEMPTS,
+        });
+        if (!retry.dispatched) {
+          try {
+            await dispatchBooking(reset);
+          } catch (e) {
+            console.error("[reject] mover fallback dispatch failed:", e);
+          }
+          await notifyAdminsOfDispatchFailure(reset, currentAttempts);
+        }
+      }
 
       res.json(updated);
     } catch (err: any) {
@@ -2416,8 +2457,24 @@ export function registerPartnerRoutes(app: Express) {
       const [partner] = await db.select().from(partners).where(and(eq(partners.id, partnerId), eq(partners.status, "active"))).limit(1);
       if (!partner) return res.status(404).json({ error: "Active partner not found" });
 
-      if (booking.enterprisePartnerId) {
-        return res.status(400).json({ error: "Booking is already routed to a partner" });
+      if (booking.enterprisePartnerId && !booking.autoRouted) {
+        return res.status(400).json({ error: "Booking is already manually routed to a partner" });
+      }
+
+      // Eligibility gates (Gap 1 hardening) — compliance docs approved + at least one available team member
+      const [approvedDoc] = await db.select({ id: complianceDocs.id })
+        .from(complianceDocs)
+        .where(and(eq(complianceDocs.partnerId, partnerId), eq(complianceDocs.reviewStatus, "approved")))
+        .limit(1);
+      if (!approvedDoc) {
+        return res.status(400).json({ error: "Partner has no approved compliance docs" });
+      }
+
+      const availableTeam = await db.select({ id: partnerTeamMembers.id })
+        .from(partnerTeamMembers)
+        .where(and(eq(partnerTeamMembers.partnerId, partnerId), eq(partnerTeamMembers.isAvailable, true)));
+      if (availableTeam.length === 0) {
+        return res.status(400).json({ error: "Partner has no available team members" });
       }
 
       // If the booking is already completed, keep it completed on both fields;
@@ -2432,6 +2489,8 @@ export function registerPartnerRoutes(app: Express) {
           enterpriseStatus: initialEnterpriseStatus,
           routedToPartnerAt: new Date(),
           status: newBookingStatus,
+          // Admin override — any prior auto-routing is superseded
+          autoRouted: false,
           updatedAt: new Date(),
         })
         .where(eq(bookings.id, booking.id))

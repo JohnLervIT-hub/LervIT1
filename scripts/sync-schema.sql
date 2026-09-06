@@ -1666,3 +1666,10 @@ ALTER TABLE "bookings"
   ADD COLUMN IF NOT EXISTS "pickup_geocoded_at"  timestamp,
   ADD COLUMN IF NOT EXISTS "dropoff_geocoded_at" timestamp,
   ADD COLUMN IF NOT EXISTS "geocode_mock"        boolean DEFAULT false;
+
+-- Auto-dispatch tracking (see migrations/0009_auto_dispatch_partners.sql).
+-- Distinguishes auto-routed from manually-routed jobs and caps re-route attempts.
+ALTER TABLE "bookings"
+  ADD COLUMN IF NOT EXISTS "auto_routed"      boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "auto_routed_at"   timestamp,
+  ADD COLUMN IF NOT EXISTS "routing_attempts" integer NOT NULL DEFAULT 0;

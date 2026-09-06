@@ -73,6 +73,7 @@ import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover } from "./dispatch";
 import { victor } from "./agents/victor";
+import { autoDispatchToPartner } from "./partner-dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
 import { circuitBreakers } from "./circuit-breaker";
 import {
@@ -7215,18 +7216,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
               logEvent.error('webhook_customer_emails', emailErr, { bookingId: booking.id });
             }
             
-            // Route through Victor for tracking + events (fire-and-forget so a
-            // dispatch hiccup can't stall Stripe's webhook 200 window).
-            victor.run('dispatch', { bookingId: booking.id })
-              .then(() => {
-                logEvent.payment('movers_notified', {
+            // Try enterprise-partner auto-dispatch first (Gap 1); if no partner
+            // qualifies, fall through to the Victor mover-dispatch pipeline.
+            // Fire-and-forget so a dispatch hiccup can't stall Stripe's
+            // webhook 200 window.
+            void (async () => {
+              const partnerResult = await autoDispatchToPartner(booking, { allowFallbackToMover: true });
+              if (partnerResult.dispatched) {
+                logEvent.payment('partner_auto_routed', {
                   bookingId: booking.id,
-                  websocketConnected: moverWebSocket.getConnectedMoversCount(),
+                  partnerId: partnerResult.partnerId,
+                  partnerName: partnerResult.partnerName,
                 });
-              })
-              .catch(err =>
-                logEvent.error('webhook_mover_notifications', err, { bookingId: booking.id }),
-              );
+                return;
+              }
+              await victor.run('dispatch', { bookingId: booking.id });
+              logEvent.payment('movers_notified', {
+                bookingId: booking.id,
+                websocketConnected: moverWebSocket.getConnectedMoversCount(),
+                partnerFallbackReason: partnerResult.reason,
+              });
+            })().catch(err =>
+              logEvent.error('webhook_mover_notifications', err, { bookingId: booking.id }),
+            );
           } else {
             // CRITICAL: No booking found for this payment intent - this is the lost booking scenario!
             // This should never happen if the payment flow is working correctly.
