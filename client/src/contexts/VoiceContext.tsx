@@ -7,6 +7,37 @@ import { toast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 
 export type VoiceStatus = "available" | "unavailable";
+export type RingtoneKey = "classic" | "double" | "triple" | "soft" | "digital";
+type RingtoneSpec = { label: string; intervalMs: number; play: (ctx: AudioContext) => void };
+const ringBeep = (ctx: AudioContext, freq: number, offset: number, duration: number, peak = 0.3) => {
+  const osc = ctx.createOscillator(); const gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.frequency.value = freq;
+  const t = ctx.currentTime + offset;
+  gain.gain.setValueAtTime(peak, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  osc.start(t); osc.stop(t + duration);
+};
+const ringSweep = (ctx: AudioContext, from: number, to: number, offset: number, duration: number, peak = 0.3) => {
+  const osc = ctx.createOscillator(); const gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  const t = ctx.currentTime + offset;
+  osc.frequency.setValueAtTime(from, t);
+  osc.frequency.linearRampToValueAtTime(to, t + duration);
+  gain.gain.setValueAtTime(peak, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  osc.start(t); osc.stop(t + duration);
+};
+const RINGTONE_SPECS: Record<RingtoneKey, RingtoneSpec> = {
+  classic: { label: "Classic", intervalMs: 3000, play: (ctx) => ringBeep(ctx, 480, 0, 1) },
+  double:  { label: "Double (UK)", intervalMs: 3000, play: (ctx) => { ringBeep(ctx, 480, 0, 0.4); ringBeep(ctx, 440, 0.6, 0.4); } },
+  triple:  { label: "Triple pulse", intervalMs: 3000, play: (ctx) => { ringBeep(ctx, 480, 0, 0.2); ringBeep(ctx, 480, 0.3, 0.2); ringBeep(ctx, 480, 0.6, 0.2); } },
+  soft:    { label: "Soft", intervalMs: 4000, play: (ctx) => ringBeep(ctx, 320, 0, 1.5, 0.25) },
+  digital: { label: "Digital", intervalMs: 3000, play: (ctx) => { ringSweep(ctx, 300, 600, 0, 0.5, 0.25); ringSweep(ctx, 300, 600, 0.7, 0.5, 0.25); } },
+};
+export const RINGTONE_OPTIONS: Array<{ key: RingtoneKey; label: string }> = (Object.keys(RINGTONE_SPECS) as RingtoneKey[]).map(k => ({ key: k, label: RINGTONE_SPECS[k].label }));
+const RINGTONE_STORAGE_KEY = "lervit_ringtone";
+const readStoredRingtone = (): RingtoneKey => { try { const stored = localStorage.getItem(RINGTONE_STORAGE_KEY); if (stored && stored in RINGTONE_SPECS) return stored as RingtoneKey; } catch { /* storage blocked */ } return "classic"; };
 export type VoiceCall = {
   appCallId: string; id: string; direction?: string; status?: string; from?: string; to?: string; fromNumber?: string; toNumber?: string;
   telnyxCallControlId?: string; telnyxCallLegId?: string; clientState?: string; customer?: { name?: string; phone?: string };
@@ -16,7 +47,9 @@ export type VoiceCall = {
 type VoiceConfig = { enabled: boolean; callerId?: string; recordingEnabled?: boolean; fallbackEnabled?: boolean; reason?: string };
 type Admin = { id: string; name?: string; email?: string; status?: string };
 type VoiceContextValue = { config: VoiceConfig; status: VoiceStatus; call: VoiceCall | null; isReady: boolean; isMuted: boolean; isHeld: boolean; elapsed: number; error: string | null; transferPending: boolean; admins: Admin[]; missedUnread: number;
-  setStatus: (status: VoiceStatus) => Promise<void>; dial: (to: string, bookingId?: string) => Promise<void>; command: (command: string, digits?: string) => Promise<void>; transfer: (adminId: string) => Promise<void>; clearCall: () => void; requestDevices: () => Promise<void>; resetMissed: () => void; };
+  ringtone: RingtoneKey; ringtones: typeof RINGTONE_OPTIONS;
+  setStatus: (status: VoiceStatus) => Promise<void>; dial: (to: string, bookingId?: string) => Promise<void>; command: (command: string, digits?: string) => Promise<void>; transfer: (adminId: string) => Promise<void>; clearCall: () => void; requestDevices: () => Promise<void>; resetMissed: () => void;
+  setRingtone: (key: RingtoneKey) => void; previewRingtone: (key: RingtoneKey) => void; };
 const VoiceContext = createContext<VoiceContextValue | null>(null);
 const canonicalId = (raw: any) => raw?.appCallId || raw?.callRecordId || raw?.id || raw?.callId || "";
 const decodeClientState = (value?: unknown) => { if (typeof value !== "string" || !value) return null; try { const parsed = JSON.parse(atob(value)); return (parsed?.kind === "inbound" || parsed?.kind === "transfer") && typeof parsed.callId === "string" && parsed.callId.trim() ? parsed : null; } catch { return null; } };
@@ -37,27 +70,33 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const sdkRef = useRef<any>(null); const sdkCallRef = useRef<any>(null); const callIdRef = useRef<string | null>(null); const wsRef = useRef<Socket | null>(null); const wsConnectingRef = useRef(false); const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null); const startedRef = useRef<number | null>(null); const dialingRef = useRef(false); const dialKeyRef = useRef<string | null>(null);
   const ringRef = useRef<{ ctx: AudioContext; interval: ReturnType<typeof setInterval> } | null>(null);
   const notifiedRef = useRef<string | null>(null);
+  const [ringtone, setRingtoneState] = useState<RingtoneKey>(() => readStoredRingtone());
+  const ringtoneRef = useRef<RingtoneKey>(ringtone);
+  useEffect(() => { ringtoneRef.current = ringtone; }, [ringtone]);
+  const setRingtone = useCallback((key: RingtoneKey) => { setRingtoneState(key); try { localStorage.setItem(RINGTONE_STORAGE_KEY, key); } catch { /* storage blocked */ } }, []);
   const stopRinging = useCallback(() => { if (!ringRef.current) return; clearInterval(ringRef.current.interval); try { ringRef.current.ctx.close(); } catch { /* already closed */ } ringRef.current = null; }, []);
   const startRinging = useCallback(() => {
     if (ringRef.current) return;
     try {
-      const AC: typeof AudioContext | undefined = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AC) return;
-      const ctx = new AC();
+      const ctx: AudioContext = new AC();
       if (ctx.state === "suspended") ctx.resume().catch(() => { /* autoplay blocked */ });
-      const playRing = () => {
-        try {
-          const osc = ctx.createOscillator(); const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.frequency.value = 480;
-          gain.gain.setValueAtTime(0.3, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1);
-        } catch { /* context closed mid-tick */ }
-      };
+      const spec = RINGTONE_SPECS[ringtoneRef.current] || RINGTONE_SPECS.classic;
+      const playRing = () => { try { spec.play(ctx); } catch { /* context closed mid-tick */ } };
       playRing();
-      const interval = setInterval(playRing, 3000);
+      const interval = setInterval(playRing, spec.intervalMs);
       ringRef.current = { ctx, interval };
+    } catch { /* audio unavailable */ }
+  }, []);
+  const previewRingtone = useCallback((key: RingtoneKey) => {
+    try {
+      const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AC) return;
+      const ctx: AudioContext = new AC();
+      if (ctx.state === "suspended") ctx.resume().catch(() => { /* autoplay blocked */ });
+      (RINGTONE_SPECS[key] || RINGTONE_SPECS.classic).play(ctx);
+      setTimeout(() => { try { ctx.close(); } catch { /* already closed */ } }, 2500);
     } catch { /* audio unavailable */ }
   }, []);
   useEffect(() => { if (presence?.status) setStatusState(presence.status); }, [presence?.status]);
@@ -135,7 +174,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const dial = useCallback(async (to: string, bookingId?: string) => { if (dialingRef.current || call || !config.enabled || status !== "available") { if (!call) setError("Set your status to Available before calling."); return; } dialingRef.current = true; const idempotencyKey = dialKeyRef.current || (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`); dialKeyRef.current = idempotencyKey; let preparedId = ""; try { const metadata = await (await apiRequest("POST", "/api/admin/voice/calls/prepare", { to, bookingId, idempotencyKey })).json(); preparedId = metadata?.call?.id || ""; if (!preparedId) throw new Error("prepare response did not include a call id"); const prepared = metadata.call; if (prepared.status === "active" || prepared.status === "connected") { setCall(normalize(prepared, preparedId)); startedRef.current = new Date(prepared.startedAt || Date.now()).getTime(); setError(null); dialKeyRef.current = null; return; } const sdk = sdkRef.current?.newCall?.({ destinationNumber: to, clientState: metadata.clientState }); if (!sdk) throw new Error("SDK unavailable"); bindSdkCall(sdk, { ...prepared, clientState: metadata.clientState, direction: "outbound", to }, preparedId); setError(null); dialKeyRef.current = null; } catch { if (preparedId) await cancelPrepared(preparedId); void clearActiveOnServer(); clearCall(); dialKeyRef.current = null; setError("Call could not be started."); } finally { dialingRef.current = false; } }, [call, config.enabled, status, bindSdkCall, cancelPrepared, clearCall, clearActiveOnServer]);
    const command = useCallback(async (name: string, digits?: string) => { const sdk = sdkCallRef.current; if (!call || !sdk || !call.appCallId || call.appCallId.startsWith("pending-")) { setError("Call context is still syncing."); return; } try { const method = resolveVoiceSdkMethod(name); if (name === "hold" && typeof sdk.toggleHold === "function") await sdk.toggleHold(); else if (typeof sdk[method] === "function") await sdk[method](...(name === "dtmf" ? [digits] : [])); else throw new Error("Unsupported call command"); if (name === "mute" || name === "unmute") setMuted(name === "mute"); if (name === "hold" || name === "resume") setHeld(name === "hold"); if (["hangup", "decline"].includes(name)) { clearCall(); void clearActiveOnServer(); } setError(null); } catch { setError(`Could not ${name} this call.`); return; } try { await apiRequest("POST", `/api/admin/voice/calls/${call.appCallId}/commands`, { command: name, ...(digits ? { digits } : {}) }); } catch { /* local SDK state remains authoritative */ } }, [call, clearCall, clearActiveOnServer]);
    const transfer = useCallback(async (adminId: string) => { if (!call || !adminId || !call.appCallId || call.appCallId.startsWith("pending-")) { setError("Call context is still syncing."); return; } setTransferPending(true); try { if (typeof sdkCallRef.current?.transfer === "function") await sdkCallRef.current.transfer(adminId); await apiRequest("POST", `/api/admin/voice/calls/${call.appCallId}/transfer`, { adminId }); setError(null); } catch { setError("Transfer could not be completed."); } finally { setTransferPending(false); } }, [call]);
-  const value = useMemo(() => ({ config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, missedUnread, setStatus, dial, command, transfer, clearCall, requestDevices, resetMissed }), [config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, missedUnread, setStatus, dial, command, transfer, clearCall, requestDevices, resetMissed]);
+  const value = useMemo(() => ({ config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, missedUnread, ringtone, ringtones: RINGTONE_OPTIONS, setStatus, dial, command, transfer, clearCall, requestDevices, resetMissed, setRingtone, previewRingtone }), [config, status, call, isReady, isMuted, isHeld, elapsed, error, transferPending, admins, missedUnread, ringtone, setStatus, dial, command, transfer, clearCall, requestDevices, resetMissed, setRingtone, previewRingtone]);
   return <VoiceContext.Provider value={value}><audio id="lervit-voice-audio" autoPlay /><>{children}</></VoiceContext.Provider>;
 }
 export function useVoice() { const value = useContext(VoiceContext); if (!value) throw new Error("useVoice must be used within VoiceProvider"); return value; }
