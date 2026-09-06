@@ -35,8 +35,46 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [status, setStatusState] = useState<VoiceStatus>("unavailable"); const [call, setCall] = useState<VoiceCall | null>(null); const [isReady, setReady] = useState(false); const [isMuted, setMuted] = useState(false); const [isHeld, setHeld] = useState(false); const [elapsed, setElapsed] = useState(0); const [error, setError] = useState<string | null>(null); const [transferPending, setTransferPending] = useState(false); const [missedUnread, setMissedUnread] = useState(0);
   const resetMissed = useCallback(() => setMissedUnread(0), []);
   const sdkRef = useRef<any>(null); const sdkCallRef = useRef<any>(null); const callIdRef = useRef<string | null>(null); const wsRef = useRef<Socket | null>(null); const wsConnectingRef = useRef(false); const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null); const startedRef = useRef<number | null>(null); const dialingRef = useRef(false); const dialKeyRef = useRef<string | null>(null);
+  const ringRef = useRef<{ ctx: AudioContext; interval: ReturnType<typeof setInterval> } | null>(null);
+  const notifiedRef = useRef<string | null>(null);
+  const stopRinging = useCallback(() => { if (!ringRef.current) return; clearInterval(ringRef.current.interval); try { ringRef.current.ctx.close(); } catch { /* already closed */ } ringRef.current = null; }, []);
+  const startRinging = useCallback(() => {
+    if (ringRef.current) return;
+    try {
+      const AC: typeof AudioContext | undefined = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      if (ctx.state === "suspended") ctx.resume().catch(() => { /* autoplay blocked */ });
+      const playRing = () => {
+        try {
+          const osc = ctx.createOscillator(); const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.frequency.value = 480;
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1);
+        } catch { /* context closed mid-tick */ }
+      };
+      playRing();
+      const interval = setInterval(playRing, 3000);
+      ringRef.current = { ctx, interval };
+    } catch { /* audio unavailable */ }
+  }, []);
   useEffect(() => { if (presence?.status) setStatusState(presence.status); }, [presence?.status]);
   useEffect(() => { if (!call) return; const started = startedRef.current || (call.startedAt ? new Date(call.startedAt).getTime() : Date.now()); const tick = () => setElapsed(Math.floor((Date.now() - started) / 1000)); tick(); const t = window.setInterval(tick, 1000); return () => window.clearInterval(t); }, [call?.appCallId, call?.startedAt]);
+  useEffect(() => {
+    const inboundRinging = call?.status === "ringing" && call?.direction !== "outbound";
+    if (!inboundRinging) { stopRinging(); if (!call) notifiedRef.current = null; return; }
+    startRinging();
+    const key = call?.appCallId || "unknown";
+    if (notifiedRef.current !== key && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try {
+        new Notification("Incoming LervIT Call", { body: `Call from ${call?.customer?.name || call?.from || call?.fromNumber || "Unknown"}`, icon: "/icon-192.png" });
+        notifiedRef.current = key;
+      } catch { /* notifications unavailable */ }
+    }
+  }, [call, startRinging, stopRinging]);
+  useEffect(() => () => stopRinging(), [stopRinging]);
   const clearCall = useCallback(() => { sdkCallRef.current = null; callIdRef.current = null; setCall(null); setElapsed(0); startedRef.current = null; setMuted(false); setHeld(false); }, []);
   const cancelPrepared = useCallback(async (appCallId?: string) => { if (!appCallId) return; try { await apiRequest("POST", `/api/admin/voice/calls/${appCallId}/cancel-prepare`); } catch { /* cancellation is best effort */ } }, []);
   const clearActiveOnServer = useCallback(async () => { try { await apiRequest("POST", "/api/admin/voice/calls/clear-active"); } catch { /* best effort — unblocks the next prepare */ } }, []);
