@@ -116,7 +116,10 @@ declare module 'express-session' {
 // verification will fail if we re-serialize the parsed JSON (key order /
 // whitespace differs from the signed payload). Registered BEFORE express.json
 // so express.json short-circuits (it checks req._body which express.raw sets).
-app.use('/api/telnyx/voice-webhook', express.raw({ type: 'application/json', limit: '2mb' }));
+// type '*/*' — Telnyx sends application/json but some deployments have seen
+// the request lose its content-type before reaching this middleware; matching
+// any type guarantees interception on this dedicated webhook path.
+app.use('/api/telnyx/voice-webhook', express.raw({ type: '*/*', limit: '2mb' }));
 
 // Upload routes need a higher limit for file data; everything else is capped at 10 MB
 app.use(['/api/uploads', '/api/bookings'], express.json({

@@ -627,26 +627,33 @@ export function registerVoiceRoutes(app: Express) {
   app.post("/api/admin/voice/websocket-token", (req, res) => res.redirect(307, "/api/admin/voice/ws-token"));
 
   app.post("/api/telnyx/voice-webhook", async (req, res) => {
-    // express.raw runs for this path (server/index.ts) so req.body is a Buffer
-    // holding the exact signed bytes. JSON.stringify fallback preserves the
-    // legacy path in case that middleware ordering ever changes.
-    const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body);
+    // express.raw for this path (server/index.ts) puts the signed bytes on
+    // req.body as a Buffer. Defensively coerce so verify() always receives
+    // a real Buffer even if the middleware chain is ever reordered.
+    const rawBody: Buffer = Buffer.isBuffer(req.body)
+      ? req.body
+      : typeof req.body === "string"
+      ? Buffer.from(req.body, "utf8")
+      : Buffer.from(JSON.stringify(req.body ?? {}), "utf8");
+    const raw = rawBody.toString("utf8");
     if (!process.env.TELNYX_PUBLIC_KEY) return res.status(503).json({ error: "Webhook verification is not configured" });
-    // TEMP DIAGNOSTIC: always attempt verify + log the outcome so we can see
-    // exactly what the ed25519 verifier objects to. TELNYX_SKIP_VERIFY still
-    // gates whether a FAILED result short-circuits with 401.
+    // TEMP DIAGNOSTIC — kept until a successful verify is observed in Railway.
     const sigHeader = req.headers["telnyx-signature-ed25519"];
     const tsHeader = req.headers["telnyx-timestamp"];
     console.log("[webhook-debug] verify attempt:", {
-      rawType: typeof raw,
-      rawLength: raw?.length,
-      isBuffer: Buffer.isBuffer(req.body),
+      rawType: typeof rawBody,
+      rawIsBuffer: Buffer.isBuffer(rawBody),
+      rawLength: rawBody.length,
+      reqBodyType: typeof req.body,
+      reqBodyIsBuffer: Buffer.isBuffer(req.body),
       publicKeyPrefix: process.env.TELNYX_PUBLIC_KEY?.substring(0, 20),
       sigHeader: typeof sigHeader === "string" ? sigHeader.substring(0, 20) : sigHeader,
       timestampHeader: tsHeader,
     });
     try {
-      new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(raw, req.headers as unknown as Record<string, string>);
+      // Pass the Buffer directly — the ed25519 verifier operates on bytes,
+      // not on the utf8-decoded string.
+      new TelnyxWebhook(process.env.TELNYX_PUBLIC_KEY).verify(rawBody as any, req.headers as unknown as Record<string, string>);
       console.log("[webhook-debug] verify PASSED");
     } catch (err) {
       console.log("[webhook-debug] verify FAILED:", err instanceof Error ? err.message : String(err));
@@ -655,7 +662,7 @@ export function registerVoiceRoutes(app: Express) {
       }
       // fall through: TELNYX_SKIP_VERIFY=true bypass is still active
     }
-    const event: any = Buffer.isBuffer(req.body) ? JSON.parse(raw) : req.body;
+    const event: any = JSON.parse(raw);
     const eventId = event.data?.id || event.id, eventType = event.data?.event_type || event.event_type;
     if (!eventId || !eventType) return res.status(400).json({ error: "Malformed Telnyx event" });
     const inserted = await db.insert(voiceWebhookEvents).values({ telnyxEventId: eventId, eventType, payload: raw, status: "pending", nextAttemptAt: new Date() }).onConflictDoNothing().returning();
