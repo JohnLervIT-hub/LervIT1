@@ -20,6 +20,24 @@ interface CircuitBreakerOptions {
   failureThreshold?: number;  // Failures before opening (default: 5)
   resetTimeout?: number;      // ms before trying again (default: 30000)
   timeout?: number;           // Request timeout in ms (default: 10000)
+  // Return false to let an error pass through without counting toward the
+  // failure threshold. Used to filter out expected races (e.g. Telnyx 422
+  // "Call has already ended") that are not real service failures.
+  isFailure?: (err: unknown) => boolean;
+}
+
+/**
+ * Telnyx returns 422 with error code 90018 when we act on a call that has
+ * already ended — a benign race, not a system failure. Exported so both the
+ * circuit breaker (to skip counting) and callers (to log gracefully) can
+ * recognize it with identical semantics.
+ */
+export function isTelnyxCallAlreadyEndedError(err: unknown): boolean {
+  const e = err as any;
+  if (!e) return false;
+  if (e.status === 422 || e.statusCode === 422 || e.raw?.statusCode === 422) return true;
+  const code = e.error?.errors?.[0]?.code ?? e.raw?.errors?.[0]?.code ?? e.errors?.[0]?.code;
+  return code === "90018" || code === 90018;
 }
 
 interface CircuitStats {
@@ -34,6 +52,7 @@ class CircuitBreaker {
   private failureThreshold: number;
   private resetTimeout: number;
   private timeout: number;
+  private isFailure?: (err: unknown) => boolean;
   private state: CircuitState = "CLOSED";
   private failures = 0;
   private successes = 0;
@@ -44,6 +63,7 @@ class CircuitBreaker {
     this.failureThreshold = options.failureThreshold || 5;
     this.resetTimeout = options.resetTimeout || 30000;
     this.timeout = options.timeout || 10000;
+    this.isFailure = options.isFailure;
   }
 
   /**
@@ -54,7 +74,7 @@ class CircuitBreaker {
       // Check if reset timeout has passed
       if (Date.now() - this.lastFailureTime >= this.resetTimeout) {
         this.state = "HALF_OPEN";
-        logEvent.vision("circuit_half_open", { name: this.name });
+        logEvent.circuit(this.name, "circuit_half_open", {});
       } else {
         throw new CircuitOpenError(`Circuit ${this.name} is OPEN - failing fast`);
       }
@@ -64,7 +84,7 @@ class CircuitBreaker {
       // Add timeout wrapper
       const result = await Promise.race([
         fn(),
-        new Promise<never>((_, reject) => 
+        new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`${this.name} timeout after ${this.timeout}ms`)), this.timeout)
         )
       ]);
@@ -72,6 +92,9 @@ class CircuitBreaker {
       this.onSuccess();
       return result;
     } catch (error) {
+      // Callers still see the original rejection; the circuit just doesn't
+      // count expected races (e.g. Telnyx 422 "Call has already ended").
+      if (this.isFailure && !this.isFailure(error)) throw error;
       this.onFailure();
       throw error;
     }
@@ -80,13 +103,10 @@ class CircuitBreaker {
   private onSuccess(): void {
     this.failures = 0;
     this.successes++;
-    
+
     if (this.state === "HALF_OPEN") {
       this.state = "CLOSED";
-      logEvent.vision("circuit_closed", { 
-        name: this.name, 
-        message: "Service recovered" 
-      });
+      logEvent.circuit(this.name, "circuit_closed", { message: "Service recovered" });
     }
   }
 
@@ -94,18 +114,14 @@ class CircuitBreaker {
     this.failures++;
     this.lastFailureTime = Date.now();
 
-    logEvent.vision("circuit_failure", { 
-      name: this.name, 
+    logEvent.circuit(this.name, "circuit_failure", {
       failures: this.failures,
-      threshold: this.failureThreshold 
+      threshold: this.failureThreshold,
     });
 
     if (this.failures >= this.failureThreshold) {
       this.state = "OPEN";
-      logEvent.vision("circuit_open", { 
-        name: this.name, 
-        message: `Circuit opened after ${this.failures} failures` 
-      });
+      logEvent.circuit(this.name, "circuit_open", { message: `Circuit opened after ${this.failures} failures` });
     }
   }
 
@@ -154,11 +170,15 @@ export const circuitBreakers = {
     timeout: 15000
   }),
   
-  telnyx: new CircuitBreaker({ 
-    name: "Telnyx", 
-    failureThreshold: 5, 
+  telnyx: new CircuitBreaker({
+    name: "Telnyx",
+    failureThreshold: 5,
     resetTimeout: 30000,
-    timeout: 10000
+    timeout: 10000,
+    // 422 / code 90018 fires when Telnyx has already ended the call before
+    // our command lands (e.g. ring timeout hangup racing a natural hangup).
+    // It is expected behavior, not a Telnyx outage.
+    isFailure: (err) => !isTelnyxCallAlreadyEndedError(err),
   }),
   
   googleMaps: new CircuitBreaker({ 

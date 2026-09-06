@@ -5,7 +5,7 @@ import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzl
 import { z } from "zod";
 import { db } from "./db";
 import { adminVoicePresence, adminVoiceProfiles, bookings, users, voiceCallAttempts, voiceCalls, voiceMedia, voiceTransfers, voiceWebhookEvents } from "@shared/schema";
-import { circuitBreakers } from "./circuit-breaker";
+import { circuitBreakers, isTelnyxCallAlreadyEndedError } from "./circuit-breaker";
 import { logger } from "./logger";
 import { adminVoiceWebSocket, generateAdminVoiceWebSocketToken } from "./websocket";
 import { ObjectStorageService } from "./objectStorage";
@@ -347,6 +347,13 @@ async function startFallback(call: typeof voiceCalls.$inferSelect) {
       await markInboundMissed(claimed.id);
     }
   } catch (error) {
+    // Telnyx 422 (code 90018) means the caller already hung up before our
+    // ring-timeout hangup landed — treat as missed, not as a fallback failure.
+    if (isTelnyxCallAlreadyEndedError(error)) {
+      logger.info({ callId: claimed.id }, "Call already ended before fallback — marking missed");
+      await markInboundMissed(claimed.id);
+      return;
+    }
     await db.update(voiceCalls).set({ routingState: "fallback_pending", routingLeaseUntil: null, updatedAt: new Date() }).where(eq(voiceCalls.id, call.id));
     logger.error({ err: error, callId: call.id }, "Voice fallback deferred");
   }

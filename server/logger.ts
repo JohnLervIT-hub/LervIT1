@@ -52,6 +52,10 @@ export const logEvent = {
   vision: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'vision_engine', action, ...data }, `Vision: ${action}`);
   },
+
+  circuit: (name: string, action: string, data: Record<string, unknown> = {}) => {
+    logger.info({ event: 'circuit_breaker', circuit: name, action, ...data }, `${name}: ${action}`);
+  },
   
   pricing: (action: string, data: Record<string, unknown>) => {
     logger.info({ event: 'pricing', action, ...data }, `Pricing: ${action}`);
