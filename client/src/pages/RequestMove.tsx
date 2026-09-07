@@ -656,12 +656,9 @@ export default function RequestMove() {
       disableDefaultUI: true,
       zoomControl: true,
       gestureHandling: "cooperative",
-      // mapId is required for AdvancedMarkerElement. Set VITE_GOOGLE_MAPS_ID
-      // to a real Map ID from Google Cloud Console (which can also carry
-      // BOOKING_MAP_STYLES via cloud-based styling — inline `styles` below is
-      // ignored when a mapId is set). Falls back to Google's public
-      // DEMO_MAP_ID so dev works out of the box.
-      mapId: import.meta.env.VITE_GOOGLE_MAPS_ID || 'DEMO_MAP_ID',
+      // Vector rendering lets AdvancedMarkerElement work without a Cloud
+      // Console mapId, so the inline `styles` array below stays authoritative.
+      renderingType: google.maps.RenderingType.VECTOR,
       styles: BOOKING_MAP_STYLES,
     });
     step1MapInstanceRef.current = map;
@@ -837,7 +834,7 @@ export default function RequestMove() {
 
   // Render available-mover truck markers around the pickup point.
   // Uses AdvancedMarkerElement (loaded on demand) so the marker content is a
-  // real DOM node. Requires `mapId` on the map (see map init above).
+  // real DOM node. Works with the vector-rendered map (no mapId required).
   useEffect(() => {
     const map = step1MapInstanceRef.current;
     if (!mapsIsLoaded || !map) return;
