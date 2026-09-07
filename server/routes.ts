@@ -12561,7 +12561,7 @@ Respond with VALID JSON only:
             COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfMonth}), 0)                                              AS month
           FROM bookings
           WHERE status = 'completed'
-            AND payment_status = ANY(${paidStates})
+            AND payment_status IN (${sql.join(paidStates.map(s => sql`${s}`), sql`, `)})
         `);
         revenueRow = (result as any).rows?.[0] as { today: string; week: string; month: string } | undefined;
       } catch (err) {
@@ -12655,7 +12655,7 @@ Respond with VALID JSON only:
             COUNT(*)::int                    AS completed
           FROM bookings
           WHERE status = 'completed'
-            AND payment_status = ANY(${paidStates})
+            AND payment_status IN (${sql.join(paidStates.map(s => sql`${s}`), sql`, `)})
             AND created_at >= ${startOfYesterday}
             AND created_at <  ${startOfToday}
         `);
@@ -12673,7 +12673,7 @@ Respond with VALID JSON only:
             COUNT(*)::int                    AS completed
           FROM bookings
           WHERE status = 'completed'
-            AND payment_status = ANY(${paidStates})
+            AND payment_status IN (${sql.join(paidStates.map(s => sql`${s}`), sql`, `)})
             AND created_at >= ${new Date(startOfYesterday.getTime() - 24 * 60 * 60 * 1000)}
             AND created_at <  ${startOfYesterday}
         `);
@@ -12689,7 +12689,7 @@ Respond with VALID JSON only:
           SELECT COALESCE(SUM(price::numeric), 0) AS revenue
           FROM bookings
           WHERE status = 'completed'
-            AND payment_status = ANY(${paidStates})
+            AND payment_status IN (${sql.join(paidStates.map(s => sql`${s}`), sql`, `)})
             AND created_at >= ${startOfLastWeek}
             AND created_at <  ${startOfWeek}
         `);
