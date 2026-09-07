@@ -28,7 +28,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // Telnyx configuration
 const telnyxApiKey = process.env.TELNYX_API_KEY;
-const telnyxPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
+const telnyxPhoneNumber = process.env.TELNYX_SMS_FROM;
 const telnyxMessagingProfileId = process.env.TELNYX_MESSAGING_PROFILE_ID;
 
 // Email Rate Limiter - Resend allows 2 requests per second

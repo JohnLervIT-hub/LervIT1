@@ -11,8 +11,8 @@ import { logger } from "./logger";
 import { adminVoiceWebSocket, generateAdminVoiceWebSocketToken } from "./websocket";
 import { ObjectStorageService } from "./objectStorage";
 
-const enabled = () => !!(process.env.TELNYX_API_KEY && process.env.TELNYX_PHONE_NUMBER && process.env.TELNYX_VOICE_CONNECTION_ID && process.env.TELNYX_PUBLIC_KEY && process.env.TELNYX_SIP_USERNAME && process.env.TELNYX_SIP_PASSWORD);
-const callerId = () => normalize(process.env.TELNYX_PHONE_NUMBER) || "";
+const enabled = () => !!(process.env.TELNYX_API_KEY && process.env.TELNYX_CALLER_ID && process.env.TELNYX_VOICE_CONNECTION_ID && process.env.TELNYX_PUBLIC_KEY && process.env.TELNYX_SIP_USERNAME && process.env.TELNYX_SIP_PASSWORD);
+const callerId = () => normalize(process.env.TELNYX_CALLER_ID) || "";
 export const encodeClientState = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64");
 export const PREPARE_TTL_MS = 2 * 60_000;
 // Live call rows (initiated/ringing/answered/held) that have not received any
@@ -423,7 +423,7 @@ export function registerVoiceRoutes(app: Express) {
   startVoiceRetryWorker();
   app.get("/api/admin/voice/config", (req, res) => {
     if (!admin(req, res)) return;
-    const missing = ["TELNYX_API_KEY", "TELNYX_PHONE_NUMBER", "TELNYX_VOICE_CONNECTION_ID", "TELNYX_PUBLIC_KEY", "TELNYX_SIP_USERNAME", "TELNYX_SIP_PASSWORD"].filter((key) => !process.env[key]);
+    const missing = ["TELNYX_API_KEY", "TELNYX_CALLER_ID", "TELNYX_VOICE_CONNECTION_ID", "TELNYX_PUBLIC_KEY", "TELNYX_SIP_USERNAME", "TELNYX_SIP_PASSWORD"].filter((key) => !process.env[key]);
     res.json({ enabled: missing.length === 0, callerId: callerId(), recordingEnabled: process.env.TELNYX_VOICE_RECORDING_ENABLED === "true", fallbackEnabled: true, ...(missing.length ? { reason: `Missing ${missing.join(", ")}` } : {}) });
   });
   app.get("/api/admin/voice/presence", async (req, res) => {
