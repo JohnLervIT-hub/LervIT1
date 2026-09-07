@@ -24,7 +24,7 @@ import { Search, SlidersHorizontal, MapPin, X, Navigation, SearchX } from "lucid
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
+import { useLocation as useGeoLocation, CALGARY_FALLBACK } from "@/contexts/LocationContext";
 import { getVehicleDisplayName } from "@/lib/utils";
 
 const PAGE_SIZE = 12;
@@ -68,7 +68,10 @@ function MoverCardSkeleton() {
 export default function BrowseMovers() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { coords: userCoords, permissionState, requestLocation, isRequesting } = useGeoLocation();
+  const { coords: userCoords, isApproximate, permissionState, requestLocation, isRequesting } = useGeoLocation();
+  const userLat = userCoords?.lat ?? CALGARY_FALLBACK.lat;
+  const userLng = userCoords?.lng ?? CALGARY_FALLBACK.lng;
+  const usingApproximateLocation = !userCoords || isApproximate;
   const [searchQuery, setSearchQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedVehicleTypes, setSelectedVehicleTypes] = useState<string[]>([]);
@@ -105,10 +108,9 @@ export default function BrowseMovers() {
   const baseUrl = "/api/movers?isAvailable=true";
 
   const { data: movers, isLoading, isError, refetch } = useQuery({
-    queryKey: [baseUrl, userCoords?.lat, userCoords?.lng, dateFilter],
+    queryKey: [baseUrl, userLat, userLng, dateFilter],
     queryFn: async () => {
-      let url = baseUrl;
-      if (userCoords) url += `&lat=${userCoords.lat}&lng=${userCoords.lng}`;
+      let url = `${baseUrl}&lat=${userLat}&lng=${userLng}`;
       if (dateFilter) url += `&date=${dateFilter}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch movers');
@@ -158,12 +160,7 @@ export default function BrowseMovers() {
     } else if (sortBy === "moves") {
       result.sort((a: any, b: any) => (b.totalMoves || 0) - (a.totalMoves || 0));
     } else if (sortBy === "distance") {
-      if (userCoords) {
-        result.sort((a: any, b: any) => (parseFloat(a.distance) || 999) - (parseFloat(b.distance) || 999));
-      } else {
-        // No GPS available — fall back to rating so list is never unsorted
-        result.sort((a: any, b: any) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
-      }
+      result.sort((a: any, b: any) => (parseFloat(a.distance) || 999) - (parseFloat(b.distance) || 999));
     }
     
     return result;
@@ -206,7 +203,7 @@ export default function BrowseMovers() {
         </div>
 
         {/* Location prompt - only shows if permission not yet granted */}
-        {!userCoords && permissionState !== "granted" && permissionState !== "loading" && (
+        {usingApproximateLocation && permissionState !== "granted" && permissionState !== "loading" && (
           <div className="mb-6">
             <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -385,6 +382,15 @@ export default function BrowseMovers() {
             </PopoverContent>
           </Popover>
         </div>
+
+        {usingApproximateLocation && (
+          <p
+            className="mb-3 text-xs text-muted-foreground"
+            data-testid="text-approximate-location-note"
+          >
+            📍 Showing distances from Calgary city centre — enable location for accurate distances
+          </p>
+        )}
 
         <div className="mb-6 flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Showing:</span>

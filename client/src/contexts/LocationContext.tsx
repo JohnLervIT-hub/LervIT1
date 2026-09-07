@@ -3,6 +3,7 @@ import { Capacitor } from "@capacitor/core";
 
 interface LocationState {
   coords: { lat: number; lng: number } | null;
+  isApproximate: boolean;
   permissionState: "prompt" | "granted" | "denied" | "unavailable" | "loading";
   lastUpdated: number | null;
   isRequesting: boolean;
@@ -16,6 +17,8 @@ interface LocationContextValue extends LocationState {
 
 const STORAGE_KEY = "lervit:lastLocation";
 const LOCATION_EXPIRY_MS = 15 * 60 * 1000;
+
+export const CALGARY_FALLBACK = { lat: 51.0447, lng: -114.0719 };
 
 const LocationContext = createContext<LocationContextValue | null>(null);
 
@@ -85,10 +88,24 @@ async function requestCapacitorPermission(): Promise<"granted" | "denied" | "pro
 export function LocationProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LocationState>({
     coords: null,
+    isApproximate: false,
     permissionState: "loading",
     lastUpdated: null,
     isRequesting: false,
   });
+
+  const applyFallback = useCallback(
+    (permissionState?: LocationState["permissionState"]) => {
+      setState(prev => ({
+        ...prev,
+        coords: { lat: CALGARY_FALLBACK.lat, lng: CALGARY_FALLBACK.lng },
+        isApproximate: true,
+        isRequesting: false,
+        permissionState: permissionState ?? prev.permissionState,
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     initializeLocation();
@@ -100,6 +117,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       setState(prev => ({
         ...prev,
         coords: { lat: stored.lat, lng: stored.lng },
+        isApproximate: false,
         lastUpdated: stored.timestamp,
       }));
     }
@@ -110,6 +128,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setState(prev => ({ ...prev, permissionState: permission }));
         if (permission === "granted") {
           silentRefresh();
+        } else if (permission === "denied" && !stored) {
+          applyFallback("denied");
         }
       } catch {
         setState(prev => ({ ...prev, permissionState: "prompt" }));
@@ -118,7 +138,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     }
 
     if (!navigator.geolocation) {
-      setState(prev => ({ ...prev, permissionState: "unavailable" }));
+      applyFallback("unavailable");
       return;
     }
 
@@ -129,8 +149,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         result.onchange = () => {
           setState(prev => ({ ...prev, permissionState: result.state as LocationState["permissionState"] }));
           if (result.state === "granted") silentRefresh();
+          else if (result.state === "denied") applyFallback("denied");
         };
         if (result.state === "granted") silentRefresh();
+        else if (result.state === "denied" && !stored) applyFallback("denied");
       } else {
         setState(prev => ({ ...prev, permissionState: "prompt" }));
       }
@@ -147,13 +169,19 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           setState(prev => ({
             ...prev,
             coords,
+            isApproximate: false,
             permissionState: "granted",
             lastUpdated: Date.now(),
             isRequesting: false,
           }));
         })
         .catch(() => {
-          setState(prev => ({ ...prev, isRequesting: false }));
+          setState(prev => (prev.coords ? { ...prev, isRequesting: false } : {
+            ...prev,
+            coords: { lat: CALGARY_FALLBACK.lat, lng: CALGARY_FALLBACK.lng },
+            isApproximate: true,
+            isRequesting: false,
+          }));
         });
       return;
     }
@@ -165,13 +193,19 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setState(prev => ({
           ...prev,
           coords,
+          isApproximate: false,
           permissionState: "granted",
           lastUpdated: Date.now(),
           isRequesting: false,
         }));
       },
       () => {
-        setState(prev => ({ ...prev, isRequesting: false }));
+        setState(prev => (prev.coords ? { ...prev, isRequesting: false } : {
+          ...prev,
+          coords: { lat: CALGARY_FALLBACK.lat, lng: CALGARY_FALLBACK.lng },
+          isApproximate: true,
+          isRequesting: false,
+        }));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
@@ -184,7 +218,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       try {
         const permission = await requestCapacitorPermission();
         if (permission !== "granted") {
-          setState(prev => ({ ...prev, isRequesting: false, permissionState: "denied" }));
+          applyFallback("denied");
           return;
         }
         const coords = await getCapacitorPosition();
@@ -192,12 +226,13 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setState(prev => ({
           ...prev,
           coords,
+          isApproximate: false,
           permissionState: "granted",
           lastUpdated: Date.now(),
           isRequesting: false,
         }));
       } catch {
-        setState(prev => ({ ...prev, isRequesting: false, permissionState: "denied" }));
+        applyFallback("denied");
       }
       return;
     }
@@ -209,21 +244,18 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setState(prev => ({
           ...prev,
           coords,
+          isApproximate: false,
           permissionState: "granted",
           lastUpdated: Date.now(),
           isRequesting: false,
         }));
       },
       (error) => {
-        setState(prev => ({
-          ...prev,
-          isRequesting: false,
-          permissionState: error.code === error.PERMISSION_DENIED ? "denied" : prev.permissionState,
-        }));
+        applyFallback(error.code === error.PERMISSION_DENIED ? "denied" : undefined);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [applyFallback]);
 
   const refreshLocation = useCallback(() => {
     if (state.permissionState === "granted") {
@@ -235,7 +267,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 
   const clearLocation = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    setState(prev => ({ ...prev, coords: null, lastUpdated: null }));
+    setState(prev => ({ ...prev, coords: null, isApproximate: false, lastUpdated: null }));
   }, []);
 
   return (
