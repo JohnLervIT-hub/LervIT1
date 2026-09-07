@@ -69,9 +69,40 @@ export default function BrowseMovers() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { coords: userCoords, isApproximate, permissionState, requestLocation, isRequesting } = useGeoLocation();
-  const userLat = userCoords?.lat ?? CALGARY_FALLBACK.lat;
-  const userLng = userCoords?.lng ?? CALGARY_FALLBACK.lng;
-  const usingApproximateLocation = !userCoords || isApproximate;
+
+  const hasRealGps = !!userCoords && !isApproximate;
+
+  // Pull the user's saved addresses only when we don't have real GPS — they
+  // already carry lat/lng from when the user saved them (no client geocoding).
+  const { data: savedAddresses } = useQuery<Array<{ id: string; label: string; address: string; latitude: number | null; longitude: number | null }>>({
+    queryKey: ["/api/addresses"],
+    queryFn: async () => {
+      const res = await fetch("/api/addresses");
+      if (!res.ok) throw new Error("Failed to fetch saved addresses");
+      return res.json();
+    },
+    enabled: !!user && !hasRealGps,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const savedAddressCoords = useMemo(() => {
+    if (!savedAddresses) return null;
+    const withCoords = savedAddresses.find(a => a.latitude != null && a.longitude != null);
+    return withCoords ? { lat: withCoords.latitude as number, lng: withCoords.longitude as number } : null;
+  }, [savedAddresses]);
+
+  const locationSource: "gps" | "saved_address" | "city_centre" = hasRealGps
+    ? "gps"
+    : savedAddressCoords
+      ? "saved_address"
+      : "city_centre";
+
+  const userLat = hasRealGps
+    ? (userCoords as { lat: number; lng: number }).lat
+    : savedAddressCoords?.lat ?? CALGARY_FALLBACK.lat;
+  const userLng = hasRealGps
+    ? (userCoords as { lat: number; lng: number }).lng
+    : savedAddressCoords?.lng ?? CALGARY_FALLBACK.lng;
   const [searchQuery, setSearchQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedVehicleTypes, setSelectedVehicleTypes] = useState<string[]>([]);
@@ -203,7 +234,7 @@ export default function BrowseMovers() {
         </div>
 
         {/* Location prompt - only shows if permission not yet granted */}
-        {usingApproximateLocation && permissionState !== "granted" && permissionState !== "loading" && (
+        {locationSource !== "gps" && permissionState !== "granted" && permissionState !== "loading" && (
           <div className="mb-6">
             <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -383,7 +414,15 @@ export default function BrowseMovers() {
           </Popover>
         </div>
 
-        {usingApproximateLocation && (
+        {locationSource === "saved_address" && (
+          <p
+            className="mb-3 text-xs text-muted-foreground"
+            data-testid="text-approximate-location-note"
+          >
+            📍 Distances from your saved address
+          </p>
+        )}
+        {locationSource === "city_centre" && (
           <p
             className="mb-3 text-xs text-muted-foreground"
             data-testid="text-approximate-location-note"
