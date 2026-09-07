@@ -3,7 +3,7 @@ import { memo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Truck, Star, Clock, ShieldCheck, Rocket, DollarSign } from "lucide-react";
 import { getVehicleDisplayName } from "@/lib/utils";
@@ -55,6 +55,7 @@ const MoverCard = memo(function MoverCard({
 }: MoverCardProps) {
   const [vehicleImageLoaded, setVehicleImageLoaded] = useState(false);
   const [vehicleImageError, setVehicleImageError] = useState(false);
+  const [profilePhotoError, setProfilePhotoError] = useState(false);
   
   return (
     <Card className="overflow-hidden shadow-sm border" data-testid={`card-mover-${id}`}>
@@ -64,8 +65,18 @@ const MoverCard = memo(function MoverCard({
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <Avatar className="w-12 h-12 shrink-0 ring-2 ring-background shadow-sm">
-                <AvatarImage src={photo} alt={name} />
-                <AvatarFallback className="bg-primary/10 text-primary font-bold">{name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                {photo && !profilePhotoError ? (
+                  <img
+                    src={photo}
+                    alt={name}
+                    loading="lazy"
+                    decoding="async"
+                    className="aspect-square h-full w-full object-cover"
+                    onError={() => setProfilePhotoError(true)}
+                  />
+                ) : (
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold">{name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                )}
               </Avatar>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-base truncate" data-testid={`text-mover-name-${id}`}>
@@ -111,10 +122,12 @@ const MoverCard = memo(function MoverCard({
                     </div>
                   </div>
                 )}
-                <img 
-                  src={vehiclePhoto} 
+                <img
+                  src={vehiclePhoto}
                   alt={`${name}'s ${vehicleColor || ''} ${vehicleType}`}
                   className={`w-full h-full object-contain transition-opacity duration-300 ${vehicleImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  loading="lazy"
+                  decoding="async"
                   crossOrigin="anonymous"
                   referrerPolicy="no-referrer"
                   onLoad={() => setVehicleImageLoaded(true)}

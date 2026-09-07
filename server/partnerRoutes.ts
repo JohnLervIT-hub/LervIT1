@@ -47,6 +47,7 @@ import {
 } from "@shared/schema";
 import { analyzeIncident, analyzeAuditEntry } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
+import { optimizeImageBuffer } from "./image-optimizer";
 import { notificationService, formatCalgaryDate } from "./notifications";
 import { getBaseUrl } from "./utils/urls";
 import { calculatePartnerNet } from "@shared/pricing";
@@ -276,7 +277,8 @@ export function registerPartnerRoutes(app: Express) {
 
       if (req.file) {
         const objectStorage = new ObjectStorageService();
-        const url = await objectStorage.uploadBuffer(req.file.buffer, req.file.originalname, req.file.mimetype, user.id);
+        const optimized = await optimizeImageBuffer(req.file.buffer, req.file.originalname, req.file.mimetype);
+        const url = await objectStorage.uploadBuffer(optimized.buffer, optimized.filename, optimized.mimetype, user.id);
         updates.avatarUrl = url;
       }
 
@@ -299,7 +301,8 @@ export function registerPartnerRoutes(app: Express) {
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
       if (!req.file.mimetype.startsWith("image/")) return res.status(400).json({ error: "Only image files accepted" });
       const objectStorage = new ObjectStorageService();
-      const url = await objectStorage.uploadBuffer(req.file.buffer, `partner-logo.${req.file.originalname.split(".").pop()}`, req.file.mimetype, partner.id);
+      const optimized = await optimizeImageBuffer(req.file.buffer, `partner-logo.${req.file.originalname.split(".").pop()}`, req.file.mimetype);
+      const url = await objectStorage.uploadBuffer(optimized.buffer, optimized.filename, optimized.mimetype, partner.id);
       const [updated] = await db.update(partners).set({ logoUrl: url, updatedAt: new Date() }).where(eq(partners.id, partner.id)).returning();
       res.json({ partner: updated });
     } catch (err: any) {
@@ -770,8 +773,8 @@ export function registerPartnerRoutes(app: Express) {
       if (!member) return res.status(404).json({ error: "Team member not found" });
 
       const objectStorage = new ObjectStorageService();
-      const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
-      const url = await objectStorage.uploadBuffer(req.file.buffer, `driver.${ext}`, req.file.mimetype, partner.id);
+      const optimized = await optimizeImageBuffer(req.file.buffer, "driver", req.file.mimetype);
+      const url = await objectStorage.uploadBuffer(optimized.buffer, optimized.filename, optimized.mimetype, partner.id);
       const [updated] = await db.update(partnerTeamMembers)
         .set({ driverPhoto: url })
         .where(eq(partnerTeamMembers.id, member.id))
@@ -798,8 +801,8 @@ export function registerPartnerRoutes(app: Express) {
       if (!member) return res.status(404).json({ error: "Team member not found" });
 
       const objectStorage = new ObjectStorageService();
-      const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/webp" ? "webp" : "jpg";
-      const url = await objectStorage.uploadBuffer(req.file.buffer, `vehicle.${ext}`, req.file.mimetype, partner.id);
+      const optimized = await optimizeImageBuffer(req.file.buffer, "vehicle", req.file.mimetype);
+      const url = await objectStorage.uploadBuffer(optimized.buffer, optimized.filename, optimized.mimetype, partner.id);
       const [updated] = await db.update(partnerTeamMembers)
         .set({ vehiclePhoto: url })
         .where(eq(partnerTeamMembers.id, member.id))

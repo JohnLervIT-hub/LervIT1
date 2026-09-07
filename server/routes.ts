@@ -63,7 +63,7 @@ import { registerPartnerRoutes } from "./partnerRoutes";
 import { circuitBreakers } from "./circuit-breaker";
 import { calculatePartnerNet } from "@shared/pricing";
 import he from "he";
-import heicConvert from "heic-convert";
+import { optimizeImageBuffer } from "./image-optimizer";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -381,40 +381,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Strip query params (e.g. ?f=jpg cache-buster) before looking up the file
       const objectPath = req.path.split("?")[0];
       const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-      const [metadata] = await objectFile.getMetadata();
-      const contentType: string = metadata.contentType || "application/octet-stream";
-
-      // HEIC/HEIF images are not supported by Chrome/Firefox — convert to JPEG on the fly
-      const isHeic = contentType === "image/heic" || contentType === "image/heif"
-        || req.path.toLowerCase().endsWith(".heic") || req.path.toLowerCase().endsWith(".heif");
-
-      if (isHeic) {
-        const chunks: Buffer[] = [];
-        const stream = objectFile.createReadStream();
-        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
-        stream.on("error", (err) => {
-          console.error("HEIC stream error:", err);
-          if (!res.headersSent) res.sendStatus(500);
-        });
-        stream.on("end", async () => {
-          try {
-            const inputBuffer = Buffer.concat(chunks);
-            const jpeg = await heicConvert({ buffer: inputBuffer, format: "JPEG", quality: 0.9 });
-            const jpegBuffer = Buffer.from(jpeg);
-            res.set({
-              "Content-Type": "image/jpeg",
-              "Content-Length": jpegBuffer.length,
-              "Cache-Control": "public, max-age=3600",
-            });
-            res.end(jpegBuffer);
-          } catch (convertErr) {
-            console.error("HEIC→JPEG conversion error:", convertErr);
-            if (!res.headersSent) res.sendStatus(500);
-          }
-        });
-        return;
-      }
-
       objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error fetching object:", error);
@@ -1093,14 +1059,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Read file from disk (multer saves to disk with diskStorage)
-      const fileBuffer = fs.readFileSync(file.path);
-      
+      const rawBuffer = fs.readFileSync(file.path);
+
+      // Resize + convert to WebP (handles HEIC input)
+      const optimized = await optimizeImageBuffer(
+        rawBuffer,
+        `avatar-${user.id}${path.extname(file.originalname)}`,
+        file.mimetype,
+      );
+
       // Upload to object storage
       const objectStorage = new ObjectStorageService();
       const avatarUrl = await objectStorage.uploadBuffer(
-        fileBuffer,
-        `avatar-${user.id}${path.extname(file.originalname)}`,
-        file.mimetype,
+        optimized.buffer,
+        optimized.filename,
+        optimized.mimetype,
         user.id
       );
       
@@ -7064,29 +7037,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const file of req.files as Express.Multer.File[]) {
         try {
           // Read the file from local disk (multer saves it temporarily)
-          let fileBuffer = fs.readFileSync(file.path);
-          let { mimetype, originalname } = file;
+          const rawBuffer = fs.readFileSync(file.path);
 
-          // Convert HEIC/HEIF → JPEG at upload time so browsers can display them
-          const isHeic = mimetype === "image/heic" || mimetype === "image/heif"
-            || /\.(heic|heif)$/i.test(originalname);
-          if (isHeic) {
-            try {
-              const jpeg = await heicConvert({ buffer: fileBuffer, format: "JPEG", quality: 0.9 });
-              fileBuffer = Buffer.from(jpeg);
-              mimetype = "image/jpeg";
-              originalname = originalname.replace(/\.(heic|heif)$/i, ".jpg");
-            } catch (convertErr) {
-              console.error("HEIC upload conversion error:", convertErr);
-              // Fall through and upload as-is if conversion fails
-            }
-          }
+          // Resize + convert to WebP (also decodes HEIC/HEIF)
+          const optimized = await optimizeImageBuffer(
+            rawBuffer,
+            file.originalname,
+            file.mimetype,
+          );
 
           // Upload to cloud storage
           const cloudPath = await objectStorageService.uploadBuffer(
-            fileBuffer,
-            originalname,
-            mimetype,
+            optimized.buffer,
+            optimized.filename,
+            optimized.mimetype,
             userId
           );
           

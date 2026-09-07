@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MoverCard from "@/components/MoverCard";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { getVehicleDisplayName } from "@/lib/utils";
+
+const PAGE_SIZE = 12;
 
 // Vehicle type filter options with display name and normalized DB values
 const VEHICLE_TYPE_FILTERS = [
@@ -74,6 +76,7 @@ export default function BrowseMovers() {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<string>("distance");
   const [dateFilter, setDateFilter] = useState<string>("");
+  const [page, setPage] = useState(1);
   const { toast } = useToast();
 
   const activeFilterCount =
@@ -165,6 +168,13 @@ export default function BrowseMovers() {
     
     return result;
   }, [movers, searchQuery, selectedVehicleTypes, minRating, verifiedOnly, sortBy]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedVehicleTypes, minRating, verifiedOnly, sortBy, dateFilter]);
+
+  const paginatedMovers = filteredMovers.slice(0, page * PAGE_SIZE);
+  const hasMore = filteredMovers.length > paginatedMovers.length;
 
   const handleSelectMover = (id: string) => {
     const bookingPath = `/request-move?moverId=${id}`;
@@ -381,9 +391,11 @@ export default function BrowseMovers() {
           <Badge variant="secondary" data-testid="badge-mover-count">
             {isLoading
               ? "Loading..."
-              : activeFilterCount > 0 || searchQuery
-                ? `${filteredMovers.length} movers shown`
-                : `${filteredMovers.length} movers available`}
+              : hasMore
+                ? `${paginatedMovers.length} of ${filteredMovers.length} shown`
+                : activeFilterCount > 0 || searchQuery
+                  ? `${filteredMovers.length} movers shown`
+                  : `${filteredMovers.length} movers available`}
           </Badge>
         </div>
 
@@ -431,41 +443,54 @@ export default function BrowseMovers() {
             )}
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMovers.map((mover: any) => {
-              // Format distance with driving time if available
-              let distanceDisplay = mover.location || "Calgary, AB";
-              if (mover.distance !== null && mover.distance !== undefined) {
-                if (mover.drivingMinutes !== null && mover.drivingMinutes !== undefined) {
-                  distanceDisplay = `${mover.distance} km · ${mover.drivingMinutes} min drive`;
-                } else {
-                  distanceDisplay = `${mover.distance} km away`;
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedMovers.map((mover: any) => {
+                // Format distance with driving time if available
+                let distanceDisplay = mover.location || "Calgary, AB";
+                if (mover.distance !== null && mover.distance !== undefined) {
+                  if (mover.drivingMinutes !== null && mover.drivingMinutes !== undefined) {
+                    distanceDisplay = `${mover.distance} km · ${mover.drivingMinutes} min drive`;
+                  } else {
+                    distanceDisplay = `${mover.distance} km away`;
+                  }
                 }
-              }
-              
-              return (
-                <MoverCard
-                  key={mover.id}
-                  id={mover.id}
-                  name={mover.user?.name || "Unknown"}
-                  photo={mover.moverImage || undefined}
-                  rating={parseFloat(mover.rating) || 0}
-                  reviewCount={mover.totalMoves || 0}
-                  vehicleType={mover.vehicleType}
-                  distance={distanceDisplay}
-                  verified={mover.isVerified}
-                  completedMoves={mover.totalMoves || 0}
-                  onSelect={handleSelectMover}
-                  vehiclePhoto={mover.vehiclePhoto || undefined}
-                  licensePlate={mover.licensePlate || undefined}
-                  vehicleColor={mover.vehicleColor || undefined}
-                  isLiveLocation={mover.isLiveLocation}
-                />
-              );
-            })}
-          </div>
+
+                return (
+                  <MoverCard
+                    key={mover.id}
+                    id={mover.id}
+                    name={mover.user?.name || "Unknown"}
+                    photo={mover.moverImage || undefined}
+                    rating={parseFloat(mover.rating) || 0}
+                    reviewCount={mover.totalMoves || 0}
+                    vehicleType={mover.vehicleType}
+                    distance={distanceDisplay}
+                    verified={mover.isVerified}
+                    completedMoves={mover.totalMoves || 0}
+                    onSelect={handleSelectMover}
+                    vehiclePhoto={mover.vehiclePhoto || undefined}
+                    licensePlate={mover.licensePlate || undefined}
+                    vehicleColor={mover.vehicleColor || undefined}
+                    isLiveLocation={mover.isLiveLocation}
+                  />
+                );
+              })}
+            </div>
+            {hasMore && (
+              <div className="mt-8 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => p + 1)}
+                  data-testid="button-load-more-movers"
+                >
+                  Load more movers
+                </Button>
+              </div>
+            )}
+          </>
         )}
-        
+
       </div>
     </div>
   );

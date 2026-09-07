@@ -187,12 +187,12 @@ export class ObjectStorageService {
     }
   }
 
-  async downloadObject(file: R2ObjectFile, res: Response, cacheTtlSec: number = 3600) {
+  async downloadObject(file: R2ObjectFile, res: Response, cacheTtlSec: number = 31536000) {
     try {
       const [metadata] = await file.getMetadata();
       const headers: Record<string, string> = {
         "Content-Type": metadata.contentType || "application/octet-stream",
-        "Cache-Control": `public, max-age=${cacheTtlSec}`,
+        "Cache-Control": `public, max-age=${cacheTtlSec}, immutable`,
       };
       if (metadata.size != null) headers["Content-Length"] = String(metadata.size);
       res.set(headers);
