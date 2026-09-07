@@ -58,7 +58,7 @@ import { logger, logEvent } from "./logger";
 import { emitEvent } from "./events";
 import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
-import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
+import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
 import { circuitBreakers } from "./circuit-breaker";
 import { calculatePartnerNet } from "@shared/pricing";
@@ -2182,7 +2182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (matched.length > 0) {
             const expiresAt = calculateExpiryTime(10);
-            // Display the full booked amount to the mover (not the post-commission payout).
+            // Show the mover the full booked amount (not the post-commission payout).
             const bookedAmount = parseFloat(pendingBooking.price || '0');
             await storage.createJobNotification({
               bookingId: pendingBooking.id, moverId: mover.id,
@@ -2190,16 +2190,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
               estimatedEarnings: toDecimalString(bookedAmount),
               status: 'pending', expiresAt,
             });
-            moverWebSocket.notifyMover(mover.userId, {
-              type: 'job_notification', bookingId: pendingBooking.id,
-              pickupAddress: pendingBooking.pickupAddress || '', dropoffAddress: pendingBooking.dropoffAddress || '',
-              price: toDecimalString(bookedAmount),
-              estimatedTime: `${Math.round(matched[0].distanceToPickup)} km`, expiresAt,
-            });
-            const moverUser = await storage.getUser(mover.userId);
-            if (moverUser) {
-              await notificationService.sendJobAssignment(moverUser, pendingBooking, bookedAmount.toFixed(2)).catch(() => {});
-            }
+
+            // Route through shared notifyMover so channels stay symmetric with
+            // the main dispatch path (WebSocket + in-app + email + SMS,
+            // preference-gated). Otherwise late dispatch is quieter than
+            // proximity dispatch and movers can miss the ping.
+            await notifyMover(
+              {
+                moverId: mover.id,
+                userId: mover.userId,
+                name: user.name,
+                vehicleType: mover.vehicleType ?? '',
+                rating: mover.rating ?? '0',
+                totalMoves: mover.totalMoves ?? 0,
+                isAvailable: mover.isAvailable ?? false,
+                latitude,
+                longitude,
+                distanceToPickup: matched[0].distanceToPickup,
+                estimatedEarnings: bookedAmount,
+              },
+              {
+                id: pendingBooking.id,
+                loadSize: pendingBooking.loadSize,
+                aiRecommendedVehicle: pendingBooking.aiRecommendedVehicle,
+                pickupLatitude: pendingBooking.pickupLatitude,
+                pickupLongitude: pendingBooking.pickupLongitude,
+                dropoffLatitude: pendingBooking.dropoffLatitude,
+                dropoffLongitude: pendingBooking.dropoffLongitude,
+                pickupAddress: pendingBooking.pickupAddress,
+                dropoffAddress: pendingBooking.dropoffAddress,
+                price: pendingBooking.price,
+                preSelectedMoverId: pendingBooking.preSelectedMoverId,
+              },
+              expiresAt,
+            );
             console.log(`[Late Dispatch] Sent pending booking ${pendingBooking.id} to newly-online mover ${mover.id}`);
           }
         }
@@ -4261,28 +4285,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Cannot accept booking - payment not completed" });
       }
       
-      // Check if already accepted by someone (race condition check)
+      // Fast-path early rejection (non-authoritative — a concurrent accept
+      // could still race in between this check and the atomic UPDATE below).
       if (booking.moverId) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: "Job already accepted by another mover",
-          acceptedBy: booking.moverId 
+          acceptedBy: booking.moverId
         });
       }
-      
+
       // SINGLE ACTIVE JOB ENFORCEMENT: Check if mover already has an active job
       const moverBookings = await storage.getBookingsByMover(moverId);
       const activeJobStatuses = ['confirmed', 'en_route_to_pickup', 'loading', 'en_route_to_dropoff', 'unloading'];
-      const existingActiveJob = moverBookings.find(b => 
+      const existingActiveJob = moverBookings.find(b =>
         activeJobStatuses.includes(b.status) && b.paymentStatus === 'succeeded'
       );
-      
+
       if (existingActiveJob) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: "You already have an active job. Complete your current job before accepting another.",
           activeBookingId: existingActiveJob.id
         });
       }
-      
+
       // Check if mover was actually notified
       const notifications = await db
         .select()
@@ -4291,35 +4316,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(jobNotifications.bookingId, bookingId),
           eq(jobNotifications.moverId, moverId)
         ));
-      
+
       const moverNotification = notifications[0];
       if (!moverNotification) {
         return res.status(403).json({ error: "You were not notified about this job" });
       }
-      
+
       // Check if notification expired
       if (new Date() > moverNotification.expiresAt) {
         return res.status(410).json({ error: "Job notification has expired" });
       }
-      
+
       // Check if mover already declined
       if (moverNotification.status === 'declined') {
         return res.status(400).json({ error: "You already declined this job" });
       }
-      
-      // ATOMIC OPERATION: Update booking and notifications
-      // 1. Update the booking with moverId + SLA fields (computed from load + distance)
-      const sla = computeBookingSla(booking);
-      const updatedBooking = await storage.updateBooking(bookingId, {
-        moverId,
-        status: 'confirmed',
-        expectedCompletionAt: sla.expectedCompletionAt,
-        slaDeadlineAt: sla.slaDeadlineAt,
-      });
 
-      if (!updatedBooking) {
-        return res.status(500).json({ error: "Failed to accept booking" });
+      // ATOMIC CLAIM: conditional UPDATE prevents the race window that the
+      // early check above cannot close on its own. Only the first mover whose
+      // UPDATE hits an unassigned booking wins; concurrent accepts fall
+      // through to the 409 below.
+      const sla = computeBookingSla(booking);
+      const [claimed] = await db
+        .update(bookings)
+        .set({
+          moverId,
+          status: 'confirmed',
+          expectedCompletionAt: sla.expectedCompletionAt,
+          slaDeadlineAt: sla.slaDeadlineAt,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(bookings.id, bookingId),
+          isNull(bookings.moverId),
+        ))
+        .returning();
+
+      if (!claimed) {
+        // Someone else won the race between our SELECT and our UPDATE.
+        const [current] = await db
+          .select({ moverId: bookings.moverId })
+          .from(bookings)
+          .where(eq(bookings.id, bookingId))
+          .limit(1);
+        return res.status(409).json({
+          error: "Job already accepted by another mover",
+          acceptedBy: current?.moverId ?? null,
+        });
       }
+
+      const updatedBooking = claimed;
 
       await emitEvent('booking.assigned', 'booking', bookingId, {
         moverId,

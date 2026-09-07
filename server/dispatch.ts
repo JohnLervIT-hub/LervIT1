@@ -137,10 +137,11 @@ async function loadOperationalMovers(excludeMoverId?: string): Promise<MoverData
 }
 
 /**
- * Send a single mover all three notification channels: WebSocket, email, SMS.
- * Each channel failure is caught independently so the others always run.
+ * Send a single mover all four notification channels: WebSocket, in-app inbox,
+ * email (if `emailJobAlerts`), SMS (if `smsJobAlerts` and phone). Each channel
+ * runs independently so a single failure never aborts the others.
  */
-async function notifyMover(
+export async function notifyMover(
   mover: MoverData & { distanceToPickup: number; estimatedEarnings: number },
   booking: DispatchableBooking,
   expiresAt: Date,
@@ -148,34 +149,73 @@ async function notifyMover(
 ): Promise<void> {
   const earningsStr = toDecimalString(mover.estimatedEarnings);
 
-  // WebSocket (AC-9: always include expiresAt)
-  moverWebSocket.notifyMover(mover.userId, {
-    type: 'job_notification',
-    bookingId: booking.id,
-    pickupAddress: booking.pickupAddress ?? '',
-    dropoffAddress: booking.dropoffAddress ?? '',
-    price: earningsStr,
-    estimatedTime: `${Math.round(mover.distanceToPickup)} km`,
-    expiresAt,
-    isPriority: opts.isPriority,
-  });
-
-  // Email
+  // WebSocket (AC-9: always include expiresAt). Wrapped so a throw in the
+  // pusher can't skip the other channels.
   try {
-    const [moverUser] = await db.select().from(users).where(eq(users.id, mover.userId)).limit(1);
-    if (moverUser) {
-      await notificationService.sendJobAssignment(moverUser, booking as any, earningsStr);
-
-      // SMS (AC-4)
-      if (moverUser.phone) {
-        const smsText = opts.isPriority
-          ? `LervIT PRIORITY: A customer selected YOU! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`
-          : `LervIT New Job! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`;
-        await notificationService.sendSMS({ to: moverUser.phone, message: smsText, type: 'job_alert' });
-      }
-    }
+    moverWebSocket.notifyMover(mover.userId, {
+      type: 'job_notification',
+      bookingId: booking.id,
+      pickupAddress: booking.pickupAddress ?? '',
+      dropoffAddress: booking.dropoffAddress ?? '',
+      price: earningsStr,
+      estimatedTime: `${Math.round(mover.distanceToPickup)} km`,
+      expiresAt,
+      isPriority: opts.isPriority,
+    });
   } catch (err) {
-    logEvent.error('dispatch_mover_notification_channels', err, { bookingId: booking.id, moverId: mover.moverId });
+    logEvent.error('dispatch_ws', err, { bookingId: booking.id, moverId: mover.moverId });
+  }
+
+  // Load user once for preferences + contact info
+  let moverUser: Awaited<ReturnType<typeof storage.getUser>> | null = null;
+  try {
+    const [row] = await db.select().from(users).where(eq(users.id, mover.userId)).limit(1);
+    moverUser = row ?? null;
+  } catch (err) {
+    logEvent.error('dispatch_user_lookup', err, { bookingId: booking.id, moverId: mover.moverId });
+  }
+
+  // In-app inbox (AC-4). Written for every dispatch so both proximity and
+  // pre-selected paths land in the mover's inbox.
+  try {
+    const title = opts.isPriority ? 'Priority Job Request!' : 'New Job Opportunity';
+    const message = opts.isPriority
+      ? `A customer specifically chose you! Earn $${earningsStr} CAD. Accept within 10 minutes.`
+      : `New job ${Math.round(mover.distanceToPickup)} km away — earn $${earningsStr} CAD. Accept within 10 minutes.`;
+    await storage.createNotification({
+      userId: mover.userId,
+      type: 'job_opportunity',
+      title,
+      message,
+      bookingId: booking.id,
+      actionUrl: '/mover-dashboard',
+      isRead: false,
+    });
+  } catch (err) {
+    logEvent.error('dispatch_inapp', err, { bookingId: booking.id, moverId: mover.moverId });
+  }
+
+  // Email — gated on user preference
+  if (moverUser?.emailJobAlerts !== false) {
+    try {
+      if (moverUser) {
+        await notificationService.sendJobAssignment(moverUser, booking as any, earningsStr);
+      }
+    } catch (err) {
+      logEvent.error('dispatch_email', err, { bookingId: booking.id, moverId: mover.moverId });
+    }
+  }
+
+  // SMS — gated on user preference AND phone on file
+  if (moverUser?.phone && moverUser?.smsJobAlerts !== false) {
+    try {
+      const smsText = opts.isPriority
+        ? `LervIT PRIORITY: A customer selected YOU! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`
+        : `LervIT New Job! Earn $${earningsStr} CAD. Accept within 10 min: ${BASE_URL}/mover-dashboard`;
+      await notificationService.sendSMS({ to: moverUser.phone, message: smsText, type: 'job_alert' });
+    } catch (err) {
+      logEvent.error('dispatch_sms', err, { bookingId: booking.id, moverId: mover.moverId });
+    }
   }
 }
 
@@ -306,25 +346,8 @@ export async function dispatchPreSelectedMover(booking: DispatchableBooking): Pr
     estimatedEarnings: moverNetAmount,
   };
 
+  // notifyMover handles WebSocket + in-app + email + SMS (preference-gated).
   await notifyMover(moverData, booking, expiresAt, { isPriority: true });
-
-  // In-app notification for the mover
-  try {
-    const moverUser = await storage.getUser(preSelectedMover.userId);
-    if (moverUser) {
-      await storage.createNotification({
-        userId: moverUser.id,
-        type: 'job_opportunity',
-        title: 'Priority Job Request!',
-        message: `A customer specifically chose you! Earn $${earningsStr} CAD. Accept within 10 minutes.`,
-        bookingId: booking.id,
-        actionUrl: '/mover-dashboard',
-        isRead: false,
-      });
-    }
-  } catch (err) {
-    logEvent.error('dispatch_preselected_inapp', err, { bookingId: booking.id });
-  }
 
   logEvent.notification('dispatch_preselected_complete', {
     bookingId: booking.id,

@@ -7,7 +7,7 @@ import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
 import { moverWebSocket } from './websocket';
-import { dispatchJobToMovers } from './dispatch';
+import { dispatchBooking, dispatchJobToMovers } from './dispatch';
 import { emitEvent } from './events';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -499,15 +499,17 @@ async function recoverOrphanedPayments() {
             }
           }
 
-          // Dispatch mover notifications via shared pipeline (AC-1 through AC-10)
-          // Runs when Stripe webhook didn't fire but orphan recovery picked up the payment.
+          // Dispatch mover notifications via the full pipeline. Use
+          // dispatchBooking (not dispatchJobToMovers directly) so pre-selected
+          // mover priority is honoured — otherwise a webhook-lost booking with
+          // a customer-chosen mover would fan out to everyone instead of
+          // pinging the chosen mover first (AC-5).
           if (updatedBooking) {
             try {
-              const result = await dispatchJobToMovers(updatedBooking);
+              await dispatchBooking(updatedBooking);
               logEvent.notification('orphan_recovery_movers_notified', {
                 bookingId: updatedBooking.id,
-                moversCount: result.dispatched,
-                requiredVehicle: result.requiredVehicle,
+                preSelectedMoverId: updatedBooking.preSelectedMoverId ?? null,
               });
             } catch (dispatchErr) {
               logEvent.error('orphan_recovery_dispatch', dispatchErr, { bookingId: booking.id });
