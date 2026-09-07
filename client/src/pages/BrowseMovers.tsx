@@ -525,7 +525,6 @@ export default function BrowseMovers() {
                     name={mover.user?.name || "Unknown"}
                     photo={mover.moverImage || undefined}
                     rating={parseFloat(mover.rating) || 0}
-                    reviewCount={mover.totalMoves || 0}
                     vehicleType={mover.vehicleType}
                     distance={distanceDisplay}
                     verified={mover.isVerified}

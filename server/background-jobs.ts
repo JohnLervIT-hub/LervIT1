@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog } from '@shared/schema';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, inAppNotifications } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
@@ -616,22 +616,87 @@ async function autoCompletePastPaidBookings() {
       .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
     
     if (completedBookings.length > 0) {
-      logEvent.cleanup('auto_complete_paid_bookings', { 
+      logEvent.cleanup('auto_complete_paid_bookings', {
         completedCount: completedBookings.length,
         bookingIds: completedBookings.map(b => b.id),
       });
-      
-      logger.info({ 
-        event: 'auto_complete_paid_bookings', 
-        count: completedBookings.length 
+
+      logger.info({
+        event: 'auto_complete_paid_bookings',
+        count: completedBookings.length
       }, `Auto-completed ${completedBookings.length} past-dated paid bookings`);
+
+      // Send review request per completed booking (only if no review exists yet).
+      // Failures are per-booking so one bad email doesn't stop the batch.
+      for (const { id: bookingId } of completedBookings) {
+        try {
+          await sendPostCompletionReviewRequest(bookingId);
+        } catch (err) {
+          logEvent.error('review_request_dispatch', err, { bookingId });
+        }
+      }
     }
-    
+
     return completedBookings.length;
   } catch (error) {
     logEvent.error('autoCompletePastPaidBookings', error);
     return 0;
   }
+}
+
+// Post-completion review request. Idempotent: skips if a review already exists
+// or if the customer already has a review_request in-app notification for the
+// booking (guards against re-firing on repeat auto-complete runs).
+async function sendPostCompletionReviewRequest(bookingId: string) {
+  const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+  if (!booking) return;
+
+  // Skip if already reviewed
+  const [existingReview] = await db.select({ id: reviews.id })
+    .from(reviews)
+    .where(eq(reviews.bookingId, bookingId))
+    .limit(1);
+  if (existingReview) return;
+
+  // Skip if we've already prompted for this booking
+  const [existingPrompt] = await db.select({ id: inAppNotifications.id })
+    .from(inAppNotifications)
+    .where(and(
+      eq(inAppNotifications.bookingId, bookingId),
+      eq(inAppNotifications.type, 'review_request'),
+    ))
+    .limit(1);
+  if (existingPrompt) return;
+
+  const [customer] = await db.select().from(users).where(eq(users.id, booking.customerId)).limit(1);
+  if (!customer) return;
+
+  let moverName: string | null = null;
+  if (booking.moverId) {
+    const [moverRow] = await db.select({ userId: movers.userId }).from(movers).where(eq(movers.id, booking.moverId)).limit(1);
+    if (moverRow) {
+      const [moverUser] = await db.select({ name: users.name }).from(users).where(eq(users.id, moverRow.userId)).limit(1);
+      if (moverUser?.name) moverName = moverUser.name;
+    }
+  }
+
+  // Email + SMS (rate-limited internally in the notifier)
+  try {
+    await notificationService.sendReviewRequest(customer, booking, moverName);
+  } catch (err) {
+    logEvent.error('review_request_email_sms', err, { bookingId });
+  }
+
+  // In-app notification (persist even if email/SMS fail)
+  await db.insert(inAppNotifications).values({
+    userId: booking.customerId,
+    type: 'review_request',
+    title: 'How was your move?',
+    message: `Rate your experience with ${moverName || 'your mover'}`,
+    bookingId,
+    actionUrl: `/review/${bookingId}`,
+    isRead: false,
+  });
 }
 
 // Auto-cancel bookings with past dates that weren't completed

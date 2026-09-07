@@ -6942,24 +6942,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/reviews", async (req: Request, res: Response) => {
     console.log('[Reviews] POST /api/reviews - Request body:', JSON.stringify(req.body));
     try {
+      if (!requireUser(req, res)) return;
+      const authUser = (req as any).user as { id: string };
+
       const reviewData = validateBody(insertReviewSchema, req.body);
       if (reviewData.comment) reviewData.comment = he.encode(reviewData.comment);
       console.log('[Reviews] Validated review data:', JSON.stringify(reviewData));
-      
+
+      // AuthZ: caller can only submit reviews as themselves
+      if (reviewData.customerId !== authUser.id) {
+        return res.status(403).json({ error: "Cannot submit review on behalf of another user" });
+      }
+
       // Validate that the booking is completed before allowing a review
       const booking = await storage.getBooking(reviewData.bookingId);
       console.log('[Reviews] Booking lookup result:', booking ? `Found (status: ${booking.status})` : 'Not found');
-      
+
       if (!booking) {
         console.log('[Reviews] ERROR: Booking not found for id:', reviewData.bookingId);
         return res.status(404).json({ error: "Booking not found" });
       }
-      
+
+      // AuthZ: caller must own this booking
+      if (booking.customerId !== authUser.id) {
+        return res.status(403).json({ error: "You did not have this booking" });
+      }
+
+      // AuthZ: mover in review must match the booking's assigned mover
+      if (reviewData.moverId && booking.moverId && booking.moverId !== reviewData.moverId) {
+        return res.status(403).json({ error: "Mover does not match booking" });
+      }
+
       if (booking.status !== "completed") {
         console.log('[Reviews] ERROR: Booking status is not completed:', booking.status);
         return res.status(400).json({ error: "You can only leave a review after the move is completed" });
       }
-      
+
+      // 30-day review window (updatedAt is the completion proxy — see autoCompletePastPaidBookings)
+      const completedAt = booking.updatedAt ? new Date(booking.updatedAt).getTime() : null;
+      if (completedAt) {
+        const daysSinceCompletion = (Date.now() - completedAt) / (1000 * 60 * 60 * 24);
+        if (daysSinceCompletion > 30) {
+          return res.status(400).json({ error: "Review window has expired (30 days after completion)" });
+        }
+      }
+
       console.log('[Reviews] Creating review in database...');
       let review;
       try {
@@ -7013,6 +7040,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId: review.customerId,
         hasComment: !!review.comment,
       });
+
+      // Low-rating admin alert (fire-and-forget; never block the response)
+      if (review.rating <= 2) {
+        (async () => {
+          try {
+            let moverName = 'Unknown mover';
+            if (review.moverId) {
+              const moverProfile = await storage.getMover(review.moverId);
+              if (moverProfile) {
+                const moverUser = await storage.getUser(moverProfile.userId);
+                if (moverUser?.name) moverName = moverUser.name;
+              }
+            }
+
+            const admins = await db.select({ id: usersTable.id })
+              .from(usersTable)
+              .where(eq(usersTable.role, 'admin'));
+
+            const shortId = review.bookingId.slice(0, 8);
+            const title = `Low rating alert: ${review.rating}★`;
+            const message = `${moverName} received ${review.rating} stars on booking #${shortId}`;
+
+            await Promise.all(admins.map(a =>
+              storage.createNotification({
+                userId: a.id,
+                type: 'system_message',
+                title,
+                message,
+                bookingId: review.bookingId,
+                actionUrl: '/admin/moves',
+                isRead: false,
+              }).catch(err => logEvent.error('low_rating_admin_notify', err, { adminId: a.id })),
+            ));
+
+            await emitEvent('review.low_rating', 'booking', review.bookingId, {
+              rating: review.rating,
+              moverId: review.moverId,
+              comment: review.comment,
+            });
+          } catch (err) {
+            logEvent.error('low_rating_alert', err, { bookingId: review.bookingId });
+          }
+        })();
+      }
 
       console.log('[Reviews] Sending response:', JSON.stringify(response));
       res.json(response);

@@ -21,7 +21,6 @@ interface MoverCardProps {
   name: string;
   photo?: string;
   rating: number;
-  reviewCount: number;
   vehicleType: string;
   distance: string;
   verified: boolean;
@@ -41,7 +40,6 @@ const MoverCard = memo(function MoverCard({
   name,
   photo,
   rating,
-  reviewCount,
   vehicleType,
   distance,
   verified,

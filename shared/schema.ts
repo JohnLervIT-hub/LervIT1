@@ -1047,6 +1047,7 @@ export const NOTIFICATION_TYPES = {
   JOB_EXPIRED: "job_expired",
   NEW_MESSAGE: "new_message",
   REVIEW_RECEIVED: "review_received",
+  REVIEW_REQUEST: "review_request",
   SUPPORT_TICKET_UPDATE: "support_ticket_update",
   EARNINGS_RECEIVED: "earnings_received",
   PAYOUT_COMPLETED: "payout_completed",

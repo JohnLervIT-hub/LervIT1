@@ -655,6 +655,73 @@ class NotificationService {
     }
   }
 
+  // Post-completion review request (email + SMS). Called from
+  // autoCompletePastPaidBookings once a booking flips to 'completed'.
+  // In-app notification is written separately by the caller.
+  async sendReviewRequest(customer: User, booking: Partial<Booking>, moverName?: string | null): Promise<void> {
+    const firstName = getFirstName(customer.name);
+    const reviewUrl = `${getBaseUrl()}/review/${booking.id}`;
+    const moverDisplay = moverName?.trim() || 'your mover';
+    const subject = 'How was your move?';
+
+    const body = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#4CAF50;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">LervIT</h1>
+              <p style="color:#ffffff;margin:10px 0 0 0;font-size:16px;">How was your move?</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 30px;">
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${firstName},</p>
+              <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Your move with <strong>${moverDisplay}</strong> is complete. A quick rating helps other customers pick the right mover — and helps great movers get more jobs.</p>
+              <table cellpadding="0" cellspacing="0" style="margin:30px 0;">
+                <tr>
+                  <td style="background-color:#4CAF50;border-radius:6px;padding:14px 28px;">
+                    <a href="${reviewUrl}" style="color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;">Leave a review</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#888888;font-size:14px;line-height:20px;margin:0;">It takes less than a minute.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
+              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    await this.sendEmail({
+      to: customer.email,
+      subject,
+      body,
+      type: 'status_update',
+    });
+
+    if (customer.phone) {
+      const smsMessage = `LervIT: Hi ${firstName}, how was your move with ${moverDisplay}? Leave a quick review: ${reviewUrl}`;
+      await this.sendSMS({
+        to: customer.phone,
+        message: smsMessage,
+        type: 'booking_update',
+      });
+    }
+  }
+
   // Status update email
   async sendStatusUpdate(user: User, booking: Partial<Booking>, newStatus: string): Promise<void> {
     const statusMessages: Record<string, string> = {

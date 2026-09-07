@@ -162,20 +162,42 @@ export function findNearestMovers(
     })
     .sort((a, b) => a.distanceToPickup - b.distanceToPickup);
   
-  // Apply radius filtering with automatic expansion
+  // Apply radius filtering with automatic expansion (distance-based, for
+  // the candidate pool — see AC-2 in dispatch.ts).
   let radius = matchingConfig.initialRadiusKm;
   let matchedMovers: MoverWithDistance[] = [];
-  
+
   while (matchedMovers.length < matchingConfig.maxMoversToNotify && radius <= matchingConfig.maxRadiusKm) {
     matchedMovers = moversWithDistance.filter(m => m.distanceToPickup <= radius);
-    
+
     if (matchedMovers.length < matchingConfig.maxMoversToNotify) {
       radius += matchingConfig.radiusExpansionStep;
     }
   }
-  
-  // Return top N movers
-  return matchedMovers.slice(0, matchingConfig.maxMoversToNotify);
+
+  // Re-rank the candidate pool by combined score: 60% proximity, 40% rating.
+  // A high-rated mover slightly farther away can beat a low-rated closer one,
+  // but the radius cap above already prevents "5-star mover 100 km away".
+  const scoreMaxKm = matchingConfig.maxRadiusKm;
+  const scored = matchedMovers.map(m => ({
+    mover: m,
+    score: computeDispatchScore(m.distanceToPickup, m.rating, scoreMaxKm),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, matchingConfig.maxMoversToNotify).map(s => s.mover);
+}
+
+// Combined dispatch score: 60% distance (closer = higher), 40% rating.
+// Unrated movers (rating <= 0) get neutral 3/5 so they aren't buried.
+export function computeDispatchScore(distanceKm: number, ratingStr: string, maxKm: number): number {
+  const rating = parseFloat(ratingStr || '0');
+  const effectiveRating = rating > 0 ? rating : 3;
+  const ratingScore = Math.min(1, Math.max(0, effectiveRating / 5));
+  const distanceScore = maxKm > 0
+    ? Math.min(1, Math.max(0, 1 - distanceKm / maxKm))
+    : 0;
+  return distanceScore * 0.6 + ratingScore * 0.4;
 }
 
 /**
