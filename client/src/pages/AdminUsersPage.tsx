@@ -46,6 +46,7 @@ import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ClickToCall } from "@/components/ClickToCall";
 
 // Paginated response type
 type PaginatedResponse<T> = {
@@ -564,7 +565,11 @@ export default function AdminUsersPage() {
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Phone</p>
-                        <p className="font-medium">{selectedUser.phone || "Not provided"}</p>
+                        {selectedUser.phone ? (
+                          <ClickToCall phone={selectedUser.phone} />
+                        ) : (
+                          <p className="font-medium">Not provided</p>
+                        )}
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Role</p>

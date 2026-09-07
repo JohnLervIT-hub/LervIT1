@@ -40,6 +40,7 @@ import type { SupportTicket, SupportTicketReply, User, AiSupportInsight } from "
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ClickToCall } from "@/components/ClickToCall";
 
 type TicketWithUser = SupportTicket & { userName?: string; userEmail?: string; userPhone?: string; userRole?: string };
 type ReplyWithUser = SupportTicketReply & { userName?: string };
@@ -445,8 +446,7 @@ export default function AdminSupportDashboard() {
                                 )}
                                 {ticket.userPhone && (
                                   <span className="flex items-center gap-1" data-testid={`text-ticket-phone-${ticket.id}`}>
-                                    <Phone className="w-3.5 h-3.5" />
-                                    {ticket.userPhone}
+                                    <ClickToCall phone={ticket.userPhone} />
                                   </span>
                                 )}
                                 {ticket.userRole && (
@@ -507,8 +507,7 @@ export default function AdminSupportDashboard() {
                           )}
                           {ticket.userPhone && (
                             <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-dialog-user-phone">
-                              <Phone className="w-4 h-4" />
-                              {ticket.userPhone}
+                              <ClickToCall phone={ticket.userPhone} />
                             </span>
                           )}
                           {ticket.userRole && (

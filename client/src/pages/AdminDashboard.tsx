@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useVoice } from "@/contexts/VoiceContext";
+import { ClickToCall } from "@/components/ClickToCall";
 
 type User = {
   id: string;
@@ -1204,7 +1205,7 @@ export default function AdminDashboard() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{u.name || "Unnamed User"}</p>
                             <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                            {u.phone && <p className="text-xs text-muted-foreground">{u.phone}</p>}
+                            {u.phone && <div className="text-xs"><ClickToCall phone={u.phone} /></div>}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-xs text-muted-foreground tabular-nums">{format(new Date(u.createdAt), "MMM d, yyyy")}</span>

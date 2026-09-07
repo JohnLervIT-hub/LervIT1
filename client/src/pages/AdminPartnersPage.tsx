@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format, isValid, isToday, isYesterday } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ClickToCall } from "@/components/ClickToCall";
 
 function fmt(d: string | null | undefined) {
   if (!d) return "—";
@@ -129,7 +130,7 @@ function TeamMemberList({ team }: { team: any[] }) {
                       </Badge>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap mt-0.5">
-                      {m.phone && <span>{m.phone}</span>}
+                      {m.phone && <ClickToCall phone={m.phone} showIcon={false} />}
                       {m.vehicleType && (
                         <span className="flex items-center gap-1">
                           <Truck className="w-3 h-3" />
@@ -164,7 +165,7 @@ function TeamMemberList({ team }: { team: any[] }) {
                           <Phone className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
                           <div>
                             <p className="text-xs text-muted-foreground">Phone</p>
-                            <p className="text-sm font-medium">{m.phone}</p>
+                            <ClickToCall phone={m.phone} showIcon={false} />
                           </div>
                         </div>
                       )}
@@ -505,7 +506,11 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                 ].map(({ label, value }) => value ? (
                   <div key={label} className="flex gap-2">
                     <span className="text-muted-foreground w-36 shrink-0">{label}</span>
-                    <span className="font-medium break-all">{value}</span>
+                    {label === "Phone" ? (
+                      <ClickToCall phone={String(value)} showIcon={false} />
+                    ) : (
+                      <span className="font-medium break-all">{value}</span>
+                    )}
                   </div>
                 ) : null)}
 
@@ -695,7 +700,7 @@ function PartnerDetail({ partnerId }: { partnerId: string }) {
                           </span>
                           {b.assignment.vehicleType && <span className="text-muted-foreground">· {b.assignment.vehicleType}</span>}
                           {b.assignment.vehiclePlate && <span className="text-muted-foreground">· {b.assignment.vehiclePlate}</span>}
-                          {b.assignment.driverPhone && <span className="text-muted-foreground">· {b.assignment.driverPhone}</span>}
+                          {b.assignment.driverPhone && <span className="text-muted-foreground">· <ClickToCall phone={b.assignment.driverPhone} showIcon={false} /></span>}
                         </div>
                       )}
                     </CardContent>

@@ -15,6 +15,7 @@ import { Link } from "wouter";
 import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Calendar, FileCheck, Rocket, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { AdminRowLayout, AdminRowCell, AdminRowPrimary, AdminRowProgress, AdminRowMobileExtras } from "@/components/admin/AdminRowLayout";
+import { ClickToCall } from "@/components/ClickToCall";
 
 interface Driver {
   driverId: string;
@@ -424,7 +425,7 @@ export default function AdminVerificationDashboard() {
                           subtitle={
                             <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
                               <span className="truncate max-w-[200px]">{driver.email}</span>
-                              {driver.phone && <span>{driver.phone}</span>}
+                              {driver.phone && <ClickToCall phone={driver.phone} showIcon={false} />}
                             </span>
                           }
                           badges={

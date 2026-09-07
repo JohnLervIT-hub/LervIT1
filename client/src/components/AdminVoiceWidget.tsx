@@ -24,6 +24,13 @@ export default function AdminVoiceWidget() {
 
   useEffect(() => { if (active) setMinimized(false); }, [active]);
 
+  useEffect(() => {
+    if (!v.dialpadNumber) return;
+    setNumber(v.dialpadNumber);
+    setMinimized(false);
+    v.setDialpadNumber("");
+  }, [v.dialpadNumber, v.setDialpadNumber]);
+
   if (!v.config) return null;
   if (!v.config.enabled) return setupDismissed
     ? <button onClick={() => setSetupDismissed(false)} className="fixed bottom-6 right-6 z-[9999] rounded-full bg-card border shadow-xl p-3 text-amber-700" aria-label="Show voice setup status"><Settings2 className="h-4 w-4" /></button>

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useVoice } from "@/contexts/VoiceContext";
+import { ClickToCall } from "@/components/ClickToCall";
 type Row = { id: string; direction?: string; outcome?: string; status?: string; from?: string; to?: string; customer?: { name?: string; phone?: string }; booking?: { id?: string }; startedAt?: string | null; answeredAt?: string | null; missedAt?: string | null; createdAt?: string | null; duration?: number; durationSeconds?: number; recordingId?: string; recording?: { id?: string }; media?: Array<{ id?: string; recordingId?: string }> ; voicemail?: boolean };
 const fmt = (n = 0) => `${Math.floor(n / 60)}m ${String(n % 60).padStart(2, "0")}s`;
 const isMissed = (row: Row) => row.outcome === "missed" || row.status === "missed";
@@ -78,7 +79,10 @@ export default function AdminVoicePage() {
             {row.voicemail && !missed && <Badge variant="secondary" className="ml-2">Voicemail</Badge>}
           </p>
           <p className={`text-xs ${missed ? "text-rose-600 font-medium" : "text-muted-foreground"}`}>
-            {row.customer?.phone || row.from || row.to || "No number"}
+            {(() => {
+              const p = row.customer?.phone || row.from || row.to;
+              return p ? <ClickToCall phone={p} /> : "No number";
+            })()}
             {row.booking?.id ? ` · Booking #${row.booking.id.slice(0, 8)}` : ""}
           </p>
         </div>
