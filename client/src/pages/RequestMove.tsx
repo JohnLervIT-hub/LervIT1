@@ -261,6 +261,7 @@ export default function RequestMove() {
   const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
   const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
+  const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Live Pricing state
@@ -318,6 +319,8 @@ export default function RequestMove() {
     id: string;
     latitude: number | null;
     longitude: number | null;
+    rating?: string | number | null;
+    distance?: number | null;
     user?: { name?: string } | null;
   };
   const { data: availableMovers = [] } = useQuery<NearbyMover[]>({
@@ -625,6 +628,8 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current = null;
       step1MoverMarkersRef.current.forEach(m => m.setMap(null));
       step1MoverMarkersRef.current = [];
+      step1MoverInfoWindowRef.current?.close();
+      step1MoverInfoWindowRef.current = null;
       if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
       step1AnimPolylineRef.current?.setMap(null);
       step1AnimPolylineRef.current = null;
@@ -792,6 +797,7 @@ export default function RequestMove() {
     // Clear any previously-drawn mover markers
     step1MoverMarkersRef.current.forEach(m => m.setMap(null));
     step1MoverMarkersRef.current = [];
+    step1MoverInfoWindowRef.current?.close();
 
     if (!availableMovers || availableMovers.length === 0) return;
 
@@ -807,6 +813,13 @@ export default function RequestMove() {
     `;
     const iconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 
+    const escapeHtml = (s: string) =>
+      s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string));
+
+    // One shared InfoWindow — click a truck to open, click another to move it
+    const infoWindow = step1MoverInfoWindowRef.current ?? new google.maps.InfoWindow();
+    step1MoverInfoWindowRef.current = infoWindow;
+
     for (const mover of nearest) {
       const marker = new google.maps.Marker({
         position: { lat: mover.latitude as number, lng: mover.longitude as number },
@@ -819,6 +832,47 @@ export default function RequestMove() {
         title: mover.user?.name || 'Available mover',
         zIndex: 5,
       });
+
+      marker.addListener('click', () => {
+        const name = escapeHtml(mover.user?.name || 'Available mover');
+        const ratingNum = typeof mover.rating === 'string' ? parseFloat(mover.rating) : mover.rating;
+        const rating = ratingNum && !Number.isNaN(ratingNum) ? ratingNum.toFixed(1) : '5.0';
+        const distance = typeof mover.distance === 'number'
+          ? `${mover.distance.toFixed(1)} km away`
+          : 'Nearby';
+        const content = `
+          <div style="
+            padding:10px 14px;
+            font-family:Arial,sans-serif;
+            min-width:160px;
+          ">
+            <div style="
+              font-weight:bold;
+              font-size:14px;
+              margin-bottom:6px;
+              color:#111;
+            ">
+              ${name}
+            </div>
+            <div style="
+              color:#f59e0b;
+              font-size:13px;
+              margin-bottom:4px;
+            ">
+              ⭐ ${rating}
+            </div>
+            <div style="
+              color:#555;
+              font-size:13px;
+            ">
+              📍 ${distance}
+            </div>
+          </div>
+        `;
+        infoWindow.setContent(content);
+        infoWindow.open({ map, anchor: marker });
+      });
+
       step1MoverMarkersRef.current.push(marker);
     }
   }, [availableMovers, mapsIsLoaded]);
