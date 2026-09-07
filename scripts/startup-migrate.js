@@ -205,6 +205,47 @@ async function run() {
       throw err;
     }
 
+    // 0012 — Backfill saved_addresses from each customer's most recent
+    // geocoded booking pickup. Gives existing customers a distance origin
+    // for Browse Movers without waiting for them to add one manually.
+    // Idempotent: skips customers who already have a "Recent pickup" row
+    // or a saved address matching that pickup, and respects the 5-max cap.
+    try {
+      const backfill = await client.query(`
+        INSERT INTO saved_addresses (user_id, label, address, latitude, longitude)
+        SELECT b.customer_id,
+               'Recent pickup',
+               b.pickup_address,
+               b.pickup_latitude,
+               b.pickup_longitude
+        FROM (
+          SELECT DISTINCT ON (customer_id)
+                 customer_id,
+                 pickup_address,
+                 pickup_latitude,
+                 pickup_longitude
+          FROM bookings
+          WHERE pickup_latitude <> 0
+            AND pickup_longitude <> 0
+            AND pickup_address IS NOT NULL
+            AND pickup_address <> ''
+          ORDER BY customer_id, created_at DESC
+        ) b
+        WHERE NOT EXISTS (
+          SELECT 1 FROM saved_addresses sa
+          WHERE sa.user_id = b.customer_id
+            AND (sa.label = 'Recent pickup' OR sa.address = b.pickup_address)
+        )
+        AND (
+          SELECT COUNT(*) FROM saved_addresses sa2 WHERE sa2.user_id = b.customer_id
+        ) < 5
+      `);
+      console.log(`[startup-migrate] ✓ Backfilled ${backfill.rowCount} saved_addresses from recent booking pickups.`);
+    } catch (err) {
+      console.error('[startup-migrate] ✗ saved_addresses backfill FAILED:', err.message);
+      throw err;
+    }
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);

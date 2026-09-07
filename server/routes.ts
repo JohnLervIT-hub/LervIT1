@@ -12664,7 +12664,8 @@ Respond with VALID JSON only:
     try {
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
-      const { label, address, latitude, longitude } = req.body;
+      const { label, address } = req.body;
+      let { latitude, longitude } = req.body;
       if (!label || !address) {
         return res.status(400).json({ error: "label and address are required" });
       }
@@ -12674,6 +12675,20 @@ Respond with VALID JSON only:
         .where(eq(savedAddresses.userId, user.id));
       if (existing.length >= 5) {
         return res.status(400).json({ error: "Maximum 5 saved addresses allowed" });
+      }
+      // Geocode server-side when the client didn't supply coords, so the row
+      // is usable as a distance origin (Browse Movers, matching).
+      if (latitude == null || longitude == null) {
+        try {
+          const { geocodeAddress } = await import("./google-maps");
+          const geo = await geocodeAddress(String(address));
+          if (geo.success && geo.coordinates) {
+            latitude = geo.coordinates.lat;
+            longitude = geo.coordinates.lng;
+          }
+        } catch (geocodeError) {
+          console.warn("[Addresses] Geocoding failed for", address, geocodeError);
+        }
       }
       const [created] = await db
         .insert(savedAddresses)
