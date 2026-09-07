@@ -47,7 +47,7 @@ import {
 } from "@shared/schema";
 import { analyzeIncident, analyzeAuditEntry } from "./ai-support-analyzer";
 import { ObjectStorageService } from "./objectStorage";
-import { notificationService } from "./notifications";
+import { notificationService, formatCalgaryDate } from "./notifications";
 import { getBaseUrl } from "./utils/urls";
 import { calculatePartnerNet } from "@shared/pricing";
 
@@ -1114,6 +1114,36 @@ export function registerPartnerRoutes(app: Express) {
           }).catch(e => console.error("[Customer notify] driver assigned notification failed:", e));
         }
       }).catch(e => console.error("[Customer notify] fetch customer failed:", e));
+
+      // Notify the assigned driver via SMS. Team members aren't platform users
+      // (no userId on partner_team_members), so SMS is the only channel available.
+      // Prefer the team member's phone on file, fall back to the phone typed into the form.
+      (async () => {
+        try {
+          let driverPhone = data.driverPhone ?? null;
+          let driverName = data.driverName ?? null;
+          if (data.teamMemberId) {
+            const [tm] = await db.select().from(partnerTeamMembers)
+              .where(eq(partnerTeamMembers.id, data.teamMemberId))
+              .limit(1);
+            if (tm) {
+              driverPhone = tm.phone ?? driverPhone;
+              driverName = driverName ?? tm.name;
+            }
+          }
+          if (driverPhone) {
+            await notificationService.sendSMS({
+              to: driverPhone,
+              message: `LervIT New Job: You have been assigned a move on ${formatCalgaryDate(updatedBooking.preferredDate)}. Pickup: ${updatedBooking.pickupAddress}. Log in to your portal for details.`,
+              type: 'booking_update',
+            });
+          } else {
+            console.warn(`[Partner assign] Driver has no phone — SMS skipped (booking ${booking.id})`);
+          }
+        } catch (e) {
+          console.error("[Partner assign] driver SMS failed:", e);
+        }
+      })();
 
       res.json({ booking: updatedBooking, assignment });
     } catch (err: any) {

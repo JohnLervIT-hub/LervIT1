@@ -9,7 +9,7 @@ const CALGARY_TZ = 'America/Edmonton';
  * Format a date value as a human-readable string in Calgary (Mountain) time.
  * Shows timezone abbreviation (MDT/MST) so recipients see the correct local time.
  */
-function formatCalgaryDate(date: Date | string | null | undefined, fallback = 'TBD'): string {
+export function formatCalgaryDate(date: Date | string | null | undefined, fallback = 'TBD'): string {
   if (!date) return fallback;
   return new Date(date).toLocaleDateString('en-US', {
     timeZone: CALGARY_TZ,

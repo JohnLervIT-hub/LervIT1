@@ -51,7 +51,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Stripe from "stripe";
-import { notificationService } from "./notifications";
+import { notificationService, formatCalgaryDate } from "./notifications";
 import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
@@ -9250,7 +9250,24 @@ Respond with VALID JSON only:
           '0' // No distance calculation for manual assignment
         );
       }
-      
+
+      // Redundant direct SMS — sendJobAssignment can silently swallow SMS failures;
+      // this second call mirrors auto-dispatch (dispatch.ts) and surfaces errors via logger.
+      try {
+        if (moverUser.phone) {
+          await notificationService.sendSMS({
+            to: moverUser.phone,
+            message: `LervIT New Job Assigned: Move on ${formatCalgaryDate(booking.preferredDate)}. Pickup: ${booking.pickupAddress} → ${booking.dropoffAddress}. Open LervIT to confirm.`,
+            type: 'booking_update',
+          });
+        } else {
+          logger.warn({ moverId: mover.id }, 'Mover has no phone — SMS skipped on manual assignment');
+        }
+      } catch (err) {
+        logger.error({ err, moverId: mover.id }, 'SMS failed on manual assignment');
+        // Do not throw — assignment already succeeded
+      }
+
       // Create in-app notification for mover
       await storage.createNotification({
         userId: mover.userId,
