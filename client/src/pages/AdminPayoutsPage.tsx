@@ -155,6 +155,15 @@ type ManualTransferResponse = {
   };
 };
 
+type ReconcileResponse = {
+  success: boolean;
+  checked: number;
+  updated: number;
+  alreadyCorrect: number;
+  notFound: number;
+  notFoundDetails: { transferId: string; bookingId?: string; amount: number }[];
+};
+
 export default function AdminPayoutsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -281,6 +290,28 @@ export default function AdminPayoutsPage() {
     },
   });
 
+  const reconcileMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/reconcile-stripe-payouts");
+      return res.json() as Promise<ReconcileResponse>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Reconciliation Complete",
+        description: `Checked ${data.checked} Stripe transfers · Updated ${data.updated} · Already correct ${data.alreadyCorrect} · Not found ${data.notFound}`,
+      });
+      refetchPending();
+      refetchEarnings();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Reconciliation Failed",
+        description: error.message || "Failed to reconcile with Stripe",
+        variant: "destructive",
+      });
+    },
+  });
+
   const manualTransferMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       const res = await apiRequest("POST", `/api/admin/manual-transfer/${bookingId}`);
@@ -380,15 +411,31 @@ export default function AdminPayoutsPage() {
               </div>
               <p className="text-sm text-muted-foreground">Manage and reconcile mover earnings</p>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => { refetchPending(); refetchEarnings(); }}
-              data-testid="button-refresh-payouts"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reconcileMutation.mutate()}
+                disabled={reconcileMutation.isPending}
+                data-testid="button-reconcile-stripe"
+              >
+                {reconcileMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Reconcile with Stripe
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { refetchPending(); refetchEarnings(); }}
+                data-testid="button-refresh-payouts"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </div>
         </div>
 

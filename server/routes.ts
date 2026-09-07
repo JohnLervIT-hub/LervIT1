@@ -226,8 +226,61 @@ const upload = multer({
   }
 });
 
+// Retry a moverEarnings update after a successful stripe.transfers.create()
+// call. If the DB write ultimately fails, log — do NOT throw — because the
+// transfer already succeeded, and /api/admin/reconcile-stripe-payouts will
+// heal the row on the next run.
+async function updateMoverEarningWithRetry(
+  ctx: { id: string; stripeTransferId: string; bookingId?: string },
+  patch: Partial<typeof moverEarnings.$inferInsert>,
+  attempt = 1,
+): Promise<void> {
+  try {
+    await db.update(moverEarnings)
+      .set(patch)
+      .where(eq(moverEarnings.id, ctx.id));
+  } catch (err) {
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+      return updateMoverEarningWithRetry(ctx, patch, attempt + 1);
+    }
+    logger.error(
+      { err, earningId: ctx.id, stripeTransferId: ctx.stripeTransferId, bookingId: ctx.bookingId },
+      'DB update failed after transfer — reconcile will fix',
+    );
+  }
+}
+
+// Same shape, for the recordMoverEarnings insert path. Unlike the update
+// helper, this one throws on final failure: the caller consumes the returned
+// row (grossAmount/netAmount/availableAt fields), so returning null would
+// crash downstream. The retry still buys resilience against transient DB
+// blips; a true persistent failure surfaces as a 500 (and reconciliation can
+// still find the transfer by metadata.bookingId — but the caller needs a row
+// now to build its response).
+async function insertMoverEarningWithRetry(
+  values: typeof moverEarnings.$inferInsert,
+  attempt = 1,
+): Promise<typeof moverEarnings.$inferSelect> {
+  try {
+    const [row] = await db.insert(moverEarnings).values(values).returning();
+    if (!row) throw new Error('moverEarnings insert returned no row');
+    return row;
+  } catch (err) {
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+      return insertMoverEarningWithRetry(values, attempt + 1);
+    }
+    logger.error(
+      { err, bookingId: values.bookingId, stripeTransferId: values.stripeTransferId },
+      'DB insert failed 3x after transfer — reconcile may need to create row',
+    );
+    throw err;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
   // Register auth middleware globally
   app.use(authMiddleware);
   
@@ -6358,15 +6411,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     }),
                   );
                   
-                  // Update earnings record
-                  await db.update(moverEarnings)
-                    .set({
-                      stripeTransferId: transfer.id,
-                      status: 'paid',
-                      paidAt: new Date(),
-                    })
-                    .where(eq(moverEarnings.id, earning.id));
-                  
+                  // Update earnings record — retry to prevent divergence.
+                  // Transfer already succeeded; if the DB write ultimately
+                  // fails, reconciliation will heal it.
+                  await updateMoverEarningWithRetry(
+                    { id: earning.id, stripeTransferId: transfer.id, bookingId: earning.bookingId },
+                    { stripeTransferId: transfer.id, status: 'paid', paidAt: new Date() },
+                  );
+
                   // Update PaymentIntent metadata to reflect the auto-transfer (merge with existing)
                   if (booking.stripePaymentIntentId) {
                     try {
@@ -6534,6 +6586,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           break;
           
+        case 'transfer.created': {
+          // Transfer to a connected account was created. Set stripeTransferId
+          // and advance the matching earning to 'available' (funds in transit
+          // to the mover's connected balance). transfer.paid will confirm bank
+          // settlement and advance to 'paid'.
+          try {
+            const transfer = event.data.object as Stripe.Transfer;
+            const earningId = transfer.metadata?.earningsId;
+            const bookingId = transfer.metadata?.bookingId;
+            if (earningId || bookingId) {
+              await db.update(moverEarnings)
+                .set({ stripeTransferId: transfer.id, status: 'available' })
+                .where(
+                  earningId
+                    ? eq(moverEarnings.id, earningId)
+                    : eq(moverEarnings.bookingId, bookingId!),
+                );
+              logEvent.payment('transfer_created_webhook', {
+                transferId: transfer.id,
+                amount: transfer.amount,
+                bookingId,
+              });
+            } else {
+              logger.warn({ transferId: transfer.id }, 'transfer.created webhook missing earningsId/bookingId metadata');
+            }
+          } catch (err) {
+            logEvent.error('transfer_created_webhook', err instanceof Error ? err : new Error(String(err)));
+          }
+          break;
+        }
+
+        // NB: Stripe does NOT emit `transfer.paid` or `transfer.failed`
+        // webhook events. Transfers to a connected account are instant into
+        // the connected balance — the terminal state advance to 'paid' is
+        // driven by:
+        //   1) Admin running process-pending-payouts (promotes 'available'
+        //      rows with a stripeTransferId → 'paid' — see FIX 4).
+        //   2) /api/admin/reconcile-stripe-payouts (looks up Stripe transfers
+        //      and heals divergent rows).
+        // The only failure signal Stripe emits at the transfer level is
+        // transfer.reversed (funds pulled back), handled below.
+        case 'transfer.reversed': {
+          try {
+            const transfer = event.data.object as Stripe.Transfer;
+            await db.update(moverEarnings)
+              .set({ status: 'failed' })
+              .where(eq(moverEarnings.stripeTransferId, transfer.id));
+            logEvent.payment('transfer_reversed_webhook', {
+              transferId: transfer.id,
+            });
+          } catch (err) {
+            logEvent.error('transfer_reversed_webhook', err instanceof Error ? err : new Error(String(err)));
+          }
+          break;
+        }
+
+        case 'payout.paid': {
+          // Stripe paid out the connected account balance to the mover's
+          // bank. transfer.paid already updated our DB; this is audit-only.
+          const payout = event.data.object as Stripe.Payout;
+          logEvent.payment('payout_paid_webhook', {
+            payoutId: payout.id,
+            amount: payout.amount,
+            arrivalDate: payout.arrival_date,
+          });
+          break;
+        }
+
+        case 'payout.failed': {
+          try {
+            const payout = event.data.object as Stripe.Payout;
+            logEvent.payment('payout_failed_webhook', {
+              payoutId: payout.id,
+              failureCode: payout.failure_code,
+              failureMessage: payout.failure_message,
+            });
+            // Notify all admins (same pattern as booking-created alerts above).
+            const adminUsers = await db.select().from(usersTable).where(eq(usersTable.role, 'admin'));
+            for (const admin of adminUsers) {
+              await db.insert(inAppNotifications).values({
+                userId: admin.id,
+                type: 'system_message',
+                title: 'Mover Payout Failed',
+                message: `Stripe payout ${payout.id} failed: ${payout.failure_message ?? payout.failure_code ?? 'unknown reason'}`,
+                actionUrl: '/admin/payouts',
+                isRead: false,
+              }).catch((notifErr) => {
+                logEvent.error('payout_failed_admin_notification', notifErr, { adminId: admin.id, payoutId: payout.id });
+              });
+            }
+          } catch (err) {
+            logEvent.error('payout_failed_webhook', err instanceof Error ? err : new Error(String(err)));
+          }
+          break;
+        }
+
         default:
           logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
       }
@@ -8588,7 +8736,9 @@ Respond with VALID JSON only:
       }
     }
     
-    const [earnings] = await db.insert(moverEarnings).values({
+    // Insert with retry — if the DB write fails after a successful transfer,
+    // reconciliation will pick up the transfer by metadata.bookingId later.
+    const earnings = await insertMoverEarningWithRetry({
       moverId,
       bookingId,
       grossAmount: grossAmount.toFixed(2),
@@ -8598,7 +8748,7 @@ Respond with VALID JSON only:
       stripeTransferId,
       status: earningsStatus,
       availableAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // Available after 2 days
-    }).returning();
+    });
 
     return earnings;
   }
@@ -10601,15 +10751,18 @@ Respond with VALID JSON only:
             console.error(`[Admin Payout] Failed to insert mover_payouts row for earning ${earning.id}:`, payoutErr);
           }
 
-          // Update earnings status to paid
-          await db.update(moverEarnings)
-            .set({
+          // Update earnings status to paid — retry to prevent divergence.
+          // Transfer already succeeded; reconciliation heals the row if the
+          // DB write ultimately fails.
+          await updateMoverEarningWithRetry(
+            { id: earning.id, stripeTransferId: transfer.id, bookingId: earning.bookingId },
+            {
               status: 'paid',
               stripeTransferId: transfer.id,
               paidAt,
               ...(payoutRowId ? { payoutId: payoutRowId } : {}),
-            })
-            .where(eq(moverEarnings.id, earning.id));
+            },
+          );
 
           processed.push({
             earningsId: earning.id,
@@ -10629,8 +10782,40 @@ Respond with VALID JSON only:
         }
       }
       
+      // Second pass: promote 'available' rows that already have a
+      // stripeTransferId (auto-transferred on completion) to 'paid'. Without
+      // this, rows created by recordMoverEarnings never advance past
+      // 'available' until transfer.paid arrives (and that webhook was
+      // previously unhandled — see FIX 1).
+      const availableEarnings = await db.select()
+        .from(moverEarnings)
+        .where(and(
+          eq(moverEarnings.status, 'available'),
+          isNotNull(moverEarnings.stripeTransferId),
+        ));
+
+      for (const earning of availableEarnings) {
+        try {
+          await db.update(moverEarnings)
+            .set({ status: 'paid', paidAt: new Date() })
+            .where(eq(moverEarnings.id, earning.id));
+          processed.push({
+            earningsId: earning.id,
+            moverId: earning.moverId,
+            amount: earning.netAmount,
+            transferId: earning.stripeTransferId ?? '',
+          });
+        } catch (err: any) {
+          failed.push({
+            earningsId: earning.id,
+            moverId: earning.moverId,
+            reason: err?.message || 'available→paid update failed',
+          });
+        }
+      }
+
       const totalPaid = processed.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      
+
       res.json({
         success: true,
         message: `Processed ${processed.length} payouts, ${failed.length} failed, ${skipped.length} skipped`,
@@ -10642,6 +10827,109 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Process pending payouts error:', error);
       res.status(500).json({ error: "Failed to process pending payouts" });
+    }
+  });
+
+  // ===== ADMIN: RECONCILE MOVER_EARNINGS WITH STRIPE =====
+  // Pulls the last 30d of transfers from Stripe and heals any local rows
+  // whose status/stripeTransferId diverged (e.g. webhook missed, DB write
+  // failed after transfer.create). Safe to run repeatedly.
+  app.post("/api/admin/reconcile-stripe-payouts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const since = Math.floor(Date.now() / 1000) - 30 * 24 * 3600;
+      const summary = { checked: 0, updated: 0, alreadyCorrect: 0, notFound: 0 };
+      const notFoundDetails: Array<{ transferId: string; bookingId?: string; amount: number }> = [];
+
+      // Paginate through Stripe transfers (limit 100 per page).
+      let startingAfter: string | undefined = undefined;
+      while (true) {
+        const page: Stripe.ApiList<Stripe.Transfer> = await circuitBreakers.stripe.execute(() =>
+          stripe.transfers.list({
+            limit: 100,
+            created: { gte: since },
+            ...(startingAfter ? { starting_after: startingAfter } : {}),
+          }),
+        );
+
+        for (const transfer of page.data) {
+          summary.checked += 1;
+
+          // Primary: match by stripeTransferId
+          const byTransferId = await db.select()
+            .from(moverEarnings)
+            .where(eq(moverEarnings.stripeTransferId, transfer.id))
+            .limit(1);
+
+          if (byTransferId.length > 0) {
+            const row = byTransferId[0];
+            if (row.status === 'paid') {
+              summary.alreadyCorrect += 1;
+            } else {
+              await db.update(moverEarnings)
+                .set({ status: 'paid', paidAt: row.paidAt ?? new Date() })
+                .where(eq(moverEarnings.id, row.id));
+              summary.updated += 1;
+              logEvent.payment('reconcile_marked_paid_by_transfer_id', {
+                earningId: row.id,
+                transferId: transfer.id,
+                previousStatus: row.status,
+              });
+            }
+            continue;
+          }
+
+          // Fallback: match by metadata.bookingId (covers rows created before
+          // the transferId was persisted).
+          const bookingId = transfer.metadata?.bookingId;
+          if (bookingId) {
+            const byBookingId = await db.select()
+              .from(moverEarnings)
+              .where(eq(moverEarnings.bookingId, bookingId))
+              .limit(1);
+            if (byBookingId.length > 0) {
+              const row = byBookingId[0];
+              if (row.status === 'paid' && row.stripeTransferId === transfer.id) {
+                summary.alreadyCorrect += 1;
+              } else {
+                await db.update(moverEarnings)
+                  .set({
+                    stripeTransferId: transfer.id,
+                    status: 'paid',
+                    paidAt: row.paidAt ?? new Date(),
+                  })
+                  .where(eq(moverEarnings.id, row.id));
+                summary.updated += 1;
+                logEvent.payment('reconcile_marked_paid_by_booking_id', {
+                  earningId: row.id,
+                  transferId: transfer.id,
+                  bookingId,
+                  previousStatus: row.status,
+                });
+              }
+              continue;
+            }
+          }
+
+          // No local row matches this Stripe transfer — surface for admin.
+          summary.notFound += 1;
+          notFoundDetails.push({
+            transferId: transfer.id,
+            bookingId: bookingId ?? undefined,
+            amount: transfer.amount / 100,
+          });
+        }
+
+        if (!page.has_more || page.data.length === 0) break;
+        startingAfter = page.data[page.data.length - 1].id;
+      }
+
+      logEvent.payment('reconcile_completed', summary);
+      res.json({ success: true, ...summary, notFoundDetails });
+    } catch (error: any) {
+      console.error('[Admin] Reconcile Stripe payouts error:', error);
+      res.status(500).json({ error: error?.message || 'Failed to reconcile Stripe payouts' });
     }
   });
 
@@ -11115,17 +11403,15 @@ Respond with VALID JSON only:
         }),
       );
       
-      // Create or update earnings record
+      // Create or update earnings record — retry to prevent divergence.
+      // Transfer already succeeded; reconciliation heals if DB writes fail.
       if (existingEarnings.length > 0) {
-        await db.update(moverEarnings)
-          .set({
-            stripeTransferId: transfer.id,
-            status: 'paid',
-            paidAt: new Date(),
-          })
-          .where(eq(moverEarnings.id, existingEarnings[0].id));
+        await updateMoverEarningWithRetry(
+          { id: existingEarnings[0].id, stripeTransferId: transfer.id, bookingId },
+          { stripeTransferId: transfer.id, status: 'paid', paidAt: new Date() },
+        );
       } else {
-        await db.insert(moverEarnings).values({
+        await insertMoverEarningWithRetry({
           moverId: booking.moverId,
           bookingId,
           grossAmount: grossAmount.toFixed(2),
@@ -11403,22 +11689,19 @@ Respond with VALID JSON only:
             }),
           );
           
-          // Update earnings record
-          await db.update(moverEarnings)
-            .set({
-              stripeTransferId: transfer.id,
-              status: 'paid',
-              paidAt: new Date(),
-            })
-            .where(eq(moverEarnings.id, earning.id));
-          
+          // Update earnings record — retry to prevent divergence.
+          await updateMoverEarningWithRetry(
+            { id: earning.id, stripeTransferId: transfer.id, bookingId: earning.bookingId },
+            { stripeTransferId: transfer.id, status: 'paid', paidAt: new Date() },
+          );
+
           results.push({
             bookingId: earning.bookingId,
             status: 'success',
             transferId: transfer.id,
             amount: moverPayoutCents / 100,
           });
-          
+
           logEvent.payment('test_auto_transfer_success', {
             moverId,
             bookingId: earning.bookingId,
