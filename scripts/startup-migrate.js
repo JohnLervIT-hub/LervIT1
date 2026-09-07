@@ -165,6 +165,18 @@ async function run() {
     `);
     console.log('[startup-migrate] ✓ bookings auto_routed columns ensured.');
 
+    // 0010 — Agent-ready operational intelligence foundation
+    // (7 tables + UTM/SLA columns on bookings + analytics_events.properties -> jsonb)
+    try {
+      const migrationPath = join(__dirname, '..', 'migrations', '0010_agent_foundation.sql');
+      const agentSql = readFileSync(migrationPath, 'utf8');
+      await client.query(agentSql);
+      console.log('[startup-migrate] ✓ 0010_agent_foundation applied.');
+    } catch (err) {
+      console.error('[startup-migrate] ✗ 0010_agent_foundation FAILED:', err.message);
+      throw err;
+    }
+
     console.log('[startup-migrate] Running sync-schema.sql...');
     await client.query(sql);
     console.log('Schema sync complete on:', host);

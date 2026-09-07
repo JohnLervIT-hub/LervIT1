@@ -11,6 +11,18 @@ import { logger } from './logger';
 
 export const QUEUE_NAMES = {
   VISION: 'vision-analysis',
+  // Autonomous agent queues
+  CLOSER_D: 'closer-d',
+  APEX: 'apex',
+  HUNTER_S: 'hunter-s',
+  HUNTER_D: 'hunter-d',
+  VETTER: 'vetter',
+  RETAIN: 'retain',
+  DISPATCH: 'dispatch',
+  PULSE: 'pulse',
+  VOICE_AGENT: 'voice-agent',
+  MAGNET: 'magnet',
+  COMPLIANCE: 'compliance',
 } as const;
 
 let _connection: IORedis | null = null;

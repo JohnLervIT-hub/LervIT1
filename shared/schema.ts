@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index, date, time } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index, date, time, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -214,6 +214,17 @@ export const bookings = pgTable("bookings", {
   // Stripe transfer to the enterprise partner (set by recordPartnerEarnings)
   partnerStripeTransferId: text("partner_stripe_transfer_id"),
 
+  // Attribution — captured on POST /api/bookings from query params / headers
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  sourceChannel: text("source_channel"),
+  landingPage: text("landing_page"),
+
+  // SLA fields — set when mover is assigned; used by PULSE for breach detection
+  expectedCompletionAt: timestamp("expected_completion_at"),
+  slaDeadlineAt: timestamp("sla_deadline_at"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -221,6 +232,8 @@ export const bookings = pgTable("bookings", {
   moverIdIdx: index("bookings_mover_id_idx").on(table.moverId),
   statusIdx: index("bookings_status_idx").on(table.status),
   paymentStatusIdx: index("bookings_payment_status_idx").on(table.paymentStatus),
+  sourceChannelIdx: index("bookings_source_channel_idx").on(table.sourceChannel),
+  slaDeadlineIdx: index("bookings_sla_deadline_idx").on(table.slaDeadlineAt),
 }));
 
 export const messages = pgTable("messages", {
@@ -1090,7 +1103,7 @@ export const analyticsEvents = pgTable("analytics_events", {
   userId: varchar("user_id").references(() => users.id),
   sessionId: varchar("session_id", { length: 100 }),
   page: varchar("page", { length: 200 }),
-  properties: text("properties"), // JSON string for flexible metadata
+  properties: jsonb("properties"), // Flexible metadata; queryable at DB level
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   eventNameIdx: index("analytics_events_name_idx").on(table.eventName),
@@ -1794,3 +1807,167 @@ export type VoiceWebhookEvent = typeof voiceWebhookEvents.$inferSelect;
 export type VoiceTransfer = typeof voiceTransfers.$inferSelect;
 export type VoiceMedia = typeof voiceMedia.$inferSelect;
 export type VoiceCallAttempt = typeof voiceCallAttempts.$inferSelect;
+
+// ============================================================
+// AGENT-READY OPERATIONAL INTELLIGENCE FOUNDATION
+// Migration: 0010_agent_foundation.sql
+// ============================================================
+
+// a) agent_logs — every agent action recorded
+export const agentLogs = pgTable("agent_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: text("agent_name").notNull(),
+  agentCode: text("agent_code").notNull(),
+  action: text("action").notNull(),
+  input: jsonb("input"),
+  output: jsonb("output"),
+  status: text("status").notNull().default("success"), // 'success' | 'failure' | 'skipped'
+  durationMs: integer("duration_ms"),
+  tokensUsed: integer("tokens_used"),
+  costUsd: decimal("cost_usd", { precision: 10, scale: 6 }),
+  bookingId: varchar("booking_id").references(() => bookings.id),
+  moverId: varchar("mover_id").references(() => movers.id),
+  partnerId: varchar("partner_id"),
+  leadId: varchar("lead_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  agentCodeIdx: index("agent_logs_agent_code_idx").on(table.agentCode),
+  statusIdx: index("agent_logs_status_idx").on(table.status),
+  createdAtIdx: index("agent_logs_created_at_idx").on(table.createdAt),
+  bookingIdIdx: index("agent_logs_booking_id_idx").on(table.bookingId),
+  moverIdIdx: index("agent_logs_mover_id_idx").on(table.moverId),
+}));
+
+// b) agent_decisions — reasoned decisions + escalation trail
+export const agentDecisions = pgTable("agent_decisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: text("agent_name").notNull(),
+  decisionType: text("decision_type").notNull(),
+  reasoning: text("reasoning"),
+  outcome: text("outcome"),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  escalatedToHuman: boolean("escalated_to_human").notNull().default(false),
+  escalatedAt: timestamp("escalated_at"),
+  resolvedAt: timestamp("resolved_at"),
+  bookingId: varchar("booking_id").references(() => bookings.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  agentNameIdx: index("agent_decisions_agent_name_idx").on(table.agentName),
+  escalatedIdx: index("agent_decisions_escalated_idx").on(table.escalatedToHuman),
+  createdAtIdx: index("agent_decisions_created_at_idx").on(table.createdAt),
+}));
+
+// c) leads — pre-booking pipeline
+export const leads = pgTable("leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactName: text("contact_name"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  // 'kijiji' | 'google' | 'referral' | 'inbound' | 'phone' | 'social' | 'direct'
+  sourceChannel: text("source_channel"),
+  utmSource: text("utm_source"),
+  utmCampaign: text("utm_campaign"),
+  utmMedium: text("utm_medium"),
+  landingPage: text("landing_page"),
+  intentScore: integer("intent_score").notNull().default(0),
+  // 'new' | 'contacted' | 'qualified' | 'converted' | 'cold' | 'lost'
+  status: text("status").notNull().default("new"),
+  touchpoints: integer("touchpoints").notNull().default(0),
+  lastTouchedAt: timestamp("last_touched_at"),
+  convertedBookingId: varchar("converted_booking_id").references(() => bookings.id),
+  assignedAgent: text("assigned_agent"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("leads_status_idx").on(table.status),
+  sourceChannelIdx: index("leads_source_channel_idx").on(table.sourceChannel),
+  createdAtIdx: index("leads_created_at_idx").on(table.createdAt),
+  phoneIdx: index("leads_contact_phone_idx").on(table.contactPhone),
+  emailIdx: index("leads_contact_email_idx").on(table.contactEmail),
+}));
+
+// d) kpi_targets — revenue / retention / conversion goals
+export const kpiTargets = pgTable("kpi_targets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricName: text("metric_name").notNull(),
+  targetValue: decimal("target_value", { precision: 14, scale: 2 }).notNull(),
+  period: text("period").notNull(), // 'daily' | 'weekly' | 'monthly'
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  metricNameIdx: index("kpi_targets_metric_name_idx").on(table.metricName),
+  periodIdx: index("kpi_targets_period_idx").on(table.period),
+}));
+
+// e) business_events — unified event log agents poll with a cursor
+export const businessEvents = pgTable("business_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventType: text("event_type").notNull(),
+  // 'booking' | 'mover' | 'customer' | 'partner' | 'payment' | 'lead' | 'agent'
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  payload: jsonb("payload"),
+  source: text("source").notNull().default("system"), // 'system' | 'webhook' | 'agent' | 'admin'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventTypeIdx: index("business_events_event_type_idx").on(table.eventType),
+  entityIdx: index("business_events_entity_idx").on(table.entityType, table.entityId),
+  createdAtIdx: index("business_events_created_at_idx").on(table.createdAt),
+}));
+
+// f) mover_activity_log — RETAIN inactivity + trend detection
+export const moverActivityLog = pgTable("mover_activity_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  // 'job_completed' | 'job_declined' | 'went_online' | 'went_offline' | 'location_update' | 'login' | 'rollup'
+  activityType: text("activity_type").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  moverIdIdx: index("mover_activity_log_mover_id_idx").on(table.moverId),
+  activityTypeIdx: index("mover_activity_log_activity_type_idx").on(table.activityType),
+  createdAtIdx: index("mover_activity_log_created_at_idx").on(table.createdAt),
+}));
+
+// g) zone_demand_log — DISPATCH supply/demand time-series
+export const zoneDemandLog = pgTable("zone_demand_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  zoneName: text("zone_name").notNull(),
+  city: text("city"),
+  province: text("province"),
+  date: date("date").notNull(),
+  hour: integer("hour").notNull(),
+  demandCount: integer("demand_count").notNull().default(0),
+  supplyCount: integer("supply_count").notNull().default(0),
+  ratio: decimal("ratio", { precision: 8, scale: 4 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  zoneIdx: index("zone_demand_log_zone_idx").on(table.zoneName),
+  dateHourIdx: index("zone_demand_log_date_hour_idx").on(table.date, table.hour),
+}));
+
+export const insertAgentLogSchema = createInsertSchema(agentLogs).omit({ id: true, createdAt: true });
+export const insertAgentDecisionSchema = createInsertSchema(agentDecisions).omit({ id: true, createdAt: true });
+export const insertLeadSchema = createInsertSchema(leads).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertKpiTargetSchema = createInsertSchema(kpiTargets).omit({ id: true, createdAt: true });
+export const insertBusinessEventSchema = createInsertSchema(businessEvents).omit({ id: true, createdAt: true });
+export const insertMoverActivityLogSchema = createInsertSchema(moverActivityLog).omit({ id: true, createdAt: true });
+export const insertZoneDemandLogSchema = createInsertSchema(zoneDemandLog).omit({ id: true, createdAt: true });
+
+export type AgentLog = typeof agentLogs.$inferSelect;
+export type InsertAgentLog = z.infer<typeof insertAgentLogSchema>;
+export type AgentDecision = typeof agentDecisions.$inferSelect;
+export type InsertAgentDecision = z.infer<typeof insertAgentDecisionSchema>;
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = z.infer<typeof insertLeadSchema>;
+export type KpiTarget = typeof kpiTargets.$inferSelect;
+export type InsertKpiTarget = z.infer<typeof insertKpiTargetSchema>;
+export type BusinessEvent = typeof businessEvents.$inferSelect;
+export type InsertBusinessEvent = z.infer<typeof insertBusinessEventSchema>;
+export type MoverActivityLog = typeof moverActivityLog.$inferSelect;
+export type InsertMoverActivityLog = z.infer<typeof insertMoverActivityLogSchema>;
+export type ZoneDemandLog = typeof zoneDemandLog.$inferSelect;
+export type InsertZoneDemandLog = z.infer<typeof insertZoneDemandLogSchema>;

@@ -41,7 +41,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents } from "@shared/schema";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -55,6 +55,8 @@ import { notificationService, formatCalgaryDate } from "./notifications";
 import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
+import { emitEvent } from "./events";
+import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
@@ -2021,6 +2023,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // }
       
       const updatedMover = await storage.updateMover(req.params.id, updates);
+
+      // Emit mover online/offline transition on actual state change.
+      if (updates.isAvailable !== undefined && mover.isAvailable !== updates.isAvailable) {
+        await emitEvent(
+          updates.isAvailable ? 'mover.online' : 'mover.offline',
+          'mover',
+          req.params.id,
+          {
+            userId: mover.userId,
+            latitude: (updates as any).latitude ?? mover.latitude ?? null,
+            longitude: (updates as any).longitude ?? mover.longitude ?? null,
+            location: (updates as any).location ?? mover.location ?? null,
+          },
+        );
+      }
+
       res.json(updatedMover);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -3725,6 +3743,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       }
       
+      // Attribution — accept UTM / channel hints from body, query, or headers.
+      // Body wins over query wins over headers. All fields optional.
+      const pickString = (v: unknown): string | undefined => {
+        if (typeof v !== 'string') return undefined;
+        const trimmed = v.trim();
+        return trimmed.length ? trimmed.slice(0, 200) : undefined;
+      };
+      const utmSource = pickString((req.body as any)?.utmSource)
+        ?? pickString(req.query.utm_source)
+        ?? pickString(req.headers['x-utm-source'] as any);
+      const utmMedium = pickString((req.body as any)?.utmMedium)
+        ?? pickString(req.query.utm_medium)
+        ?? pickString(req.headers['x-utm-medium'] as any);
+      const utmCampaign = pickString((req.body as any)?.utmCampaign)
+        ?? pickString(req.query.utm_campaign)
+        ?? pickString(req.headers['x-utm-campaign'] as any);
+      const sourceChannel = pickString((req.body as any)?.sourceChannel)
+        ?? pickString(req.query.source_channel)
+        ?? pickString(req.headers['x-source-channel'] as any)
+        ?? (utmSource ? 'utm' : undefined);
+      const landingPage = pickString((req.body as any)?.landingPage)
+        ?? pickString(req.query.landing_page)
+        ?? pickString(req.headers['referer'] as any);
+
       // Create booking with geocoded data, price breakdown, and AI metadata
       // SECURITY: Use authenticated user's ID, not from request body
       // If preSelectedMoverId is provided, store it for direct assignment after payment
@@ -3764,6 +3806,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         discountReason: discountReason,
         moverBalanceOwed: toDecimalString(moverBalanceOwed),
         notifiedAt: new Date(),
+        ...(utmSource && { utmSource }),
+        ...(utmMedium && { utmMedium }),
+        ...(utmCampaign && { utmCampaign }),
+        ...(sourceChannel && { sourceChannel }),
+        ...(landingPage && { landingPage }),
       } as any);
       
       // Increment promo usage count if promo applied
@@ -3783,7 +3830,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vehicleClass: priceBreakdown.vehicleClass,
         status: BOOKING_STATUSES.PENDING_PAYMENT,
       });
-      
+
+      await emitEvent('booking.created', 'booking', booking.id, {
+        customerId: user.id,
+        pickupAddress: booking.pickupAddress,
+        dropoffAddress: booking.dropoffAddress,
+        loadSize: bookingData.loadSize,
+        distanceKm: distance,
+        price: priceBreakdown.totalCost,
+        vehicleClass: priceBreakdown.vehicleClass,
+        sourceChannel: (booking as any).sourceChannel ?? null,
+        utmSource: (booking as any).utmSource ?? null,
+        utmCampaign: (booking as any).utmCampaign ?? null,
+      });
+
       // Note: Confirmation email and mover matching happen AFTER payment succeeds (in Stripe webhook)
       // Do NOT send booking confirmation here - booking is still pending payment
       res.json({
@@ -4219,16 +4279,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // ATOMIC OPERATION: Update booking and notifications
-      // 1. Update the booking with moverId
+      // 1. Update the booking with moverId + SLA fields (computed from load + distance)
+      const sla = computeBookingSla(booking);
       const updatedBooking = await storage.updateBooking(bookingId, {
         moverId,
         status: 'confirmed',
+        expectedCompletionAt: sla.expectedCompletionAt,
+        slaDeadlineAt: sla.slaDeadlineAt,
       });
-      
+
       if (!updatedBooking) {
         return res.status(500).json({ error: "Failed to accept booking" });
       }
-      
+
+      await emitEvent('booking.assigned', 'booking', bookingId, {
+        moverId,
+        customerId: booking.customerId,
+        assignedBy: 'mover_accept',
+        expectedCompletionAt: sla.expectedCompletionAt.toISOString(),
+        slaDeadlineAt: sla.slaDeadlineAt.toISOString(),
+        estimatedMinutes: sla.estimatedMinutes,
+      });
+
       // Create mover performance tracking record
       try {
         await db.insert(moverPerformanceTable).values({
@@ -4546,11 +4618,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      logEvent.booking('customer_delete_booking', { 
-        bookingId, 
+      logEvent.booking('customer_delete_booking', {
+        bookingId,
         customerId: user.id,
         status: booking.status,
-        paymentStatus: booking.paymentStatus 
+        paymentStatus: booking.paymentStatus
+      });
+
+      await emitEvent('booking.cancelled', 'booking', bookingId, {
+        customerId: user.id,
+        previousStatus: booking.status,
+        paymentStatus: booking.paymentStatus,
+        moverId: booking.moverId ?? null,
+        reason: 'customer_deleted',
       });
       
       // Delete related records first (foreign key constraints)
@@ -6074,8 +6154,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })
             });
             
-            logEvent.payment('booking_confirmed', { 
-              bookingId: booking.id, 
+            logEvent.payment('booking_confirmed', {
+              bookingId: booking.id,
               userId: booking.customerId,
               paymentIntentId: paymentIntent.id,
               status: 'succeeded',
@@ -6084,6 +6164,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               amount: booking.price,
               riskLevel: riskLevel || 'unknown'
             });
+
+            await emitEvent('payment.succeeded', 'booking', booking.id, {
+              amount: booking.price,
+              currency: paymentIntent.currency,
+              paymentIntentId: paymentIntent.id,
+              customerId: booking.customerId,
+              riskLevel: riskLevel || 'unknown',
+              fraudFlagged,
+            }, 'webhook');
             
             // ATOMICITY: All post-payment operations are wrapped in try-catch
             // to ensure webhook success even if notifications fail.
@@ -6792,6 +6881,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...review,
         customer: customer ? { id: customer.id, name: customer.name } : null
       };
+
+      await emitEvent('review.submitted', 'booking', review.bookingId, {
+        reviewId: review.id,
+        rating: review.rating,
+        moverId: review.moverId,
+        customerId: review.customerId,
+        hasComment: !!review.comment,
+      });
+
       console.log('[Reviews] Sending response:', JSON.stringify(response));
       res.json(response);
     } catch (error) {
@@ -8748,9 +8846,20 @@ Respond with VALID JSON only:
       
       // Update booking status to completed
       await storage.updateBooking(bookingId, { status: 'completed' });
-      
+
       // Get updated booking with commission data for earnings record
       const updatedBooking = await storage.getBooking(bookingId);
+
+      await emitEvent('booking.completed', 'booking', bookingId, {
+        moverId: booking.moverId,
+        customerId: booking.customerId,
+        price: booking.price,
+        distanceKm: booking.distance,
+        expectedCompletionAt: booking.expectedCompletionAt ?? null,
+        slaDeadlineAt: booking.slaDeadlineAt ?? null,
+        completedAt: new Date().toISOString(),
+        onTime: booking.slaDeadlineAt ? Date.now() <= new Date(booking.slaDeadlineAt).getTime() : null,
+      });
       
       // Record earnings using persisted commission data from booking
       const earnings = await recordMoverEarnings(bookingId, booking.moverId!, updatedBooking);
@@ -9213,12 +9322,24 @@ Respond with VALID JSON only:
         return res.status(404).json({ error: "Mover user not found" });
       }
       
-      // Update the booking with the mover
+      // Update the booking with the mover + SLA fields
+      const adminSla = computeBookingSla(booking);
       const updatedBooking = await storage.updateBooking(bookingId, {
         moverId: moverId,
         status: 'confirmed', // 'confirmed' is the canonical "mover accepted" status
+        expectedCompletionAt: adminSla.expectedCompletionAt,
+        slaDeadlineAt: adminSla.slaDeadlineAt,
       });
-      
+
+      await emitEvent('booking.assigned', 'booking', bookingId, {
+        moverId,
+        customerId: booking.customerId,
+        assignedBy: 'admin_manual',
+        expectedCompletionAt: adminSla.expectedCompletionAt.toISOString(),
+        slaDeadlineAt: adminSla.slaDeadlineAt.toISOString(),
+        estimatedMinutes: adminSla.estimatedMinutes,
+      });
+
       // Clear any pending job notifications for this booking
       await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
       
@@ -11932,7 +12053,7 @@ Respond with VALID JSON only:
       const pageViewEvents = events.filter(e => e.eventName === "page_view");
       const pageViewMap: Record<string, number> = {};
       for (const e of pageViewEvents) {
-        const props = e.properties ? JSON.parse(e.properties) : {};
+        const props = (e.properties as Record<string, any> | null) ?? {};
         const name = props.page_name ?? e.page ?? "unknown";
         pageViewMap[name] = (pageViewMap[name] ?? 0) + 1;
       }
@@ -12021,7 +12142,7 @@ Respond with VALID JSON only:
         userId: userId ?? undefined,
         sessionId: sessionId ? String(sessionId).slice(0, 100) : undefined,
         page: page ? String(page).slice(0, 200) : undefined,
-        properties: properties ? JSON.stringify(properties) : undefined,
+        properties: properties ?? undefined,
       });
       res.json({ ok: true });
     } catch (error) {
@@ -12411,6 +12532,186 @@ Respond with VALID JSON only:
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch survey summary" });
+    }
+  });
+
+  // ===== ADMIN: OPERATIONAL INTELLIGENCE SUMMARY (APEX daily brief) =====
+  // Single endpoint that bundles everything APEX needs for the daily brief,
+  // plus alerts PULSE surfaces to admins.
+  app.get("/api/admin/intelligence/summary", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+      const startOfWeek = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfLastWeek = new Date(startOfWeek.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const paidStates = ['paid', 'succeeded'];
+
+      // Revenue rollups (today / week / month) — same paid-state filter as
+      // the revenue summary endpoint for consistency.
+      const [revenueRow] = await db.execute<{
+        today: string;
+        week: string;
+        month: string;
+      }>(sql`
+        SELECT
+          COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfToday}), 0)                                              AS today,
+          COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfWeek}),  0)                                              AS week,
+          COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfMonth}), 0)                                              AS month
+        FROM bookings
+        WHERE status = 'completed'
+          AND payment_status = ANY(${paidStates})
+      `) as unknown as Array<{ today: string; week: string; month: string }>;
+
+      // Booking status counts (real-time)
+      const [bookingCounts] = await db.execute<{
+        active: number;
+        completed_today: number;
+        pending_payment: number;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status IN ('pending','confirmed','in_progress'))::int                                              AS active,
+          COUNT(*) FILTER (WHERE status = 'completed' AND updated_at >= ${startOfToday})::int                                       AS completed_today,
+          COUNT(*) FILTER (WHERE status = 'pending_payment')::int                                                                    AS pending_payment
+        FROM bookings
+      `) as unknown as Array<{ active: number; completed_today: number; pending_payment: number }>;
+
+      // Mover state — online / available / inactive-7d
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const [moverCounts] = await db.execute<{
+        online: number;
+        available: number;
+        inactive_7d: number;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE last_location_update >= ${oneHourAgo})::int                                                        AS online,
+          COUNT(*) FILTER (WHERE is_available = true)::int                                                                          AS available,
+          COUNT(*) FILTER (WHERE (last_location_update IS NULL OR last_location_update < ${sevenDaysAgo}) AND is_verified = true)::int AS inactive_7d
+        FROM movers
+      `) as unknown as Array<{ online: number; available: number; inactive_7d: number }>;
+
+      // Pipeline (leads)
+      const [pipelineCounts] = await db.execute<{
+        new_leads: number;
+        conversions_today: number;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'new')::int                                                                               AS new_leads,
+          COUNT(*) FILTER (WHERE status = 'converted' AND updated_at >= ${startOfToday})::int                                       AS conversions_today
+        FROM leads
+      `) as unknown as Array<{ new_leads: number; conversions_today: number }>;
+
+      // Alerts — SLA breaches, stuck jobs, open incidents
+      const [alertCounts] = await db.execute<{
+        sla_breaches: number;
+        stuck_jobs: number;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE sla_deadline_at IS NOT NULL AND sla_deadline_at < now() AND status IN ('confirmed','in_progress'))::int  AS sla_breaches,
+          COUNT(*) FILTER (WHERE status = 'in_progress' AND updated_at < ${new Date(now.getTime() - 4 * 60 * 60 * 1000)})::int             AS stuck_jobs
+        FROM bookings
+      `) as unknown as Array<{ sla_breaches: number; stuck_jobs: number }>;
+
+      const [incidentRow] = await db.execute<{ open_incidents: number }>(sql`
+        SELECT COUNT(*)::int AS open_incidents
+        FROM partner_incidents
+        WHERE status IN ('open','pending')
+      `) as unknown as Array<{ open_incidents: number }>;
+
+      // KPI deltas — yesterday's revenue vs day-before, week vs last-week
+      const [ydayRow] = await db.execute<{ revenue: string; completed: number }>(sql`
+        SELECT
+          COALESCE(SUM(price::numeric), 0) AS revenue,
+          COUNT(*)::int                    AS completed
+        FROM bookings
+        WHERE status = 'completed'
+          AND payment_status = ANY(${paidStates})
+          AND created_at >= ${startOfYesterday}
+          AND created_at <  ${startOfToday}
+      `) as unknown as Array<{ revenue: string; completed: number }>;
+
+      const [dayBeforeRow] = await db.execute<{ revenue: string; completed: number }>(sql`
+        SELECT
+          COALESCE(SUM(price::numeric), 0) AS revenue,
+          COUNT(*)::int                    AS completed
+        FROM bookings
+        WHERE status = 'completed'
+          AND payment_status = ANY(${paidStates})
+          AND created_at >= ${new Date(startOfYesterday.getTime() - 24 * 60 * 60 * 1000)}
+          AND created_at <  ${startOfYesterday}
+      `) as unknown as Array<{ revenue: string; completed: number }>;
+
+      const [lastWeekRow] = await db.execute<{ revenue: string }>(sql`
+        SELECT COALESCE(SUM(price::numeric), 0) AS revenue
+        FROM bookings
+        WHERE status = 'completed'
+          AND payment_status = ANY(${paidStates})
+          AND created_at >= ${startOfLastWeek}
+          AND created_at <  ${startOfWeek}
+      `) as unknown as Array<{ revenue: string }>;
+
+      // KPI targets
+      const targetRows = await db.select().from(kpiTargets);
+      const targetMap: Record<string, number> = {};
+      for (const t of targetRows) targetMap[t.metricName] = Number(t.targetValue);
+
+      const monthRevenue = Number(revenueRow?.month ?? 0);
+      const monthlyTarget = targetMap.monthly_revenue ?? null;
+
+      res.json({
+        generatedAt: now.toISOString(),
+        revenue: {
+          today: Number(revenueRow?.today ?? 0),
+          week: Number(revenueRow?.week ?? 0),
+          month: monthRevenue,
+          vs_target: monthlyTarget !== null
+            ? {
+                target: monthlyTarget,
+                actual: monthRevenue,
+                deltaAbsolute: monthRevenue - monthlyTarget,
+                deltaPct: monthlyTarget > 0
+                  ? Math.round(((monthRevenue - monthlyTarget) / monthlyTarget) * 10000) / 100
+                  : null,
+              }
+            : null,
+        },
+        bookings: {
+          active: bookingCounts?.active ?? 0,
+          completed_today: bookingCounts?.completed_today ?? 0,
+          pending: bookingCounts?.pending_payment ?? 0,
+        },
+        movers: {
+          online: moverCounts?.online ?? 0,
+          available: moverCounts?.available ?? 0,
+          inactive_7d: moverCounts?.inactive_7d ?? 0,
+        },
+        pipeline: {
+          new_leads: pipelineCounts?.new_leads ?? 0,
+          conversions_today: pipelineCounts?.conversions_today ?? 0,
+        },
+        alerts: {
+          sla_breaches: alertCounts?.sla_breaches ?? 0,
+          stuck_jobs: alertCounts?.stuck_jobs ?? 0,
+          incidents: incidentRow?.open_incidents ?? 0,
+        },
+        kpi_deltas: {
+          vs_yesterday: {
+            revenue: Number(ydayRow?.revenue ?? 0) - Number(dayBeforeRow?.revenue ?? 0),
+            completedMoves: (ydayRow?.completed ?? 0) - (dayBeforeRow?.completed ?? 0),
+          },
+          vs_last_week: {
+            revenue: Number(revenueRow?.week ?? 0) - Number(lastWeekRow?.revenue ?? 0),
+          },
+        },
+        targets: targetMap,
+      });
+    } catch (error) {
+      console.error('[Admin] intelligence summary error:', error);
+      res.status(500).json({ error: "Failed to build intelligence summary" });
     }
   });
 

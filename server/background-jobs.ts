@@ -1,13 +1,14 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts } from '@shared/schema';
-import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte } from 'drizzle-orm';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog } from '@shared/schema';
+import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
 import { moverWebSocket } from './websocket';
 import { dispatchJobToMovers } from './dispatch';
+import { emitEvent } from './events';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -92,6 +93,17 @@ export function initBackgroundJobs() {
   // 3 AM, 9 AM, 3 PM, 9 PM Calgary time
   cron.schedule('20 3,9,15,21 * * *', async () => {
     await withJobLock('profile_reminders', sendProfileCompletionReminders);
+  }, TZ);
+
+  // Daily 06:00 Calgary — snapshot yesterday's KPIs so APEX has a stable
+  // brief to read at its 07:00 run.
+  cron.schedule('0 6 * * *', async () => {
+    await withJobLock('daily_kpi_snapshot', dailyKpiSnapshot);
+  }, TZ);
+
+  // Every 30 min — roll up per-mover activity for RETAIN inactivity detection.
+  cron.schedule('*/30 * * * *', async () => {
+    await withJobLock('mover_activity_rollup', moverActivityRollup);
   }, TZ);
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
@@ -1339,17 +1351,254 @@ async function sendProfileCompletionReminders() {
     }
     
     if (emailsSent > 0 || smsSent > 0) {
-      logger.info({ 
-        event: 'profile_completion_reminders', 
-        emailsSent, 
+      logger.info({
+        event: 'profile_completion_reminders',
+        emailsSent,
         smsSent,
-        total: incompleteMovers.length 
+        total: incompleteMovers.length
       }, `Sent ${emailsSent} emails and ${smsSent} SMS for incomplete mover profiles`);
     }
-    
+
     return { emailsSent, smsSent };
   } catch (error) {
     logEvent.error('sendProfileCompletionReminders', error);
     return { emailsSent: 0, smsSent: 0 };
+  }
+}
+
+// ============================================================
+// AGENT-FACING JOBS
+// ============================================================
+
+/**
+ * Daily KPI snapshot — runs 06:00 Calgary time so APEX (07:00) has a
+ * stable, pre-aggregated view. Writes a single `business_events` row
+ * with eventType `kpi.daily_snapshot` and payload `{ metrics, targets, deltas }`.
+ */
+async function dailyKpiSnapshot() {
+  try {
+    // "Yesterday" = the previous local day, but we operate on UTC here
+    // and rely on the fact that revenue queries elsewhere use created_at
+    // in the DB's timezone. Close-enough for a daily rollup.
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+    const startOfDayBefore = new Date(startOfYesterday.getTime() - 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const paidStates: string[] = ['paid', 'succeeded'];
+
+    // Yesterday's completed + paid bookings and revenue
+    const [yesterdayRow] = await db.execute<{
+      completed_count: number;
+      revenue: string;
+    }>(sql`
+      SELECT
+        COUNT(*)::int                                     AS completed_count,
+        COALESCE(SUM(price::numeric), 0)                  AS revenue
+      FROM bookings
+      WHERE status = 'completed'
+        AND payment_status = ANY(${paidStates})
+        AND created_at >= ${startOfYesterday}
+        AND created_at <  ${startOfToday}
+    `) as unknown as Array<{ completed_count: number; revenue: string }>;
+
+    const [dayBeforeRow] = await db.execute<{
+      completed_count: number;
+      revenue: string;
+    }>(sql`
+      SELECT
+        COUNT(*)::int                                     AS completed_count,
+        COALESCE(SUM(price::numeric), 0)                  AS revenue
+      FROM bookings
+      WHERE status = 'completed'
+        AND payment_status = ANY(${paidStates})
+        AND created_at >= ${startOfDayBefore}
+        AND created_at <  ${startOfYesterday}
+    `) as unknown as Array<{ completed_count: number; revenue: string }>;
+
+    const [monthRow] = await db.execute<{
+      completed_count: number;
+      revenue: string;
+    }>(sql`
+      SELECT
+        COUNT(*)::int                                     AS completed_count,
+        COALESCE(SUM(price::numeric), 0)                  AS revenue
+      FROM bookings
+      WHERE status = 'completed'
+        AND payment_status = ANY(${paidStates})
+        AND created_at >= ${startOfMonth}
+    `) as unknown as Array<{ completed_count: number; revenue: string }>;
+
+    // Funnel: new bookings and conversion rate for yesterday
+    const [funnelRow] = await db.execute<{
+      total: number;
+      converted: number;
+    }>(sql`
+      SELECT
+        COUNT(*)::int                                                                       AS total,
+        COUNT(*) FILTER (WHERE payment_status = ANY(${paidStates}))::int                    AS converted
+      FROM bookings
+      WHERE created_at >= ${startOfYesterday}
+        AND created_at <  ${startOfToday}
+    `) as unknown as Array<{ total: number; converted: number }>;
+
+    // New movers + active movers yesterday
+    const [moversRow] = await db.execute<{
+      new_movers: number;
+      active_movers: number;
+    }>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE created_at >= ${startOfYesterday} AND created_at < ${startOfToday})::int                              AS new_movers,
+        COUNT(*) FILTER (WHERE last_location_update >= ${startOfYesterday} AND last_location_update < ${startOfToday})::int          AS active_movers
+      FROM movers
+    `) as unknown as Array<{ new_movers: number; active_movers: number }>;
+
+    // Avg response time (mover accept latency) — proxied by
+    // job_notifications.responded_at - created_at where status='accepted'
+    const [responseRow] = await db.execute<{ avg_response_seconds: string | null }>(sql`
+      SELECT AVG(EXTRACT(EPOCH FROM (responded_at - created_at)))::text AS avg_response_seconds
+      FROM job_notifications
+      WHERE status = 'accepted'
+        AND responded_at IS NOT NULL
+        AND created_at >= ${startOfYesterday}
+        AND created_at <  ${startOfToday}
+    `) as unknown as Array<{ avg_response_seconds: string | null }>;
+
+    // Load current active targets
+    const targetRows = await db.select().from(kpiTargets);
+    const targetMap: Record<string, number> = {};
+    for (const t of targetRows) {
+      targetMap[t.metricName] = Number(t.targetValue);
+    }
+
+    const revenueYesterday = Number(yesterdayRow?.revenue ?? 0);
+    const revenueDayBefore = Number(dayBeforeRow?.revenue ?? 0);
+    const completedYesterday = yesterdayRow?.completed_count ?? 0;
+    const completedDayBefore = dayBeforeRow?.completed_count ?? 0;
+    const monthlyRevenue = Number(monthRow?.revenue ?? 0);
+    const monthlyCompleted = monthRow?.completed_count ?? 0;
+    const conversionRate = funnelRow?.total
+      ? (funnelRow.converted / funnelRow.total) * 100
+      : 0;
+
+    const payload = {
+      period: {
+        yesterdayStart: startOfYesterday.toISOString(),
+        yesterdayEnd: startOfToday.toISOString(),
+        monthStart: startOfMonth.toISOString(),
+      },
+      metrics: {
+        revenue: {
+          yesterday: revenueYesterday,
+          dayBefore: revenueDayBefore,
+          monthToDate: monthlyRevenue,
+        },
+        completedMoves: {
+          yesterday: completedYesterday,
+          dayBefore: completedDayBefore,
+          monthToDate: monthlyCompleted,
+        },
+        conversion: {
+          yesterdayRatePct: Math.round(conversionRate * 100) / 100,
+          yesterdayTotal: funnelRow?.total ?? 0,
+          yesterdayConverted: funnelRow?.converted ?? 0,
+        },
+        movers: {
+          newYesterday: moversRow?.new_movers ?? 0,
+          activeYesterday: moversRow?.active_movers ?? 0,
+        },
+        avgResponseSeconds: responseRow?.avg_response_seconds
+          ? Math.round(Number(responseRow.avg_response_seconds))
+          : null,
+      },
+      targets: targetMap,
+      deltas: {
+        revenueVsDayBefore: revenueYesterday - revenueDayBefore,
+        completedVsDayBefore: completedYesterday - completedDayBefore,
+        monthlyRevenueVsTarget: targetMap.monthly_revenue
+          ? monthlyRevenue - targetMap.monthly_revenue
+          : null,
+        completedMovesVsTarget: targetMap.completed_moves
+          ? monthlyCompleted - targetMap.completed_moves
+          : null,
+      },
+    };
+
+    await emitEvent('kpi.daily_snapshot', 'system', 'daily', payload);
+    logger.info({ event: 'kpi_snapshot', payload }, 'Daily KPI snapshot written');
+    return payload;
+  } catch (error) {
+    logEvent.error('dailyKpiSnapshot', error);
+    return null;
+  }
+}
+
+/**
+ * Mover activity rollup — every 30 min, write one `mover_activity_log`
+ * row per mover with a `rollup` activity_type and per-window counters.
+ * RETAIN reads this history to detect inactivity trends.
+ */
+async function moverActivityRollup() {
+  try {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const allMovers = await db.select().from(movers);
+
+    // Aggregate today's completed + declined counts per mover in one pass.
+    const completedRows = await db.execute<{ mover_id: string; count: number }>(sql`
+      SELECT mover_id, COUNT(*)::int AS count
+      FROM bookings
+      WHERE mover_id IS NOT NULL
+        AND status = 'completed'
+        AND updated_at >= ${startOfToday}
+      GROUP BY mover_id
+    `) as unknown as Array<{ mover_id: string; count: number }>;
+    const completedByMover = new Map<string, number>(
+      completedRows.map(r => [r.mover_id, r.count]),
+    );
+
+    const declinedRows = await db.execute<{ mover_id: string; count: number }>(sql`
+      SELECT mover_id, COUNT(*)::int AS count
+      FROM job_notifications
+      WHERE status = 'declined'
+        AND (responded_at IS NOT NULL AND responded_at >= ${startOfToday})
+      GROUP BY mover_id
+    `) as unknown as Array<{ mover_id: string; count: number }>;
+    const declinedByMover = new Map<string, number>(
+      declinedRows.map(r => [r.mover_id, r.count]),
+    );
+
+    let inserted = 0;
+    for (const mover of allMovers) {
+      const completed = completedByMover.get(mover.id) ?? 0;
+      const declined = declinedByMover.get(mover.id) ?? 0;
+      const lastLocationAgeMs = mover.lastLocationUpdate
+        ? now.getTime() - new Date(mover.lastLocationUpdate).getTime()
+        : null;
+
+      await db.insert(moverActivityLog).values({
+        moverId: mover.id,
+        activityType: 'rollup',
+        metadata: {
+          jobsCompletedToday: completed,
+          jobsDeclinedToday: declined,
+          lastLocationAgeMinutes: lastLocationAgeMs !== null
+            ? Math.round(lastLocationAgeMs / 60000)
+            : null,
+          isAvailable: mover.isAvailable ?? false,
+          rating: mover.rating ?? null,
+          completedTripsLifetime: mover.completedTrips ?? 0,
+        },
+      });
+      inserted += 1;
+    }
+
+    logger.info({ event: 'mover_activity_rollup', moverCount: inserted }, 'Mover activity rolled up');
+    return { moverCount: inserted };
+  } catch (error) {
+    logEvent.error('moverActivityRollup', error);
+    return { moverCount: 0 };
   }
 }
