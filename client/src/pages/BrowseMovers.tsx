@@ -491,21 +491,31 @@ export default function BrowseMovers() {
           <>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedMovers.map((mover: any) => {
-                // Coordinates are geocoded from the profile address, so
-                // presence of lat/lng + a calculated distance is enough to
-                // trust the value. (last_location_update is not yet present
-                // in prod, so gating on it would hide every distance.)
-                const hasRealLocation =
+                // With hourly GPS heartbeats, gate distance on a fresh
+                // last_location_update (<= 2h). Stale GPS falls back to
+                // the profile location text.
+                const minutesAgo = mover.lastLocationUpdate
+                  ? Math.floor((Date.now() - new Date(mover.lastLocationUpdate).getTime()) / 60000)
+                  : null;
+                const isLocationFresh = minutesAgo !== null && minutesAgo < 120;
+                const hasCoordsAndDistance =
                   mover.latitude != null &&
                   mover.longitude != null &&
                   mover.distance != null;
+                const showDistance = hasCoordsAndDistance && isLocationFresh;
+                const freshness =
+                  minutesAgo === null
+                    ? null
+                    : minutesAgo < 60
+                    ? `Updated ${minutesAgo} min ago`
+                    : `Updated ${Math.floor(minutesAgo / 60)}h ago`;
                 let distanceDisplay = mover.location || "Calgary, AB";
-                if (hasRealLocation) {
-                  if (mover.drivingMinutes !== null && mover.drivingMinutes !== undefined) {
-                    distanceDisplay = `${mover.distance} km · ${mover.drivingMinutes} min drive`;
-                  } else {
-                    distanceDisplay = `${mover.distance} km away`;
-                  }
+                if (showDistance) {
+                  const base =
+                    mover.drivingMinutes !== null && mover.drivingMinutes !== undefined
+                      ? `${mover.distance} km · ${mover.drivingMinutes} min drive`
+                      : `${mover.distance} km away`;
+                  distanceDisplay = freshness ? `${base} · ${freshness}` : base;
                 }
 
                 return (

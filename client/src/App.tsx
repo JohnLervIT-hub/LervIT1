@@ -21,6 +21,7 @@ import AdminVoiceWidget from "@/components/AdminVoiceWidget";
 
 // Import directly to avoid HMR timing issues
 import { JobNotificationSound } from "@/components/JobNotificationSound";
+import { MoverGpsHeartbeat } from "@/components/MoverGpsHeartbeat";
 // Lazy load splash screen
 const SplashScreen = lazy(() => import("@/components/SplashScreen"));
 
@@ -386,6 +387,7 @@ function AppShell() {
         </AppContent>
         <MobileBottomNav />
         <JobNotificationSound />
+        <MoverGpsHeartbeat />
         <InstallPrompt />
         {user?.role === "admin" && <AdminVoiceWidget />}
       </VoiceProvider>
