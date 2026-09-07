@@ -656,12 +656,12 @@ export default function RequestMove() {
       disableDefaultUI: true,
       zoomControl: true,
       gestureHandling: "cooperative",
-      // mapId is required for AdvancedMarkerElement. DEMO_MAP_ID is a public
-      // Google-provided test id — for production, replace with a real Map ID
-      // from Google Cloud Console (which can also carry BOOKING_MAP_STYLES
-      // via cloud-based styling; inline `styles` below is ignored when a
-      // mapId is set).
-      mapId: 'DEMO_MAP_ID',
+      // mapId is required for AdvancedMarkerElement. Set VITE_GOOGLE_MAPS_ID
+      // to a real Map ID from Google Cloud Console (which can also carry
+      // BOOKING_MAP_STYLES via cloud-based styling — inline `styles` below is
+      // ignored when a mapId is set). Falls back to Google's public
+      // DEMO_MAP_ID so dev works out of the box.
+      mapId: import.meta.env.VITE_GOOGLE_MAPS_ID || 'DEMO_MAP_ID',
       styles: BOOKING_MAP_STYLES,
     });
     step1MapInstanceRef.current = map;
