@@ -202,19 +202,23 @@ class PostgresStorage implements IStorage {
   }
 
   async getAllBookings(pagination?: PaginationOptions): Promise<PaginatedResult<Booking>> {
-    const limit = Math.min(pagination?.limit || 50, 200);
+    // Callers can pass Number.MAX_SAFE_INTEGER (or any very large value) to
+    // request every row — used by the admin dashboard / revenue page which
+    // must not be silently truncated. Explicit UI pagination still passes
+    // a real limit and is clamped to 200 to protect the network.
+    const requestedLimit = pagination?.limit ?? 50;
+    const isUnlimited = requestedLimit >= 10000;
+    const limit = isUnlimited ? requestedLimit : Math.min(requestedLimit, 200);
     const offset = pagination?.offset || 0;
-    
-    // Get total count for pagination metadata
+
     const countResult = await db.select({ count: sql<number>`count(*)::int` }).from(bookings);
     const total = countResult[0]?.count ?? 0;
-    
-    // Get paginated data - most recently created first for admin view
+
     const data = await db.select().from(bookings)
       .orderBy(desc(bookings.createdAt))
       .limit(limit)
       .offset(offset);
-    
+
     return {
       data,
       total,

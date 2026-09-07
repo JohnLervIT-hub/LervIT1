@@ -3844,13 +3844,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (moverId) {
           userBookings = await storage.getBookingsByMover(moverId);
         } else {
-          // Support pagination for admin view
-          const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+          // Support pagination for admin view. When neither ?limit nor ?offset
+          // is supplied, return every booking — the previous 50-row default
+                    // silently truncated admin views (e.g. revenue metrics) with no
+          // signal to the client. Callers that want pagination still get it
+          // via explicit ?limit / ?offset.
+          const explicitPagination = req.query.limit !== undefined || req.query.offset !== undefined;
+          const limit = explicitPagination
+            ? Math.min(parseInt(req.query.limit as string) || 50, 200)
+            : Number.MAX_SAFE_INTEGER;
           const offset = parseInt(req.query.offset as string) || 0;
           const result = await storage.getAllBookings({ limit, offset });
           userBookings = result.data;
-          // Return paginated envelope only when client explicitly requests pagination
-          if (req.query.limit !== undefined || req.query.offset !== undefined) {
+          if (explicitPagination) {
             adminPagination = { total: result.total, limit, offset };
           }
         }
@@ -11731,6 +11737,131 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Get abandoned bookings error:', error);
       res.status(500).json({ error: "Failed to fetch abandoned bookings" });
+    }
+  });
+
+  // ============================================================
+  // REVENUE SUMMARY (admin) — single pre-aggregated query so the
+  // /admin/revenue page never has to reduce over an arbitrary booking
+  // page and can never silently truncate. See AdminRevenuePage.tsx.
+  //
+  // Period filter uses updated_at as a proxy for completion date because
+  // the bookings table does not carry a dedicated completed_at column.
+  // Cancelled / payment_failed / pending_payment aggregates ignore the
+  // period so the page can always show total exposure at a glance.
+  // ============================================================
+
+  app.get("/api/admin/revenue/summary", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const period = (req.query.period as string) || 'all';
+      const now = new Date();
+      let cutoff: Date | null = null;
+      if (period === '7d') cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      else if (period === '30d') cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // updated_at is used as the completion-date proxy (see block comment above).
+      const earnedPeriod = cutoff ? sql`AND updated_at >= ${cutoff}` : sql``;
+
+      const result: any = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              ${earnedPeriod}
+          )::int AS earned_count,
+          COALESCE(SUM(price) FILTER (
+            WHERE status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              ${earnedPeriod}
+          ), 0)::text AS earned_revenue,
+          COALESCE(SUM(platform_fee_amount) FILTER (
+            WHERE status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              ${earnedPeriod}
+          ), 0)::text AS platform_fees,
+          COALESCE(SUM(price - COALESCE(platform_fee_amount, 0)) FILTER (
+            WHERE status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              ${earnedPeriod}
+          ), 0)::text AS mover_payouts,
+
+          COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled_count,
+          COALESCE(SUM(price) FILTER (WHERE status = 'cancelled'), 0)::text AS cancelled_value,
+
+          COUNT(*) FILTER (WHERE status = 'payment_failed' OR payment_status = 'failed')::int AS failed_count,
+          COALESCE(SUM(price) FILTER (WHERE status = 'payment_failed' OR payment_status = 'failed'), 0)::text AS failed_value,
+
+          COUNT(*) FILTER (WHERE status = 'pending_payment')::int AS pending_count,
+          COALESCE(SUM(price) FILTER (WHERE status = 'pending_payment'), 0)::text AS pending_revenue,
+
+          COUNT(*) FILTER (
+            WHERE enterprise_partner_id IS NOT NULL
+              AND status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              ${earnedPeriod}
+          )::int AS partner_completed,
+          COALESCE(SUM(price) FILTER (
+            WHERE enterprise_partner_id IS NOT NULL
+              AND status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              ${earnedPeriod}
+          ), 0)::text AS partner_revenue,
+
+          COALESCE(SUM(price) FILTER (
+            WHERE status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              AND created_at >= NOW() - INTERVAL '7 days'
+          ), 0)::text AS revenue_this_week,
+          COALESCE(SUM(price) FILTER (
+            WHERE status = 'completed'
+              AND payment_status IN ('paid', 'succeeded')
+              AND created_at >= NOW() - INTERVAL '30 days'
+          ), 0)::text AS revenue_this_month,
+
+          COUNT(*)::int AS total_bookings
+        FROM bookings
+      `);
+
+      const row = result?.rows?.[0] ?? {};
+      const num = (v: any) => parseFloat(v ?? '0') || 0;
+      const earnedCount = Number(row.earned_count ?? 0);
+      const earnedRevenue = num(row.earned_revenue);
+      const avgBookingValue = earnedCount > 0 ? earnedRevenue / earnedCount : 0;
+
+      res.json({
+        period,
+        earned: {
+          count: earnedCount,
+          revenue: earnedRevenue,
+          avgBookingValue,
+        },
+        platformFees: num(row.platform_fees),
+        moverPayouts: num(row.mover_payouts),
+        cancelled: {
+          count: Number(row.cancelled_count ?? 0),
+          value: num(row.cancelled_value),
+        },
+        paymentFailed: {
+          count: Number(row.failed_count ?? 0),
+          value: num(row.failed_value),
+        },
+        pending: {
+          count: Number(row.pending_count ?? 0),
+          revenue: num(row.pending_revenue),
+        },
+        partner: {
+          count: Number(row.partner_completed ?? 0),
+          revenue: num(row.partner_revenue),
+        },
+        revenueThisWeek: num(row.revenue_this_week),
+        revenueThisMonth: num(row.revenue_this_month),
+        totalBookings: Number(row.total_bookings ?? 0),
+      });
+    } catch (error) {
+      console.error('[Admin] Revenue summary error:', error);
+      res.status(500).json({ error: 'Failed to fetch revenue summary' });
     }
   });
 
