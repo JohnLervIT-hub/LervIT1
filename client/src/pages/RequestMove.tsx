@@ -264,6 +264,7 @@ export default function RequestMove() {
   const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [visibleMoverCount, setVisibleMoverCount] = useState(0);
+  const [routeError, setRouteError] = useState<string | null>(null);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -668,36 +669,74 @@ export default function RequestMove() {
     step1DirServiceRef.current = new google.maps.DirectionsService();
   }, [mapsIsLoaded, step1DivReady]);
 
-  // Calculate route and push to the imperative renderer whenever addresses change
+  // Calculate route and push to the imperative renderer whenever addresses change.
+  // Debounced by 500ms so we don't fire the Directions API on every keystroke.
   useEffect(() => {
     if (!mapsIsLoaded || !pickupAddress || !dropoffAddress) {
-      // Clear the renderer when addresses are incomplete
+      // Clear the renderer + any route error when addresses are incomplete
       if (step1DirRendererRef.current && (!pickupAddress || !dropoffAddress)) {
         step1DirRendererRef.current.setDirections({ routes: [] } as unknown as google.maps.DirectionsResult);
       }
+      setRouteError(null);
       return;
     }
     const key = `${pickupAddress}|||${dropoffAddress}`;
     if (step1LastAddressesRef.current === key) return;
-    step1LastAddressesRef.current = key;
 
-    // Wait for service ref to be ready (map init effect might not have run yet)
-    const service = step1DirServiceRef.current;
-    if (!service) return;
+    const timer = setTimeout(() => {
+      step1LastAddressesRef.current = key;
 
-    // Capture the key now so the async callback can detect stale responses.
-    // If addresses change while the request is in-flight, the old callback
-    // must not apply its directions or fitBounds — doing so causes the
-    // "zoom in then immediately zoom out" race condition.
-    const requestKey = key;
+      // Wait for service ref to be ready (map init effect might not have run yet)
+      const service = step1DirServiceRef.current;
+      if (!service) return;
 
-    service.route(
-      { origin: pickupAddress, destination: dropoffAddress, travelMode: google.maps.TravelMode.DRIVING, region: "CA" },
-      (result, status) => {
-        // Stale-response guard: discard if addresses changed since this request was sent
-        if (step1LastAddressesRef.current !== requestKey) return;
+      // Capture the key now so the async callback can detect stale responses.
+      const requestKey = key;
 
-        if (status === google.maps.DirectionsStatus.OK && result && step1DirRendererRef.current) {
+      service.route(
+        { origin: pickupAddress, destination: dropoffAddress, travelMode: google.maps.TravelMode.DRIVING, region: "CA" },
+        (result, status) => {
+          // Stale-response guard: discard if addresses changed since this request was sent
+          if (step1LastAddressesRef.current !== requestKey) return;
+
+          // NOT_FOUND / ZERO_RESULTS — address doesn't resolve or no drivable route.
+          // Clear the polyline + endpoint markers, show a subtle message, and
+          // fall back to geocoding just the pickup so truck markers still load.
+          if (
+            status === google.maps.DirectionsStatus.NOT_FOUND ||
+            status === google.maps.DirectionsStatus.ZERO_RESULTS
+          ) {
+            step1DirRendererRef.current?.setDirections({ routes: [] } as unknown as google.maps.DirectionsResult);
+            if (step1AnimIntervalRef.current) {
+              clearInterval(step1AnimIntervalRef.current);
+              step1AnimIntervalRef.current = null;
+            }
+            step1AnimPolylineRef.current?.setMap(null);
+            step1AnimPolylineRef.current = null;
+            setRouteError("Route not found — please verify your address");
+
+            // Best-effort pickup-only geocode so the mover-markers query can still fire
+            try {
+              new google.maps.Geocoder().geocode(
+                { address: pickupAddress, region: "CA" },
+                (geoResults, geoStatus) => {
+                  if (step1LastAddressesRef.current !== requestKey) return;
+                  if (geoStatus === google.maps.GeocoderStatus.OK && geoResults?.[0]) {
+                    const loc = geoResults[0].geometry.location;
+                    setPickupCoords({ lat: loc.lat(), lng: loc.lng() });
+                  }
+                }
+              );
+            } catch { /* geocoder unavailable — silently skip */ }
+            return;
+          }
+
+          if (status !== google.maps.DirectionsStatus.OK || !result || !step1DirRendererRef.current) {
+            // Other transient errors (OVER_QUERY_LIMIT etc.) — leave prior route in place
+            return;
+          }
+
+          setRouteError(null);
           step1DirRendererRef.current.setDirections(result);
 
           const map = step1MapInstanceRef.current;
@@ -784,8 +823,10 @@ export default function RequestMove() {
             });
           }
         }
-      }
-    );
+      );
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
 
   // Render available-mover truck markers around the pickup point.
@@ -884,7 +925,10 @@ export default function RequestMove() {
 
       step1MoverMarkersRef.current.push(marker);
     }
-    setVisibleMoverCount(step1MoverMarkersRef.current.length);
+    const rendered = step1MoverMarkersRef.current.length;
+    setVisibleMoverCount(rendered);
+    // Diagnostic: confirms pill count matches actual markers on the map
+    console.log('[markers] rendered:', rendered, 'availableMovers:', availableMovers.length);
   }, [availableMovers, mapsIsLoaded]);
 
   // Calculate real distance estimate when addresses change using geocoding
@@ -2026,6 +2070,14 @@ export default function RequestMove() {
                 >
                   <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
                   {visibleMoverCount} mover{visibleMoverCount === 1 ? '' : 's'} available nearby
+                </div>
+              )}
+              {routeError && (
+                <div
+                  className="absolute bottom-3 left-3 right-3 z-10 rounded-md bg-amber-50/95 dark:bg-amber-950/80 backdrop-blur px-3 py-1.5 text-xs text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 shadow-sm text-center"
+                  data-testid="text-route-error"
+                >
+                  {routeError}
                 </div>
               )}
             </div>
