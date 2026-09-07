@@ -264,6 +264,7 @@ export default function RequestMove() {
   const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [visibleMoverCount, setVisibleMoverCount] = useState(0);
+  const [pillExpanded, setPillExpanded] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
 
   // Live Pricing state
@@ -875,12 +876,12 @@ export default function RequestMove() {
         markerEl.style.cssText = `
           background:#1a56db;
           border-radius:50%;
-          width:36px;height:36px;
+          width:44px;height:44px;
           display:flex;align-items:center;
           justify-content:center;
           box-shadow:0 2px 8px rgba(0,0,0,0.3);
           border:2px solid white;
-          font-size:18px;cursor:pointer;
+          font-size:20px;cursor:pointer;
         `;
 
         const marker = new AdvancedMarkerElement({
@@ -892,7 +893,9 @@ export default function RequestMove() {
 
         // DOM click on the content element is the most portable way to wire
         // a click across Maps JS SDK versions (vs `gmp-click` on the marker).
-        markerEl.addEventListener('click', () => {
+        // Touchend is required because AdvancedMarkerElement's synthetic click
+        // event doesn't fire reliably on mobile touch screens.
+        const handleMarkerClick = () => {
           const name = escapeHtml(mover.user?.name || 'Available mover');
           const ratingNum = typeof mover.rating === 'string' ? parseFloat(mover.rating) : mover.rating;
           const rating = ratingNum && !Number.isNaN(ratingNum) ? ratingNum.toFixed(1) : '5.0';
@@ -930,6 +933,11 @@ export default function RequestMove() {
           `;
           infoWindow.setContent(content);
           infoWindow.open({ map, anchor: marker });
+        };
+        markerEl.addEventListener('click', handleMarkerClick);
+        markerEl.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          handleMarkerClick();
         });
 
         step1MoverMarkersRef.current.push(marker);
@@ -2076,13 +2084,37 @@ export default function RequestMove() {
                 </div>
               )}
               {visibleMoverCount > 0 && (
-                <div
-                  className="absolute top-3 right-3 z-10 rounded-full bg-white/95 dark:bg-neutral-900/95 backdrop-blur px-3 py-1.5 text-xs font-medium shadow-md border border-neutral-200 dark:border-neutral-700 flex items-center gap-1.5"
+                <button
+                  type="button"
+                  onClick={() => setPillExpanded(v => !v)}
                   data-testid="pill-available-movers"
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    zIndex: 10,
+                    background: 'white',
+                    color: '#111',
+                    borderRadius: 20,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    padding: '6px 12px',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    whiteSpace: 'nowrap',
+                    maxWidth: pillExpanded ? 200 : 60,
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                  }}
                 >
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                  {visibleMoverCount} mover{visibleMoverCount === 1 ? '' : 's'} available nearby
-                </div>
+                  <span>🚛</span>
+                  {pillExpanded
+                    ? `${visibleMoverCount} mover${visibleMoverCount === 1 ? '' : 's'} available nearby`
+                    : visibleMoverCount}
+                </button>
               )}
               {routeError && (
                 <div
