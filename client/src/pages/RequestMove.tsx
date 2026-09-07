@@ -260,6 +260,8 @@ export default function RequestMove() {
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
   const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const step1MoverMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -310,7 +312,28 @@ export default function RequestMove() {
     },
     enabled: !!preSelectedMoverId,
   });
-  
+
+  // Available movers near the pickup — powers the truck markers on the map
+  type NearbyMover = {
+    id: string;
+    latitude: number | null;
+    longitude: number | null;
+    user?: { name?: string } | null;
+  };
+  const { data: availableMovers = [] } = useQuery<NearbyMover[]>({
+    queryKey: ['/api/movers', 'available', pickupCoords?.lat, pickupCoords?.lng],
+    queryFn: async () => {
+      if (!pickupCoords) return [];
+      const res = await fetch(
+        `/api/movers?isAvailable=true&lat=${pickupCoords.lat}&lng=${pickupCoords.lng}`
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+    enabled: !!pickupCoords,
+  });
+
   // Fetch saved addresses for quick-select chips (customers only)
   type SavedAddress = { id: string; label: string; address: string; latitude: number | null; longitude: number | null };
   const { data: savedAddresses } = useQuery<SavedAddress[]>({
@@ -600,6 +623,8 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current?.setMap(null);
       step1PickupMarkerRef.current = null;
       step1DropoffMarkerRef.current = null;
+      step1MoverMarkersRef.current.forEach(m => { m.map = null; });
+      step1MoverMarkersRef.current = [];
       if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
       step1AnimPolylineRef.current?.setMap(null);
       step1AnimPolylineRef.current = null;
@@ -672,47 +697,12 @@ export default function RequestMove() {
           const map = step1MapInstanceRef.current;
           const leg = result.routes[0]?.legs[0];
           if (map && leg) {
-            // ── Smart camera framing ─────────────────────────────────────
-            // Centre on the route midpoint.
-            const centerLat = (leg.start_location.lat() + leg.end_location.lat()) / 2;
-            const centerLng = (leg.start_location.lng() + leg.end_location.lng()) / 2;
-
-            // Measure the full route span (all path points, not just endpoints).
-            const tripBounds = new google.maps.LatLngBounds();
-            tripBounds.extend(leg.start_location);
-            tripBounds.extend(leg.end_location);
-            (result.routes[0]?.overview_path ?? []).forEach(pt => tripBounds.extend(pt));
-            const ne = tripBounds.getNorthEast();
-            const sw = tripBounds.getSouthWest();
-            const latSpan = Math.max(ne.lat() - sw.lat(), 0);
-            const lngSpan = Math.max(ne.lng() - sw.lng(), 0);
-
-            // km per degree at Calgary's latitude (51°), cos(51°) ≈ 0.629
-            const COS_LAT = 0.629;
-            const routeKmH = Math.max(latSpan * 111.0, 2); // min 2 km guard
-            const routeKmW = Math.max(lngSpan *  69.0, 2);
-
-            // Mercator viewport size in km at zoom-0 for this screen.
-            // formula: km_visible = pixels × 156.543 × cos(lat) / 2^Z
-            // → at Z=0: C = pixels × 156.543 × cos(lat)
-            const mapDiv = step1MapDivRef.current;
-            const vW = mapDiv?.clientWidth  || 375;
-            const vH = mapDiv?.clientHeight || 439;
-            const C_H = vH * 156.543 * COS_LAT; // km visible vertically   at Z=0
-            const C_W = vW * 156.543 * COS_LAT; // km visible horizontally at Z=0
-
-            // Pick the zoom where the route fills 72 % of the constraining
-            // viewport dimension.  Using the SMALLER of the two zoom values
-            // guarantees both endpoints are always visible.
-            const FILL = 0.72;
-            const zoomH = Math.log2((C_H * FILL) / routeKmH);
-            const zoomW = Math.log2((C_W * FILL) / routeKmW);
-            // Add 0.5 before rounding to bias toward a slightly tighter frame
-            const finalZoom = Math.max(9, Math.min(15, Math.round(Math.min(zoomH, zoomW) + 0.15)));
-
-            map.setCenter({ lat: centerLat, lng: centerLng });
-            map.setZoom(finalZoom);
-            // ─────────────────────────────────────────────────────────────
+            // Fit to Google's own route bounds — guarantees both endpoints and
+            // the full polyline are visible regardless of distance/direction.
+            const routeBounds = result.routes[0]?.bounds;
+            if (routeBounds) {
+              map.fitBounds(routeBounds, { top: 80, bottom: 80, left: 60, right: 60 });
+            }
 
             // ── Flowing dash animation over the route ──────────────────────
             // Clear any previous animation before drawing a new one
@@ -780,11 +770,65 @@ export default function RequestMove() {
                 zIndex: 10,
               });
             }
+
+            // Publish pickup coords so the available-movers query can fire
+            setPickupCoords({
+              lat: leg.start_location.lat(),
+              lng: leg.start_location.lng(),
+            });
           }
         }
       }
     );
   }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
+
+  // Render available-mover truck markers around the pickup point.
+  // Uses AdvancedMarkerElement (loaded on demand) so we can attach custom HTML.
+  useEffect(() => {
+    const map = step1MapInstanceRef.current;
+    if (!mapsIsLoaded || !map) return;
+
+    // Clear any previously-drawn mover markers
+    step1MoverMarkersRef.current.forEach(m => { m.map = null; });
+    step1MoverMarkersRef.current = [];
+
+    if (!availableMovers || availableMovers.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const markerLib = await (google.maps as any).importLibrary("marker") as google.maps.MarkerLibrary;
+      if (cancelled) return;
+      const { AdvancedMarkerElement } = markerLib;
+
+      const nearest = availableMovers
+        .filter(m => typeof m.latitude === 'number' && typeof m.longitude === 'number')
+        .slice(0, 8);
+
+      for (const mover of nearest) {
+        const el = document.createElement('div');
+        el.innerHTML = `
+          <div style="
+            background:#1a56db;
+            border-radius:50%;
+            width:36px;height:36px;
+            display:flex;align-items:center;
+            justify-content:center;
+            box-shadow:0 2px 8px rgba(0,0,0,0.3);
+            border:2px solid white;
+            font-size:18px;cursor:pointer;
+          ">🚛</div>`;
+        const marker = new AdvancedMarkerElement({
+          map,
+          position: { lat: mover.latitude as number, lng: mover.longitude as number },
+          content: el,
+          title: mover.user?.name || 'Available mover',
+        });
+        step1MoverMarkersRef.current.push(marker);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [availableMovers, mapsIsLoaded]);
 
   // Calculate real distance estimate when addresses change using geocoding
   useEffect(() => {
@@ -1918,6 +1962,22 @@ export default function RequestMove() {
                   </div>
                 </div>
               )}
+              {(() => {
+                const shown = Math.min(
+                  8,
+                  availableMovers.filter(m => typeof m.latitude === 'number' && typeof m.longitude === 'number').length
+                );
+                if (shown === 0) return null;
+                return (
+                  <div
+                    className="absolute top-3 right-3 z-10 rounded-full bg-white/95 dark:bg-neutral-900/95 backdrop-blur px-3 py-1.5 text-xs font-medium shadow-md border border-neutral-200 dark:border-neutral-700 flex items-center gap-1.5"
+                    data-testid="pill-available-movers"
+                  >
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                    {shown} mover{shown === 1 ? '' : 's'} available nearby
+                  </div>
+                );
+              })()}
             </div>
           )}
 
