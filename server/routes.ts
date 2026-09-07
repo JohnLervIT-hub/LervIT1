@@ -772,17 +772,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send verification email
       await notificationService.sendVerificationEmail(user.email, user.name, verificationToken);
       
-      // If user signed up as a mover, automatically create a mover profile
+      // If user signed up as a mover, automatically create a mover profile.
+      // Do NOT seed fake coordinates — coords remain null until the mover pushes
+      // real GPS from the mover app or geocodes from their profile address.
       if (user.role === "mover") {
-        const { generateRandomCalgaryCoordinates } = await import("@shared/geocoding");
-        const coords = generateRandomCalgaryCoordinates();
         await storage.createMover({
           userId: user.id,
           vehicleType: "van", // Default vehicle type
           isAvailable: true,
           location: "Calgary, AB", // Default location
-          latitude: coords.lat,
-          longitude: coords.lng,
+          latitude: null,
+          longitude: null,
         });
       }
       
@@ -1983,11 +1983,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates = validateBody(updateSchema, req.body);
 
       // Auto-geocode so mover pins render on the customer map even without an
-      // active GPS ping. Two triggers, both respect an explicitly-provided
-      // lat/lng in the same request:
+      // active GPS ping. Triggers (all respect an explicitly-provided lat/lng
+      // in the same request):
       //   (a) `location` was just changed → geocode the new value
-      //   (b) toggling `isAvailable = true` and mover has no coords, or
-      //       lastLocationUpdate is stale (>24h)
+      //   (b) mover has no coords yet and has an existing location on file
+      //       (onboarding: first profile save should populate real coords)
+      //   (c) toggling `isAvailable = true` and lastLocationUpdate is stale (>24h)
       const explicitCoords = updates.latitude != null && updates.longitude != null;
       if (!explicitCoords) {
         const { geocodeAddress } = await import("./google-maps");
@@ -2000,7 +2001,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let addressToGeocode: string | null = null;
         if (typeof updates.location === "string" && updates.location.trim().length > 0) {
           addressToGeocode = updates.location.trim();
-        } else if (updates.isAvailable === true && (!hasCoords || staleLocation)) {
+        } else if (!hasCoords) {
+          const existing = (mover.location ?? "").trim();
+          if (existing.length > 0) addressToGeocode = existing;
+        } else if (updates.isAvailable === true && staleLocation) {
           const existing = (mover.location ?? "").trim();
           if (existing.length > 0) addressToGeocode = existing;
         }
@@ -3089,17 +3093,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(1);
         
         if (existingMover.length === 0) {
-          // Create default mover profile with Calgary coordinates
-          const { generateRandomCalgaryCoordinates } = await import("@shared/geocoding");
-          const coords = generateRandomCalgaryCoordinates();
-          
+          // Create default mover profile. Do NOT seed fake coordinates —
+          // coords remain null until real GPS is pushed or the profile
+          // address is geocoded.
           const newMover = await db.insert(moversTable).values({
             userId: userId,
             vehicleType: "van",
             isAvailable: true,
             location: "Calgary, AB",
-            latitude: coords.lat,
-            longitude: coords.lng,
+            latitude: null,
+            longitude: null,
             isVerified: false,
             profileVerified: false,
             documentsVerified: false,

@@ -165,6 +165,27 @@ async function run() {
     `);
     console.log('[startup-migrate] ✓ bookings auto_routed columns ensured.');
 
+    // 0011 — One-time cleanup of seeded fake coordinates.
+    // Movers who never pushed real GPS (last_location_update IS NULL) had
+    // random Calgary coords seeded on signup. Reset them so the PATCH
+    // /api/movers/:id geocoder can populate real coords from the profile
+    // address on next save. Movers with a real GPS ping keep their coords.
+    // Idempotent: after the first run, no matching rows remain.
+    try {
+      const reset = await client.query(`
+        UPDATE movers
+           SET latitude = NULL,
+               longitude = NULL,
+               last_location_update = NULL
+         WHERE last_location_update IS NULL
+           AND latitude IS NOT NULL
+      `);
+      console.log(`[startup-migrate] ✓ Reset ${reset.rowCount} movers with seeded fake coords.`);
+    } catch (err) {
+      console.error('[startup-migrate] ✗ Fake coord cleanup FAILED:', err.message);
+      throw err;
+    }
+
     // 0010 — Agent-ready operational intelligence foundation
     // (7 tables + UTM/SLA columns on bookings + analytics_events.properties -> jsonb)
     try {

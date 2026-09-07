@@ -446,9 +446,17 @@ export default function BrowseMovers() {
           <>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedMovers.map((mover: any) => {
-                // Format distance with driving time if available
+                // Only trust distance when the mover has a real GPS ping.
+                // Movers with no lastLocationUpdate either have null coords
+                // or legacy seeded coords, so any distance derived from them
+                // would be fake — fall back to the city/area label instead.
+                const hasRealLocation = mover.lastLocationUpdate != null;
                 let distanceDisplay = mover.location || "Calgary, AB";
-                if (mover.distance !== null && mover.distance !== undefined) {
+                if (
+                  hasRealLocation &&
+                  mover.distance !== null &&
+                  mover.distance !== undefined
+                ) {
                   if (mover.drivingMinutes !== null && mover.drivingMinutes !== undefined) {
                     distanceDisplay = `${mover.distance} km · ${mover.drivingMinutes} min drive`;
                   } else {
