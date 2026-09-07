@@ -656,9 +656,7 @@ export default function RequestMove() {
       disableDefaultUI: true,
       zoomControl: true,
       gestureHandling: "cooperative",
-      // Vector rendering lets AdvancedMarkerElement work without a Cloud
-      // Console mapId, so the inline `styles` array below stays authoritative.
-      renderingType: google.maps.RenderingType.VECTOR,
+      mapId: import.meta.env.VITE_GOOGLE_MAPS_ID || 'DEMO_MAP_ID',
       styles: BOOKING_MAP_STYLES,
     });
     step1MapInstanceRef.current = map;
