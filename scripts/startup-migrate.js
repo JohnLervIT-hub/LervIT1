@@ -165,6 +165,13 @@ async function run() {
     `);
     console.log('[startup-migrate] ✓ bookings auto_routed columns ensured.');
 
+    await client.query(`
+      ALTER TABLE movers
+      ADD COLUMN IF NOT EXISTS last_location_update
+      timestamp;
+    `);
+    console.log('[startup-migrate] ✓ movers.last_location_update ensured.');
+
     // 0011 — One-time cleanup of seeded fake coordinates.
     // Movers who never pushed real GPS (last_location_update IS NULL) had
     // random Calgary coords seeded on signup. Reset them so the PATCH
