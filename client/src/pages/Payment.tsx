@@ -181,12 +181,12 @@ export default function Payment() {
   // Track if payment intent was already created to prevent duplicates
   const paymentIntentCreated = useRef(false);
 
-  const createPaymentIntent = async () => {
+  const createPaymentIntent = async (attempt = 1) => {
     if (!bookingId || !user) return;
-    
+
     setIsCreatingIntent(true);
     setPaymentError(null);
-    
+
     try {
       // Use raw fetch (not apiRequest) so we can read the response body even on error status codes
       const res = await fetch(`/api/bookings/${bookingId}/create-payment-intent`, {
@@ -195,9 +195,9 @@ export default function Payment() {
         credentials: "include",
         body: JSON.stringify({}),
       });
-      
+
       const data = await res.json();
-      
+
       if (!res.ok) {
         // Already paid — redirect silently instead of showing an error
         if (data.alreadyPaid) {
@@ -206,20 +206,27 @@ export default function Payment() {
           setLocation("/my-bookings");
           return;
         }
-        // Email verification required — show specific message
+        // Email verification required — show specific message (non-retryable)
         if (data.requiresEmailVerification) {
           setPaymentError("Please verify your email address before making a payment. Check your inbox for a verification link.");
           return;
         }
         throw new Error(data.error || "Failed to initialize payment");
       }
-      
+
       if (!data.clientSecret) {
         throw new Error("No payment session received");
       }
-      
+
       setClientSecret(data.clientSecret);
     } catch (err) {
+      // Retry transient failures up to 3 attempts before surfacing an error to the user
+      if (attempt < 3) {
+        paymentIntentCreated.current = false;
+        await new Promise(r => setTimeout(r, 1000));
+        paymentIntentCreated.current = true;
+        return createPaymentIntent(attempt + 1);
+      }
       const errorMessage = err instanceof Error ? err.message : "Failed to load payment form";
       setPaymentError(errorMessage);
       toast({
@@ -233,10 +240,10 @@ export default function Payment() {
   };
 
   useEffect(() => {
-    if (!bookingId || !user || paymentIntentCreated.current || clientSecret) return;
+    if (!bookingId || !user || !booking || paymentIntentCreated.current || clientSecret) return;
     paymentIntentCreated.current = true;
     createPaymentIntent();
-  }, [bookingId, user, clientSecret]);
+  }, [bookingId, user, booking, clientSecret]);
 
   if (!user || !bookingId) {
     return (
@@ -396,10 +403,12 @@ export default function Payment() {
             {paymentError ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <div className="text-center">
-                  <p className="text-destructive font-medium">Unable to load payment form</p>
+                  <p className="text-destructive font-medium">
+                    We had trouble loading payment options. This is usually temporary — please click Retry below.
+                  </p>
                   <p className="text-sm text-muted-foreground mt-1">{paymentError}</p>
                 </div>
-                <Button 
+                <Button
                   onClick={() => {
                     paymentIntentCreated.current = false;
                     setPaymentError(null);
@@ -414,7 +423,7 @@ export default function Payment() {
                       Retrying...
                     </>
                   ) : (
-                    "Try Again"
+                    "Retry"
                   )}
                 </Button>
               </div>
