@@ -263,6 +263,7 @@ export default function RequestMove() {
   const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
   const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [visibleMoverCount, setVisibleMoverCount] = useState(0);
 
   // Live Pricing state
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
@@ -799,11 +800,19 @@ export default function RequestMove() {
     step1MoverMarkersRef.current = [];
     step1MoverInfoWindowRef.current?.close();
 
-    if (!availableMovers || availableMovers.length === 0) return;
+    if (!availableMovers || availableMovers.length === 0) {
+      setVisibleMoverCount(0);
+      return;
+    }
 
-    const nearest = availableMovers
-      .filter(m => typeof m.latitude === 'number' && typeof m.longitude === 'number')
-      .slice(0, 8);
+    // Exclude null, 0/0, and near-zero (default/uninitialized) coordinates
+    const mappableMovers = availableMovers.filter(m =>
+      m.latitude != null && m.longitude != null &&
+      m.latitude !== 0 && m.longitude !== 0 &&
+      Math.abs(m.latitude) > 0.001 &&
+      Math.abs(m.longitude) > 0.001
+    );
+    const nearest = mappableMovers.slice(0, 8);
 
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
@@ -875,6 +884,7 @@ export default function RequestMove() {
 
       step1MoverMarkersRef.current.push(marker);
     }
+    setVisibleMoverCount(step1MoverMarkersRef.current.length);
   }, [availableMovers, mapsIsLoaded]);
 
   // Calculate real distance estimate when addresses change using geocoding
@@ -2009,22 +2019,15 @@ export default function RequestMove() {
                   </div>
                 </div>
               )}
-              {(() => {
-                const shown = Math.min(
-                  8,
-                  availableMovers.filter(m => typeof m.latitude === 'number' && typeof m.longitude === 'number').length
-                );
-                if (shown === 0) return null;
-                return (
-                  <div
-                    className="absolute top-3 right-3 z-10 rounded-full bg-white/95 dark:bg-neutral-900/95 backdrop-blur px-3 py-1.5 text-xs font-medium shadow-md border border-neutral-200 dark:border-neutral-700 flex items-center gap-1.5"
-                    data-testid="pill-available-movers"
-                  >
-                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                    {shown} mover{shown === 1 ? '' : 's'} available nearby
-                  </div>
-                );
-              })()}
+              {visibleMoverCount > 0 && (
+                <div
+                  className="absolute top-3 right-3 z-10 rounded-full bg-white/95 dark:bg-neutral-900/95 backdrop-blur px-3 py-1.5 text-xs font-medium shadow-md border border-neutral-200 dark:border-neutral-700 flex items-center gap-1.5"
+                  data-testid="pill-available-movers"
+                >
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                  {visibleMoverCount} mover{visibleMoverCount === 1 ? '' : 's'} available nearby
+                </div>
+              )}
             </div>
           )}
 

@@ -1953,7 +1953,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         onboardingCompleted: true,
       });
       const updates = validateBody(updateSchema, req.body);
-      
+
+      // Auto-geocode so mover pins render on the customer map even without an
+      // active GPS ping. Two triggers, both respect an explicitly-provided
+      // lat/lng in the same request:
+      //   (a) `location` was just changed → geocode the new value
+      //   (b) toggling `isAvailable = true` and mover has no coords, or
+      //       lastLocationUpdate is stale (>24h)
+      const explicitCoords = updates.latitude != null && updates.longitude != null;
+      if (!explicitCoords) {
+        const { geocodeAddress } = await import("./google-maps");
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const lastUpdate = mover.lastLocationUpdate ? new Date(mover.lastLocationUpdate).getTime() : 0;
+        const hasCoords = mover.latitude != null && mover.longitude != null;
+        const staleLocation = !lastUpdate || (now - lastUpdate) > TWENTY_FOUR_HOURS_MS;
+
+        let addressToGeocode: string | null = null;
+        if (typeof updates.location === "string" && updates.location.trim().length > 0) {
+          addressToGeocode = updates.location.trim();
+        } else if (updates.isAvailable === true && (!hasCoords || staleLocation)) {
+          const existing = (mover.location ?? "").trim();
+          if (existing.length > 0) addressToGeocode = existing;
+        }
+
+        if (addressToGeocode) {
+          const geo = await geocodeAddress(addressToGeocode);
+          if (geo.success) {
+            (updates as any).latitude = geo.coordinates.lat;
+            (updates as any).longitude = geo.coordinates.lng;
+            (updates as any).lastLocationUpdate = new Date();
+          }
+        }
+      }
+
       // VERIFICATION CHECK: If trying to go online, verify all requirements are met
       // TEMPORARILY DISABLED FOR TESTING - Re-enable verification check for production
       // if (updates.isAvailable === true && user.role !== "admin") {
