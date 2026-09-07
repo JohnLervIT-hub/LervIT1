@@ -39,7 +39,19 @@ async function withJobLock<T>(jobName: string, fn: () => Promise<T>): Promise<T 
   }
 }
 
+let backgroundJobsStarted = false;
+
 export function initBackgroundJobs() {
+  if (backgroundJobsStarted) {
+    logger.warn({ event: 'background_jobs', action: 'init_skipped' }, 'Background jobs already initialized in this process');
+    return;
+  }
+  if (process.env.DISABLE_BACKGROUND_JOBS === '1') {
+    logger.info({ event: 'background_jobs', action: 'init_disabled' }, 'Background jobs disabled via DISABLE_BACKGROUND_JOBS=1');
+    return;
+  }
+  backgroundJobsStarted = true;
+
   logger.info({ event: 'background_jobs', action: 'init' }, 'Initializing background jobs');
 
   const TZ = { timezone: 'America/Edmonton' };
@@ -107,6 +119,16 @@ export function initBackgroundJobs() {
   }, TZ);
 
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
+
+  // One-shot startup cleanup: catches any stale pending_payment / abandoned
+  // notification rows that accumulated while the cron was not running (e.g.
+  // when the worker was a separate un-deployed process). Safe to run every
+  // boot — expireStaleBookings re-checks Stripe before flipping any row.
+  setTimeout(() => {
+    void withJobLock('expire_stale_bookings', expireStaleBookings);
+    void withJobLock('expire_notifications', expireOldNotifications);
+    void withJobLock('orphaned_payments', recoverOrphanedPayments);
+  }, 5000);
 }
 
 async function expireOldNotifications() {

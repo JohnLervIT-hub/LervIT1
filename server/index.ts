@@ -10,6 +10,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { logger, logEvent } from "./logger";
+import { initBackgroundJobs } from "./background-jobs";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
@@ -243,6 +244,16 @@ app.use((req, res, next) => {
           logEvent.error('database_connection', dbError);
         }
       });
+
+      // Cron jobs (stale-booking cleanup, payment reminders, orphan recovery, etc.)
+      // run inside the web process because the standalone worker service isn't
+      // deployed. Set DISABLE_BACKGROUND_JOBS=1 on any instance that shouldn't
+      // run them (e.g. if you later split the worker onto its own deploy).
+      try {
+        initBackgroundJobs();
+      } catch (jobErr) {
+        logEvent.error('background_jobs_init', jobErr);
+      }
     });
 
     // Handle server errors
