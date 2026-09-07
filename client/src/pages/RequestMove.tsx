@@ -260,7 +260,7 @@ export default function RequestMove() {
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
   const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const step1MoverMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Live Pricing state
@@ -623,7 +623,7 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current?.setMap(null);
       step1PickupMarkerRef.current = null;
       step1DropoffMarkerRef.current = null;
-      step1MoverMarkersRef.current.forEach(m => { m.map = null; });
+      step1MoverMarkersRef.current.forEach(m => m.setMap(null));
       step1MoverMarkersRef.current = [];
       if (step1AnimIntervalRef.current) { clearInterval(step1AnimIntervalRef.current); step1AnimIntervalRef.current = null; }
       step1AnimPolylineRef.current?.setMap(null);
@@ -783,51 +783,44 @@ export default function RequestMove() {
   }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
 
   // Render available-mover truck markers around the pickup point.
-  // Uses AdvancedMarkerElement (loaded on demand) so we can attach custom HTML.
+  // Uses a classic google.maps.Marker with an SVG data-URL icon so we don't
+  // require a mapId (AdvancedMarkerElement silently fails without one).
   useEffect(() => {
     const map = step1MapInstanceRef.current;
     if (!mapsIsLoaded || !map) return;
 
     // Clear any previously-drawn mover markers
-    step1MoverMarkersRef.current.forEach(m => { m.map = null; });
+    step1MoverMarkersRef.current.forEach(m => m.setMap(null));
     step1MoverMarkersRef.current = [];
 
     if (!availableMovers || availableMovers.length === 0) return;
 
-    let cancelled = false;
-    (async () => {
-      const markerLib = await (google.maps as any).importLibrary("marker") as google.maps.MarkerLibrary;
-      if (cancelled) return;
-      const { AdvancedMarkerElement } = markerLib;
+    const nearest = availableMovers
+      .filter(m => typeof m.latitude === 'number' && typeof m.longitude === 'number')
+      .slice(0, 8);
 
-      const nearest = availableMovers
-        .filter(m => typeof m.latitude === 'number' && typeof m.longitude === 'number')
-        .slice(0, 8);
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+        <circle cx="18" cy="18" r="16" fill="#1a56db" stroke="white" stroke-width="2"/>
+        <text x="18" y="24" text-anchor="middle" font-size="16">🚛</text>
+      </svg>
+    `;
+    const iconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 
-      for (const mover of nearest) {
-        const el = document.createElement('div');
-        el.innerHTML = `
-          <div style="
-            background:#1a56db;
-            border-radius:50%;
-            width:36px;height:36px;
-            display:flex;align-items:center;
-            justify-content:center;
-            box-shadow:0 2px 8px rgba(0,0,0,0.3);
-            border:2px solid white;
-            font-size:18px;cursor:pointer;
-          ">🚛</div>`;
-        const marker = new AdvancedMarkerElement({
-          map,
-          position: { lat: mover.latitude as number, lng: mover.longitude as number },
-          content: el,
-          title: mover.user?.name || 'Available mover',
-        });
-        step1MoverMarkersRef.current.push(marker);
-      }
-    })();
-
-    return () => { cancelled = true; };
+    for (const mover of nearest) {
+      const marker = new google.maps.Marker({
+        position: { lat: mover.latitude as number, lng: mover.longitude as number },
+        map,
+        icon: {
+          url: iconUrl,
+          scaledSize: new google.maps.Size(36, 36),
+          anchor: new google.maps.Point(18, 18),
+        },
+        title: mover.user?.name || 'Available mover',
+        zIndex: 5,
+      });
+      step1MoverMarkersRef.current.push(marker);
+    }
   }, [availableMovers, mapsIsLoaded]);
 
   // Calculate real distance estimate when addresses change using geocoding

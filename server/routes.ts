@@ -1675,15 +1675,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (userLat && userLng) {
         const { getBatchDrivingDistances } = await import("./google-maps");
-        
-        // Prepare destinations for batch API call
+
+        // Straight-line pre-filter to the 10 closest movers — the Distance
+        // Matrix API returns MAX_DIMENSIONS_EXCEEDED when we send too many
+        // destinations in one call.
+        const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+          const R = 6371;
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLng = (lng2 - lng1) * Math.PI / 180;
+          const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) *
+            Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
         const destinations = movers
           .filter(m => m.latitude !== null && m.longitude !== null)
           .map(m => ({
             id: m.id,
-            coords: { lat: m.latitude!, lng: m.longitude! }
-          }));
-        
+            coords: { lat: m.latitude!, lng: m.longitude! },
+            straightKm: haversineKm(userLat, userLng, m.latitude!, m.longitude!),
+          }))
+          .sort((a, b) => a.straightKm - b.straightKm)
+          .slice(0, 10)
+          .map(({ id, coords }) => ({ id, coords }));
+
         // Get driving distances in a single API call
         drivingDistances = await getBatchDrivingDistances(
           { lat: userLat, lng: userLng },
