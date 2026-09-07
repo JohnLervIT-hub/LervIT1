@@ -260,7 +260,7 @@ export default function RequestMove() {
   const step1DropoffMarkerRef = useRef<google.maps.Marker | null>(null);
   const step1AnimPolylineRef = useRef<google.maps.Polyline | null>(null);
   const step1AnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const step1MoverMarkersRef = useRef<google.maps.Marker[]>([]);
+  const step1MoverMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [visibleMoverCount, setVisibleMoverCount] = useState(0);
@@ -628,7 +628,7 @@ export default function RequestMove() {
       step1DropoffMarkerRef.current?.setMap(null);
       step1PickupMarkerRef.current = null;
       step1DropoffMarkerRef.current = null;
-      step1MoverMarkersRef.current.forEach(m => m.setMap(null));
+      step1MoverMarkersRef.current.forEach(m => { m.map = null; });
       step1MoverMarkersRef.current = [];
       step1MoverInfoWindowRef.current?.close();
       step1MoverInfoWindowRef.current = null;
@@ -656,6 +656,12 @@ export default function RequestMove() {
       disableDefaultUI: true,
       zoomControl: true,
       gestureHandling: "cooperative",
+      // mapId is required for AdvancedMarkerElement. DEMO_MAP_ID is a public
+      // Google-provided test id — for production, replace with a real Map ID
+      // from Google Cloud Console (which can also carry BOOKING_MAP_STYLES
+      // via cloud-based styling; inline `styles` below is ignored when a
+      // mapId is set).
+      mapId: 'DEMO_MAP_ID',
       styles: BOOKING_MAP_STYLES,
     });
     step1MapInstanceRef.current = map;
@@ -830,14 +836,14 @@ export default function RequestMove() {
   }, [mapsIsLoaded, pickupAddress, dropoffAddress]);
 
   // Render available-mover truck markers around the pickup point.
-  // Uses a classic google.maps.Marker with an SVG data-URL icon so we don't
-  // require a mapId (AdvancedMarkerElement silently fails without one).
+  // Uses AdvancedMarkerElement (loaded on demand) so the marker content is a
+  // real DOM node. Requires `mapId` on the map (see map init above).
   useEffect(() => {
     const map = step1MapInstanceRef.current;
     if (!mapsIsLoaded || !map) return;
 
     // Clear any previously-drawn mover markers
-    step1MoverMarkersRef.current.forEach(m => m.setMap(null));
+    step1MoverMarkersRef.current.forEach(m => { m.map = null; });
     step1MoverMarkersRef.current = [];
     step1MoverInfoWindowRef.current?.close();
 
@@ -855,14 +861,6 @@ export default function RequestMove() {
     );
     const nearest = mappableMovers.slice(0, 8);
 
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
-        <circle cx="18" cy="18" r="16" fill="#1a56db" stroke="white" stroke-width="2"/>
-        <text x="18" y="24" text-anchor="middle" font-size="16">🚛</text>
-      </svg>
-    `;
-    const iconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-
     const escapeHtml = (s: string) =>
       s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string));
 
@@ -870,65 +868,84 @@ export default function RequestMove() {
     const infoWindow = step1MoverInfoWindowRef.current ?? new google.maps.InfoWindow();
     step1MoverInfoWindowRef.current = infoWindow;
 
-    for (const mover of nearest) {
-      const marker = new google.maps.Marker({
-        position: { lat: mover.latitude as number, lng: mover.longitude as number },
-        map,
-        icon: {
-          url: iconUrl,
-          scaledSize: new google.maps.Size(36, 36),
-          anchor: new google.maps.Point(18, 18),
-        },
-        title: mover.user?.name || 'Available mover',
-        zIndex: 5,
-      });
+    let cancelled = false;
+    (async () => {
+      const markerLib = await (google.maps as any).importLibrary('marker') as google.maps.MarkerLibrary;
+      if (cancelled) return;
+      const { AdvancedMarkerElement } = markerLib;
 
-      marker.addListener('click', () => {
-        const name = escapeHtml(mover.user?.name || 'Available mover');
-        const ratingNum = typeof mover.rating === 'string' ? parseFloat(mover.rating) : mover.rating;
-        const rating = ratingNum && !Number.isNaN(ratingNum) ? ratingNum.toFixed(1) : '5.0';
-        const distance = typeof mover.distance === 'number'
-          ? `${mover.distance.toFixed(1)} km away`
-          : 'Nearby';
-        const content = `
-          <div style="
-            padding:10px 14px;
-            font-family:Arial,sans-serif;
-            min-width:160px;
-          ">
-            <div style="
-              font-weight:bold;
-              font-size:14px;
-              margin-bottom:6px;
-              color:#111;
-            ">
-              ${name}
-            </div>
-            <div style="
-              color:#f59e0b;
-              font-size:13px;
-              margin-bottom:4px;
-            ">
-              ⭐ ${rating}
-            </div>
-            <div style="
-              color:#555;
-              font-size:13px;
-            ">
-              📍 ${distance}
-            </div>
-          </div>
+      for (const mover of nearest) {
+        const markerEl = document.createElement('div');
+        markerEl.innerHTML = '🚛';
+        markerEl.style.cssText = `
+          background:#1a56db;
+          border-radius:50%;
+          width:36px;height:36px;
+          display:flex;align-items:center;
+          justify-content:center;
+          box-shadow:0 2px 8px rgba(0,0,0,0.3);
+          border:2px solid white;
+          font-size:18px;cursor:pointer;
         `;
-        infoWindow.setContent(content);
-        infoWindow.open({ map, anchor: marker });
-      });
 
-      step1MoverMarkersRef.current.push(marker);
-    }
-    const rendered = step1MoverMarkersRef.current.length;
-    setVisibleMoverCount(rendered);
-    // Diagnostic: confirms pill count matches actual markers on the map
-    console.log('[markers] rendered:', rendered, 'availableMovers:', availableMovers.length);
+        const marker = new AdvancedMarkerElement({
+          map,
+          position: { lat: mover.latitude as number, lng: mover.longitude as number },
+          content: markerEl,
+          title: mover.user?.name || 'Available mover',
+        });
+
+        // DOM click on the content element is the most portable way to wire
+        // a click across Maps JS SDK versions (vs `gmp-click` on the marker).
+        markerEl.addEventListener('click', () => {
+          const name = escapeHtml(mover.user?.name || 'Available mover');
+          const ratingNum = typeof mover.rating === 'string' ? parseFloat(mover.rating) : mover.rating;
+          const rating = ratingNum && !Number.isNaN(ratingNum) ? ratingNum.toFixed(1) : '5.0';
+          const distance = typeof mover.distance === 'number'
+            ? `${mover.distance.toFixed(1)} km away`
+            : 'Nearby';
+          const content = `
+            <div style="
+              padding:10px 14px;
+              font-family:Arial,sans-serif;
+              min-width:160px;
+            ">
+              <div style="
+                font-weight:bold;
+                font-size:14px;
+                margin-bottom:6px;
+                color:#111;
+              ">
+                ${name}
+              </div>
+              <div style="
+                color:#f59e0b;
+                font-size:13px;
+                margin-bottom:4px;
+              ">
+                ⭐ ${rating}
+              </div>
+              <div style="
+                color:#555;
+                font-size:13px;
+              ">
+                📍 ${distance}
+              </div>
+            </div>
+          `;
+          infoWindow.setContent(content);
+          infoWindow.open({ map, anchor: marker });
+        });
+
+        step1MoverMarkersRef.current.push(marker);
+      }
+      const rendered = step1MoverMarkersRef.current.length;
+      setVisibleMoverCount(rendered);
+      // Diagnostic: confirms pill count matches actual markers on the map
+      console.log('[markers] rendered:', rendered, 'availableMovers:', availableMovers.length);
+    })();
+
+    return () => { cancelled = true; };
   }, [availableMovers, mapsIsLoaded]);
 
   // Calculate real distance estimate when addresses change using geocoding
