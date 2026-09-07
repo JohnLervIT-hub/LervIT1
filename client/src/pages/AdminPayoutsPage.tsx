@@ -71,6 +71,10 @@ type PendingPayoutsResponse = {
   totalPending: string;
   readyToPay: string;
   needsStripeSetup: string;
+  noStripeAccount?: string;
+  noStripeAccountCount?: number;
+  unverified?: string;
+  unverifiedCount?: number;
   count: number;
   payouts: PendingPayout[];
 };
@@ -338,9 +342,14 @@ export default function AdminPayoutsPage() {
   const readyPayouts = pendingPayouts.filter(p => p.isReadyToPay);
   const notReadyPayouts = pendingPayouts.filter(p => !p.isReadyToPay);
   
-  const paidEarnings = allEarnings?.filter(e => e.status === 'paid' || e.status === 'available') || [];
+  const paidEarnings = allEarnings?.filter(e => e.status === 'paid') || [];
+  const transferredEarnings = paidEarnings.filter(e => !!e.stripeTransferId);
+  const availableEarnings = allEarnings?.filter(e => e.status === 'available') || [];
   const pendingEarnings = allEarnings?.filter(e => e.status === 'pending') || [];
   const missingEarnings = allEarnings?.filter(e => e.status === 'needs_backfill' || e._isMissing) || [];
+
+  const totalTransferred = transferredEarnings.reduce((sum, e) => sum + parseFloat(e.netAmount), 0);
+  const totalAvailable = availableEarnings.reduce((sum, e) => sum + parseFloat(e.netAmount), 0);
 
   const handleProcessPayouts = async () => {
     setIsProcessing(true);
@@ -384,7 +393,7 @@ export default function AdminPayoutsPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -426,7 +435,35 @@ export default function AdminPayoutsPage() {
               <div className="text-2xl font-bold tabular-nums text-red-600">
                 ${pendingData?.needsStripeSetup || "0.00"}
               </div>
-              <p className="text-xs text-muted-foreground">{notReadyPayouts.length} movers unverified</p>
+              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between gap-2">
+                  <span>No Stripe Account</span>
+                  <span className="tabular-nums font-medium">
+                    ${pendingData?.noStripeAccount || "0.00"} ({pendingData?.noStripeAccountCount ?? 0})
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span>Unverified</span>
+                  <span className="tabular-nums font-medium">
+                    ${pendingData?.unverified || "0.00"} ({pendingData?.unverifiedCount ?? 0})
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5" />
+                Total Available
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tabular-nums text-blue-600">
+                ${totalAvailable.toFixed(2)}
+              </div>
+              <p className="text-xs text-muted-foreground">{availableEarnings.length} earned, awaiting transfer</p>
             </CardContent>
           </Card>
 
@@ -434,14 +471,14 @@ export default function AdminPayoutsPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                 <DollarSign className="w-3.5 h-3.5" />
-                Total Paid
+                Total Transferred
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold tabular-nums">
-                ${paidEarnings.reduce((sum, e) => sum + parseFloat(e.netAmount), 0).toFixed(2)}
+                ${totalTransferred.toFixed(2)}
               </div>
-              <p className="text-xs text-muted-foreground">{paidEarnings.length} transfers completed</p>
+              <p className="text-xs text-muted-foreground">{transferredEarnings.length} transfers completed</p>
             </CardContent>
           </Card>
         </div>
@@ -539,6 +576,10 @@ export default function AdminPayoutsPage() {
             <TabsTrigger value="all" data-testid="tab-all">
               All Earnings ({allEarnings?.length || 0})
             </TabsTrigger>
+            <TabsTrigger value="promo" data-testid="tab-promo">
+              <Tag className="w-3.5 h-3.5 mr-1" />
+              Promo Balances ({promoBalances?.length || 0})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending">
@@ -587,7 +628,7 @@ export default function AdminPayoutsPage() {
                           <TableHead>Mover</TableHead>
                           <TableHead>Booking</TableHead>
                           <TableHead className="text-right">Gross</TableHead>
-                          <TableHead className="text-right">Fee (15%)</TableHead>
+                          <TableHead className="text-right">Platform Fee</TableHead>
                           <TableHead className="text-right">Net Payout</TableHead>
                           <TableHead>Stripe Status</TableHead>
                           <TableHead>Date</TableHead>
@@ -749,7 +790,7 @@ export default function AdminPayoutsPage() {
                         <TableHead>Booking</TableHead>
                         <TableHead>Mover ID</TableHead>
                         <TableHead className="text-right">Gross</TableHead>
-                        <TableHead className="text-right">Fee ({allEarnings[0]?.platformFeePercent || 15}%)</TableHead>
+                        <TableHead className="text-right">Platform Fee</TableHead>
                         <TableHead className="text-right">Net</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Created</TableHead>
@@ -762,11 +803,18 @@ export default function AdminPayoutsPage() {
                           <TableCell className="text-xs">{earning.bookingId.slice(0, 8)}...</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{earning.moverId.slice(0, 8)}...</TableCell>
                           <TableCell className="text-right">${earning.grossAmount}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">${earning.platformFeeAmount}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            ${earning.platformFeeAmount}
+                            <span className="text-[10px] text-muted-foreground/70 ml-1">
+                              ({parseFloat(earning.platformFeePercent || '15').toFixed(0)}%)
+                            </span>
+                          </TableCell>
                           <TableCell className="text-right font-semibold">${earning.netAmount}</TableCell>
                           <TableCell>
-                            {earning.status === 'paid' || earning.status === 'available' ? (
+                            {earning.status === 'paid' ? (
                               <Badge variant="default" className="bg-green-500">Paid</Badge>
+                            ) : earning.status === 'available' ? (
+                              <Badge variant="outline" className="border-blue-400 text-blue-700">Available</Badge>
                             ) : earning.status === 'needs_backfill' || earning._isMissing ? (
                               <Badge variant="outline" className="border-amber-400 text-amber-700">Needs Backfill</Badge>
                             ) : (

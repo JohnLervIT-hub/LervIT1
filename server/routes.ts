@@ -10245,18 +10245,24 @@ Respond with VALID JSON only:
       
       for (const booking of missingBookings) {
         if (!booking.moverId || !booking.price) continue;
-        
+
         const grossAmount = parseFloat(booking.price);
-        const platformFeeAmount = grossAmount * (PLATFORM_COMMISSION_PERCENT / 100);
+        const bookingFee = booking.platformFeeAmount ? parseFloat(booking.platformFeeAmount) : 0;
+        const platformFeeAmount = bookingFee > 0
+          ? bookingFee
+          : grossAmount * (PLATFORM_COMMISSION_PERCENT / 100);
+        const platformFeePercent = grossAmount > 0
+          ? (platformFeeAmount / grossAmount) * 100
+          : PLATFORM_COMMISSION_PERCENT;
         const netAmount = grossAmount - platformFeeAmount;
-        
+
         try {
           await db.insert(moverEarnings).values({
             id: crypto.randomUUID(),
             bookingId: booking.id,
             moverId: booking.moverId,
             grossAmount: grossAmount.toFixed(2),
-            platformFeePercent: PLATFORM_COMMISSION_PERCENT.toString(),
+            platformFeePercent: platformFeePercent.toFixed(2),
             platformFeeAmount: platformFeeAmount.toFixed(2),
             netAmount: netAmount.toFixed(2),
             status: 'pending',
@@ -10455,22 +10461,42 @@ Respond with VALID JSON only:
             }),
           );
 
+          // Create mover_payouts audit row for the transfer
+          const paidAt = new Date();
+          let payoutRowId: string | null = null;
+          try {
+            const [payoutRow] = await db.insert(moverPayouts).values({
+              moverId: earning.moverId,
+              stripePayoutId: transfer.id,
+              amount: earning.netAmount,
+              currency: 'cad',
+              status: 'paid',
+              payoutType: 'standard',
+              initiatedAt: paidAt,
+              completedAt: paidAt,
+            }).returning({ id: moverPayouts.id });
+            payoutRowId = payoutRow?.id ?? null;
+          } catch (payoutErr) {
+            console.error(`[Admin Payout] Failed to insert mover_payouts row for earning ${earning.id}:`, payoutErr);
+          }
+
           // Update earnings status to paid
           await db.update(moverEarnings)
             .set({
               status: 'paid',
               stripeTransferId: transfer.id,
-              paidAt: new Date(),
+              paidAt,
+              ...(payoutRowId ? { payoutId: payoutRowId } : {}),
             })
             .where(eq(moverEarnings.id, earning.id));
-          
+
           processed.push({
             earningsId: earning.id,
             moverId: earning.moverId,
             amount: earning.netAmount,
             transferId: transfer.id
           });
-          
+
           console.log(`[Admin Payout] Transferred $${earning.netAmount} to mover ${earning.moverId} (transfer: ${transfer.id})`);
         } catch (err: any) {
           console.error(`[Admin Payout] Failed to transfer for earnings ${earning.id}:`, err);
@@ -10514,23 +10540,34 @@ Respond with VALID JSON only:
       let totalPending = 0;
       let readyToPay = 0;
       let needsStripeSetup = 0;
-      
+      let noStripeAccount = 0;
+      let unverified = 0;
+      const noStripeMovers = new Set<string>();
+      const unverifiedMovers = new Set<string>();
+
       for (const earning of pendingEarnings) {
         const moverAccounts = await db.select()
           .from(moverStripeAccounts)
           .where(eq(moverStripeAccounts.moverId, earning.moverId))
           .limit(1);
-        
+
         const hasStripeAccount = moverAccounts.length > 0;
         const isReady = hasStripeAccount && moverAccounts[0].chargesEnabled && moverAccounts[0].payoutsEnabled;
-        
+
         const netAmount = parseFloat(earning.netAmount);
         totalPending += netAmount;
-        
+
         if (isReady) {
           readyToPay += netAmount;
         } else {
           needsStripeSetup += netAmount;
+          if (!hasStripeAccount) {
+            noStripeAccount += netAmount;
+            noStripeMovers.add(earning.moverId);
+          } else {
+            unverified += netAmount;
+            unverifiedMovers.add(earning.moverId);
+          }
         }
         
         // Get mover name
@@ -10556,6 +10593,10 @@ Respond with VALID JSON only:
         totalPending: totalPending.toFixed(2),
         readyToPay: readyToPay.toFixed(2),
         needsStripeSetup: needsStripeSetup.toFixed(2),
+        noStripeAccount: noStripeAccount.toFixed(2),
+        noStripeAccountCount: noStripeMovers.size,
+        unverified: unverified.toFixed(2),
+        unverifiedCount: unverifiedMovers.size,
         count: pendingEarnings.length,
         payouts: payoutSummary
       });
@@ -10584,7 +10625,7 @@ Respond with VALID JSON only:
         .where(
           and(
             eq(bookings.status, 'completed'),
-            eq(bookings.paymentStatus, 'succeeded'),
+            inArray(bookings.paymentStatus, ['paid', 'succeeded']),
             sql`${bookings.moverId} IS NOT NULL`
           )
         )
@@ -10595,16 +10636,21 @@ Respond with VALID JSON only:
         .filter(b => !existingBookingIds.has(b.id))
         .map(b => {
           const grossAmount = Number(b.price) || 0;
-          const platformFeePercent = 15; // 15% commission
-          const platformFeeAmount = Math.round(grossAmount * platformFeePercent) / 100;
+          const bookingFee = b.platformFeeAmount ? parseFloat(b.platformFeeAmount) : 0;
+          const platformFeeAmount = bookingFee > 0
+            ? bookingFee
+            : Math.round(grossAmount * 15) / 100;
+          const platformFeePercent = grossAmount > 0
+            ? (platformFeeAmount / grossAmount) * 100
+            : 15;
           const netAmount = grossAmount - platformFeeAmount;
-          
+
           return {
             id: `missing-${b.id}`,
             moverId: b.moverId,
             bookingId: b.id,
             grossAmount: grossAmount.toFixed(2),
-            platformFeePercent: platformFeePercent.toString(),
+            platformFeePercent: platformFeePercent.toFixed(2),
             platformFeeAmount: platformFeeAmount.toFixed(2),
             netAmount: netAmount.toFixed(2),
             stripeTransferId: null,
@@ -10703,7 +10749,7 @@ Respond with VALID JSON only:
 
       for (const earning of pending) {
         const booking = await storage.getBooking(earning.bookingId);
-        if (!booking || booking.paymentStatus !== 'succeeded') {
+        if (!booking || (booking.paymentStatus !== 'succeeded' && booking.paymentStatus !== 'paid')) {
           skipped.push({ earningsId: earning.id, partnerId: earning.partnerId, reason: 'Booking not paid' });
           continue;
         }
@@ -10745,7 +10791,7 @@ Respond with VALID JSON only:
         return res.status(400).json({ error: `Cannot retry earnings in status ${earning.status}` });
       }
       const booking = await storage.getBooking(earning.bookingId);
-      if (!booking || booking.paymentStatus !== 'succeeded') {
+      if (!booking || (booking.paymentStatus !== 'succeeded' && booking.paymentStatus !== 'paid')) {
         return res.status(400).json({ error: "Booking is not paid" });
       }
       const row = await recordPartnerEarnings(earning.bookingId, earning.partnerId, booking);
@@ -10886,7 +10932,7 @@ Respond with VALID JSON only:
         return res.status(400).json({ error: "Booking has no assigned mover" });
       }
       
-      if (booking.paymentStatus !== 'succeeded') {
+      if (booking.paymentStatus !== 'succeeded' && booking.paymentStatus !== 'paid') {
         return res.status(400).json({ error: "Booking payment not completed" });
       }
       
