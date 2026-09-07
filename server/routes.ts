@@ -12552,110 +12552,161 @@ Respond with VALID JSON only:
 
       // Revenue rollups (today / week / month) — same paid-state filter as
       // the revenue summary endpoint for consistency.
-      const [revenueRow] = await db.execute<{
-        today: string;
-        week: string;
-        month: string;
-      }>(sql`
-        SELECT
-          COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfToday}), 0)                                              AS today,
-          COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfWeek}),  0)                                              AS week,
-          COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfMonth}), 0)                                              AS month
-        FROM bookings
-        WHERE status = 'completed'
-          AND payment_status = ANY(${paidStates})
-      `) as unknown as Array<{ today: string; week: string; month: string }>;
+      let revenueRow: { today: string; week: string; month: string } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfToday}), 0)                                              AS today,
+            COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfWeek}),  0)                                              AS week,
+            COALESCE(SUM(price::numeric) FILTER (WHERE created_at >= ${startOfMonth}), 0)                                              AS month
+          FROM bookings
+          WHERE status = 'completed'
+            AND payment_status = ANY(${paidStates})
+        `);
+        revenueRow = (result as any).rows?.[0] as { today: string; week: string; month: string } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: revenue query failed');
+        throw err;
+      }
 
       // Booking status counts (real-time)
-      const [bookingCounts] = await db.execute<{
-        active: number;
-        completed_today: number;
-        pending_payment: number;
-      }>(sql`
-        SELECT
-          COUNT(*) FILTER (WHERE status IN ('pending','confirmed','in_progress'))::int                                              AS active,
-          COUNT(*) FILTER (WHERE status = 'completed' AND updated_at >= ${startOfToday})::int                                       AS completed_today,
-          COUNT(*) FILTER (WHERE status = 'pending_payment')::int                                                                    AS pending_payment
-        FROM bookings
-      `) as unknown as Array<{ active: number; completed_today: number; pending_payment: number }>;
+      let bookingCounts: { active: number; completed_today: number; pending_payment: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE status IN ('pending','confirmed','in_progress'))::int                                              AS active,
+            COUNT(*) FILTER (WHERE status = 'completed' AND updated_at >= ${startOfToday})::int                                       AS completed_today,
+            COUNT(*) FILTER (WHERE status = 'pending_payment')::int                                                                    AS pending_payment
+          FROM bookings
+        `);
+        bookingCounts = (result as any).rows?.[0] as { active: number; completed_today: number; pending_payment: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: bookingCounts query failed');
+        throw err;
+      }
 
       // Mover state — online / available / inactive-7d
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      const [moverCounts] = await db.execute<{
-        online: number;
-        available: number;
-        inactive_7d: number;
-      }>(sql`
-        SELECT
-          COUNT(*) FILTER (WHERE last_location_update >= ${oneHourAgo})::int                                                        AS online,
-          COUNT(*) FILTER (WHERE is_available = true)::int                                                                          AS available,
-          COUNT(*) FILTER (WHERE (last_location_update IS NULL OR last_location_update < ${sevenDaysAgo}) AND is_verified = true)::int AS inactive_7d
-        FROM movers
-      `) as unknown as Array<{ online: number; available: number; inactive_7d: number }>;
+      let moverCounts: { online: number; available: number; inactive_7d: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE last_location_update >= ${oneHourAgo})::int                                                        AS online,
+            COUNT(*) FILTER (WHERE is_available = true)::int                                                                          AS available,
+            COUNT(*) FILTER (WHERE (last_location_update IS NULL OR last_location_update < ${sevenDaysAgo}) AND is_verified = true)::int AS inactive_7d
+          FROM movers
+        `);
+        moverCounts = (result as any).rows?.[0] as { online: number; available: number; inactive_7d: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: moverCounts query failed');
+        throw err;
+      }
 
       // Pipeline (leads)
-      const [pipelineCounts] = await db.execute<{
-        new_leads: number;
-        conversions_today: number;
-      }>(sql`
-        SELECT
-          COUNT(*) FILTER (WHERE status = 'new')::int                                                                               AS new_leads,
-          COUNT(*) FILTER (WHERE status = 'converted' AND updated_at >= ${startOfToday})::int                                       AS conversions_today
-        FROM leads
-      `) as unknown as Array<{ new_leads: number; conversions_today: number }>;
+      let pipelineCounts: { new_leads: number; conversions_today: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE status = 'new')::int                                                                               AS new_leads,
+            COUNT(*) FILTER (WHERE status = 'converted' AND updated_at >= ${startOfToday})::int                                       AS conversions_today
+          FROM leads
+        `);
+        pipelineCounts = (result as any).rows?.[0] as { new_leads: number; conversions_today: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: pipeline (leads) query failed');
+        throw err;
+      }
 
       // Alerts — SLA breaches, stuck jobs, open incidents
-      const [alertCounts] = await db.execute<{
-        sla_breaches: number;
-        stuck_jobs: number;
-      }>(sql`
-        SELECT
-          COUNT(*) FILTER (WHERE sla_deadline_at IS NOT NULL AND sla_deadline_at < now() AND status IN ('confirmed','in_progress'))::int  AS sla_breaches,
-          COUNT(*) FILTER (WHERE status = 'in_progress' AND updated_at < ${new Date(now.getTime() - 4 * 60 * 60 * 1000)})::int             AS stuck_jobs
-        FROM bookings
-      `) as unknown as Array<{ sla_breaches: number; stuck_jobs: number }>;
+      let alertCounts: { sla_breaches: number; stuck_jobs: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE sla_deadline_at IS NOT NULL AND sla_deadline_at < now() AND status IN ('confirmed','in_progress'))::int  AS sla_breaches,
+            COUNT(*) FILTER (WHERE status = 'in_progress' AND updated_at < ${new Date(now.getTime() - 4 * 60 * 60 * 1000)})::int             AS stuck_jobs
+          FROM bookings
+        `);
+        alertCounts = (result as any).rows?.[0] as { sla_breaches: number; stuck_jobs: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: alertCounts (bookings SLA) query failed');
+        throw err;
+      }
 
-      const [incidentRow] = await db.execute<{ open_incidents: number }>(sql`
-        SELECT COUNT(*)::int AS open_incidents
-        FROM partner_incidents
-        WHERE status IN ('open','pending')
-      `) as unknown as Array<{ open_incidents: number }>;
+      let incidentRow: { open_incidents: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT COUNT(*)::int AS open_incidents
+          FROM partner_incidents
+          WHERE status IN ('open','under_review','escalated')
+        `);
+        incidentRow = (result as any).rows?.[0] as { open_incidents: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: partner_incidents query failed');
+        throw err;
+      }
 
       // KPI deltas — yesterday's revenue vs day-before, week vs last-week
-      const [ydayRow] = await db.execute<{ revenue: string; completed: number }>(sql`
-        SELECT
-          COALESCE(SUM(price::numeric), 0) AS revenue,
-          COUNT(*)::int                    AS completed
-        FROM bookings
-        WHERE status = 'completed'
-          AND payment_status = ANY(${paidStates})
-          AND created_at >= ${startOfYesterday}
-          AND created_at <  ${startOfToday}
-      `) as unknown as Array<{ revenue: string; completed: number }>;
+      let ydayRow: { revenue: string; completed: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COALESCE(SUM(price::numeric), 0) AS revenue,
+            COUNT(*)::int                    AS completed
+          FROM bookings
+          WHERE status = 'completed'
+            AND payment_status = ANY(${paidStates})
+            AND created_at >= ${startOfYesterday}
+            AND created_at <  ${startOfToday}
+        `);
+        ydayRow = (result as any).rows?.[0] as { revenue: string; completed: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: yesterday revenue query failed');
+        throw err;
+      }
 
-      const [dayBeforeRow] = await db.execute<{ revenue: string; completed: number }>(sql`
-        SELECT
-          COALESCE(SUM(price::numeric), 0) AS revenue,
-          COUNT(*)::int                    AS completed
-        FROM bookings
-        WHERE status = 'completed'
-          AND payment_status = ANY(${paidStates})
-          AND created_at >= ${new Date(startOfYesterday.getTime() - 24 * 60 * 60 * 1000)}
-          AND created_at <  ${startOfYesterday}
-      `) as unknown as Array<{ revenue: string; completed: number }>;
+      let dayBeforeRow: { revenue: string; completed: number } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT
+            COALESCE(SUM(price::numeric), 0) AS revenue,
+            COUNT(*)::int                    AS completed
+          FROM bookings
+          WHERE status = 'completed'
+            AND payment_status = ANY(${paidStates})
+            AND created_at >= ${new Date(startOfYesterday.getTime() - 24 * 60 * 60 * 1000)}
+            AND created_at <  ${startOfYesterday}
+        `);
+        dayBeforeRow = (result as any).rows?.[0] as { revenue: string; completed: number } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: day-before revenue query failed');
+        throw err;
+      }
 
-      const [lastWeekRow] = await db.execute<{ revenue: string }>(sql`
-        SELECT COALESCE(SUM(price::numeric), 0) AS revenue
-        FROM bookings
-        WHERE status = 'completed'
-          AND payment_status = ANY(${paidStates})
-          AND created_at >= ${startOfLastWeek}
-          AND created_at <  ${startOfWeek}
-      `) as unknown as Array<{ revenue: string }>;
+      let lastWeekRow: { revenue: string } | undefined;
+      try {
+        const result = await db.execute(sql`
+          SELECT COALESCE(SUM(price::numeric), 0) AS revenue
+          FROM bookings
+          WHERE status = 'completed'
+            AND payment_status = ANY(${paidStates})
+            AND created_at >= ${startOfLastWeek}
+            AND created_at <  ${startOfWeek}
+        `);
+        lastWeekRow = (result as any).rows?.[0] as { revenue: string } | undefined;
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: last-week revenue query failed');
+        throw err;
+      }
 
       // KPI targets
-      const targetRows = await db.select().from(kpiTargets);
+      let targetRows: Array<typeof kpiTargets.$inferSelect>;
+      try {
+        targetRows = await db.select().from(kpiTargets);
+      } catch (err) {
+        logger.error({ err }, 'intelligence/summary: kpi_targets select failed');
+        throw err;
+      }
       const targetMap: Record<string, number> = {};
       for (const t of targetRows) targetMap[t.metricName] = Number(t.targetValue);
 
@@ -12710,6 +12761,7 @@ Respond with VALID JSON only:
         targets: targetMap,
       });
     } catch (error) {
+      logger.error({ err: error }, '[Admin] intelligence/summary: failed');
       console.error('[Admin] intelligence summary error:', error);
       res.status(500).json({ error: "Failed to build intelligence summary" });
     }
