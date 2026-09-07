@@ -812,7 +812,11 @@ export default function AdminDashboard() {
     );
   }
 
-  const totalRevenue = bookings.reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
+  // Earned revenue: only bookings that are completed AND actually paid.
+  // Excludes cancelled/failed/pending bookings whose price was set at creation but never collected.
+  const earnedRevenue = bookings
+    .filter(b => b.status === "completed" && (b.paymentStatus === "paid" || b.paymentStatus === "succeeded"))
+    .reduce((sum, b) => sum + (parseFloat(b.price || "0")), 0);
   const completedBookings = bookings.filter(b => b.status === "completed").length;
   const verifiedMovers = movers.filter(m => m.isVerified).length;
 
@@ -914,11 +918,11 @@ export default function AdminDashboard() {
           <Link href="/admin/revenue" data-testid="link-admin-revenue">
             <Card className="bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 cursor-pointer hover-elevate">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-xs font-medium text-amber-100 uppercase tracking-wide">Total Revenue</CardTitle>
+                <CardTitle className="text-xs font-medium text-amber-100 uppercase tracking-wide">Earned Revenue</CardTitle>
                 <TrendingUp className="w-4 h-4 text-amber-200" />
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-revenue">${totalRevenue.toFixed(2)}</div>
+                <div className="text-3xl font-bold tabular-nums" data-testid="stat-total-revenue">${earnedRevenue.toFixed(2)}</div>
                 <div className="flex items-center justify-between mt-1.5">
                   <p className="text-xs text-amber-200">CAD earned</p>
                   <ChevronRight className="w-3.5 h-3.5 text-amber-200" />

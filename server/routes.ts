@@ -11530,10 +11530,17 @@ Respond with VALID JSON only:
       // Average booking value (all-time)
       const avgBookingValue = completedCount > 0 ? (totalRevenue / completedCount).toFixed(2) : '0';
 
-      // Revenue period-filtered calculations (use updatedAt as proxy for completion date)
+      // Revenue period-filtered calculations.
+      // Only count revenue where paymentStatus IN ('paid', 'succeeded') — this excludes
+      // cancelled/failed/pending_payment bookings whose price was set at creation but
+      // never actually collected. Both count and amount share the same createdAt-based
+      // filter so they stay in lockstep with the selected period.
+      const revenueEligible = completedBookings.filter(b =>
+        b.paymentStatus === 'paid' || b.paymentStatus === 'succeeded'
+      );
       const revenueFilteredCompleted = revenueCutoff
-        ? completedBookings.filter(b => b.updatedAt && new Date(b.updatedAt) >= revenueCutoff!)
-        : completedBookings;
+        ? revenueEligible.filter(b => b.createdAt && new Date(b.createdAt) >= revenueCutoff!)
+        : revenueEligible;
       const revenueFilteredCount = revenueFilteredCompleted.length;
       const revenueFilteredTotal = revenueFilteredCompleted.reduce((sum, b) => sum + parseFloat(b.price || '0'), 0);
       const revenueFilteredAvg = revenueFilteredCount > 0 ? (revenueFilteredTotal / revenueFilteredCount).toFixed(2) : '0';
