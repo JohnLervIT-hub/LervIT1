@@ -1298,7 +1298,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle SMS delivery result
       const isDev = process.env.NODE_ENV === 'development';
       if (!smsSent) {
-        console.log(`[SMS FAILED] Verification code for ${phone}: ${verificationCode}`);
+        // Never log the code or the full phone — anyone with log access could
+        // bypass phone verification otherwise. Keep just the last 4 digits so
+        // support can correlate with the user's report.
+        const phoneTail = phone.slice(-4);
+        console.log(`[SMS FAILED] Verification could not be delivered to phone ending ****${phoneTail}`);
         if (isDev) {
           // In development only, show the code for testing
           res.json({ 
@@ -1513,8 +1517,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // ===== USER ROUTES =====
+  // Admin-only: /api/auth/signup is the real user-creation path (validates
+  // role, sends verification email, etc). This route accepted an arbitrary
+  // `role` from the body while unauthenticated — a privilege-escalation hole.
   app.post("/api/users", async (req: Request, res: Response) => {
     try {
+      if (!requireAdmin(req, res)) return;
       const userData = validateBody(insertUserSchema, req.body);
       const hashedPassword = userData.password ? await hashPassword(userData.password) : null;
       const user = await storage.createUser({ ...userData, password: hashedPassword });
@@ -1525,18 +1533,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin-only: full user directory. AdminDashboard consumes this. Anyone
+  // else who needs their own profile should call /api/auth/me.
   app.get("/api/users", async (req: Request, res: Response) => {
     try {
+      if (!requireAdmin(req, res)) return;
+
       // Support pagination via query params
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const offset = parseInt(req.query.offset as string) || 0;
-      
+
       const result = await storage.getAllUsers({ limit, offset });
       const usersWithoutPasswords = result.data.map((user: any) => {
         const { password, ...userWithoutPassword } = user;
         return userWithoutPassword;
       });
-      
+
       // Return paginated response
       res.json({
         data: usersWithoutPasswords,
@@ -1550,8 +1562,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Auth required. Callers may look up their own record; admins may look up
+  // anyone. Blocks sequential-ID enumeration of the user table.
   app.get("/api/users/:id", async (req: Request, res: Response) => {
     try {
+      if (!requireUser(req, res)) return;
+      const authUser = (req as any).user as { id: string; role: string };
+      if (authUser.id !== req.params.id && authUser.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const user = await storage.getUser(req.params.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -1563,8 +1582,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin-only: email→user lookup is a classic account-enumeration vector.
   app.get("/api/users/email/:email", async (req: Request, res: Response) => {
     try {
+      if (!requireAdmin(req, res)) return;
       const user = await storage.getUserByEmail(req.params.email);
       if (!user) {
         return res.status(404).json({ error: "User not found" });

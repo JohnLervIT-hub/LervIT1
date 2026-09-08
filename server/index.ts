@@ -10,6 +10,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { logger, logEvent } from "./logger";
+import { randomBytes } from "crypto";
 import { initBackgroundJobs } from "./background-jobs";
 import { 
   corsMiddleware, 
@@ -34,9 +35,16 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// In production, SESSION_SECRET is mandatory. In dev we generate an ephemeral
+// per-boot secret rather than falling back to a hardcoded literal — a shared
+// dev secret becomes universally-known and can slip into a bundled artifact.
+// Downside of ephemeral: dev sessions don't survive a restart. Acceptable.
 if (!process.env.SESSION_SECRET) {
-  if (process.env.NODE_ENV === 'production') throw new Error('SESSION_SECRET must be set in production');
-  console.warn("WARNING: SESSION_SECRET not set, using default (not recommended for production)");
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be set in production');
+  }
+  process.env.SESSION_SECRET = randomBytes(32).toString('hex');
+  console.warn('WARNING: SESSION_SECRET not set — generated an ephemeral one for this dev boot. Sessions will not survive restart.');
 }
 
 // Trust the first proxy (Replit's proxy) - required for secure cookies behind a proxy
@@ -87,7 +95,7 @@ try {
 // Use 'auto' for secure which checks req.secure (respects trust proxy setting)
 app.use(session({
   store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'lervit-dev-secret-change-in-production',
+  secret: process.env.SESSION_SECRET!,
   resave: false,
   rolling: false,
   saveUninitialized: false,
