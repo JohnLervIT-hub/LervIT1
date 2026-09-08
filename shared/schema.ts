@@ -1363,6 +1363,28 @@ export const partnerAuditLog = pgTable("partner_audit_log", {
   createdAtIdx: index("partner_audit_log_created_at_idx").on(table.createdAt),
 }));
 
+// Admin action audit log. One row per mutating request (POST/PATCH/PUT/DELETE)
+// that reaches /api/admin/*. Populated by the adminAudit middleware.
+// Kept intentionally minimal (no before/after JSON diffs) — high-value
+// admin mutations can additionally emit a business event via emitEvent().
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").references(() => users.id).notNull(),
+  method: text("method").notNull(),          // POST | PATCH | PUT | DELETE
+  path: text("path").notNull(),              // req.originalUrl (with query stripped)
+  resourceType: text("resource_type"),       // parsed from path segment after /api/admin/
+  resourceId: text("resource_id"),           // parsed from :id-shaped URL param
+  requestBody: text("request_body"),         // JSON string, redacted (password/secret/token/apiKey removed)
+  statusCode: integer("status_code"),        // HTTP response status
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  adminIdIdx: index("admin_audit_log_admin_id_idx").on(table.adminId),
+  createdAtIdx: index("admin_audit_log_created_at_idx").on(table.createdAt),
+  resourceIdx: index("admin_audit_log_resource_idx").on(table.resourceType, table.resourceId),
+}));
+
 // === Insert schemas and types ===
 
 export const insertPartnerSchema = createInsertSchema(partners).omit({
@@ -1425,6 +1447,10 @@ export const insertPartnerAuditLogSchema = createInsertSchema(partnerAuditLog).o
   id: true, createdAt: true,
 });
 
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLog).omit({
+  id: true, createdAt: true,
+});
+
 export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = z.infer<typeof insertPartnerSchema>;
 export type PartnerUser = typeof partnerUsers.$inferSelect;
@@ -1447,6 +1473,8 @@ export type ProofOfCompletion = typeof proofOfCompletion.$inferSelect;
 export type InsertProofOfCompletion = z.infer<typeof insertProofOfCompletionSchema>;
 export type PartnerAuditLog = typeof partnerAuditLog.$inferSelect;
 export type InsertPartnerAuditLog = z.infer<typeof insertPartnerAuditLogSchema>;
+export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
+export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
 
 // Enterprise status model for partner-handled bookings
 export const ENTERPRISE_STATUSES = {

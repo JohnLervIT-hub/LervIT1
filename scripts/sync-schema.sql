@@ -1541,3 +1541,27 @@ CREATE INDEX IF NOT EXISTS "referrals_code_idx"
 
 CREATE INDEX IF NOT EXISTS "ai_incident_insights_incident_id_idx"
   ON "ai_incident_insights" ("incident_id");
+
+-- Admin action audit log. One row per mutating request under /api/admin/*.
+CREATE TABLE IF NOT EXISTS "admin_audit_log" (
+  "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  "admin_id" varchar NOT NULL REFERENCES "users" ("id"),
+  "method" text NOT NULL,
+  "path" text NOT NULL,
+  "resource_type" text,
+  "resource_id" text,
+  "request_body" text,
+  "status_code" integer,
+  "ip_address" text,
+  "user_agent" text,
+  "created_at" timestamp NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "admin_audit_log_admin_id_idx"
+  ON "admin_audit_log" ("admin_id");
+
+CREATE INDEX IF NOT EXISTS "admin_audit_log_created_at_idx"
+  ON "admin_audit_log" ("created_at");
+
+CREATE INDEX IF NOT EXISTS "admin_audit_log_resource_idx"
+  ON "admin_audit_log" ("resource_type", "resource_id");

@@ -41,7 +41,8 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog } from "@shared/schema";
+import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
@@ -283,7 +284,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register auth middleware globally
   app.use(authMiddleware);
-  
+
+  // Audit every mutating admin call. Mounted *after* authMiddleware so
+  // req.user is populated when the res.finish handler fires.
+  app.use("/api/admin", adminAuditMiddleware);
+
   // ===== DOCUMENT DOWNLOADS =====
   // Admin-only: internal strategic documents must not be publicly accessible
   app.get("/api/downloads/roadmap", (req: Request, res: Response) => {
@@ -12417,6 +12422,71 @@ Respond with VALID JSON only:
     } catch (error) {
       console.error('[Admin] Revenue summary error:', error);
       res.status(500).json({ error: 'Failed to fetch revenue summary' });
+    }
+  });
+
+  // ============================================================
+  // ADMIN AUDIT LOG (admin)
+  // Paginated read of admin_audit_log. Filters: adminId, resourceType,
+  // resourceId, method, since (ISO date). Enriches each row with the
+  // admin's name/email so the UI doesn't need a second lookup.
+  // ============================================================
+  app.get("/api/admin/audit-log", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const limit = Math.min(parseInt((req.query.limit as string) || "50", 10) || 50, 200);
+      const offset = Math.max(parseInt((req.query.offset as string) || "0", 10) || 0, 0);
+
+      const filters: any[] = [];
+      if (req.query.adminId) filters.push(eq(adminAuditLog.adminId, req.query.adminId as string));
+      if (req.query.method) filters.push(eq(adminAuditLog.method, (req.query.method as string).toUpperCase()));
+      if (req.query.resourceType) filters.push(eq(adminAuditLog.resourceType, req.query.resourceType as string));
+      if (req.query.resourceId) filters.push(eq(adminAuditLog.resourceId, req.query.resourceId as string));
+      if (req.query.since) {
+        const since = new Date(req.query.since as string);
+        if (!isNaN(since.getTime())) filters.push(sql`${adminAuditLog.createdAt} >= ${since}`);
+      }
+      const where = filters.length ? and(...filters) : undefined;
+
+      const rows = await db
+        .select({
+          id: adminAuditLog.id,
+          adminId: adminAuditLog.adminId,
+          method: adminAuditLog.method,
+          path: adminAuditLog.path,
+          resourceType: adminAuditLog.resourceType,
+          resourceId: adminAuditLog.resourceId,
+          statusCode: adminAuditLog.statusCode,
+          ipAddress: adminAuditLog.ipAddress,
+          userAgent: adminAuditLog.userAgent,
+          requestBody: adminAuditLog.requestBody,
+          createdAt: adminAuditLog.createdAt,
+          adminName: usersTable.name,
+          adminEmail: usersTable.email,
+        })
+        .from(adminAuditLog)
+        .leftJoin(usersTable, eq(adminAuditLog.adminId, usersTable.id))
+        .where(where as any)
+        .orderBy(desc(adminAuditLog.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      const [countRow] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(adminAuditLog)
+        .where(where as any);
+
+      res.json({
+        data: rows,
+        total: Number(countRow?.count ?? 0),
+        limit,
+        offset,
+        hasMore: offset + rows.length < Number(countRow?.count ?? 0),
+      });
+    } catch (error) {
+      console.error('[Admin Audit] Read error:', error);
+      res.status(500).json({ error: 'Failed to fetch admin audit log' });
     }
   });
 
