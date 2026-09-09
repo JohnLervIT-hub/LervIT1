@@ -7,7 +7,7 @@
  *   - `send_touch`        : execute one delayed touch (2/3/4). Marks cold at 4.
  *   - `recover_abandoned` : one-off recovery email for an abandoned booking.
  *
- * Emails are persona-branded ("Alex Morgan <alex@lervit.com>") so we use
+ * Emails are persona-branded ("Alex Morgan | LervIT <alex.morgan@lervit.com>") so we use
  * Resend directly rather than notificationService.sendEmail (which forces
  * "LervIT <support@lervit.com>"). SMS goes through notificationService.
  */
@@ -24,7 +24,8 @@ import { createAgentQueue, QUEUE_NAMES } from './queue';
 
 const ALEX_EMAIL_MODEL = 'claude-sonnet-4-6';
 const ALEX_SMS_MODEL = 'claude-haiku-4-5-20251001';
-const ALEX_FROM = 'Alex Morgan <alex@lervit.com>';
+const ALEX_EMAIL = process.env.ALEX_EMAIL?.trim() || 'alex.morgan@lervit.com';
+const ALEX_FROM = `Alex Morgan | LervIT <${ALEX_EMAIL}>`;
 const ALEX_REPLY_TO = 'support@lervit.com';
 
 const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
