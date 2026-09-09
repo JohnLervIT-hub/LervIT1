@@ -1,14 +1,11 @@
 [phases.setup]
-# chromium is required by puppeteer-core for Scout Reid's Kijiji crawler.
-# If unset, CHROMIUM_PATH defaults to /usr/bin/chromium (nixpacks path).
-nixPkgs = ["nodejs_20", "chromium"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
+# The `puppeteer` npm package downloads its own Chromium into
+# node_modules/puppeteer/.local-chromium during install, so we don't need
+# a system chromium package. Nixpacks caches this dir across builds.
 cmds = ["npm ci"]
 
 [phases.build]
 cmds = ["npm run build"]
-
-[variables]
-# Path Puppeteer will use if CHROMIUM_PATH is not set at runtime.
-CHROMIUM_PATH = "/usr/bin/chromium"

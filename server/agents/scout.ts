@@ -36,18 +36,18 @@ const REDDIT_CREATE_THRESHOLD = 50;
 const KIJIJI_CREATE_THRESHOLD = 45;
 const RENTFASTER_STATIC_SCORE = 55;
 const CRAIGSLIST_STATIC_SCORE = 45;
-const RSS2JSON_INTER_FEED_DELAY_MS = 1000;
-const REDDIT_INTER_QUERY_DELAY_MS = 2000;
+// rss2json's free tier is roughly 10 req/min without an API key. All Scout
+// RSS crawlers share this budget, so we pace every rss2json call by 2s.
+const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 
-const REDDIT_SUBREDDITS = ['Calgary', 'calgaryhousing', 'Alberta'] as const;
-const REDDIT_QUERIES = [
-  'moving mover delivery',
-  'need a mover',
-  'moving company',
-  'furniture delivery',
-  'help moving',
+// Reddit's public JSON API now returns 403 for unauthenticated User-Agents.
+// The .rss endpoint is served without auth (with browser-friendly caching)
+// and rss2json parses it identically to any other feed.
+const REDDIT_FEEDS = [
+  'https://www.reddit.com/r/Calgary/search.rss?q=moving+mover+delivery&sort=new',
+  'https://www.reddit.com/r/Calgary/search.rss?q=need+mover+calgary&sort=new',
+  'https://www.reddit.com/r/calgaryhousing/new.rss',
 ] as const;
-const REDDIT_USER_AGENT = 'LervIT-Scout/1.0 (moving platform)';
 
 const KIJIJI_URL = 'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
 const KIJIJI_MAX_LISTINGS = 15;
@@ -196,87 +196,44 @@ export class ScoutAgent extends BaseAgent {
     let found = 0;
     let created = 0;
 
-    // Google Alerts RSS URLs are per-Google-account private feeds — fetching
-    // them from a server yields non-200 without the account cookies. Proxy
-    // via rss2json.com, which fetches the RSS from its own IPs with a
-    // browser-like User-Agent and returns parsed JSON. rss2json's free
-    // tier is rate-limited (~10 req/min); a 1s inter-feed delay + optional
-    // api_key avoid intermittent 429s on the last few feeds.
-    const rss2jsonApiKey = process.env.RSSBRIDGE_API_KEY?.trim();
-
     for (let i = 0; i < feeds.length; i++) {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
       const feedUrl = feeds[i];
 
-      try {
-        const params = new URLSearchParams({ rss_url: feedUrl });
-        if (rss2jsonApiKey) params.set('api_key', rss2jsonApiKey);
-        const proxyUrl = `https://api.rss2json.com/v1/api.json?${params.toString()}`;
+      const items = await this.fetchRss2Json(feedUrl, 'google_alerts');
+      if (!items) continue;
 
-        const response = await fetch(proxyUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-        });
-        if (!response.ok) {
-          logger.warn(
-            { feedUrl, status: response.status },
-            'Scout: rss2json fetch non-200',
+      for (const item of items) {
+        found++;
+        const title = (item.title ?? '').trim();
+        const description = (item.description ?? '').trim();
+        const link = (item.link ?? '').trim();
+        const fingerprint = link || title;
+        if (!fingerprint) continue;
+
+        const score = await this.scoreSignal(`${title} ${description}`);
+        logger.info({ score, title: title.slice(0, 80) }, 'Scout: signal scored');
+        if (score < GOOGLE_ALERTS_CREATE_THRESHOLD) continue;
+        if (await this.wasSignalSeen('google_alerts', fingerprint)) continue;
+
+        try {
+          await db.insert(leads).values({
+            contactName: 'Unknown',
+            sourceChannel: 'google_alerts',
+            utmSource: 'google_alerts',
+            utmCampaign: 'scout-reid',
+            intentScore: score,
+            status: 'new',
+            notes: `Signal: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
+          });
+          created++;
+          logger.info({ score, title: title.slice(0, 50) }, 'Scout: lead created');
+        } catch (err) {
+          logger.error(
+            { err: (err as Error).message, title: title.slice(0, 80) },
+            'Scout: lead insert failed',
           );
-          continue;
         }
-        const data = (await response.json()) as {
-          status?: string;
-          message?: string;
-          items?: Array<{ title?: string; description?: string; link?: string }>;
-        };
-        if (data.status !== 'ok' || !Array.isArray(data.items)) {
-          logger.warn(
-            { feedUrl, status: data.status, message: data.message },
-            'Scout: rss2json returned non-ok response',
-          );
-          continue;
-        }
-
-        for (const item of data.items) {
-          found++;
-          const title = (item.title ?? '').trim();
-          const description = (item.description ?? '').trim();
-          const link = (item.link ?? '').trim();
-          const fingerprint = link || title;
-          if (!fingerprint) continue;
-
-          const score = await this.scoreSignal(`${title} ${description}`);
-          logger.info(
-            { score, title: title.slice(0, 80) },
-            'Scout: signal scored',
-          );
-          if (score < GOOGLE_ALERTS_CREATE_THRESHOLD) continue;
-
-          if (await this.wasSignalSeen('google_alerts', fingerprint)) continue;
-
-          try {
-            await db.insert(leads).values({
-              contactName: 'Unknown',
-              sourceChannel: 'google_alerts',
-              utmSource: 'google_alerts',
-              utmCampaign: 'scout-reid',
-              intentScore: score,
-              status: 'new',
-              notes: `Signal: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
-            });
-            created++;
-            logger.info(
-              { score, title: title.slice(0, 50) },
-              'Scout: lead created',
-            );
-          } catch (err) {
-            logger.error(
-              { err: (err as Error).message, title: title.slice(0, 80) },
-              'Scout: lead insert failed',
-            );
-          }
-        }
-      } catch (err) {
-        logger.error({ err, feedUrl }, 'Scout: Google Alerts feed failed');
       }
     }
 
@@ -286,83 +243,47 @@ export class ScoutAgent extends BaseAgent {
   private async crawlReddit(): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
-    let requestIdx = 0;
 
-    for (const subreddit of REDDIT_SUBREDDITS) {
-      for (const query of REDDIT_QUERIES) {
-        if (requestIdx > 0) await sleep(REDDIT_INTER_QUERY_DELAY_MS);
-        requestIdx++;
+    for (let i = 0; i < REDDIT_FEEDS.length; i++) {
+      if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
+      const feedUrl = REDDIT_FEEDS[i];
 
-        const url =
-          `https://www.reddit.com/r/${subreddit}/search.json` +
-          `?q=${encodeURIComponent(query)}&restrict_sr=1&sort=new&limit=25&t=day`;
+      const items = await this.fetchRss2Json(feedUrl, 'reddit');
+      if (!items) continue;
+
+      for (const item of items) {
+        const title = (item.title ?? '').trim();
+        const description = (item.description ?? '').trim();
+        const link = (item.link ?? '').trim();
+        const fingerprint = link || title;
+        if (!fingerprint || !title) continue;
+
+        found++;
+        const score = await this.scoreSignal(`${title}\n${description}`);
+        logger.info({ score, title: title.slice(0, 80) }, 'Scout: signal scored');
+        if (score < REDDIT_CREATE_THRESHOLD) continue;
+        if (await this.wasSignalSeen('reddit', fingerprint)) continue;
+
         try {
-          const response = await fetch(url, {
-            headers: { 'User-Agent': REDDIT_USER_AGENT },
+          await db.insert(leads).values({
+            contactName: 'Reddit User',
+            sourceChannel: 'reddit',
+            utmSource: 'reddit',
+            utmCampaign: 'scout-reid',
+            intentScore: score,
+            status: 'new',
+            notes:
+              `Title: ${title}\n` +
+              `URL: ${link}\n` +
+              `Body: ${description.slice(0, 300)}`,
           });
-          if (!response.ok) {
-            logger.warn(
-              { subreddit, query, status: response.status },
-              'Scout: Reddit search non-200',
-            );
-            continue;
-          }
-          const data = (await response.json()) as {
-            data?: {
-              children?: Array<{
-                data?: {
-                  title?: string;
-                  selftext?: string;
-                  permalink?: string;
-                  name?: string;
-                };
-              }>;
-            };
-          };
-          const children = data.data?.children ?? [];
-
-          for (const child of children) {
-            const post = child.data ?? {};
-            const title = (post.title ?? '').trim();
-            const selftext = (post.selftext ?? '').trim();
-            const permalink = post.permalink ? `https://www.reddit.com${post.permalink}` : '';
-            const fingerprint = post.name || permalink || title;
-            if (!fingerprint || !title) continue;
-
-            found++;
-            const score = await this.scoreSignal(`${title}\n${selftext}`);
-            logger.info(
-              { score, subreddit, title: title.slice(0, 80) },
-              'Scout: signal scored',
-            );
-            if (score < REDDIT_CREATE_THRESHOLD) continue;
-            if (await this.wasSignalSeen('reddit', fingerprint)) continue;
-
-            try {
-              await db.insert(leads).values({
-                contactName: 'Reddit User',
-                sourceChannel: 'reddit',
-                utmSource: 'reddit',
-                utmCampaign: 'scout-reid',
-                intentScore: score,
-                status: 'new',
-                notes:
-                  `Subreddit: r/${subreddit}\n` +
-                  `Title: ${title}\n` +
-                  `URL: ${permalink}\n` +
-                  `Body: ${selftext.slice(0, 300)}`,
-              });
-              created++;
-              logger.info({ score, title: title.slice(0, 60) }, 'Scout: reddit lead created');
-            } catch (err) {
-              logger.error(
-                { err: (err as Error).message, title: title.slice(0, 60) },
-                'Scout: reddit lead insert failed',
-              );
-            }
-          }
+          created++;
+          logger.info({ score, title: title.slice(0, 60) }, 'Scout: reddit lead created');
         } catch (err) {
-          logger.error({ err, subreddit, query }, 'Scout: Reddit search failed');
+          logger.error(
+            { err: (err as Error).message, title: title.slice(0, 60) },
+            'Scout: reddit lead insert failed',
+          );
         }
       }
     }
@@ -393,7 +314,7 @@ export class ScoutAgent extends BaseAgent {
   /**
    * Shared helper for RSS sources where every item gets the same static
    * intent score (rentals/housing signals = "someone will need a mover").
-   * Skips scoring to save Anthropic calls on high-volume sources.
+   * Skips per-item Anthropic scoring on high-volume static sources.
    */
   private async crawlRssWithStaticScore(opts: {
     feedUrl: string;
@@ -405,9 +326,58 @@ export class ScoutAgent extends BaseAgent {
     let found = 0;
     let created = 0;
 
+    const items = await this.fetchRss2Json(opts.feedUrl, opts.source);
+    if (!items) return { found: 0, created: 0 };
+
+    for (const item of items.slice(0, opts.maxItems)) {
+      found++;
+      const title = (item.title ?? '').trim();
+      const description = (item.description ?? '').trim();
+      const link = (item.link ?? '').trim();
+      const fingerprint = link || title;
+      if (!fingerprint || !title) continue;
+      if (await this.wasSignalSeen(opts.source, fingerprint)) continue;
+
+      try {
+        await db.insert(leads).values({
+          contactName: opts.contactName,
+          sourceChannel: opts.source,
+          utmSource: opts.source,
+          utmCampaign: 'scout-reid',
+          intentScore: opts.staticScore,
+          status: 'new',
+          notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
+        });
+        created++;
+        logger.info(
+          { source: opts.source, title: title.slice(0, 60) },
+          'Scout: RSS lead created',
+        );
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, source: opts.source, title: title.slice(0, 60) },
+          'Scout: RSS lead insert failed',
+        );
+      }
+    }
+
+    return { found, created };
+  }
+
+  /**
+   * Shared rss2json proxy fetcher. All Scout RSS sources funnel through here
+   * so the API key (RSS2JSON_API_KEY, with RSSBRIDGE_API_KEY fallback for
+   * back-compat), the User-Agent, and the "status:ok" parsing live in one
+   * place. Returns null on any failure; each caller decides how to log it.
+   */
+  private async fetchRss2Json(
+    feedUrl: string,
+    source: string,
+  ): Promise<Array<{ title?: string; description?: string; link?: string }> | null> {
     try {
-      const params = new URLSearchParams({ rss_url: opts.feedUrl });
-      const apiKey = process.env.RSSBRIDGE_API_KEY?.trim();
+      const params = new URLSearchParams({ rss_url: feedUrl });
+      const apiKey =
+        process.env.RSS2JSON_API_KEY?.trim() || process.env.RSSBRIDGE_API_KEY?.trim();
       if (apiKey) params.set('api_key', apiKey);
       const proxyUrl = `https://api.rss2json.com/v1/api.json?${params.toString()}`;
 
@@ -416,10 +386,10 @@ export class ScoutAgent extends BaseAgent {
       });
       if (!response.ok) {
         logger.warn(
-          { source: opts.source, status: response.status },
+          { source, status: response.status, feedUrl },
           'Scout: rss2json fetch non-200',
         );
-        return { found: 0, created: 0 };
+        return null;
       }
       const data = (await response.json()) as {
         status?: string;
@@ -428,72 +398,38 @@ export class ScoutAgent extends BaseAgent {
       };
       if (data.status !== 'ok' || !Array.isArray(data.items)) {
         logger.warn(
-          { source: opts.source, status: data.status, message: data.message },
+          { source, feedUrl, status: data.status, message: data.message },
           'Scout: rss2json returned non-ok',
         );
-        return { found: 0, created: 0 };
+        return null;
       }
-
-      for (const item of data.items.slice(0, opts.maxItems)) {
-        found++;
-        const title = (item.title ?? '').trim();
-        const description = (item.description ?? '').trim();
-        const link = (item.link ?? '').trim();
-        const fingerprint = link || title;
-        if (!fingerprint || !title) continue;
-        if (await this.wasSignalSeen(opts.source, fingerprint)) continue;
-
-        try {
-          await db.insert(leads).values({
-            contactName: opts.contactName,
-            sourceChannel: opts.source,
-            utmSource: opts.source,
-            utmCampaign: 'scout-reid',
-            intentScore: opts.staticScore,
-            status: 'new',
-            notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
-          });
-          created++;
-          logger.info(
-            { source: opts.source, title: title.slice(0, 60) },
-            'Scout: RSS lead created',
-          );
-        } catch (err) {
-          logger.error(
-            { err: (err as Error).message, source: opts.source, title: title.slice(0, 60) },
-            'Scout: RSS lead insert failed',
-          );
-        }
-      }
+      return data.items;
     } catch (err) {
-      logger.error({ err, source: opts.source }, 'Scout: RSS crawl failed');
+      logger.error({ err, source, feedUrl }, 'Scout: rss2json request threw');
+      return null;
     }
-
-    return { found, created };
   }
 
   private async crawlKijiji(): Promise<CrawlResult> {
-    // puppeteer-core is loaded dynamically so that (a) local dev machines
-    // without a chromium install don't crash the process at boot, and
-    // (b) tsc doesn't require a working install at build time. If either
-    // the module or the chromium binary is missing, log and skip.
+    // Use the full `puppeteer` package (bundles its own Chromium at install
+    // time) rather than puppeteer-core, so we don't depend on Railway
+    // having a chromium binary on PATH. Loaded via dynamic import so a
+    // missing/broken install degrades cleanly instead of crashing boot.
     let puppeteer: any = null;
     try {
-      const mod: any = await import('puppeteer-core');
+      const mod: any = await import('puppeteer');
       puppeteer = mod.default ?? mod;
     } catch (err) {
-      logger.warn({ err: (err as Error).message }, 'Scout: puppeteer-core not installed — Kijiji skipped');
+      logger.warn({ err: (err as Error).message }, 'Scout: puppeteer not installed — Kijiji skipped');
       return { found: 0, created: 0 };
     }
 
-    const executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
     let browser: any = null;
     let found = 0;
     let created = 0;
 
     try {
       browser = await puppeteer.launch({
-        executablePath,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -556,7 +492,7 @@ export class ScoutAgent extends BaseAgent {
         }
       }
     } catch (err) {
-      logger.warn({ err: (err as Error).message, executablePath }, 'Scout: Kijiji Puppeteer failed');
+      logger.warn({ err: (err as Error).message }, 'Scout: Kijiji Puppeteer failed');
     } finally {
       if (browser) {
         try { await browser.close(); } catch { /* ignore */ }
