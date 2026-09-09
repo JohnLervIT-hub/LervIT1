@@ -1,5 +1,5 @@
 [build]
-builder = "nixpacks"
+builder = "dockerfile"
 
 [deploy]
-startCommand = "node scripts/startup-migrate.js && node dist/index.js"
+startCommand = "sh -c 'node scripts/startup-migrate.js && node dist/index.js'"
