@@ -13,5 +13,7 @@ playwright-report/
 test-results/
 website-standalone/node_modules
 website-standalone/dist
-attached_assets/
 docs/
+# NOTE: attached_assets/ is NOT excluded — it's a source directory
+# aliased as @assets in vite.config.ts and imported by many
+# components (SplashScreen, HeroSection, HowItWorksSection, etc.).
