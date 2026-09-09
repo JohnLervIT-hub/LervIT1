@@ -23,10 +23,12 @@ import { createAgentQueue, QUEUE_NAMES } from './queue';
 
 const SCOUT_MODEL = 'claude-haiku-4-5-20251001';
 const HIGH_INTENT_THRESHOLD = 70;
-// Google Alerts often carries local news / development stories which are
-// weaker per-item intent signals than a Kijiji "moving sale" post, but
-// they aggregate into useful demand context. Lower threshold for this source.
-const GOOGLE_ALERTS_CREATE_THRESHOLD = 50;
+// Google Alerts carries local news / development stories which are weaker
+// per-item intent signals than a Kijiji "moving sale" post. Threshold
+// temporarily lowered to 20 to verify the full ingest → score → insert
+// pipeline while we tune. Bump back to 50–60 once we see healthy volume.
+const GOOGLE_ALERTS_CREATE_THRESHOLD = 20;
+const RSS2JSON_INTER_FEED_DELAY_MS = 1000;
 const KIJIJI_URLS = [
   'https://www.kijiji.ca/b-apartments-condos/calgary/c37l1700199',
   'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199',
@@ -145,15 +147,28 @@ export class ScoutAgent extends BaseAgent {
     // Google Alerts RSS URLs are per-Google-account private feeds — fetching
     // them from a server yields non-200 without the account cookies. Proxy
     // via rss2json.com, which fetches the RSS from its own IPs with a
-    // browser-like User-Agent and returns parsed JSON.
-    for (const feedUrl of feeds) {
+    // browser-like User-Agent and returns parsed JSON. rss2json's free
+    // tier is rate-limited (~10 req/min); a 1s inter-feed delay + optional
+    // api_key avoid intermittent 429s on the last few feeds.
+    const rss2jsonApiKey = process.env.RSSBRIDGE_API_KEY?.trim();
+
+    for (let i = 0; i < feeds.length; i++) {
+      if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
+      const feedUrl = feeds[i];
+
       try {
-        const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`;
+        const params = new URLSearchParams({ rss_url: feedUrl });
+        if (rss2jsonApiKey) params.set('api_key', rss2jsonApiKey);
+        const proxyUrl = `https://api.rss2json.com/v1/api.json?${params.toString()}`;
+
         const response = await fetch(proxyUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         if (!response.ok) {
-          logger.warn({ feedUrl, status: response.status }, 'Scout: rss2json fetch non-200');
+          logger.warn(
+            { feedUrl, status: response.status },
+            'Scout: rss2json fetch non-200',
+          );
           continue;
         }
         const data = (await response.json()) as {
@@ -178,22 +193,35 @@ export class ScoutAgent extends BaseAgent {
           if (!fingerprint) continue;
 
           const score = await this.scoreSignal(`${title} ${description}`);
-          logger.info({ title, score }, 'Scout: signal scored');
+          logger.info(
+            { score, title: title.slice(0, 80) },
+            'Scout: signal scored',
+          );
           if (score < GOOGLE_ALERTS_CREATE_THRESHOLD) continue;
 
           if (await this.wasSignalSeen('google_alerts', fingerprint)) continue;
 
-          await db.insert(leads).values({
-            contactName: 'Unknown',
-            sourceChannel: 'google_alerts',
-            utmSource: 'google_alerts',
-            utmCampaign: 'scout-reid',
-            intentScore: score,
-            status: 'new',
-            notes: `Signal: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
-          });
-          created++;
-          logger.info({ title, score }, 'Scout: lead created from google_alerts');
+          try {
+            await db.insert(leads).values({
+              contactName: 'Unknown',
+              sourceChannel: 'google_alerts',
+              utmSource: 'google_alerts',
+              utmCampaign: 'scout-reid',
+              intentScore: score,
+              status: 'new',
+              notes: `Signal: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
+            });
+            created++;
+            logger.info(
+              { score, title: title.slice(0, 50) },
+              'Scout: lead created',
+            );
+          } catch (err) {
+            logger.error(
+              { err: (err as Error).message, title: title.slice(0, 80) },
+              'Scout: lead insert failed',
+            );
+          }
         }
       } catch (err) {
         logger.error({ err, feedUrl }, 'Scout: Google Alerts feed failed');
@@ -288,27 +316,8 @@ Return ONLY a number, nothing else.`,
   }
 }
 
-function parseRssItems(xml: string): Array<{ title: string; description: string; link: string }> {
-  const items: Array<{ title: string; description: string; link: string }> = [];
-  const itemMatches = xml.match(/<(?:item|entry)>[\s\S]*?<\/(?:item|entry)>/g) ?? [];
-  for (const raw of itemMatches) {
-    const title =
-      raw.match(/<title[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ??
-      raw.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ??
-      '';
-    const description =
-      raw.match(/<(?:description|summary)[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/(?:description|summary)>/)?.[1] ??
-      raw.match(/<(?:description|summary)[^>]*>([\s\S]*?)<\/(?:description|summary)>/)?.[1] ??
-      '';
-    const link =
-      raw.match(/<link[^>]*href="([^"]+)"/)?.[1] ??
-      raw.match(/<link[^>]*>([\s\S]*?)<\/link>/)?.[1] ??
-      '';
-    if (title.trim()) {
-      items.push({ title: title.trim(), description: description.trim(), link: link.trim() });
-    }
-  }
-  return items;
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export const scout = new ScoutAgent();
