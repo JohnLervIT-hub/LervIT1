@@ -24,10 +24,10 @@ import { createAgentQueue, QUEUE_NAMES } from './queue';
 const SCOUT_MODEL = 'claude-haiku-4-5-20251001';
 const HIGH_INTENT_THRESHOLD = 70;
 // Google Alerts carries local news / development stories which are weaker
-// per-item intent signals than a Kijiji "moving sale" post. Threshold
-// temporarily lowered to 20 to verify the full ingest → score → insert
-// pipeline while we tune. Bump back to 50–60 once we see healthy volume.
-const GOOGLE_ALERTS_CREATE_THRESHOLD = 20;
+// per-item intent signals than a Kijiji "moving sale" post. The scoring
+// prompt has explicit figurative-language rules now, so 50 is a fair
+// gate for creating a lead vs. logging-only.
+const GOOGLE_ALERTS_CREATE_THRESHOLD = 50;
 const RSS2JSON_INTER_FEED_DELAY_MS = 1000;
 const KIJIJI_URLS = [
   'https://www.kijiji.ca/b-apartments-condos/calgary/c37l1700199',
@@ -281,14 +281,18 @@ export class ScoutAgent extends BaseAgent {
   private async scoreSignal(text: string): Promise<number> {
     if (!text.trim()) return 0;
     const response = await this.callClaude(
-      `You are Scout Reid, a lead scoring agent for LervIT, a Calgary moving platform.
-Score moving intent 0-100.
-100 = actively looking for a mover right now
-70  = planning a move in next 30 days
-50  = considering a move
-30  = general interest
-0   = no moving intent
-Return ONLY a number, nothing else.`,
+      `You are Scout Reid, a lead scoring agent for LervIT, a Calgary moving and delivery platform. Score ONLY physical moving intent.
+
+IMPORTANT RULES:
+- 'moving beyond', 'moving forward', 'moving past' = FIGURATIVE = score 0-5
+- Someone physically relocating home/office = 70-100
+- Someone needing furniture delivery = 60-80
+- Someone selling items before a move = 50-70
+- News articles about city development = 0-10
+- Real estate listings (for sale/rent) = 40-60 (they signal someone will need to move)
+- Job postings for movers/drivers = 0 (supply side, not demand)
+
+Return ONLY a number 0-100.`,
       `Score this signal for moving intent:\n${text}`,
       SCOUT_MODEL,
       20,
