@@ -66,6 +66,15 @@ const SOURCE_OPTIONS = [
 
 const ALEX_AUTO_TRIGGER_THRESHOLD = 50;
 
+const TEMPERATURE_OPTIONS = [
+  { value: "hot",  score: 90, label: "🔴 Hot — Moving soon" },
+  { value: "warm", score: 70, label: "🟡 Warm — Planning a move" },
+  { value: "cool", score: 50, label: "🟢 Cool — Considering a move" },
+  { value: "cold", score: 30, label: "⚪ Cold — Just exploring" },
+] as const;
+type Temperature = typeof TEMPERATURE_OPTIONS[number]["value"];
+const DEFAULT_TEMPERATURE: Temperature = "warm";
+
 function scoreClass(score: number | null): string {
   const s = score ?? 0;
   if (s >= 70) return "text-emerald-600 font-semibold";
@@ -79,7 +88,7 @@ interface CreateLeadForm {
   contactPhone: string;
   sourceChannel: string;
   notes: string;
-  intentScore: number;
+  temperature: Temperature;
 }
 
 const BLANK_FORM: CreateLeadForm = {
@@ -88,8 +97,12 @@ const BLANK_FORM: CreateLeadForm = {
   contactPhone: "",
   sourceChannel: "personal",
   notes: "",
-  intentScore: 80,
+  temperature: DEFAULT_TEMPERATURE,
 };
+
+function temperatureToScore(t: Temperature): number {
+  return TEMPERATURE_OPTIONS.find(o => o.value === t)?.score ?? 70;
+}
 
 export default function AdminLeadsPage() {
   const { toast } = useToast();
@@ -138,7 +151,7 @@ export default function AdminLeadsPage() {
         contactPhone: input.contactPhone.trim() || undefined,
         sourceChannel: input.sourceChannel,
         notes: input.notes.trim() || undefined,
-        intentScore: input.intentScore,
+        intentScore: temperatureToScore(input.temperature),
         status: "new",
       });
       const body = (await res.json()) as { lead?: Lead };
@@ -406,19 +419,20 @@ export default function AdminLeadsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="lead-score">Intent score (0–100)</Label>
-              <Input
-                id="lead-score"
-                type="number"
-                min={0}
-                max={100}
-                value={form.intentScore}
-                onChange={e => {
-                  const n = Number(e.target.value);
-                  setForm(f => ({ ...f, intentScore: isNaN(n) ? 0 : Math.max(0, Math.min(100, n)) }));
-                }}
-                data-testid="input-lead-score"
-              />
+              <Label htmlFor="lead-temperature">Lead Temperature</Label>
+              <Select
+                value={form.temperature}
+                onValueChange={v => setForm(f => ({ ...f, temperature: v as Temperature }))}
+              >
+                <SelectTrigger id="lead-temperature" data-testid="select-lead-temperature">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEMPERATURE_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setAddOpen(false)}>
