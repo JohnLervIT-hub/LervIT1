@@ -4,13 +4,17 @@
  * Actions:
  *   - `process_signals`     : full daily run — crawls all sources, scores,
  *                             creates leads, routes high-intent to Alex.
- *   - `crawl_google_alerts` : subset — Google Alerts RSS feeds only.
- *   - `crawl_kijiji`        : subset — Kijiji Calgary listings only.
+ *   - `crawl_google_alerts` : subset — Google Alerts RSS via rss2json.
+ *   - `crawl_reddit`        : subset — r/Calgary + r/calgaryhousing + r/Alberta.
+ *   - `crawl_rentfaster`    : subset — RentFaster Calgary RSS (rss2json).
+ *   - `crawl_craigslist`    : subset — Craigslist Calgary housing RSS (rss2json).
+ *   - `crawl_kijiji`        : subset — Kijiji Calgary via Puppeteer.
  *   - `score_lead`          : one-off scoring of a signal string.
  *
- * MVP crawlers are best-effort: RSS is straightforward, Kijiji HTML is
- * fragile (anti-bot + shifting selectors). Failures are logged and never
- * block downstream crawlers.
+ * Crawlers are best-effort: RSS sources go through rss2json; Reddit uses
+ * its public JSON API; Kijiji uses puppeteer-core against a system chromium
+ * (see nixpacks.toml). Any crawler that fails is logged and swallowed so
+ * downstream crawlers still run.
  */
 
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
@@ -28,19 +32,31 @@ const HIGH_INTENT_THRESHOLD = 70;
 // prompt has explicit figurative-language rules now, so 50 is a fair
 // gate for creating a lead vs. logging-only.
 const GOOGLE_ALERTS_CREATE_THRESHOLD = 50;
+const REDDIT_CREATE_THRESHOLD = 50;
+const KIJIJI_CREATE_THRESHOLD = 45;
+const RENTFASTER_STATIC_SCORE = 55;
+const CRAIGSLIST_STATIC_SCORE = 45;
 const RSS2JSON_INTER_FEED_DELAY_MS = 1000;
-const KIJIJI_URLS = [
-  'https://www.kijiji.ca/b-apartments-condos/calgary/c37l1700199',
-  'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199',
+const REDDIT_INTER_QUERY_DELAY_MS = 2000;
+
+const REDDIT_SUBREDDITS = ['Calgary', 'calgaryhousing', 'Alberta'] as const;
+const REDDIT_QUERIES = [
+  'moving mover delivery',
+  'need a mover',
+  'moving company',
+  'furniture delivery',
+  'help moving',
 ] as const;
-const MOVING_KEYWORDS = [
-  'moving',
-  'relocating',
-  'must go',
-  'moving sale',
-  'moving out',
-  'need to move',
-] as const;
+const REDDIT_USER_AGENT = 'LervIT-Scout/1.0 (moving platform)';
+
+const KIJIJI_URL = 'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
+const KIJIJI_MAX_LISTINGS = 15;
+
+const RENTFASTER_FEED = 'https://www.rentfaster.ca/rss/?city=calgary';
+const RENTFASTER_MAX_ITEMS = 10;
+
+const CRAIGSLIST_FEED = 'https://calgary.craigslist.org/search/hhh?format=rss';
+const CRAIGSLIST_MAX_ITEMS = 10;
 
 interface CrawlResult {
   found: number;
@@ -49,6 +65,9 @@ interface CrawlResult {
 
 interface ProcessSignalsResult {
   googleAlerts: number;
+  reddit: number;
+  rentfaster: number;
+  craigslist: number;
   kijiji: number;
   leadsCreated: number;
   leadsRouted: number;
@@ -64,6 +83,12 @@ export class ScoutAgent extends BaseAgent {
         return this.processSignals();
       case 'crawl_google_alerts':
         return this.crawlGoogleAlerts();
+      case 'crawl_reddit':
+        return this.crawlReddit();
+      case 'crawl_rentfaster':
+        return this.crawlRentFaster();
+      case 'crawl_craigslist':
+        return this.crawlCraigslist();
       case 'crawl_kijiji':
         return this.crawlKijiji();
       case 'score_lead':
@@ -76,25 +101,52 @@ export class ScoutAgent extends BaseAgent {
   private async processSignals(): Promise<ProcessSignalsResult> {
     const results: ProcessSignalsResult = {
       googleAlerts: 0,
+      reddit: 0,
+      rentfaster: 0,
+      craigslist: 0,
       kijiji: 0,
       leadsCreated: 0,
       leadsRouted: 0,
     };
 
     try {
-      const ga = await this.crawlGoogleAlerts();
-      results.googleAlerts = ga.found;
-      results.leadsCreated += ga.created;
+      const r = await this.crawlGoogleAlerts();
+      results.googleAlerts = r.found;
+      results.leadsCreated += r.created;
     } catch (err) {
-      logger.error({ err }, 'Scout: Google Alerts crawl failed');
+      logger.error({ err }, 'Scout: Google Alerts failed');
     }
 
     try {
-      const kj = await this.crawlKijiji();
-      results.kijiji = kj.found;
-      results.leadsCreated += kj.created;
+      const r = await this.crawlReddit();
+      results.reddit = r.found;
+      results.leadsCreated += r.created;
     } catch (err) {
-      logger.error({ err }, 'Scout: Kijiji crawl failed');
+      logger.error({ err }, 'Scout: Reddit failed');
+    }
+
+    try {
+      const r = await this.crawlRentFaster();
+      results.rentfaster = r.found;
+      results.leadsCreated += r.created;
+    } catch (err) {
+      logger.error({ err }, 'Scout: RentFaster failed');
+    }
+
+    try {
+      const r = await this.crawlCraigslist();
+      results.craigslist = r.found;
+      results.leadsCreated += r.created;
+    } catch (err) {
+      logger.error({ err }, 'Scout: Craigslist failed');
+    }
+
+    try {
+      const r = await this.crawlKijiji();
+      results.kijiji = r.found;
+      results.leadsCreated += r.created;
+    } catch (err) {
+      logger.warn({ err }, 'Scout: Kijiji failed (Puppeteer/chromium may be missing)');
     }
 
     const highIntent = await db
@@ -231,47 +283,283 @@ export class ScoutAgent extends BaseAgent {
     return { found, created };
   }
 
-  private async crawlKijiji(): Promise<CrawlResult> {
+  private async crawlReddit(): Promise<CrawlResult> {
+    let found = 0;
+    let created = 0;
+    let requestIdx = 0;
+
+    for (const subreddit of REDDIT_SUBREDDITS) {
+      for (const query of REDDIT_QUERIES) {
+        if (requestIdx > 0) await sleep(REDDIT_INTER_QUERY_DELAY_MS);
+        requestIdx++;
+
+        const url =
+          `https://www.reddit.com/r/${subreddit}/search.json` +
+          `?q=${encodeURIComponent(query)}&restrict_sr=1&sort=new&limit=25&t=day`;
+        try {
+          const response = await fetch(url, {
+            headers: { 'User-Agent': REDDIT_USER_AGENT },
+          });
+          if (!response.ok) {
+            logger.warn(
+              { subreddit, query, status: response.status },
+              'Scout: Reddit search non-200',
+            );
+            continue;
+          }
+          const data = (await response.json()) as {
+            data?: {
+              children?: Array<{
+                data?: {
+                  title?: string;
+                  selftext?: string;
+                  permalink?: string;
+                  name?: string;
+                };
+              }>;
+            };
+          };
+          const children = data.data?.children ?? [];
+
+          for (const child of children) {
+            const post = child.data ?? {};
+            const title = (post.title ?? '').trim();
+            const selftext = (post.selftext ?? '').trim();
+            const permalink = post.permalink ? `https://www.reddit.com${post.permalink}` : '';
+            const fingerprint = post.name || permalink || title;
+            if (!fingerprint || !title) continue;
+
+            found++;
+            const score = await this.scoreSignal(`${title}\n${selftext}`);
+            logger.info(
+              { score, subreddit, title: title.slice(0, 80) },
+              'Scout: signal scored',
+            );
+            if (score < REDDIT_CREATE_THRESHOLD) continue;
+            if (await this.wasSignalSeen('reddit', fingerprint)) continue;
+
+            try {
+              await db.insert(leads).values({
+                contactName: 'Reddit User',
+                sourceChannel: 'reddit',
+                utmSource: 'reddit',
+                utmCampaign: 'scout-reid',
+                intentScore: score,
+                status: 'new',
+                notes:
+                  `Subreddit: r/${subreddit}\n` +
+                  `Title: ${title}\n` +
+                  `URL: ${permalink}\n` +
+                  `Body: ${selftext.slice(0, 300)}`,
+              });
+              created++;
+              logger.info({ score, title: title.slice(0, 60) }, 'Scout: reddit lead created');
+            } catch (err) {
+              logger.error(
+                { err: (err as Error).message, title: title.slice(0, 60) },
+                'Scout: reddit lead insert failed',
+              );
+            }
+          }
+        } catch (err) {
+          logger.error({ err, subreddit, query }, 'Scout: Reddit search failed');
+        }
+      }
+    }
+
+    return { found, created };
+  }
+
+  private async crawlRentFaster(): Promise<CrawlResult> {
+    return this.crawlRssWithStaticScore({
+      feedUrl: RENTFASTER_FEED,
+      source: 'rentfaster',
+      staticScore: RENTFASTER_STATIC_SCORE,
+      maxItems: RENTFASTER_MAX_ITEMS,
+      contactName: 'RentFaster Listing',
+    });
+  }
+
+  private async crawlCraigslist(): Promise<CrawlResult> {
+    return this.crawlRssWithStaticScore({
+      feedUrl: CRAIGSLIST_FEED,
+      source: 'craigslist',
+      staticScore: CRAIGSLIST_STATIC_SCORE,
+      maxItems: CRAIGSLIST_MAX_ITEMS,
+      contactName: 'Craigslist Listing',
+    });
+  }
+
+  /**
+   * Shared helper for RSS sources where every item gets the same static
+   * intent score (rentals/housing signals = "someone will need a mover").
+   * Skips scoring to save Anthropic calls on high-volume sources.
+   */
+  private async crawlRssWithStaticScore(opts: {
+    feedUrl: string;
+    source: string;
+    staticScore: number;
+    maxItems: number;
+    contactName: string;
+  }): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
 
-    for (const url of KIJIJI_URLS) {
-      try {
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-CA,en;q=0.9',
-          },
-        });
-        if (!response.ok) {
-          logger.warn({ url, status: response.status }, 'Scout: Kijiji fetch non-200');
-          continue;
+    try {
+      const params = new URLSearchParams({ rss_url: opts.feedUrl });
+      const apiKey = process.env.RSSBRIDGE_API_KEY?.trim();
+      if (apiKey) params.set('api_key', apiKey);
+      const proxyUrl = `https://api.rss2json.com/v1/api.json?${params.toString()}`;
+
+      const response = await fetch(proxyUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!response.ok) {
+        logger.warn(
+          { source: opts.source, status: response.status },
+          'Scout: rss2json fetch non-200',
+        );
+        return { found: 0, created: 0 };
+      }
+      const data = (await response.json()) as {
+        status?: string;
+        message?: string;
+        items?: Array<{ title?: string; description?: string; link?: string }>;
+      };
+      if (data.status !== 'ok' || !Array.isArray(data.items)) {
+        logger.warn(
+          { source: opts.source, status: data.status, message: data.message },
+          'Scout: rss2json returned non-ok',
+        );
+        return { found: 0, created: 0 };
+      }
+
+      for (const item of data.items.slice(0, opts.maxItems)) {
+        found++;
+        const title = (item.title ?? '').trim();
+        const description = (item.description ?? '').trim();
+        const link = (item.link ?? '').trim();
+        const fingerprint = link || title;
+        if (!fingerprint || !title) continue;
+        if (await this.wasSignalSeen(opts.source, fingerprint)) continue;
+
+        try {
+          await db.insert(leads).values({
+            contactName: opts.contactName,
+            sourceChannel: opts.source,
+            utmSource: opts.source,
+            utmCampaign: 'scout-reid',
+            intentScore: opts.staticScore,
+            status: 'new',
+            notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
+          });
+          created++;
+          logger.info(
+            { source: opts.source, title: title.slice(0, 60) },
+            'Scout: RSS lead created',
+          );
+        } catch (err) {
+          logger.error(
+            { err: (err as Error).message, source: opts.source, title: title.slice(0, 60) },
+            'Scout: RSS lead insert failed',
+          );
         }
-        const html = await response.text();
+      }
+    } catch (err) {
+      logger.error({ err, source: opts.source }, 'Scout: RSS crawl failed');
+    }
 
-        const titleMatches = html.match(/data-testid="listing-title"[^>]*>([^<]+)</g) ?? [];
-        for (const raw of titleMatches.slice(0, 20)) {
-          found++;
-          const title = raw.replace(/data-testid[^>]+>/, '').replace(/<[^>]+>/g, '').trim();
-          const hasIntent = MOVING_KEYWORDS.some(kw => title.toLowerCase().includes(kw));
-          if (!hasIntent) continue;
+    return { found, created };
+  }
 
-          if (await this.wasSignalSeen('kijiji', title)) continue;
+  private async crawlKijiji(): Promise<CrawlResult> {
+    // puppeteer-core is loaded dynamically so that (a) local dev machines
+    // without a chromium install don't crash the process at boot, and
+    // (b) tsc doesn't require a working install at build time. If either
+    // the module or the chromium binary is missing, log and skip.
+    let puppeteer: any = null;
+    try {
+      const mod: any = await import('puppeteer-core');
+      puppeteer = mod.default ?? mod;
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, 'Scout: puppeteer-core not installed — Kijiji skipped');
+      return { found: 0, created: 0 };
+    }
 
+    const executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
+    let browser: any = null;
+    let found = 0;
+    let created = 0;
+
+    try {
+      browser = await puppeteer.launch({
+        executablePath,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+        ],
+        headless: true,
+      });
+
+      const page = await browser.newPage();
+      await page.setUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
+      await page.goto(KIJIJI_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+
+      const listings: Array<{ title: string; description: string; link: string }> =
+        await page.evaluate((max: number) => {
+          const items = document.querySelectorAll('[data-testid="listing-card"]');
+          return Array.from(items)
+            .slice(0, max)
+            .map(item => ({
+              title: (item.querySelector('h3')?.textContent ?? '').trim(),
+              description: (item.querySelector('[class*="description"]')?.textContent ?? '').trim(),
+              link: (item.querySelector('a') as HTMLAnchorElement | null)?.href ?? '',
+            }));
+        }, KIJIJI_MAX_LISTINGS);
+
+      for (const listing of listings) {
+        if (!listing.title) continue;
+        found++;
+        const fingerprint = listing.link || listing.title;
+        const score = await this.scoreSignal(`${listing.title}\n${listing.description}`);
+        logger.info({ score, title: listing.title.slice(0, 80) }, 'Scout: signal scored');
+        if (score < KIJIJI_CREATE_THRESHOLD) continue;
+        if (await this.wasSignalSeen('kijiji', fingerprint)) continue;
+
+        try {
           await db.insert(leads).values({
             contactName: 'Kijiji User',
             sourceChannel: 'kijiji',
             utmSource: 'kijiji',
-            intentScore: 65,
+            utmCampaign: 'scout-reid',
+            intentScore: score,
             status: 'new',
-            notes: `Kijiji listing: ${title}\nSection: ${url}`,
+            notes:
+              `Title: ${listing.title}\n` +
+              `URL: ${listing.link}\n` +
+              `Desc: ${listing.description.slice(0, 200)}`,
           });
           created++;
+          logger.info({ score, title: listing.title.slice(0, 60) }, 'Scout: kijiji lead created');
+        } catch (err) {
+          logger.error(
+            { err: (err as Error).message, title: listing.title.slice(0, 60) },
+            'Scout: kijiji lead insert failed',
+          );
         }
-      } catch (err) {
-        logger.error({ err, url }, 'Scout: Kijiji crawl failed');
+      }
+    } catch (err) {
+      logger.warn({ err: (err as Error).message, executablePath }, 'Scout: Kijiji Puppeteer failed');
+    } finally {
+      if (browser) {
+        try { await browser.close(); } catch { /* ignore */ }
       }
     }
 

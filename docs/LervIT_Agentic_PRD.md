@@ -41,35 +41,34 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 
 ### 3.1 DEMAND SIDE — Scout Reid (HUNTER-D)
 
-#### Priority 1 — Daily
+#### Priority 1 — Daily (shipped)
 
-**Google Alerts (RSS)**
-- Queries: `moving Calgary`, `mover Calgary`, `moving to Calgary`, `relocating Calgary`, `Calgary apartment for rent`
-- Method: RSS feed processing
-- Cost: FREE
+| Source | Status | Method | Threshold | Notes |
+|---|---|---|---|---|
+| Google Alerts RSS | ✅ | rss2json proxy | score ≥ 50 | `GOOGLE_ALERT_FEEDS` env, per-account private feeds |
+| Reddit (r/Calgary, r/calgaryhousing, r/Alberta) | ✅ | Public JSON, 2s throttle | score ≥ 50 | Custom User-Agent `LervIT-Scout/1.0` |
+| RentFaster.ca RSS | ✅ | rss2json proxy | static 55, max 10/run | Rental listings = latent move signal |
+| Craigslist Calgary housing RSS | ✅ | rss2json proxy | static 45, max 10/run | Replaces Facebook Marketplace |
+| Kijiji Calgary moving-storage | ✅ | Puppeteer (chromium via nixpacks) | score ≥ 45, max 15/run | `CHROMIUM_PATH` env |
+| Facebook Marketplace | ❌ | — | — | Archived — see `docs/strategies/facebook-marketplace.md` |
 
-**Kijiji.ca**
-- Sections: Housing (For Rent, For Sale), Services (Moving), Free Stuff (Moving Sale)
-- Method: Puppeteer + Cheerio
-- Cost: FREE
+**Google Alerts (RSS)** — Queries: `moving Calgary`, `mover Calgary`, `moving to Calgary`, `relocating Calgary`, `Calgary apartment for rent`. Method: rss2json proxy (per-account feeds require auth otherwise). Cost: FREE (rss2json free tier).
 
-**RentFaster.ca**
-- New rental listings Calgary; "Available immediately" signals
-- Method: RSS/API
-- Cost: FREE
+**Reddit** — Subreddits: `r/Calgary`, `r/calgaryhousing`, `r/Alberta`. Queries: `moving mover delivery`, `need a mover`, `moving company`, `furniture delivery`, `help moving`. Method: reddit.com/r/{sub}/search.json with `LervIT-Scout/1.0` User-Agent, 2s inter-request delay. Cost: FREE.
 
-**Facebook Marketplace**
-- Queries: "Moving sale", "Relocating — must sell"; Calgary buy/sell groups
-- Method: Public listings scrape
-- Cost: FREE
+**RentFaster.ca RSS** — Feed: `rentfaster.ca/rss/?city=calgary`. Method: rss2json proxy. Cost: FREE.
 
-**YouTube Data API v3**
+**Craigslist Calgary** — Feed: `calgary.craigslist.org/search/hhh?format=rss`. Method: rss2json proxy. Cost: FREE.
+
+**Kijiji Calgary (Puppeteer)** — Section: moving & storage services. Method: puppeteer-core + system chromium (Railway nixpacks). Cost: FREE (deploy dependency).
+
+**YouTube Data API v3** *(planned — Phase 3+)*
 - Monitor comments on videos tagged: `moving to Calgary`, `Calgary apartment tour`, `Calgary cost of living`, `Calgary neighbourhood`
 - Flag comments containing moving-intent keywords: `moving next month`, `relocating to Calgary`, `need a mover`, `moving company`, `help moving`
 - Method: YouTube Data API v3
 - Cost: FREE (10K units/day)
 
-#### Priority 2 — Every 48 Hours
+#### Priority 2 — Every 48 Hours (planned)
 
 **Google Maps Places API**
 - Search: `moving company Calgary`
@@ -79,23 +78,12 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 
 **Google News (RSS)**
 - Queries: `Calgary real estate`, `Calgary housing market`, `Alberta interprovincial migration`, `Calgary new development`
-- Method: RSS feed processing
-- Cost: FREE
-
-**Reddit**
-- Subreddits: `r/Calgary`, `r/calgaryhousing`, `r/Alberta`
-- Keywords: `moving`, `mover`, `help moving`, `relocating`, `moving company`
-- Method: Reddit API (free tier)
+- Method: RSS feed processing (via rss2json)
 - Cost: FREE
 
 **Realtor.ca**
 - New Calgary listings; sold listings (buyer needs to move in)
 - Method: RSS/scrape
-- Cost: FREE
-
-**Craigslist Calgary**
-- Housing section new listings; moving-sale tags
-- Method: RSS feed
 - Cost: FREE
 
 #### Priority 3 — Weekly
