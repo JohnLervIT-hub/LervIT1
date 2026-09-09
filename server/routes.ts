@@ -13072,6 +13072,148 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== SCOUT REID (HUNTER-D) + ALEX MORGAN (CLOSER-D) =====
+
+  // List leads with filters + pagination.
+  app.get("/api/admin/agent/leads", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const source = typeof req.query.source === 'string' ? req.query.source : undefined;
+      const sinceParam = typeof req.query.since === 'string' ? req.query.since : undefined;
+      const page = Math.max(1, Number(req.query.page ?? 1));
+      const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize ?? 50)));
+
+      const filters: any[] = [];
+      if (status) filters.push(eq(leads.status, status));
+      if (source) filters.push(eq(leads.sourceChannel, source));
+      if (sinceParam) {
+        const since = new Date(sinceParam);
+        if (!isNaN(since.getTime())) filters.push(sql`${leads.createdAt} >= ${since}`);
+      }
+      const whereClause = filters.length > 0 ? and(...filters) : undefined;
+
+      const countRows = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(whereClause as any);
+      const total = countRows[0]?.n ?? 0;
+
+      const rows = await db
+        .select()
+        .from(leads)
+        .where(whereClause as any)
+        .orderBy(desc(leads.createdAt))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+      res.json({ data: rows, page, pageSize, total });
+    } catch (err) {
+      logger.error({ err }, '[Admin] leads list failed');
+      res.status(500).json({ error: 'Failed to list leads' });
+    }
+  });
+
+  // Single lead + its business_events timeline.
+  app.get("/api/admin/agent/leads/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!lead) return res.status(404).json({ error: 'Lead not found' });
+      const events = await db
+        .select()
+        .from(businessEvents)
+        .where(and(eq(businessEvents.entityType, 'lead'), eq(businessEvents.entityId, req.params.id)))
+        .orderBy(desc(businessEvents.createdAt))
+        .limit(200);
+      res.json({ lead, events });
+    } catch (err) {
+      logger.error({ err }, '[Admin] lead detail failed');
+      res.status(500).json({ error: 'Failed to load lead' });
+    }
+  });
+
+  // Manually trigger Scout crawl.
+  app.post("/api/admin/agent/scout/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { scout } = await import('./agents/scout');
+      const action = (req.body?.action ?? 'process_signals') as string;
+      const allowed = new Set(['process_signals', 'crawl_google_alerts', 'crawl_kijiji', 'score_lead']);
+      if (!allowed.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const result = await scout.run(action, req.body?.input ?? {});
+      res.json({ ok: true, action, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] scout/trigger failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // Manually trigger Alex on a specific lead or booking.
+  app.post("/api/admin/agent/alex/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { alex } = await import('./agents/alex');
+      const action = (req.body?.action ?? 'convert_lead') as string;
+      if (action === 'convert_lead' || action === 'send_touch') {
+        if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
+        const input = { leadId: String(req.body.leadId), touchNumber: Number(req.body.touchNumber ?? 2) };
+        const result = await alex.run(action, input);
+        return res.json({ ok: true, action, result });
+      }
+      if (action === 'recover_abandoned') {
+        if (!req.body?.bookingId) return res.status(400).json({ error: 'bookingId required' });
+        const result = await alex.run('recover_abandoned', { bookingId: String(req.body.bookingId) });
+        return res.json({ ok: true, action, result });
+      }
+      return res.status(400).json({ error: `Unsupported action: ${action}` });
+    } catch (err) {
+      logger.error({ err }, '[Admin] alex/trigger failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // Alex conversion funnel + touch effectiveness for the last N days.
+  app.get("/api/admin/agent/alex/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const days = Math.max(1, Math.min(90, Number(req.query.days ?? 7)));
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const funnelRows = await db.execute(sql`
+        SELECT
+          COUNT(*)                                                   ::int AS total,
+          COUNT(*) FILTER (WHERE status = 'new')                     ::int AS new_,
+          COUNT(*) FILTER (WHERE status = 'contacted')               ::int AS contacted,
+          COUNT(*) FILTER (WHERE status = 'converted')               ::int AS converted,
+          COUNT(*) FILTER (WHERE status = 'cold')                    ::int AS cold
+        FROM leads
+        WHERE created_at >= ${since}
+      `);
+      const funnel = (funnelRows as any).rows?.[0] ?? { total: 0, new_: 0, contacted: 0, converted: 0, cold: 0 };
+
+      const channelRows = await db.execute(sql`
+        SELECT
+          COALESCE(payload->>'channel', 'unknown')                   AS channel,
+          COUNT(*)                                                   ::int AS touches,
+          COUNT(*) FILTER (WHERE (payload->>'delivered') = 'true')   ::int AS delivered
+        FROM business_events
+        WHERE event_type IN ('lead.contacted','lead.touched')
+          AND created_at >= ${since}
+        GROUP BY 1
+        ORDER BY touches DESC
+      `);
+      const byChannel = (channelRows as any).rows ?? [];
+
+      res.json({ days, since: since.toISOString(), funnel, byChannel });
+    } catch (err) {
+      logger.error({ err }, '[Admin] alex/stats failed');
+      res.status(500).json({ error: 'Failed to load Alex stats' });
+    }
+  });
+
   // ===== SPRINT 5: MOVER EARNINGS PDF =====
 
   app.get("/api/mover/earnings/pdf", async (req: Request, res: Response) => {

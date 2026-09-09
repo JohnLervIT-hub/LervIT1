@@ -12,6 +12,7 @@ import { pool } from "./db";
 import { logger, logEvent } from "./logger";
 import { randomBytes } from "crypto";
 import { initBackgroundJobs } from "./background-jobs";
+import { startAgentWorkers } from "./agents/workers";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
@@ -261,6 +262,14 @@ app.use((req, res, next) => {
         initBackgroundJobs();
       } catch (jobErr) {
         logEvent.error('background_jobs_init', jobErr);
+      }
+
+      // BullMQ workers for autonomous agents (Alex Morgan, Scout Reid).
+      // No-op when REDIS_URL is unset.
+      try {
+        startAgentWorkers();
+      } catch (workerErr) {
+        logEvent.error('agent_workers_init', workerErr);
       }
     });
 

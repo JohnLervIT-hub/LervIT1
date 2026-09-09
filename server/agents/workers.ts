@@ -1,0 +1,66 @@
+/**
+ * BullMQ workers for autonomous agents.
+ *
+ * Each worker pulls jobs from its named queue (matching QUEUE_NAMES) and
+ * dispatches them through the agent's `run(action, input)` method — which
+ * gives us the BaseAgent guarantees (agent_logs row, business_events
+ * emit, timing).
+ *
+ * Skips silently when Redis is unavailable. Skips when
+ * DISABLE_AGENT_WORKERS=1 (matches DISABLE_BACKGROUND_JOBS convention).
+ */
+
+import { Worker, type Job } from 'bullmq';
+import { getRedisConnection, QUEUE_NAMES } from '../queue';
+import { logger } from '../logger';
+import { alex } from './alex';
+import { scout } from './scout';
+import type { BaseAgent } from './base';
+
+let workersStarted = false;
+
+export function startAgentWorkers(): void {
+  if (workersStarted) {
+    logger.warn('startAgentWorkers: already initialized in this process');
+    return;
+  }
+  if (process.env.DISABLE_AGENT_WORKERS === '1') {
+    logger.info('startAgentWorkers: disabled via DISABLE_AGENT_WORKERS=1');
+    return;
+  }
+
+  const connection = getRedisConnection();
+  if (!connection) {
+    logger.warn('startAgentWorkers: REDIS_URL unset — agent workers not started');
+    return;
+  }
+  workersStarted = true;
+
+  spawnWorker(QUEUE_NAMES.CLOSER_D, alex, 3);
+  spawnWorker(QUEUE_NAMES.HUNTER_D, scout, 1);
+
+  logger.info('Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d)');
+}
+
+function spawnWorker(queueName: string, agent: BaseAgent, concurrency: number): Worker {
+  const connection = getRedisConnection();
+  if (!connection) throw new Error('spawnWorker called without Redis');
+
+  const worker = new Worker(
+    queueName,
+    async (job: Job) => agent.run(job.name, job.data ?? {}),
+    { connection, concurrency },
+  );
+
+  worker.on('failed', (job, err) => {
+    logger.error(
+      { queue: queueName, jobId: job?.id, jobName: job?.name, err },
+      'Agent worker job failed',
+    );
+  });
+  worker.on('error', err => {
+    logger.error({ queue: queueName, err }, 'Agent worker errored');
+  });
+
+  return worker;
+}

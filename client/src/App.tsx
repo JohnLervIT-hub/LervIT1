@@ -61,6 +61,7 @@ const Review = lazy(() => import("@/pages/Review"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const AdminUsersPage = lazy(() => import("@/pages/AdminUsersPage"));
 const AdminMoversPage = lazy(() => import("@/pages/AdminMoversPage"));
+const AdminLeadsPage = lazy(() => import("@/pages/AdminLeadsPage"));
 const AdminMovesPage = lazy(() => import("@/pages/AdminMovesPage"));
 const AdminRevenuePage = lazy(() => import("@/pages/AdminRevenuePage"));
 const AdminPayoutsPage = lazy(() => import("@/pages/AdminPayoutsPage"));
@@ -273,6 +274,11 @@ function Router() {
         <Route path="/admin/movers">
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminMoversPage />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/leads">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminLeadsPage />
           </ProtectedRoute>
         </Route>
         <Route path="/admin/moves">

@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 
 const OperationsDashboard = lazy(() => import("@/pages/OperationsDashboard"));
 import { XavierBriefCard } from "@/components/XavierBriefCard";
+import { DemandPipelineCard } from "@/components/DemandPipelineCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1243,6 +1244,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="apex" className="space-y-4 mt-4">
+            <DemandPipelineCard />
             <XavierBriefCard />
           </TabsContent>
 

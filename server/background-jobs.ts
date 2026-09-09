@@ -10,6 +10,9 @@ import { moverWebSocket } from './websocket';
 import { dispatchBooking, dispatchJobToMovers } from './dispatch';
 import { emitEvent } from './events';
 import { xavier } from './agents/xavier';
+import { scout } from './agents/scout';
+import { alex } from './agents/alex';
+import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -123,6 +126,53 @@ export function initBackgroundJobs() {
         logger.info({ event: 'xavier_daily_brief' }, 'Xavier Cole daily brief sent');
       } catch (err) {
         logger.error({ err, event: 'xavier_daily_brief' }, 'Xavier daily brief failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 07:00 Calgary — Scout Reid (HUNTER-D) crawls demand signals and
+  // routes high-intent leads to Alex on the closer-d queue.
+  cron.schedule('0 7 * * *', async () => {
+    await withJobLock('scout_daily_crawl', async () => {
+      try {
+        const results = await scout.run('process_signals', {});
+        logger.info({ event: 'scout_daily_crawl', results }, 'Scout Reid daily crawl complete');
+      } catch (err) {
+        logger.error({ err, event: 'scout_daily_crawl' }, 'Scout daily crawl failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 09:00 Calgary — Alex Morgan (CLOSER-D) sweeps for abandoned
+  // bookings (pending_payment, 30min–24hr old) and sends a recovery email.
+  // Dedup vs sendAbandonedBookingReminders is done inside Alex via the
+  // business_events "booking.recovery_sent" check.
+  cron.schedule('0 9 * * *', async () => {
+    await withJobLock('alex_abandoned_recovery', async () => {
+      try {
+        const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const abandoned = await db
+          .select({ id: bookings.id })
+          .from(bookings)
+          .where(and(
+            eq(bookings.status, 'pending_payment'),
+            lt(bookings.createdAt, thirtyMinAgo),
+            gt(bookings.createdAt, oneDayAgo),
+          ));
+        let sent = 0;
+        for (const b of abandoned) {
+          try {
+            const res = await alex.run('recover_abandoned', { bookingId: b.id });
+            if (res?.success) sent++;
+          } catch (err) {
+            logger.error({ err, bookingId: b.id }, 'Alex recover_abandoned failed for booking');
+          }
+        }
+        logger.info({ event: 'alex_abandoned_recovery', candidates: abandoned.length, sent },
+          'Alex abandoned recovery complete');
+      } catch (err) {
+        logger.error({ err, event: 'alex_abandoned_recovery' }, 'Alex abandoned recovery failed');
       }
     });
   }, TZ);
