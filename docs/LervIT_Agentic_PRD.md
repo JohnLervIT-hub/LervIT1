@@ -1,11 +1,11 @@
 # LervIT Agentic System PRD
-## Version 2.0 — September 2026
+## Version 2.1 — September 2026
 
 ---
 
 ## 1. OVERVIEW
 
-LervIT operates **11 autonomous AI agents** orchestrated by Xavier Cole (APEX). The system handles demand generation, supply recruitment, conversion, dispatch, operations, compliance, and retention without human intervention.
+LervIT operates **12 autonomous AI agents** orchestrated by Xavier Cole (APEX). The system handles demand generation, supply recruitment, pricing intelligence, conversion, dispatch, operations, compliance, and retention without human intervention.
 
 Xavier is the only agent with cross-agent visibility. Every other agent operates within its lane and reports events to a shared event bus (`business_events`), a structured log (`agent_logs`), and a decision journal (`agent_decisions`).
 
@@ -13,22 +13,25 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 
 ## 2. AGENT ROSTER
 
-| Formal Name | Code Name | Model | Trigger | Role | Est. Monthly Cost |
-|---|---|---|---|---|---|
-| Xavier Cole | APEX | Opus 4.6 | Daily 06:00 | Orchestrator | $8/mo |
-| Alex Morgan | CLOSER-D | Sonnet 4.6 | Event + Scheduled | Lead Conversion | $2/mo |
-| Scout Reid | HUNTER-D | Haiku 4.5 | Daily 07:00 | Customer Prospecting | $0.30/mo |
-| Ryan Brooks | HUNTER-S | Haiku 4.5 | Daily 07:00 | Mover Recruitment | $0.30/mo |
-| Ember Lane | MAGNET | Haiku 4.5 | Weekly | Content + Inbound | $0.10/mo |
-| Jordan Hayes | VETTER | Sonnet 4.6 | Event | Application + Onboarding | $1/mo |
-| Kai Bennett | RETAIN | Haiku 4.5 | Event | Mover Engagement | $0.50/mo |
-| Victor Nash | DISPATCH | Haiku 4.5 | Event | Job Matching | $0.20/mo |
-| Mark Shaw | PULSE | Haiku 4.5 | Event | Operations Monitoring | $0.20/mo |
-| Nova Clarke | VOICE | Haiku 4.5 | Event | Customer Communications | $0.30/mo |
-| Aegis Ford | COMPLIANCE | Opus 4.6 | Event | Safety + Compliance | $3/mo |
+| Formal Name  | Code Name   | Model      | Trigger      | Role                    | Est/mo |
+|-------------|-------------|------------|--------------|-------------------------|--------|
+| Xavier Cole  | APEX        | Opus 4.6   | Daily 06:00  | CEO Orchestrator        | $8.00  |
+| Aegis Ford   | COMPLIANCE  | Opus 4.6   | Event        | Safety + Compliance     | $3.00  |
+| Alex Morgan  | CLOSER-D    | Sonnet 4.6 | Event+Sched  | Lead Conversion         | $2.00  |
+| Jordan Hayes | VETTER      | Sonnet 4.6 | Event        | Mover Onboarding        | $1.00  |
+| Morgan Price | ORACLE      | Sonnet 4.6 | Daily 05:30  | Pricing Intelligence    | $1.00  |
+| Scout Reid   | HUNTER-D    | Haiku 4.5  | Daily 07:00  | Customer Prospecting    | $0.30  |
+| Ryan Brooks  | HUNTER-S    | Haiku 4.5  | Daily 07:00  | Mover Recruitment       | $0.30  |
+| Kai Bennett  | RETAIN      | Haiku 4.5  | Event        | Mover Engagement        | $0.50  |
+| Victor Nash  | DISPATCH    | Haiku 4.5  | Event        | Job Matching            | $0.20  |
+| Mark Shaw    | PULSE       | Haiku 4.5  | Event        | Operations Monitoring   | $0.20  |
+| Nova Clarke  | VOICE       | Haiku 4.5  | Event        | Customer Communications | $0.30  |
+| Ember Lane   | MAGNET      | Haiku 4.5  | Weekly       | Content + Inbound       | $0.10  |
+
+**Total agents:** 12
 
 **Cost curve**
-- Current volume (~10 jobs/mo): **~$16/month**
+- Current volume (~10 jobs/mo): **~$17/month**
 - Growth (50 jobs/mo): **~$35/month**
 - Scale (150 jobs/mo): **~$80/month**
 
@@ -330,13 +333,61 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
   - WCB fatigue hour limits
   - YouTube / Google API terms compliance
 
+### 4.12 Morgan Price (ORACLE) — Pricing Intelligence
+- **Trigger:** Daily 05:30 Calgary time (before Xavier brief) + Event: fuel price spike >5%
+- **Model:** Claude Sonnet 4.6
+- **Actions:**
+
+  1. **Competitive Intelligence (daily)**
+     - Monitor competitor pricing on:
+       - Kijiji moving ads (price listings)
+       - Google Maps competitor profiles
+       - HomeStars.com Calgary movers
+     - Output: market rate comparison report
+     - Routes to: Xavier Cole for John review
+
+  2. **Fuel Price Monitoring (daily)**
+     - Sources: GasBuddy API, Alberta government data
+     - When fuel rises >5%:
+       - Automatically adjusts fuel surcharge
+       - Notifies John via Xavier Cole
+       - Updates customer-facing estimates
+
+  3. **YOLO Pricing Accuracy (weekly)**
+     - Reviews completed jobs:
+       - Quoted price vs actual price
+       - Items detected vs actual items
+       - Time estimated vs actual time
+     - Identifies systematic underquoting patterns
+     - Routes corrections to pricing engine
+
+  4. **Seasonal Pricing (monthly)**
+     - Calgary demand peaks:
+       - May–September (summer moving season)
+       - Month-end surges (lease renewals)
+       - University move-in (August/September)
+     - Recommends surge pricing windows to John
+     - Never applies automatically — John approves
+
+  5. **Demand-Based Pricing (event-driven)**
+     - Triggered when Victor Nash flags high demand
+     - Recommends 10–15% surge pricing
+     - Routes to John for approval
+     - If approved: updates pricing engine
+
+  6. **Feeds Victor Nash (DISPATCH)**
+     - Maintains: base rates by job type
+     - Active fuel surcharge %
+     - Zone-based pricing adjustments
+     - Peak/off-peak multipliers
+
 ---
 
 ## 5. COST ARCHITECTURE
 
 ### 5.1 Model Tiers
 - **Claude Opus 4.6:** Xavier Cole, Aegis Ford
-- **Claude Sonnet 4.6:** Alex Morgan, Jordan Hayes
+- **Claude Sonnet 4.6:** Alex Morgan, Jordan Hayes, Morgan Price
 - **Claude Haiku 4.5:** All other 7 agents
 
 ### 5.2 Optimizations
@@ -350,7 +401,7 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 - BullMQ delayed jobs for timed sequences
 
 ### 5.3 Cost Estimates
-- Current volume (~10 jobs/month): **~$16/month**
+- Current volume (~10 jobs/month): **~$17/month**
 - Growth (50 jobs/month): **~$35/month**
 - Scale (150 jobs/month): **~$80/month**
 
@@ -388,7 +439,7 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 
 ### 7.1 Queue System
 - BullMQ + Redis (Railway)
-- 11 named agent queues
+- 12 named agent queues
 - 3 retry attempts, exponential backoff
 
 ### 7.2 Database Tables
@@ -412,15 +463,54 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 
 | Phase | Weeks | Deliverables |
 |---|---|---|
-| Phase 1 | 1–2 | Xavier Cole + APEX daily brief |
-| Phase 2 | 3–4 | Alex Morgan + Scout Reid |
-| Phase 3 | 5–6 | Ryan Brooks + Jordan Hayes |
-| Phase 4 | 7–8 | Victor Nash + Mark Shaw |
-| Phase 5 | 9–10 | Nova Clarke + Kai Bennett |
-| Phase 6 | 11–12 | Ember Lane + Aegis Ford |
-| Phase 7 | 13+ | Voice integration + YOLO capacity |
+| Phase 1 | 1–2 | Xavier Cole (APEX) + daily brief |
+| Phase 2 | 3–4 | Alex Morgan (CLOSER-D) + Scout Reid (HUNTER-D) |
+| Phase 3 | 5–6 | Ryan Brooks (HUNTER-S) + Jordan Hayes (VETTER) |
+| Phase 4 | 7–8 | Victor Nash (DISPATCH) + Mark Shaw (PULSE) |
+| Phase 5 | 9–10 | Nova Clarke (VOICE) + Kai Bennett (RETAIN) |
+| Phase 6 | 11–12 | Ember Lane (MAGNET) + Aegis Ford (COMPLIANCE) |
+| Phase 7 | 13–14 | Morgan Price (ORACLE) + YOLO vehicle capacity |
+| Phase 8 | 15+ | Voice integration + mobile app agents |
+
+---
+
+## 9. ORCHESTRATION FLOW
+
+### 9.1 Agent Hierarchy
+
+Xavier Cole (APEX) sits at the top of the orchestration hierarchy. All 11 specialist agents receive direction from Xavier and report outcomes back.
+
+### 9.2 Layer Structure
+
+| Layer | Focus | Agents |
+|---|---|---|
+| Layer 1 | Demand | Scout Reid, Morgan Price |
+| Layer 2 | Supply | Ryan Brooks, Jordan Hayes |
+| Layer 3 | Conversion | Alex Morgan, Ember Lane, Kai Bennett |
+| Layer 4 | Operations | Victor Nash, Mark Shaw, Nova Clarke |
+| Layer 5 | Finance | Pricing Engine (YOLO + CV + Stripe) |
+| Layer 6 | Compliance | Aegis Ford (monitors all layers) |
+
+### 9.3 Key Data Flows
+
+- Scout Reid → Alex Morgan (qualified leads)
+- Ryan Brooks → Jordan Hayes (recruited movers)
+- Morgan Price → Victor Nash (pricing data)
+- Victor Nash → Nova Clarke (dispatch triggers comms)
+- Aegis Ford → All agents (compliance monitoring)
+
+### 9.4 Daily Schedule
+
+| Time | Agent | Action |
+|---|---|---|
+| 05:30 | Morgan Price | Pricing intelligence run |
+| 06:00 | Xavier Cole | Daily brief generation |
+| 07:00 | Scout Reid + Ryan Brooks | Crawl runs |
+| On-event | All other agents | Fire on triggers |
+| Weekly | Ember Lane | Content calendar |
 
 ---
 
 ## Change Log
+- **2026-09-09** — v2.1. Added Morgan Price (ORACLE) as 12th agent (pricing intelligence, Sonnet 4.6, daily 05:30). Added Section 9 (Orchestration Flow) with layer structure, data flows, and daily schedule. Rebalanced build sequence into 8 phases.
 - **2026-09-09** — v2.0. Full 11-agent PRD with crawl sources, workflows, cost architecture, compliance, infrastructure, and build sequence.
