@@ -5,16 +5,15 @@
  *   - `process_signals`     : full daily run — crawls all sources, scores,
  *                             creates leads, routes high-intent to Alex.
  *   - `crawl_google_alerts` : subset — Google Alerts RSS via rss2json.
- *   - `crawl_reddit`        : subset — r/Calgary + r/calgaryhousing + r/Alberta.
- *   - `crawl_rentfaster`    : subset — RentFaster Calgary RSS (rss2json).
- *   - `crawl_craigslist`    : subset — Craigslist Calgary housing RSS (rss2json).
- *   - `crawl_kijiji`        : subset — Kijiji Calgary via Puppeteer.
+ *   - `crawl_reddit`        : subset — Reddit .rss feeds via rss2json.
+ *   - `crawl_rentfaster`    : subset — RentFaster Calgary RSS via rss2json.
+ *   - `crawl_craigslist`    : subset — Craigslist Calgary housing RSS via rss2json.
+ *   - `crawl_kijiji`        : subset — Kijiji Calgary category RSS via rss2json.
  *   - `score_lead`          : one-off scoring of a signal string.
  *
- * Crawlers are best-effort: RSS sources go through rss2json; Reddit uses
- * its public JSON API; Kijiji uses puppeteer-core against a system chromium
- * (see nixpacks.toml). Any crawler that fails is logged and swallowed so
- * downstream crawlers still run.
+ * All five crawl sources go through the same rss2json proxy — no browser,
+ * no scraper, no system chromium. Any single crawler failure is logged
+ * and swallowed so the other sources still run.
  */
 
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
@@ -49,8 +48,12 @@ const REDDIT_FEEDS = [
   'https://www.reddit.com/r/calgaryhousing/new.rss',
 ] as const;
 
-const KIJIJI_URL = 'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
-const KIJIJI_MAX_LISTINGS = 15;
+// Kijiji publishes an RSS feed per category. Going through rss2json avoids
+// the anti-bot fingerprinting that killed the browser-fetch and
+// puppeteer-based approaches. See docs/strategies/puppeteer-scraping.md.
+const KIJIJI_FEED =
+  'https://www.kijiji.ca/rss-srp-moving-storage/city-of-calgary/c146l1700199';
+const KIJIJI_MAX_ITEMS = 15;
 
 const RENTFASTER_FEED = 'https://www.rentfaster.ca/rss/?city=calgary';
 const RENTFASTER_MAX_ITEMS = 10;
@@ -146,7 +149,7 @@ export class ScoutAgent extends BaseAgent {
       results.kijiji = r.found;
       results.leadsCreated += r.created;
     } catch (err) {
-      logger.warn({ err }, 'Scout: Kijiji failed (Puppeteer/chromium may be missing)');
+      logger.warn({ err }, 'Scout: Kijiji failed');
     }
 
     const highIntent = await db
@@ -411,102 +414,49 @@ export class ScoutAgent extends BaseAgent {
   }
 
   private async crawlKijiji(): Promise<CrawlResult> {
-    // `puppeteer` is loaded via dynamic import so a missing/broken install
-    // degrades cleanly instead of crashing boot. The bundled Chromium
-    // download is skipped (.npmrc PUPPETEER_SKIP_DOWNLOAD=true) because
-    // Railway/nixpacks provides `chromium` at the OS level — see the
-    // executablePath fallback chain below.
-    let puppeteer: any = null;
-    try {
-      const mod: any = await import('puppeteer');
-      puppeteer = mod.default ?? mod;
-    } catch (err) {
-      logger.warn({ err: (err as Error).message }, 'Scout: puppeteer not installed — Kijiji skipped');
-      return { found: 0, created: 0 };
-    }
-
-    // Fallback chain: env override → nixpacks/debian path → alternate name.
-    // The `|| '/usr/bin/chromium-browser'` tail is a no-op given the middle
-    // string is truthy; kept for documentation and for the case where a
-    // future refactor swaps the middle for a check that can return empty.
-    const executablePath =
-      process.env.CHROMIUM_PATH ||
-      '/usr/bin/chromium' ||
-      '/usr/bin/chromium-browser';
-
-    let browser: any = null;
+    // RSS via rss2json. Puppeteer was tried and archived — see
+    // docs/strategies/puppeteer-scraping.md. Kijiji publishes a per-category
+    // RSS feed which contains the same title/description/link data the
+    // headless browser was extracting, without any of the anti-bot risk.
     let found = 0;
     let created = 0;
 
-    try {
-      browser = await puppeteer.launch({
-        executablePath,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-        ],
-        headless: true,
-      });
+    const items = await this.fetchRss2Json(KIJIJI_FEED, 'kijiji');
+    if (!items) return { found: 0, created: 0 };
 
-      const page = await browser.newPage();
-      await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      );
-      await page.goto(KIJIJI_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    for (const item of items.slice(0, KIJIJI_MAX_ITEMS)) {
+      const title = (item.title ?? '').trim();
+      const description = (item.description ?? '').trim();
+      const link = (item.link ?? '').trim();
+      const fingerprint = link || title;
+      if (!fingerprint || !title) continue;
 
-      const listings: Array<{ title: string; description: string; link: string }> =
-        await page.evaluate((max: number) => {
-          const items = document.querySelectorAll('[data-testid="listing-card"]');
-          return Array.from(items)
-            .slice(0, max)
-            .map(item => ({
-              title: (item.querySelector('h3')?.textContent ?? '').trim(),
-              description: (item.querySelector('[class*="description"]')?.textContent ?? '').trim(),
-              link: (item.querySelector('a') as HTMLAnchorElement | null)?.href ?? '',
-            }));
-        }, KIJIJI_MAX_LISTINGS);
+      found++;
+      const score = await this.scoreSignal(`${title}\n${description}`);
+      logger.info({ score, title: title.slice(0, 80) }, 'Scout: signal scored');
+      if (score < KIJIJI_CREATE_THRESHOLD) continue;
+      if (await this.wasSignalSeen('kijiji', fingerprint)) continue;
 
-      for (const listing of listings) {
-        if (!listing.title) continue;
-        found++;
-        const fingerprint = listing.link || listing.title;
-        const score = await this.scoreSignal(`${listing.title}\n${listing.description}`);
-        logger.info({ score, title: listing.title.slice(0, 80) }, 'Scout: signal scored');
-        if (score < KIJIJI_CREATE_THRESHOLD) continue;
-        if (await this.wasSignalSeen('kijiji', fingerprint)) continue;
-
-        try {
-          await db.insert(leads).values({
-            contactName: 'Kijiji User',
-            sourceChannel: 'kijiji',
-            utmSource: 'kijiji',
-            utmCampaign: 'scout-reid',
-            intentScore: score,
-            status: 'new',
-            notes:
-              `Title: ${listing.title}\n` +
-              `URL: ${listing.link}\n` +
-              `Desc: ${listing.description.slice(0, 200)}`,
-          });
-          created++;
-          logger.info({ score, title: listing.title.slice(0, 60) }, 'Scout: kijiji lead created');
-        } catch (err) {
-          logger.error(
-            { err: (err as Error).message, title: listing.title.slice(0, 60) },
-            'Scout: kijiji lead insert failed',
-          );
-        }
-      }
-    } catch (err) {
-      logger.warn({ err: (err as Error).message, executablePath }, 'Scout: Kijiji Puppeteer failed');
-    } finally {
-      if (browser) {
-        try { await browser.close(); } catch { /* ignore */ }
+      try {
+        await db.insert(leads).values({
+          contactName: 'Kijiji User',
+          sourceChannel: 'kijiji',
+          utmSource: 'kijiji',
+          utmCampaign: 'scout-reid',
+          intentScore: score,
+          status: 'new',
+          notes:
+            `Title: ${title}\n` +
+            `URL: ${link}\n` +
+            `Desc: ${description.slice(0, 200)}`,
+        });
+        created++;
+        logger.info({ score, title: title.slice(0, 60) }, 'Scout: kijiji lead created');
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, title: title.slice(0, 60) },
+          'Scout: kijiji lead insert failed',
+        );
       }
     }
 

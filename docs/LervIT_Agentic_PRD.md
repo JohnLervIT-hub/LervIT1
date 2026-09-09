@@ -49,8 +49,9 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 | Reddit (r/Calgary, r/calgaryhousing, r/Alberta) | ✅ | Public JSON, 2s throttle | score ≥ 50 | Custom User-Agent `LervIT-Scout/1.0` |
 | RentFaster.ca RSS | ✅ | rss2json proxy | static 55, max 10/run | Rental listings = latent move signal |
 | Craigslist Calgary housing RSS | ✅ | rss2json proxy | static 45, max 10/run | Replaces Facebook Marketplace |
-| Kijiji Calgary moving-storage | ✅ | Puppeteer (chromium via nixpacks) | score ≥ 45, max 15/run | `CHROMIUM_PATH` env |
+| Kijiji Calgary moving-storage | ✅ | rss2json proxy | score ≥ 45, max 15/run | Uses Kijiji's per-category RSS feed |
 | Facebook Marketplace | ❌ | — | — | Archived — see `docs/strategies/facebook-marketplace.md` |
+| Puppeteer / headless browser | ❌ | — | — | Archived — see `docs/strategies/puppeteer-scraping.md` |
 
 **Google Alerts (RSS)** — Queries: `moving Calgary`, `mover Calgary`, `moving to Calgary`, `relocating Calgary`, `Calgary apartment for rent`. Method: rss2json proxy (per-account feeds require auth otherwise). Cost: FREE (rss2json free tier).
 
@@ -60,7 +61,7 @@ Xavier is the only agent with cross-agent visibility. Every other agent operates
 
 **Craigslist Calgary** — Feed: `calgary.craigslist.org/search/hhh?format=rss`. Method: rss2json proxy. Cost: FREE.
 
-**Kijiji Calgary (Puppeteer)** — Section: moving & storage services. Method: puppeteer-core + system chromium (Railway nixpacks). Cost: FREE (deploy dependency).
+**Kijiji Calgary** — Feed: `kijiji.ca/rss-srp-moving-storage/city-of-calgary/c146l1700199`. Method: rss2json proxy (replaces the archived Puppeteer approach — see `docs/strategies/puppeteer-scraping.md`). Cost: FREE.
 
 **YouTube Data API v3** *(planned — Phase 3+)*
 - Monitor comments on videos tagged: `moving to Calgary`, `Calgary apartment tour`, `Calgary cost of living`, `Calgary neighbourhood`
