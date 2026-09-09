@@ -13114,6 +13114,42 @@ Respond with VALID JSON only:
     }
   });
 
+  // Manually create a lead (admin-entered warm intro, phone call, referral, etc.).
+  app.post("/api/admin/agent/leads", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const body = req.body ?? {};
+      const contactName = typeof body.contactName === 'string' ? body.contactName.trim() : '';
+      if (!contactName) return res.status(400).json({ error: 'contactName is required' });
+
+      const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim() || null : null;
+      const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() || null : null;
+      const sourceChannel = typeof body.sourceChannel === 'string' && body.sourceChannel.trim()
+        ? body.sourceChannel.trim()
+        : 'personal';
+      const notes = typeof body.notes === 'string' ? body.notes.trim() || null : null;
+      const intentScore = Math.max(0, Math.min(100, Number(body.intentScore ?? 80)));
+      const status = typeof body.status === 'string' && body.status.trim() ? body.status.trim() : 'new';
+
+      const [row] = await db.insert(leads).values({
+        contactName,
+        contactEmail,
+        contactPhone,
+        sourceChannel,
+        utmSource: sourceChannel,
+        utmCampaign: 'admin-manual',
+        notes,
+        intentScore,
+        status,
+      }).returning();
+
+      res.status(201).json({ lead: row });
+    } catch (err) {
+      logger.error({ err }, '[Admin] lead create failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Single lead + its business_events timeline.
   app.get("/api/admin/agent/leads/:id", async (req: Request, res: Response) => {
     try {
