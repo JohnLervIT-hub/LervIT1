@@ -2,6 +2,7 @@ import { useState, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 const OperationsDashboard = lazy(() => import("@/pages/OperationsDashboard"));
+import { XavierBriefCard } from "@/components/XavierBriefCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1027,6 +1028,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
             <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
             <TabsTrigger value="feedback" data-testid="tab-feedback">Feedback</TabsTrigger>
+            <TabsTrigger value="apex" data-testid="tab-apex">APEX</TabsTrigger>
           </TabsList>
 
           {/* Bookings Tab */}
@@ -1238,6 +1240,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="feedback" className="space-y-4 mt-4">
             <FeedbackTab />
+          </TabsContent>
+
+          <TabsContent value="apex" className="space-y-4 mt-4">
+            <XavierBriefCard />
           </TabsContent>
 
         </Tabs>

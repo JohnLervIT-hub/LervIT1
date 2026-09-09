@@ -9,6 +9,7 @@ import { stripe } from './config/stripe';
 import { moverWebSocket } from './websocket';
 import { dispatchBooking, dispatchJobToMovers } from './dispatch';
 import { emitEvent } from './events';
+import { xavier } from './agents/xavier';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -111,6 +112,19 @@ export function initBackgroundJobs() {
   // brief to read at its 07:00 run.
   cron.schedule('0 6 * * *', async () => {
     await withJobLock('daily_kpi_snapshot', dailyKpiSnapshot);
+  }, TZ);
+
+  // Daily 06:05 Calgary — Xavier Cole (APEX) reads the fresh KPI snapshot,
+  // generates the operational brief, and SMSes it to John.
+  cron.schedule('5 6 * * *', async () => {
+    await withJobLock('xavier_daily_brief', async () => {
+      try {
+        await xavier.run('daily_brief', {});
+        logger.info({ event: 'xavier_daily_brief' }, 'Xavier Cole daily brief sent');
+      } catch (err) {
+        logger.error({ err, event: 'xavier_daily_brief' }, 'Xavier daily brief failed');
+      }
+    });
   }, TZ);
 
   // Every 30 min — roll up per-mover activity for RETAIN inactivity detection.
