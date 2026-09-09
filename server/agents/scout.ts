@@ -411,10 +411,11 @@ export class ScoutAgent extends BaseAgent {
   }
 
   private async crawlKijiji(): Promise<CrawlResult> {
-    // Use the full `puppeteer` package (bundles its own Chromium at install
-    // time) rather than puppeteer-core, so we don't depend on Railway
-    // having a chromium binary on PATH. Loaded via dynamic import so a
-    // missing/broken install degrades cleanly instead of crashing boot.
+    // `puppeteer` is loaded via dynamic import so a missing/broken install
+    // degrades cleanly instead of crashing boot. The bundled Chromium
+    // download is skipped (.npmrc PUPPETEER_SKIP_DOWNLOAD=true) because
+    // Railway/nixpacks provides `chromium` at the OS level — see the
+    // executablePath fallback chain below.
     let puppeteer: any = null;
     try {
       const mod: any = await import('puppeteer');
@@ -424,12 +425,22 @@ export class ScoutAgent extends BaseAgent {
       return { found: 0, created: 0 };
     }
 
+    // Fallback chain: env override → nixpacks/debian path → alternate name.
+    // The `|| '/usr/bin/chromium-browser'` tail is a no-op given the middle
+    // string is truthy; kept for documentation and for the case where a
+    // future refactor swaps the middle for a check that can return empty.
+    const executablePath =
+      process.env.CHROMIUM_PATH ||
+      '/usr/bin/chromium' ||
+      '/usr/bin/chromium-browser';
+
     let browser: any = null;
     let found = 0;
     let created = 0;
 
     try {
       browser = await puppeteer.launch({
+        executablePath,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -492,7 +503,7 @@ export class ScoutAgent extends BaseAgent {
         }
       }
     } catch (err) {
-      logger.warn({ err: (err as Error).message }, 'Scout: Kijiji Puppeteer failed');
+      logger.warn({ err: (err as Error).message, executablePath }, 'Scout: Kijiji Puppeteer failed');
     } finally {
       if (browser) {
         try { await browser.close(); } catch { /* ignore */ }
