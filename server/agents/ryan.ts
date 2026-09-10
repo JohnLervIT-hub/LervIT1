@@ -237,23 +237,40 @@ export class RyanAgent extends BaseAgent {
       if (score < ROUTE_TO_JORDAN_SCORE) continue;
 
       const fingerprint = title.slice(0, 80);
-      if (!fingerprint) continue;
+      if (!fingerprint || fingerprint.length < 5) {
+        logger.warn(
+          { source: opts.source, fingerprint },
+          'Ryan: skipping — empty or too-short fingerprint',
+        );
+        continue;
+      }
       if (await this.wasSeen(opts.source, fingerprint)) continue;
 
-      await db.insert(leads).values({
-        contactName: opts.contactName,
-        sourceChannel: opts.source,
-        utmSource: opts.utmSource,
-        utmCampaign: 'ryan-brooks',
-        intentScore: score,
-        status: 'new',
-        notes: `${opts.source.replace('_', ' ')} listing: ${title}\nURL: ${opts.pageUrl}`,
-      });
-      created++;
       logger.info(
-        { source: opts.source, title: title.slice(0, 60), score },
-        'Ryan: supply candidate created (scraped)',
+        { fingerprint: fingerprint.slice(0, 50), score, source: opts.source },
+        'Ryan: attempting lead insert',
       );
+      try {
+        await db.insert(leads).values({
+          contactName: opts.contactName,
+          sourceChannel: opts.source,
+          utmSource: opts.utmSource,
+          utmCampaign: 'ryan-brooks',
+          intentScore: score,
+          status: 'new',
+          notes: `${opts.source.replace('_', ' ')} listing: ${title}\nURL: ${opts.pageUrl}`,
+        });
+        created++;
+        logger.info(
+          { source: opts.source, title: title.slice(0, 60), score },
+          'Ryan: lead inserted successfully (scraped)',
+        );
+      } catch (err) {
+        logger.error(
+          { err: err instanceof Error ? err.message : String(err), source: opts.source, fingerprint },
+          'Ryan: lead insert FAILED (scraped)',
+        );
+      }
     }
 
     return { found, created };
@@ -288,23 +305,40 @@ export class RyanAgent extends BaseAgent {
       if (score < ROUTE_TO_JORDAN_SCORE) continue;
 
       const fingerprint = (link || title).slice(0, 80);
-      if (!fingerprint) continue;
+      if (!fingerprint || fingerprint.length < 5) {
+        logger.warn(
+          { source: opts.source, fingerprint },
+          'Ryan: skipping — empty or too-short fingerprint',
+        );
+        continue;
+      }
       if (await this.wasSeen(opts.source, fingerprint)) continue;
 
-      await db.insert(leads).values({
-        contactName: opts.contactName,
-        sourceChannel: opts.source,
-        utmSource: opts.utmSource,
-        utmCampaign: 'ryan-brooks',
-        intentScore: score,
-        status: 'new',
-        notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 300)}`,
-      });
-      created++;
       logger.info(
-        { source: opts.source, title: title.slice(0, 60), score },
-        'Ryan: supply candidate created',
+        { fingerprint: fingerprint.slice(0, 50), score, source: opts.source },
+        'Ryan: attempting lead insert',
       );
+      try {
+        await db.insert(leads).values({
+          contactName: opts.contactName,
+          sourceChannel: opts.source,
+          utmSource: opts.utmSource,
+          utmCampaign: 'ryan-brooks',
+          intentScore: score,
+          status: 'new',
+          notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 300)}`,
+        });
+        created++;
+        logger.info(
+          { source: opts.source, title: title.slice(0, 60), score },
+          'Ryan: lead inserted successfully',
+        );
+      } catch (err) {
+        logger.error(
+          { err: err instanceof Error ? err.message : String(err), source: opts.source, fingerprint },
+          'Ryan: lead insert FAILED',
+        );
+      }
     }
 
     return { found, created };
