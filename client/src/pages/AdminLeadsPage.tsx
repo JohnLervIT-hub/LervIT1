@@ -23,7 +23,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, ArrowLeft, RefreshCw, Zap, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import {
+  Loader2,
+  ArrowLeft,
+  RefreshCw,
+  Zap,
+  Plus,
+  Trash2,
+  ExternalLink,
+  UserPlus,
+  Mail,
+  Phone,
+  Clock,
+  AlertCircle,
+} from "lucide-react";
 import { format } from "date-fns";
 
 interface Lead {
@@ -50,6 +65,20 @@ const AUDIENCE_TABS: Array<{ value: Audience; label: string }> = [
 
 function isMoverCandidate(lead: Lead): boolean {
   return lead.utmCampaign === "ryan-brooks";
+}
+
+function extractUrl(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const match = notes.match(/URL:\s*(https?:\/\/[^\s\n]+)/);
+  return match?.[1] ?? null;
+}
+
+function getScoreColor(score?: number | null): string {
+  if (!score) return "bg-gray-100 text-gray-600";
+  if (score >= 80) return "bg-green-100 text-green-700";
+  if (score >= 60) return "bg-yellow-100 text-yellow-700";
+  if (score >= 40) return "bg-orange-100 text-orange-700";
+  return "bg-red-100 text-red-600";
 }
 
 interface ListResponse {
@@ -123,7 +152,64 @@ export default function AdminLeadsPage() {
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState<CreateLeadForm>(BLANK_FORM);
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const pageSize = 50;
+
+  const openAddContact = (lead: Lead) => {
+    setSelectedLead(lead);
+    setContactForm({ name: "", email: "", phone: "" });
+    setAddContactOpen(true);
+  };
+
+  const agentName = selectedLead
+    ? (isMoverCandidate(selectedLead) ? "Jordan Hayes" : "Alex Morgan")
+    : "";
+  const isSupply = selectedLead ? isMoverCandidate(selectedLead) : false;
+
+  const handleAddContact = async () => {
+    if (!selectedLead) return;
+    if (!contactForm.email && !contactForm.phone) return;
+
+    setIsSubmitting(true);
+    try {
+      await apiRequest("PATCH", `/api/admin/agent/leads/${selectedLead.id}/contact`, {
+        contactName: contactForm.name.trim() || undefined,
+        contactEmail: contactForm.email.trim() || undefined,
+        contactPhone: contactForm.phone.trim() || undefined,
+      });
+
+      const agentEndpoint = isMoverCandidate(selectedLead)
+        ? "/api/admin/agent/jordan/trigger"
+        : "/api/admin/agent/alex/trigger";
+      const agentAction = isMoverCandidate(selectedLead) ? "onboard_candidate" : "convert_lead";
+
+      await apiRequest("POST", agentEndpoint, {
+        action: agentAction,
+        leadId: selectedLead.id,
+      });
+
+      toast({
+        title: `${agentName} activated`,
+        description: contactForm.email
+          ? `Personalized email sent to ${contactForm.email}`
+          : `SMS sequence started for ${contactForm.phone}`,
+      });
+
+      setAddContactOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
+    } catch (err: any) {
+      toast({
+        title: "Something went wrong",
+        description: err?.message ?? "Contact not saved. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const { data, isLoading, error } = useQuery<ListResponse>({
     queryKey: ["/api/admin/agent/leads", { status: statusFilter, audience, page, pageSize }],
@@ -356,7 +442,10 @@ export default function AdminLeadsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map(lead => (
+                  {leads.map(lead => {
+                    const listingUrl = extractUrl(lead.notes);
+                    const isAnonymous = !lead.contactEmail && !lead.contactPhone;
+                    return (
                     <tr key={lead.id} className="border-t align-top">
                       <td className="py-2 pr-3">{lead.sourceChannel ?? "—"}</td>
                       <td className={`py-2 pr-3 tabular-nums ${scoreClass(lead.intentScore)}`}>
@@ -375,8 +464,31 @@ export default function AdminLeadsPage() {
                         {lead.notes ?? "—"}
                       </td>
                       <td className="py-2 pr-3">
-                        <div className="flex gap-1.5">
-                          {isMoverCandidate(lead) ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {listingUrl && !lead.contactEmail && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(listingUrl, "_blank")}
+                              className="gap-1.5 text-xs"
+                              data-testid={`button-view-listing-${lead.id}`}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              View Listing
+                            </Button>
+                          )}
+                          {isAnonymous && (
+                            <Button
+                              size="sm"
+                              onClick={() => openAddContact(lead)}
+                              className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                              data-testid={`button-add-contact-${lead.id}`}
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              Add Contact
+                            </Button>
+                          )}
+                          {!isAnonymous && (isMoverCandidate(lead) ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -395,7 +507,7 @@ export default function AdminLeadsPage() {
                             >
                               <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Alex
                             </Button>
-                          )}
+                          ))}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -415,7 +527,8 @@ export default function AdminLeadsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -553,6 +666,149 @@ export default function AdminLeadsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addContactOpen} onOpenChange={setAddContactOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-blue-600" />
+              Add Contact Details
+            </DialogTitle>
+            <DialogDescription>
+              Add contact info to activate
+              {isSupply ? " Jordan Hayes" : " Alex Morgan"}'s outreach sequence.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="bg-muted/50 rounded-lg p-3 text-sm">
+            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-1">
+              Lead Signal
+            </p>
+            <p className="text-sm line-clamp-2">
+              {selectedLead?.notes?.split("\n")[0]}
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              {selectedLead?.sourceChannel && (
+                <Badge variant="outline" className="text-xs">
+                  {selectedLead.sourceChannel}
+                </Badge>
+              )}
+              <Badge className={cn("text-xs", getScoreColor(selectedLead?.intentScore))}>
+                Score: {selectedLead?.intentScore ?? 0}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="contact-name">
+                Full Name{" "}
+                <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Input
+                id="contact-name"
+                placeholder="e.g. Sarah Johnson"
+                value={contactForm.name}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, name: e.target.value }))
+                }
+                data-testid="input-contact-name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contact-email">Email Address</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                placeholder="e.g. sarah@email.com"
+                value={contactForm.email}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, email: e.target.value }))
+                }
+                data-testid="input-contact-email"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contact-phone">
+                Phone Number{" "}
+                <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Input
+                id="contact-phone"
+                type="tel"
+                placeholder="e.g. (403) 555-0123"
+                value={contactForm.phone}
+                onChange={(e) =>
+                  setContactForm((f) => ({ ...f, phone: e.target.value }))
+                }
+                data-testid="input-contact-phone"
+              />
+            </div>
+
+            {!contactForm.email && !contactForm.phone && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                At least one contact method required
+              </p>
+            )}
+          </div>
+
+          <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3">
+            <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+              What happens next
+            </p>
+            <div className="space-y-1 text-xs text-blue-600 dark:text-blue-400">
+              {contactForm.email && (
+                <p className="flex items-center gap-1.5">
+                  <Mail className="w-3 h-3" />
+                  {agentName} sends personalized email immediately
+                </p>
+              )}
+              {contactForm.phone && (
+                <p className="flex items-center gap-1.5">
+                  <Phone className="w-3 h-3" />
+                  SMS follow-up in 24 hours
+                </p>
+              )}
+              <p className="flex items-center gap-1.5">
+                <Clock className="w-3 h-3" />
+                4-touch sequence over 72 hours
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAddContactOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddContact}
+              disabled={
+                (!contactForm.email && !contactForm.phone) || isSubmitting
+              }
+              className="gap-2 bg-blue-600 hover:bg-blue-700"
+              data-testid="button-submit-contact"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Activating...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Add Contact & Activate {agentName}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -37,13 +37,22 @@ const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 // rss2json), so we hit their HTML search pages through ScrapingBee.
 const KIJIJI_SERVICES_HTML_URL =
   'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
+const KIJIJI_BASE_URL = 'https://www.kijiji.ca';
 const KIJIJI_MAX_ITEMS = 15;
 
 // Ryan hunts supply, so we scrape the "household services offered" section
 // (people advertising services). Scout uses /search/lbs (labor gigs =
 // customers hiring) for demand. Do not swap without also swapping scout.ts.
 const CRAIGSLIST_SERVICES_HTML_URL = 'https://calgary.craigslist.org/search/hss';
+const CRAIGSLIST_BASE_URL = 'https://calgary.craigslist.org';
 const CRAIGSLIST_MAX_ITEMS = 10;
+
+// Per-run cap on how many individual listing pages we fetch through
+// ScrapingBee. render_js=true costs 5 credits per fetch, so 5 pages/source
+// stays inside the free tier (25 credits/source, 50/run, ~1500/month with
+// daily crawls — still fits ScrapingBee's 1000/mo free tier if crawls run
+// every other day, and easy to lower here without redeploying selectors).
+const MAX_LISTING_PAGES_PER_SOURCE = 5;
 
 // Temporarily lowered from 60 → 50 to capture more candidates while the
 // scoring prompt is being tuned. Raise back once scoring stabilises.
@@ -168,20 +177,24 @@ export class RyanAgent extends BaseAgent {
   private async crawlKijijiServices(): Promise<CrawlResult> {
     return this.crawlScrapedListings({
       pageUrl: KIJIJI_SERVICES_HTML_URL,
+      baseUrl: KIJIJI_BASE_URL,
       source: 'kijiji_services',
       utmSource: 'kijiji',
       contactName: 'Kijiji Poster',
       maxItems: KIJIJI_MAX_ITEMS,
+      maxListingPages: MAX_LISTING_PAGES_PER_SOURCE,
     });
   }
 
   private async crawlCraigslistServices(): Promise<CrawlResult> {
     return this.crawlScrapedListings({
       pageUrl: CRAIGSLIST_SERVICES_HTML_URL,
+      baseUrl: CRAIGSLIST_BASE_URL,
       source: 'craigslist_services',
       utmSource: 'craigslist',
       contactName: 'Craigslist Poster',
       maxItems: CRAIGSLIST_MAX_ITEMS,
+      maxListingPages: MAX_LISTING_PAGES_PER_SOURCE,
     });
   }
 
@@ -215,16 +228,23 @@ export class RyanAgent extends BaseAgent {
 
   /**
    * ScrapingBee-backed crawler for sources blocked at origin (Kijiji /
-   * Craigslist). Fetches the HTML search page, extracts titles via the
-   * shared parseListingTitles helper, scores each with Haiku, dedups and
-   * inserts high-scoring rows.
+   * Craigslist). Fetches the HTML search page, extracts title+URL pairs,
+   * scores each title with Haiku, and for the top-scoring rows visits the
+   * individual listing page to pull the poster's phone/email. Leads with
+   * a contact detail are immediately queued to Jordan for onboarding.
+   *
+   * `maxListingPages` caps the number of secondary listing fetches so we
+   * stay inside the ScrapingBee free tier (each JS-rendered fetch is 5
+   * credits — see MAX_LISTING_PAGES_PER_SOURCE).
    */
   private async crawlScrapedListings(opts: {
     pageUrl: string;
+    baseUrl: string;
     source: string;
     utmSource: string;
     contactName: string;
     maxItems: number;
+    maxListingPages: number;
   }): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
@@ -232,30 +252,47 @@ export class RyanAgent extends BaseAgent {
     const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source, renderJs: true });
     if (!html) return { found, created };
 
-    const rawTitles = parseListingTitles(html, opts.source);
-    const titles = rawTitles.filter(
-      t => t.length > 15 && !NAV_ITEMS.has(t.toLowerCase().trim()),
+    const rawItems = parseListingLinks(html, opts.source, opts.baseUrl);
+    const items = rawItems.filter(
+      it => it.title.length > 15 && !NAV_ITEMS.has(it.title.toLowerCase().trim()),
     );
-    if (titles.length === 0) {
-      logger.warn(
-        { source: opts.source, bytes: html.length, rawCount: rawTitles.length },
-        'Ryan: parsed 0 real listings after nav filter — markup may have changed',
+    if (items.length === 0) {
+      // Fall back to title-only parse so we don't regress the existing
+      // pipeline when the anchor selectors miss but the title ones hit.
+      const rawTitles = parseListingTitles(html, opts.source);
+      const titles = rawTitles.filter(
+        t => t.length > 15 && !NAV_ITEMS.has(t.toLowerCase().trim()),
       );
-      return { found, created };
+      if (titles.length === 0) {
+        logger.warn(
+          { source: opts.source, bytes: html.length, rawCount: rawTitles.length },
+          'Ryan: parsed 0 real listings after nav filter — markup may have changed',
+        );
+        return { found, created };
+      }
+      for (const t of titles) items.push({ title: t, url: null });
+      logger.info(
+        { source: opts.source, titleFallback: titles.length },
+        'Ryan: URL parse empty, fell back to title-only mode',
+      );
     }
 
-    for (const title of titles.slice(0, opts.maxItems)) {
+    const vetterQueue = createAgentQueue(QUEUE_NAMES.VETTER);
+    let listingPageFetches = 0;
+
+    for (const item of items.slice(0, opts.maxItems)) {
+      const title = item.title;
       if (!title) continue;
       found++;
 
       const score = await this.scoreCandidate(title);
       logger.info(
-        { source: opts.source, score, title: title.slice(0, 80) },
+        { source: opts.source, score, title: title.slice(0, 80), hasUrl: !!item.url },
         'Ryan: signal scored',
       );
       if (score < ROUTE_TO_JORDAN_SCORE) continue;
 
-      const fingerprint = title.slice(0, 80);
+      const fingerprint = (item.url || title).slice(0, 80);
       if (!fingerprint || fingerprint.length < 5) {
         logger.warn(
           { source: opts.source, fingerprint },
@@ -265,25 +302,96 @@ export class RyanAgent extends BaseAgent {
       }
       if (await this.wasSeen(opts.source, fingerprint)) continue;
 
+      // If we have a listing URL and haven't blown the per-source budget,
+      // fetch the individual page for phone/email. Every fetch costs a
+      // rendered ScrapingBee credit even if the extract yields nothing.
+      let phone: string | null = null;
+      let email: string | null = null;
+      let description: string | null = null;
+      if (item.url && listingPageFetches < opts.maxListingPages) {
+        listingPageFetches++;
+        const listingHtml = await fetchWithScrapingBee(item.url, {
+          source: `${opts.source}_listing`,
+          renderJs: true,
+        });
+        if (listingHtml) {
+          phone = extractPhone(listingHtml);
+          email = extractEmail(listingHtml);
+          description = extractDescription(listingHtml);
+          logger.info(
+            {
+              source: opts.source,
+              url: item.url,
+              hasPhone: !!phone,
+              hasEmail: !!email,
+              descLen: description?.length ?? 0,
+            },
+            'Ryan: listing page contact scan',
+          );
+        }
+      }
+
       logger.info(
-        { fingerprint: fingerprint.slice(0, 50), score, source: opts.source },
+        {
+          fingerprint: fingerprint.slice(0, 50),
+          score,
+          source: opts.source,
+          hasContact: !!(phone || email),
+        },
         'Ryan: attempting lead insert',
       );
       try {
-        await db.insert(leads).values({
-          contactName: opts.contactName,
-          sourceChannel: opts.source,
-          utmSource: opts.utmSource,
-          utmCampaign: 'ryan-brooks',
-          intentScore: score,
-          status: 'new',
-          notes: `${opts.source.replace('_', ' ')} listing: ${title}\nURL: ${opts.pageUrl}`,
-        });
+        const notesLines = [
+          `${opts.source.replace('_', ' ')} listing: ${title}`,
+          `URL: ${item.url ?? opts.pageUrl}`,
+        ];
+        if (description) notesLines.push(description.slice(0, 200));
+
+        const [inserted] = await db
+          .insert(leads)
+          .values({
+            contactName: opts.contactName,
+            contactEmail: email ?? undefined,
+            contactPhone: phone ? `+1${phone}` : undefined,
+            sourceChannel: opts.source,
+            utmSource: opts.utmSource,
+            utmCampaign: 'ryan-brooks',
+            intentScore: score,
+            status: 'new',
+            notes: notesLines.join('\n'),
+          })
+          .returning({ id: leads.id });
         created++;
         logger.info(
-          { source: opts.source, title: title.slice(0, 60), score },
+          {
+            source: opts.source,
+            title: title.slice(0, 60),
+            score,
+            hasContact: !!(phone || email),
+          },
           'Ryan: lead inserted successfully (scraped)',
         );
+
+        // Contact-bearing leads skip the batch router at end of processSignals
+        // — queue Jordan immediately so first-touch happens in the same run.
+        if (inserted?.id && (phone || email) && vetterQueue) {
+          try {
+            await vetterQueue.add('onboard_candidate', { leadId: inserted.id });
+            await db
+              .update(leads)
+              .set({ assignedAgent: 'jordan-hayes', updatedAt: new Date() })
+              .where(eq(leads.id, inserted.id));
+            logger.info(
+              { leadId: inserted.id, source: opts.source },
+              'Ryan: contact-bearing lead routed to Jordan immediately',
+            );
+          } catch (err) {
+            logger.error(
+              { err, leadId: inserted.id },
+              'Ryan: immediate Jordan route failed (batch router will retry)',
+            );
+          }
+        }
       } catch (err) {
         logger.error(
           { err: err instanceof Error ? err.message : String(err), source: opts.source, fingerprint },
@@ -470,6 +578,115 @@ Return ONLY a number 0-100.`,
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Pull `{ title, url }` pairs from a Kijiji/Craigslist search-results HTML
+ * blob. Regex-based (same reasoning as parseListingTitles — small payload,
+ * we only need anchor href + text). Relative Kijiji hrefs are resolved
+ * against `baseUrl`. Returns [] on no match so the caller can fall back to
+ * title-only parsing.
+ */
+export function parseListingLinks(
+  html: string,
+  source: string,
+  baseUrl: string,
+): Array<{ title: string; url: string | null }> {
+  const results: Array<{ title: string; url: string | null }> = [];
+  const seen = new Set<string>();
+
+  const push = (title: string, href: string | null) => {
+    const cleanedTitle = title.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    if (cleanedTitle.length < 5) return;
+    let url: string | null = null;
+    if (href) {
+      const cleanedHref = href.trim();
+      if (/^https?:\/\//i.test(cleanedHref)) url = cleanedHref;
+      else if (cleanedHref.startsWith('/')) url = `${baseUrl}${cleanedHref}`;
+    }
+    const key = url ?? cleanedTitle;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({ title: cleanedTitle, url });
+  };
+
+  // Kijiji: newer QA hook (<a … data-qa="ad-title" href="/v-…">Title</a>)
+  const kijijiQa = /<a[^>]*data-qa="ad-title"[^>]*href="([^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = kijijiQa.exec(html)) !== null) push(m[2], m[1]);
+
+  // Kijiji: historic listing-link testid.
+  const kijijiTestid = /<a[^>]*data-testid="listing-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
+  while ((m = kijijiTestid.exec(html)) !== null) push(m[2], m[1]);
+
+  // Kijiji: any anchor whose href starts with /v- (listing detail path).
+  const kijijiVAnchor = /<a[^>]*href="(\/v-[^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
+  while ((m = kijijiVAnchor.exec(html)) !== null) push(m[2], m[1]);
+
+  // Craigslist: <a class="posting-title" href="…"><span class="label">Title</span>
+  const clPosting = /<a[^>]*class="[^"]*posting-title[^"]*"[^>]*href="([^"]+)"[^>]*>[\s\S]{0,300}?<span[^>]*class="[^"]*label[^"]*"[^>]*>([^<]+)</gi;
+  while ((m = clPosting.exec(html)) !== null) push(m[2], m[1]);
+
+  // Craigslist: 2024+ static search wrapper — anchor immediately after
+  // `class="cl-static-search-result"` container.
+  const clStatic = /class="cl-static-search-result"[\s\S]{0,400}?<a[^>]*href="([^"]+)"[^>]*>([\s\S]{0,200}?)<\/a>/gi;
+  while ((m = clStatic.exec(html)) !== null) push(m[2], m[1]);
+
+  logger.info(
+    { source, extractedLinks: results.length, withUrl: results.filter(r => r.url).length },
+    'Ryan: parseListingLinks',
+  );
+  return results;
+}
+
+/**
+ * Kijiji surfaces the poster's phone through a `tel:` link when the seller
+ * enables "show phone number". If not present we scan for a raw NANP-shaped
+ * number in the page body. Everything is normalised to a 10-digit string —
+ * the caller adds the `+1` country prefix before persisting.
+ */
+export function extractPhone(html: string): string | null {
+  const patterns: RegExp[] = [
+    /tel:([+\d\s()\-.]{10,})/i,
+    /data-phone-number="([^"]+)"/i,
+    /(\+?1?\s*\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4})/,
+    /(\d{3}[-.\s]\d{3}[-.\s]\d{4})/,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      const digits = match[1].replace(/\D/g, '');
+      if (digits.length >= 10) return digits.slice(-10);
+    }
+  }
+  return null;
+}
+
+export function extractEmail(html: string): string | null {
+  const match = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  return match?.[0] ?? null;
+}
+
+/**
+ * Prefer the poster's own description (Kijiji itemprop / Craigslist
+ * postingbody) over the site-level meta description, which tends to be
+ * generic ("Find deals on Kijiji…"). Falls back to <meta name="description">.
+ */
+export function extractDescription(html: string): string | null {
+  const kijiji = html.match(/itemprop="description"[^>]*>([\s\S]{0,1500}?)<\/(?:div|section|p)>/i);
+  if (kijiji?.[1]) return stripHtml(kijiji[1]);
+
+  const clBody = html.match(/id="postingbody"[^>]*>([\s\S]{0,2000}?)<\/section>/i);
+  if (clBody?.[1]) return stripHtml(clBody[1]);
+
+  const meta = html.match(/<meta[^>]*name="description"[^>]*content="([^"]+)"/i);
+  if (meta?.[1]) return meta[1].trim();
+
+  return null;
+}
+
+function stripHtml(input: string): string {
+  return input.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 export const ryan = new RyanAgent();

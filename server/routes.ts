@@ -13177,6 +13177,41 @@ Respond with VALID JSON only:
     }
   });
 
+  // Manually add contact details to an anonymous lead (URL-only Kijiji/Craigslist rows).
+  // Requires at least one of email or phone.
+  app.patch("/api/admin/agent/leads/:id/contact", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const body = req.body ?? {};
+      const contactName = typeof body.contactName === 'string' ? body.contactName.trim() : '';
+      const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim() : '';
+      const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : '';
+
+      if (!contactEmail && !contactPhone) {
+        return res.status(400).json({ error: 'At least one of contactEmail or contactPhone is required' });
+      }
+
+      const [existing] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: 'Lead not found' });
+
+      const [updated] = await db
+        .update(leads)
+        .set({
+          contactName: contactName || existing.contactName,
+          contactEmail: contactEmail || existing.contactEmail,
+          contactPhone: contactPhone || existing.contactPhone,
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, req.params.id))
+        .returning();
+
+      res.json({ lead: updated });
+    } catch (err) {
+      logger.error({ err }, '[Admin] lead contact patch failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Hard-delete a lead. Used to prune false positives from Scout crawls
   // (out-of-region signals, figurative "moving" language, etc.).
   app.delete("/api/admin/agent/leads/:id", async (req: Request, res: Response) => {
