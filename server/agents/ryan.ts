@@ -437,9 +437,13 @@ export class RyanAgent extends BaseAgent {
           renderJs: true,
         });
         if (listingHtml) {
-          phone = extractPhone(listingHtml);
-          email = extractEmail(listingHtml);
+          // Description first, then scope email extraction to the poster's
+          // own body text. Scanning the full HTML kept surfacing Kijiji's
+          // Adevinta template email; if the poster didn't put their address
+          // in the ad body, we'd rather return null than a false positive.
           description = extractDescription(listingHtml);
+          phone = extractPhone(listingHtml);
+          email = description ? extractEmail(description) : null;
           logger.info(
             {
               source: opts.source,
@@ -839,9 +843,39 @@ export function extractPhone(html: string): string | null {
   return null;
 }
 
-export function extractEmail(html: string): string | null {
-  const match = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
-  return match?.[0] ?? null;
+/**
+ * Substrings that identify platform/proxy addresses we never want to
+ * persist as a poster's contact email. Match is `domain.includes(entry)`
+ * so anonymized subdomains (`reply-abc@sale.craigslist.org`) still hit.
+ *
+ * `adevinta.com` is Kijiji's parent company — their template embeds a
+ * staff email in every listing's shell (`mudiaga.ejenavi.ext@adevinta.com`
+ * was leaking into every Kijiji lead). Kijiji itself doesn't expose
+ * seller emails in listing HTML (contact goes through their messaging
+ * form), so on Kijiji this function will now correctly return null
+ * instead of an Adevinta false positive.
+ */
+const EMAIL_BLACKLIST = [
+  'adevinta.com',
+  'kijiji.ca',
+  'ebay.com',
+  'craigslist.org',
+  'rentfaster.ca',
+  'wixpress.com',
+  'sentry.io',
+  'google-analytics.com',
+] as const;
+
+export function extractEmail(text: string): string | null {
+  const re = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const email = m[0];
+    const domain = email.split('@')[1]?.toLowerCase() ?? '';
+    if (EMAIL_BLACKLIST.some(b => domain.includes(b))) continue;
+    return email;
+  }
+  return null;
 }
 
 /**
