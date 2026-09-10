@@ -35,7 +35,10 @@ const GOOGLE_ALERTS_CREATE_THRESHOLD = 50;
 const REDDIT_CREATE_THRESHOLD = 50;
 const KIJIJI_CREATE_THRESHOLD = 45;
 const RENTFASTER_STATIC_SCORE = 55;
-const CRAIGSLIST_STATIC_SCORE = 45;
+// Craigslist household-services listings are a mix of moving-help wanted,
+// medical/property ads, and misc chores. We used to blanket-score them 45;
+// now each title is scored by Claude and only >= threshold is inserted.
+const CRAIGSLIST_CREATE_THRESHOLD = 50;
 // rss2json's free tier is roughly 10 req/min without an API key. All Scout
 // RSS crawlers share this budget, so we pace every rss2json call by 2s.
 const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
@@ -60,10 +63,19 @@ const KIJIJI_HTML_URL =
   'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
 const KIJIJI_MAX_ITEMS = 15;
 
-const RENTFASTER_HTML_URL = 'https://www.rentfaster.ca/ab/calgary/rentals/';
+// RentFaster's HTML listing page renders client-side (Vue) and even with
+// render_js + wait we were still capturing template shells. Their RSS
+// feed serves the same items as XML with zero JS — cheaper (1 credit)
+// and no template noise. We hit RSS through ScrapingBee because
+// RentFaster's origin blocks non-approved fetchers (both direct and
+// rss2json return 5xx/403 as of Sep 2026).
+const RENTFASTER_RSS_URL = 'https://www.rentfaster.ca/rss/?city=calgary';
 const RENTFASTER_MAX_ITEMS = 10;
 
-const CRAIGSLIST_HTML_URL = 'https://calgary.craigslist.org/search/hhh';
+// hss = household services. Users posting here are typically requesting
+// help ("Need 2 movers Saturday", "Sublet needed"). The previous /hhh
+// path was housing listings which are landlord posts, not demand.
+const CRAIGSLIST_HTML_URL = 'https://calgary.craigslist.org/search/hss';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
 interface CrawlResult {
@@ -300,31 +312,114 @@ export class ScoutAgent extends BaseAgent {
   }
 
   private async crawlRentFaster(): Promise<CrawlResult> {
-    return this.scrapeHtmlWithStaticScore({
-      pageUrl: RENTFASTER_HTML_URL,
+    // RSS path — cheaper (renderJs off) and immune to the Vue template
+    // shells the HTML page kept leaking through.
+    let found = 0;
+    let created = 0;
+
+    const xml = await fetchWithScrapingBee(RENTFASTER_RSS_URL, {
       source: 'rentfaster',
-      staticScore: RENTFASTER_STATIC_SCORE,
-      maxItems: RENTFASTER_MAX_ITEMS,
-      contactName: 'RentFaster Listing',
-      notesPrefix: 'New rental listing',
-      // RentFaster renders its listing list client-side (Vue), so we need
-      // ScrapingBee to actually execute the JS before returning HTML.
-      renderJs: true,
-      // Even after JS render, the DOM contains Vue template shells and
-      // navigation labels. Strip anything that clearly isn't a listing.
-      filterTitle: isRealRentFasterListing,
+      renderJs: false,
     });
+    if (!xml) return { found: 0, created: 0 };
+
+    const titles = parseRssItemTitles(xml).filter(isRealRentFasterListing);
+    if (titles.length === 0) {
+      logger.warn(
+        { source: 'rentfaster', bytes: xml.length },
+        'Scout: rentfaster parsed 0 usable RSS titles',
+      );
+      return { found: 0, created: 0 };
+    }
+
+    for (const title of titles.slice(0, RENTFASTER_MAX_ITEMS)) {
+      const fingerprint = title.slice(0, 50);
+      if (!fingerprint) continue;
+      found++;
+      if (await this.wasSignalSeen('rentfaster', fingerprint)) continue;
+
+      try {
+        await db.insert(leads).values({
+          contactName: 'RentFaster Listing',
+          sourceChannel: 'rentfaster',
+          utmSource: 'rentfaster',
+          utmCampaign: 'scout-reid',
+          intentScore: RENTFASTER_STATIC_SCORE,
+          status: 'new',
+          notes: `New rental listing: ${title}\nURL: ${RENTFASTER_RSS_URL}`,
+        });
+        created++;
+        logger.info(
+          { source: 'rentfaster', title: title.slice(0, 60) },
+          'Scout: rentfaster lead created',
+        );
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, source: 'rentfaster', title: title.slice(0, 60) },
+          'Scout: rentfaster lead insert failed',
+        );
+      }
+    }
+
+    return { found, created };
   }
 
   private async crawlCraigslist(): Promise<CrawlResult> {
-    return this.scrapeHtmlWithStaticScore({
-      pageUrl: CRAIGSLIST_HTML_URL,
-      source: 'craigslist',
-      staticScore: CRAIGSLIST_STATIC_SCORE,
-      maxItems: CRAIGSLIST_MAX_ITEMS,
-      contactName: 'Craigslist Listing',
-      notesPrefix: 'Craigslist listing',
-    });
+    // Claude-scored (was static 45) — hss mixes moving requests with
+    // property/medical listings that shouldn't create leads.
+    let found = 0;
+    let created = 0;
+
+    const html = await fetchWithScrapingBee(CRAIGSLIST_HTML_URL, { source: 'craigslist' });
+    if (!html) return { found: 0, created: 0 };
+
+    const titles = parseListingTitles(html, 'craigslist');
+    if (titles.length === 0) {
+      logger.warn(
+        { source: 'craigslist', bytes: html.length },
+        'Scout: craigslist parsed 0 titles — markup may have changed',
+      );
+      return { found: 0, created: 0 };
+    }
+
+    for (const title of titles.slice(0, CRAIGSLIST_MAX_ITEMS)) {
+      if (!title) continue;
+      found++;
+      const score = await this.scoreSignal(title);
+      logger.info(
+        { source: 'craigslist', score, title: title.slice(0, 80) },
+        'Scout: signal scored',
+      );
+      if (score < CRAIGSLIST_CREATE_THRESHOLD) continue;
+
+      const fingerprint = title.slice(0, 50);
+      if (!fingerprint) continue;
+      if (await this.wasSignalSeen('craigslist', fingerprint)) continue;
+
+      try {
+        await db.insert(leads).values({
+          contactName: 'Craigslist Poster',
+          sourceChannel: 'craigslist',
+          utmSource: 'craigslist',
+          utmCampaign: 'scout-reid',
+          intentScore: score,
+          status: 'new',
+          notes: `Craigslist listing: ${title}\nURL: ${CRAIGSLIST_HTML_URL}`,
+        });
+        created++;
+        logger.info(
+          { source: 'craigslist', score, title: title.slice(0, 60) },
+          'Scout: craigslist lead created',
+        );
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, source: 'craigslist', title: title.slice(0, 60) },
+          'Scout: craigslist lead insert failed',
+        );
+      }
+    }
+
+    return { found, created };
   }
 
   /**
@@ -433,82 +528,6 @@ export class ScoutAgent extends BaseAgent {
     return { found, created };
   }
 
-  /**
-   * Twin of crawlRssWithStaticScore for sources that go through ScrapingBee
-   * (blocked at origin). Same static-score / dedup semantics; only the
-   * fetch + parse differ.
-   */
-  private async scrapeHtmlWithStaticScore(opts: {
-    pageUrl: string;
-    source: string;
-    staticScore: number;
-    maxItems: number;
-    contactName: string;
-    notesPrefix: string;
-    renderJs?: boolean;
-    // Optional per-source predicate to strip UI-chrome or template-shell
-    // strings that parseListingTitles can't distinguish from real listings
-    // (e.g. Vue's `{{price}}` shells on RentFaster).
-    filterTitle?: (title: string) => boolean;
-  }): Promise<CrawlResult> {
-    let found = 0;
-    let created = 0;
-
-    const html = await fetchWithScrapingBee(opts.pageUrl, {
-      source: opts.source,
-      renderJs: opts.renderJs,
-    });
-    if (!html) return { found: 0, created: 0 };
-
-    const parsed = parseListingTitles(html, opts.source);
-    const titles = opts.filterTitle ? parsed.filter(opts.filterTitle) : parsed;
-    if (opts.filterTitle && parsed.length !== titles.length) {
-      logger.info(
-        { source: opts.source, before: parsed.length, after: titles.length },
-        'Scout: title filter applied',
-      );
-    }
-    if (titles.length === 0) {
-      logger.warn(
-        { source: opts.source, bytes: html.length, parsedBeforeFilter: parsed.length },
-        'Scout: parsed 0 usable titles — markup may have changed',
-      );
-      return { found: 0, created: 0 };
-    }
-
-    for (const title of titles.slice(0, opts.maxItems)) {
-      const fingerprint = title.slice(0, 50);
-      if (!fingerprint) continue;
-
-      found++;
-      if (await this.wasSignalSeen(opts.source, fingerprint)) continue;
-
-      try {
-        await db.insert(leads).values({
-          contactName: opts.contactName,
-          sourceChannel: opts.source,
-          utmSource: opts.source,
-          utmCampaign: 'scout-reid',
-          intentScore: opts.staticScore,
-          status: 'new',
-          notes: `${opts.notesPrefix}: ${title}\nURL: ${opts.pageUrl}`,
-        });
-        created++;
-        logger.info(
-          { source: opts.source, title: title.slice(0, 60) },
-          'Scout: HTML lead created',
-        );
-      } catch (err) {
-        logger.error(
-          { err: (err as Error).message, source: opts.source, title: title.slice(0, 60) },
-          'Scout: HTML lead insert failed',
-        );
-      }
-    }
-
-    return { found, created };
-  }
-
   private async scoreSignal(text: string): Promise<number> {
     if (!text.trim()) return 0;
     const response = await this.callClaude(
@@ -571,6 +590,37 @@ Return ONLY a number 0-100.`,
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Extract <title> content from RSS <item> blocks. Ignores the channel-level
+ * <title> (the feed title itself) by requiring the title to sit inside an
+ * <item>. Handles CDATA-wrapped titles too — RentFaster wraps some.
+ */
+export function parseRssItemTitles(xml: string): string[] {
+  const titles: string[] = [];
+  const itemRegex = /<item\b[\s\S]*?<\/item>/g;
+  const titleRegex = /<title\b[^>]*>([\s\S]*?)<\/title>/;
+  let m: RegExpExecArray | null;
+  while ((m = itemRegex.exec(xml)) !== null) {
+    const inner = m[0];
+    const t = titleRegex.exec(inner);
+    if (!t) continue;
+    let raw = t[1] ?? '';
+    // Unwrap <![CDATA[…]]> and strip any residual tags.
+    raw = raw.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+    const cleaned = raw
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned.length >= 5) titles.push(cleaned);
+  }
+  return titles;
 }
 
 /**

@@ -50,7 +50,9 @@ export async function fetchWithScrapingBee(
   });
   // wait= is only respected when render_js=true; skip it otherwise so
   // ScrapingBee doesn't reject the request with an unknown-param error.
-  if (renderJs) params.set('wait', '2000');
+  // 5s is enough for the client-side Vue apps we've seen (RentFaster);
+  // still safely inside SCRAPINGBEE_TIMEOUT_MS.
+  if (renderJs) params.set('wait', '5000');
   const proxyUrl = `${SCRAPINGBEE_ENDPOINT}?${params.toString()}`;
 
   // Log the request with the api_key redacted so we can confirm the
