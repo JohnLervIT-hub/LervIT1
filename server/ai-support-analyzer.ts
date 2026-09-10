@@ -1,7 +1,15 @@
 import OpenAI from "openai";
 import type { SupportTicket, SupportTicketReply, Booking, User } from "@shared/schema";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// OpenAI SDK throws synchronously in the constructor when apiKey is
+// missing. Because this module is imported eagerly at server boot, an
+// unconfigured OPENAI_API_KEY would crash the process before any
+// uncaughtException handler is registered — Railway saw this as a silent
+// container exit with no logs. Instantiate lazily; each call site
+// short-circuits to its existing fallback when `openai` is null.
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 interface TicketContext {
   ticket: SupportTicket;
@@ -126,6 +134,7 @@ export async function analyzeTicket(context: TicketContext): Promise<AiAnalysisR
       .replace('{{bookingContext}}', bookingContext)
       .replace('{{/if}}', bookingContext ? '' : '-->');
 
+    if (!openai) throw new Error("OpenAI is not configured (OPENAI_API_KEY unset)");
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -313,6 +322,7 @@ export async function analyzeIncident(context: IncidentContext): Promise<Inciden
       .replace("{{/if}}", context.reporterName ? "" : "-->")
       .replace("{{notes}}", context.incident.notes);
 
+    if (!openai) throw new Error("OpenAI is not configured (OPENAI_API_KEY unset)");
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -465,6 +475,7 @@ export async function analyzeAuditEntry(context: AuditEntryContext): Promise<Aud
       .replace("{{objectId}}", context.objectId || "N/A")
       .replace("{{notes}}", context.notes || "No notes recorded");
 
+    if (!openai) throw new Error("OpenAI is not configured (OPENAI_API_KEY unset)");
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
