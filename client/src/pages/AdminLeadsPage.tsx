@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, ArrowLeft, RefreshCw, Zap, Plus } from "lucide-react";
+import { Loader2, ArrowLeft, RefreshCw, Zap, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface Lead {
@@ -137,6 +137,24 @@ export default function AdminLeadsPage() {
     onError: (err: any) => {
       toast({
         title: "Trigger failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteLead = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/agent/leads/${leadId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Lead deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Delete failed",
         description: err?.message ?? "Unknown error",
         variant: "destructive",
       });
@@ -300,14 +318,32 @@ export default function AdminLeadsPage() {
                         {lead.notes ?? "—"}
                       </td>
                       <td className="py-2 pr-3">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={triggerAlex.isPending || lead.status === "converted" || lead.status === "cold"}
-                          onClick={() => triggerAlex.mutate(lead.id)}
-                        >
-                          <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Alex
-                        </Button>
+                        <div className="flex gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={triggerAlex.isPending || lead.status === "converted" || lead.status === "cold"}
+                            onClick={() => triggerAlex.mutate(lead.id)}
+                          >
+                            <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Alex
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            disabled={deleteLead.isPending}
+                            title="Delete lead"
+                            data-testid={`button-delete-lead-${lead.id}`}
+                            onClick={() => {
+                              const label = lead.contactName?.trim() || lead.notes?.slice(0, 60) || lead.id;
+                              if (window.confirm(`Delete this lead?\n\n${label}\n\nThis cannot be undone.`)) {
+                                deleteLead.mutate(lead.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

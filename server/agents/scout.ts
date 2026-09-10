@@ -42,9 +42,12 @@ const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 // Reddit's public JSON API now returns 403 for unauthenticated User-Agents.
 // The .rss endpoint is served without auth (with browser-friendly caching)
 // and rss2json parses it identically to any other feed.
+// restrict_sr=1 pins search to the named subreddit — without it, Reddit's
+// search widens to the entire site, which is how we ended up scoring things
+// like a San Jose Puja announcement as a moving lead.
 const REDDIT_FEEDS = [
-  'https://www.reddit.com/r/Calgary/search.rss?q=moving+mover+delivery&sort=new',
-  'https://www.reddit.com/r/Calgary/search.rss?q=need+mover+calgary&sort=new',
+  'https://www.reddit.com/r/Calgary/search.rss?q=moving+delivery+mover&sort=new&restrict_sr=1',
+  'https://www.reddit.com/r/Calgary/search.rss?q=need+mover+help+moving&sort=new&restrict_sr=1',
   'https://www.reddit.com/r/calgaryhousing/new.rss',
 ] as const;
 
@@ -478,13 +481,21 @@ export class ScoutAgent extends BaseAgent {
     const response = await this.callClaude(
       `You are Scout Reid, a lead scoring agent for LervIT, a Calgary moving and delivery platform. Score ONLY physical moving intent.
 
+CRITICAL RULE:
+If the signal is NOT from Calgary or Alberta, Canada — score it 0 regardless
+of moving intent. We only serve Calgary.
+
+Cities that score 0:
+San Jose, Toronto, Vancouver, Edmonton, New York, London — any non-Calgary
+location. Calgary signals only.
+
 IMPORTANT RULES:
 - 'moving beyond', 'moving forward', 'moving past' = FIGURATIVE = score 0-5
-- Someone physically relocating home/office = 70-100
-- Someone needing furniture delivery = 60-80
-- Someone selling items before a move = 50-70
+- Someone physically relocating home/office in Calgary = 70-100
+- Someone needing furniture delivery in Calgary = 60-80
+- Someone selling items before a Calgary move = 50-70
 - News articles about city development = 0-10
-- Real estate listings (for sale/rent) = 40-60 (they signal someone will need to move)
+- Real estate listings in Calgary (for sale/rent) = 40-60 (they signal someone will need to move)
 - Job postings for movers/drivers = 0 (supply side, not demand)
 
 Return ONLY a number 0-100.`,

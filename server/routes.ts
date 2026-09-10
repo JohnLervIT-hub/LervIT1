@@ -13169,6 +13169,23 @@ Respond with VALID JSON only:
     }
   });
 
+  // Hard-delete a lead. Used to prune false positives from Scout crawls
+  // (out-of-region signals, figurative "moving" language, etc.).
+  app.delete("/api/admin/agent/leads/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const deleted = await db
+        .delete(leads)
+        .where(eq(leads.id, req.params.id))
+        .returning({ id: leads.id });
+      if (deleted.length === 0) return res.status(404).json({ error: 'Lead not found' });
+      res.status(200).json({ ok: true, id: deleted[0].id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] lead delete failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Manually trigger Scout crawl.
   app.post("/api/admin/agent/scout/trigger", async (req: Request, res: Response) => {
     try {
