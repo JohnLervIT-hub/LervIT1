@@ -384,6 +384,16 @@ export class ScoutAgent extends BaseAgent {
       if (apiKey) params.set('api_key', apiKey);
       const proxyUrl = `https://api.rss2json.com/v1/api.json?${params.toString()}`;
 
+      // Rebuild the URL with the key redacted so we can confirm in prod logs
+      // that the api_key param is actually being appended (blank env vars
+      // silently drop us to rss2json's ~10 req/min free tier).
+      const logParams = new URLSearchParams(params);
+      if (apiKey) logParams.set('api_key', 'REDACTED');
+      logger.info(
+        { source, url: `https://api.rss2json.com/v1/api.json?${logParams.toString()}`, keyed: !!apiKey },
+        'Scout: rss2json fetch',
+      );
+
       const response = await fetch(proxyUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0' },
       });
