@@ -257,10 +257,34 @@ export class ScoutAgent extends BaseAgent {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
       const feedUrl = feeds[i];
 
-      const xml = await fetchWithScrapingBee(feedUrl, {
-        source: 'google_alerts',
-        renderJs: false,
-      });
+      // ScrapingBee blocks *.google.com (400), so hit the Atom feed
+      // directly with a browser UA — Google Alerts serves these publicly.
+      let xml: string | null = null;
+      try {
+        const response = await fetch(feedUrl, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/atom+xml,application/xml,text/xml,*/*',
+            'Accept-Language': 'en-CA,en;q=0.9',
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (response.ok) {
+          xml = await response.text();
+          logger.info(
+            { source: 'google_alerts', feedUrl: feedUrl.slice(-20), bytes: xml.length },
+            'Scout: GA direct fetch ok',
+          );
+        } else {
+          logger.warn(
+            { source: 'google_alerts', status: response.status, feedUrl: feedUrl.slice(-20) },
+            'Scout: GA direct fetch non-200',
+          );
+        }
+      } catch (err) {
+        logger.error({ err }, 'Scout: GA direct fetch error');
+      }
       if (!xml) continue;
 
       const entries = xml.match(/<entry>([\s\S]*?)<\/entry>/g) ?? [];

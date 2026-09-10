@@ -5,11 +5,11 @@
  * to hire movers, Ryan hunts *suppliers* — people offering moving/delivery
  * labour or vehicles, whom LervIT can recruit onto the platform.
  *
- * Sources (all Calgary-scoped, all fetched through ScrapingBee — origin
- * blocks direct scraping and rss2json chokes on Atom, see scout.ts):
- *   - Kijiji "Moving & Storage" services listings (HTML)
- *   - Craigslist Calgary "labor / moving" (`lbs`) category (HTML)
- *   - Google Alerts feeds targeted at supply-side keywords (Atom XML)
+ * Sources (all Calgary-scoped):
+ *   - Kijiji "Moving & Storage" services listings (HTML via ScrapingBee)
+ *   - Craigslist Calgary "labor / moving" (`lbs`) category (HTML via ScrapingBee)
+ *   - Google Alerts feeds targeted at supply-side keywords (Atom XML,
+ *     fetched directly — ScrapingBee blocks *.google.com)
  *     (env: GOOGLE_ALERT_SUPPLY_FEEDS — separate from GOOGLE_ALERT_FEEDS)
  *
  * Candidates scoring >= 60 get routed onto the `vetter` BullMQ queue where
@@ -254,7 +254,34 @@ export class RyanAgent extends BaseAgent {
       if (i > 0) await sleep(INTER_FEED_DELAY_MS);
       const feedUrl = feedUrls[i];
 
-      const xml = await fetchWithScrapingBee(feedUrl, { source, renderJs: false });
+      // ScrapingBee blocks *.google.com (400), so hit the Atom feed
+      // directly with a browser UA — Google Alerts serves these publicly.
+      let xml: string | null = null;
+      try {
+        const response = await fetch(feedUrl, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/atom+xml,application/xml,text/xml,*/*',
+            'Accept-Language': 'en-CA,en;q=0.9',
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (response.ok) {
+          xml = await response.text();
+          logger.info(
+            { source, feedUrl: feedUrl.slice(-20), bytes: xml.length },
+            'Ryan: GA direct fetch ok',
+          );
+        } else {
+          logger.warn(
+            { source, status: response.status, feedUrl: feedUrl.slice(-20) },
+            'Ryan: GA direct fetch non-200',
+          );
+        }
+      } catch (err) {
+        logger.error({ err }, 'Ryan: GA direct fetch error');
+      }
       if (!xml) continue;
 
       const entries = (xml.match(/<entry>([\s\S]*?)<\/entry>/g) ?? []).slice(0, maxItems);
