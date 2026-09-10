@@ -254,7 +254,17 @@ async function run() {
   }
 }
 
-run().catch(err => {
-  console.error('[startup-migrate] Fatal:', err.message);
-  process.exit(1);
-});
+// Explicit exit codes are required because the container's CMD chains
+// `startup-migrate && dist/index.js` — anything short of a code-0 exit
+// (including a hang on an unclosed pg keep-alive handle) prevents the
+// server from ever booting. Relying on Node's natural drain-and-exit
+// was masking the crash as a silent "server never starts."
+run()
+  .then(() => {
+    console.log('[startup-migrate] Complete — starting server');
+    process.exit(0);
+  })
+  .catch(err => {
+    console.error('[startup-migrate] Fatal:', err.message);
+    process.exit(1);
+  });
