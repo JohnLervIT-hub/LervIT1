@@ -35,8 +35,14 @@ const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 
 // Kijiji + Craigslist block bot traffic at the origin (403 direct, 500 via
 // rss2json), so we hit their HTML search pages through ScrapingBee.
+//
+// URL slug fix: /b-moving-storage/calgary/c146l1700199 was returning
+// cleaning-service ads (c146 currently canonicalises to "Cleaners &
+// Cleaning" on Kijiji). The `b-moving-packing` slug hits the intended
+// "Moving & Packing Services" listing set. We log the fetched page's
+// <title> after every crawl so a future re-slug is easy to spot in prod.
 const KIJIJI_SERVICES_HTML_URL =
-  'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
+  'https://www.kijiji.ca/b-moving-packing/calgary/c146l1700199';
 const KIJIJI_BASE_URL = 'https://www.kijiji.ca';
 const KIJIJI_MAX_ITEMS = 15;
 
@@ -251,6 +257,14 @@ export class RyanAgent extends BaseAgent {
 
     const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source, renderJs: true });
     if (!html) return { found, created };
+
+    // Confirms which category Kijiji actually served (slug changes tend to
+    // silently redirect us to the wrong grid — cleaning vs moving).
+    const pageTitle = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
+    logger.info(
+      { source: opts.source, url: opts.pageUrl, pageTitle },
+      'Ryan: fetched search page',
+    );
 
     const rawItems = parseListingLinks(html, opts.source, opts.baseUrl);
     const items = rawItems.filter(
@@ -582,61 +596,116 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Pull `{ title, url }` pairs from a Kijiji/Craigslist search-results HTML
- * blob. Regex-based (same reasoning as parseListingTitles — small payload,
- * we only need anchor href + text). Relative Kijiji hrefs are resolved
- * against `baseUrl`. Returns [] on no match so the caller can fall back to
- * title-only parsing.
+ * blob. Runs two passes:
+ *   1. Anchor patterns that co-locate title text with href (best case).
+ *   2. URL-only patterns (Kijiji server-renders anchors without inline
+ *      text — title lives in a sibling node). URLs from this pass get a
+ *      title derived from the URL slug so scoring still works without a
+ *      secondary fetch.
+ * Both passes dedupe on the absolute URL. Relative Kijiji hrefs are
+ * resolved against `baseUrl`.
  */
 export function parseListingLinks(
   html: string,
   source: string,
   baseUrl: string,
 ): Array<{ title: string; url: string | null }> {
-  const results: Array<{ title: string; url: string | null }> = [];
-  const seen = new Set<string>();
+  const byKey = new Map<string, { title: string; url: string | null }>();
 
-  const push = (title: string, href: string | null) => {
-    const cleanedTitle = title.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-    if (cleanedTitle.length < 5) return;
-    let url: string | null = null;
-    if (href) {
-      const cleanedHref = href.trim();
-      if (/^https?:\/\//i.test(cleanedHref)) url = cleanedHref;
-      else if (cleanedHref.startsWith('/')) url = `${baseUrl}${cleanedHref}`;
-    }
-    const key = url ?? cleanedTitle;
-    if (seen.has(key)) return;
-    seen.add(key);
-    results.push({ title: cleanedTitle, url });
+  const resolve = (href: string): string | null => {
+    const trimmed = href.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (trimmed.startsWith('/')) return `${baseUrl}${trimmed}`;
+    return null;
   };
 
-  // Kijiji: newer QA hook (<a … data-qa="ad-title" href="/v-…">Title</a>)
-  const kijijiQa = /<a[^>]*data-qa="ad-title"[^>]*href="([^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = kijijiQa.exec(html)) !== null) push(m[2], m[1]);
+  const register = (rawTitle: string, rawHref: string | null) => {
+    const cleanedTitle = rawTitle.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const url = rawHref ? resolve(rawHref) : null;
+    const key = url ?? cleanedTitle;
+    if (!key) return;
+    const existing = byKey.get(key);
+    // Keep the longer/richer title if we hit the same URL twice.
+    if (!existing || existing.title.length < cleanedTitle.length) {
+      byKey.set(key, { title: cleanedTitle, url });
+    }
+  };
 
-  // Kijiji: historic listing-link testid.
-  const kijijiTestid = /<a[^>]*data-testid="listing-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
-  while ((m = kijijiTestid.exec(html)) !== null) push(m[2], m[1]);
-
-  // Kijiji: any anchor whose href starts with /v- (listing detail path).
-  const kijijiVAnchor = /<a[^>]*href="(\/v-[^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi;
-  while ((m = kijijiVAnchor.exec(html)) !== null) push(m[2], m[1]);
+  // ─── Pass 1: title+URL anchors ───────────────────────────────────
+  const titledAnchors: RegExp[] = [
+    // Kijiji: newer QA hook (<a … data-qa="ad-title" href="/v-…">Title</a>)
+    /<a[^>]*data-qa="ad-title"[^>]*href="([^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi,
+    // Kijiji: historic listing-link testid.
+    /<a[^>]*data-testid="listing-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi,
+    // Kijiji: any anchor whose href starts with /v- (listing detail path).
+    /<a[^>]*href="(\/v-[^"]+)"[^>]*>([\s\S]{0,300}?)<\/a>/gi,
+  ];
+  for (const re of titledAnchors) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null) register(m[2], m[1]);
+  }
 
   // Craigslist: <a class="posting-title" href="…"><span class="label">Title</span>
   const clPosting = /<a[^>]*class="[^"]*posting-title[^"]*"[^>]*href="([^"]+)"[^>]*>[\s\S]{0,300}?<span[^>]*class="[^"]*label[^"]*"[^>]*>([^<]+)</gi;
-  while ((m = clPosting.exec(html)) !== null) push(m[2], m[1]);
+  let m: RegExpExecArray | null;
+  while ((m = clPosting.exec(html)) !== null) register(m[2], m[1]);
 
   // Craigslist: 2024+ static search wrapper — anchor immediately after
   // `class="cl-static-search-result"` container.
   const clStatic = /class="cl-static-search-result"[\s\S]{0,400}?<a[^>]*href="([^"]+)"[^>]*>([\s\S]{0,200}?)<\/a>/gi;
-  while ((m = clStatic.exec(html)) !== null) push(m[2], m[1]);
+  while ((m = clStatic.exec(html)) !== null) register(m[2], m[1]);
+
+  // ─── Pass 2: URL-only patterns (Kijiji) ──────────────────────────
+  // Standard listing detail path with trailing numeric ad id.
+  const kijijiStandard = /href="(\/v-[^"]+\/[^"]+\/[^"]+\/\d+)"/g;
+  while ((m = kijijiStandard.exec(html)) !== null) register('', m[1]);
+  // Absolute listing URL.
+  const kijijiAbsolute = /href="(https:\/\/www\.kijiji\.ca\/v-[^"]+)"/g;
+  while ((m = kijijiAbsolute.exec(html)) !== null) register('', m[1]);
+  // data-vip attribute (used on some card containers).
+  const kijijiDataVip = /data-vip="(https:\/\/www\.kijiji\.ca\/[^"]+)"/g;
+  while ((m = kijijiDataVip.exec(html)) !== null) register('', m[1]);
+
+  // ─── Backfill titles from URL slugs where the anchor text was empty.
+  Array.from(byKey.entries()).forEach(([key, entry]) => {
+    if (entry.title.length >= 5 || !entry.url) return;
+    const derived = titleFromUrlSlug(entry.url);
+    if (derived) byKey.set(key, { title: derived, url: entry.url });
+  });
+
+  const results = Array.from(byKey.values());
 
   logger.info(
-    { source, extractedLinks: results.length, withUrl: results.filter(r => r.url).length },
-    'Ryan: parseListingLinks',
+    {
+      source,
+      htmlLength: html.length,
+      extractedLinks: results.length,
+      withUrl: results.filter(r => r.url).length,
+      sample: html.length > 11000 ? html.slice(10000, 11000) : null,
+    },
+    'Ryan: Kijiji link extraction sample',
   );
+
   return results;
+}
+
+/**
+ * Kijiji embeds the ad title as a hyphenated slug in the URL path:
+ *   /v-moving-packing/calgary/big-truck-friendly-movers/1712345678
+ * We use that to score without a second fetch. Craigslist URLs put a
+ * shorter slug in the same position, so this works there too.
+ */
+function titleFromUrlSlug(url: string): string | null {
+  const parts = url.split('?')[0].split('#')[0].split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  // Trailing segment is usually the numeric ad id — use the segment
+  // before it, which is the slug.
+  const trailing = parts[parts.length - 1];
+  const slug = /^\d+$/.test(trailing) ? parts[parts.length - 2] : trailing;
+  if (!slug) return null;
+  const decoded = slug.replace(/[-_+]/g, ' ').replace(/\s+/g, ' ').trim();
+  return decoded.length >= 5 ? decoded : null;
 }
 
 /**
