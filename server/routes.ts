@@ -13286,7 +13286,7 @@ Respond with VALID JSON only:
       const allowed = new Set([
         'process_signals',
         'crawl_kijiji_services',
-        'crawl_craigslist_labor',
+        'crawl_craigslist_services',
         'crawl_supply_alerts',
         'score_candidate',
       ]);

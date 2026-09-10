@@ -39,7 +39,10 @@ const KIJIJI_SERVICES_HTML_URL =
   'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
 const KIJIJI_MAX_ITEMS = 15;
 
-const CRAIGSLIST_LABOR_HTML_URL = 'https://calgary.craigslist.org/search/lbs';
+// Ryan hunts supply, so we scrape the "household services offered" section
+// (people advertising services). Scout uses /search/lbs (labor gigs =
+// customers hiring) for demand. Do not swap without also swapping scout.ts.
+const CRAIGSLIST_SERVICES_HTML_URL = 'https://calgary.craigslist.org/search/hss';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
 // Temporarily lowered from 60 → 50 to capture more candidates while the
@@ -80,8 +83,8 @@ export class RyanAgent extends BaseAgent {
         return this.processSignals();
       case 'crawl_kijiji_services':
         return this.crawlKijijiServices();
-      case 'crawl_craigslist_labor':
-        return this.crawlCraigslistLabor();
+      case 'crawl_craigslist_services':
+        return this.crawlCraigslistServices();
       case 'crawl_supply_alerts':
         return this.crawlGoogleAlerts();
       case 'score_candidate':
@@ -109,11 +112,11 @@ export class RyanAgent extends BaseAgent {
     }
 
     try {
-      const r = await this.crawlCraigslistLabor();
+      const r = await this.crawlCraigslistServices();
       results.craigslist = r.found;
       results.leadsCreated += r.created;
     } catch (err) {
-      logger.error({ err }, 'Ryan: Craigslist labor crawl failed');
+      logger.error({ err }, 'Ryan: Craigslist services crawl failed');
     }
 
     try {
@@ -172,10 +175,10 @@ export class RyanAgent extends BaseAgent {
     });
   }
 
-  private async crawlCraigslistLabor(): Promise<CrawlResult> {
+  private async crawlCraigslistServices(): Promise<CrawlResult> {
     return this.crawlScrapedListings({
-      pageUrl: CRAIGSLIST_LABOR_HTML_URL,
-      source: 'craigslist_labor',
+      pageUrl: CRAIGSLIST_SERVICES_HTML_URL,
+      source: 'craigslist_services',
       utmSource: 'craigslist',
       contactName: 'Craigslist Poster',
       maxItems: CRAIGSLIST_MAX_ITEMS,
@@ -429,29 +432,30 @@ export class RyanAgent extends BaseAgent {
   private async scoreCandidate(text: string): Promise<number> {
     if (!text.trim()) return 0;
     const response = await this.callClaude(
-      `You are Ryan Brooks, a supply-side agent for LervIT, Calgary's moving and delivery platform. Score signals for jobs LervIT movers could be dispatched to, or people we could recruit as movers.
+      `You are Ryan Brooks, a supply-side recruiter for LervIT, Calgary's moving and delivery platform. Ryan hunts SUPPLY only — people who want to EARN MONEY as movers/drivers. Scout is the sister agent who handles DEMAND (customers needing movers).
 
-SCORING RULES:
-90-100: Someone HIRING movers/helpers for a job LervIT movers can fill.
-        "Looking for 2 guys to move furniture", "Need movers this weekend",
-        "Hiring moving helpers", "Need help moving Saturday $200".
-        These are JOBS LervIT movers can fill — the highest-value signal.
-70-89:  Person offering moving/delivery services in Calgary with a
-        truck/van looking for work. "Cargo van for hire",
-        "Will move for hire — have truck", "Moving service — call me".
-        Recruit them as movers.
-50-69:  Structured commercial job posting for a mover/driver/courier.
-        "Hiring drivers — full/part-time", "Movers wanted — apply now",
-        "Delivery drivers needed". Business or ongoing positions.
-30-49:  Vague work interest, unclear vehicle situation, unclear intent.
-0-29:   Unrelated content: news articles about delivery drivers,
-        crime reports mentioning drivers/movers, property sales, retail,
-        medical. Anything not related to the Calgary moving industry,
-        or not from Calgary/Alberta.
+Score 0-100 for likelihood this person wants to EARN MONEY doing moving or delivery work in Calgary.
 
-CRITICAL RULES:
-- Score 0 if the signal is not from Calgary or Alberta, Canada.
-- Score 0 for pure news/crime articles even if they mention "movers" or "drivers".
+HIGH scores (70-100):
+  "Man with truck available"
+  "Offering moving/delivery services"
+  "Have cargo van looking for work"
+  "Moving help available"
+  "Driver available for hire"
+  "We do deliveries Calgary"
+
+LOW scores (0-30):
+  "Looking for movers"
+  "Need help moving"
+  "Looking for 2 guys to move"
+  "Hiring movers" (customer side)
+  News articles
+  Non-Calgary signals
+
+CRITICAL:
+  Someone OFFERING services = HIGH score
+  Someone NEEDING services = score 0-10
+  (Scout handles demand, Ryan handles supply)
 
 Return ONLY a number 0-100.`,
       `Score this signal:\n${text.slice(0, 500)}`,

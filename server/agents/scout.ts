@@ -75,7 +75,11 @@ const RENTFASTER_MAX_ITEMS = 10;
 // hss = household services. Users posting here are typically requesting
 // help ("Need 2 movers Saturday", "Sublet needed"). The previous /hhh
 // path was housing listings which are landlord posts, not demand.
-const CRAIGSLIST_HTML_URL = 'https://calgary.craigslist.org/search/hss';
+// Scout hunts demand, so we scrape the "labor gigs / labor wanted" section
+// (customers hiring movers). Ryan uses /search/hss (household services
+// offered = movers advertising services) for supply. Do not swap without
+// also swapping ryan.ts.
+const CRAIGSLIST_HTML_URL = 'https://calgary.craigslist.org/search/lbs';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
 interface CrawlResult {
