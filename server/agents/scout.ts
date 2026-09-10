@@ -272,6 +272,24 @@ export class ScoutAgent extends BaseAgent {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
       const feedUrl = feeds[i];
 
+      // Guard against env parsing corruption — a comma-split accident or an
+      // HTML-entity-encoded `&` produces a string that fetch() will 400 on
+      // without telling us which entry was bad.
+      try {
+        new URL(feedUrl);
+      } catch {
+        logger.warn(
+          { feedUrl: feedUrl.slice(0, 50) },
+          'Scout: invalid GA feed URL — skipping',
+        );
+        continue;
+      }
+
+      // Log the last two path segments (e.g. `feeds/1234567890123`) so we can
+      // identify which alert is 400ing without leaking the query token that
+      // authenticates the feed.
+      const feedId = new URL(feedUrl).pathname.split('/').slice(-2).join('/');
+
       // ScrapingBee blocks *.google.com (400), so hit the Atom feed
       // directly with a browser UA — Google Alerts serves these publicly.
       let xml: string | null = null;
@@ -288,17 +306,17 @@ export class ScoutAgent extends BaseAgent {
         if (response.ok) {
           xml = await response.text();
           logger.info(
-            { source: 'google_alerts', feedUrl: feedUrl.slice(-20), bytes: xml.length },
+            { source: 'google_alerts', feedId, bytes: xml.length },
             'Scout: GA direct fetch ok',
           );
         } else {
           logger.warn(
-            { source: 'google_alerts', status: response.status, feedUrl: feedUrl.slice(-20) },
+            { source: 'google_alerts', feedId, status: response.status },
             'Scout: GA direct fetch non-200',
           );
         }
       } catch (err) {
-        logger.error({ err }, 'Scout: GA direct fetch error');
+        logger.error({ err, feedId }, 'Scout: GA direct fetch error');
       }
       if (!xml) continue;
 
