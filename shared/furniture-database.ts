@@ -414,7 +414,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'SOFA_RECLINER_001',
     name: 'Recliner sofa (3-seat)',
-    category: 'Sofa',
+    category: 'Chair',
     subcategory: 'Recliner',
     keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'electric', 'power'],
     dimensions_cm: { length: 230, width: 100, height: 100 },
@@ -429,7 +429,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'ARMCHAIR_001',
     name: 'Armchair / Accent chair',
-    category: 'Sofa',
+    category: 'Chair',
     subcategory: 'Armchair',
     keywords: ['armchair', 'accent', 'chair', 'single', 'living room'],
     dimensions_cm: { length: 85, width: 85, height: 90 },
@@ -444,7 +444,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'RECLINER_SINGLE_001',
     name: 'Single recliner chair',
-    category: 'Sofa',
+    category: 'Chair',
     subcategory: 'Recliner',
     keywords: ['recliner', 'chair', 'single', 'lazy boy', 'lazyboy'],
     dimensions_cm: { length: 90, width: 85, height: 100 },
@@ -1112,7 +1112,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'BBQ_GRILL_001',
     name: 'BBQ grill (propane)',
-    category: 'Appliance',
+    category: 'Outdoor',
     subcategory: 'Outdoor',
     keywords: ['bbq', 'grill', 'barbecue', 'propane', 'gas', 'outdoor', 'cooking'],
     dimensions_cm: { length: 140, width: 60, height: 115 },
@@ -1294,21 +1294,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     insurance_level: 'standard',
   },
   {
-    item_id: 'GRILL_001',
-    name: 'BBQ grill (propane)',
-    category: 'Outdoor',
-    subcategory: 'Grill',
-    keywords: ['bbq', 'grill', 'barbecue', 'propane', 'gas', 'outdoor'],
-    dimensions_cm: { length: 140, width: 60, height: 120 },
-    volume_ft3: calcVolume(140, 60, 120),
-    weight_kg: 50,
-    load_size: 'medium',
-    vehicle: 'pickup',
-    movers_required: 2,
-    handling_complexity: 'high',
-    insurance_level: 'medium',
-  },
-  {
     item_id: 'LAWNMOWER_001',
     name: 'Lawn mower (push)',
     category: 'Outdoor',
@@ -1447,13 +1432,13 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   },
   {
     item_id: 'BOXES_SMALL_001',
-    name: 'Moving boxes (small, set of 10)',
+    name: 'Moving box (small)',
     category: 'Other',
     subcategory: 'Boxes',
-    keywords: ['boxes', 'small', 'moving', 'cardboard', 'packing'],
+    keywords: ['box', 'boxes', 'small', 'moving', 'cardboard', 'packing'],
     dimensions_cm: { length: 40, width: 30, height: 30 },
-    volume_ft3: calcVolume(40, 30, 30) * 10,  // 10 boxes
-    weight_kg: 50,  // Assuming filled boxes
+    volume_ft3: calcVolume(40, 30, 30),
+    weight_kg: 15,  // Packed weight per single box
     load_size: 'boxes',
     vehicle: 'car',
     movers_required: 1,
@@ -1462,13 +1447,13 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   },
   {
     item_id: 'BOXES_MEDIUM_001',
-    name: 'Moving boxes (medium, set of 10)',
+    name: 'Moving box (medium)',
     category: 'Other',
     subcategory: 'Boxes',
-    keywords: ['boxes', 'medium', 'moving', 'cardboard', 'packing'],
+    keywords: ['box', 'boxes', 'medium', 'moving', 'cardboard', 'packing'],
     dimensions_cm: { length: 50, width: 40, height: 40 },
-    volume_ft3: calcVolume(50, 40, 40) * 10,  // 10 boxes
-    weight_kg: 80,  // Assuming filled boxes
+    volume_ft3: calcVolume(50, 40, 40),
+    weight_kg: 20,  // Packed weight per single box
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 1,
@@ -1477,13 +1462,13 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   },
   {
     item_id: 'BOXES_LARGE_001',
-    name: 'Moving boxes (large, set of 10)',
+    name: 'Moving box (large)',
     category: 'Other',
     subcategory: 'Boxes',
-    keywords: ['boxes', 'large', 'moving', 'cardboard', 'packing'],
+    keywords: ['box', 'boxes', 'large', 'moving', 'cardboard', 'packing'],
     dimensions_cm: { length: 60, width: 50, height: 50 },
-    volume_ft3: calcVolume(60, 50, 50) * 10,  // 10 boxes
-    weight_kg: 100,  // Assuming filled boxes
+    volume_ft3: calcVolume(60, 50, 50),
+    weight_kg: 25,  // Packed weight per single box
     load_size: 'medium',
     vehicle: 'pickup',
     movers_required: 2,
@@ -1886,9 +1871,9 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'MASSAGE_CHAIR_001',
     name: 'Massage chair (zero gravity / full body)',
-    category: 'Chair',
+    category: 'Other',
     subcategory: 'Massage Chair',
-    keywords: ['massage chair', 'zero gravity', 'recliner', 'osaki', 'human touch', 'shiatsu', 'full body', 'luxury'],
+    keywords: ['massage chair', 'zero gravity', 'recliner', 'osaki', 'human touch', 'shiatsu', 'full body', 'luxury', 'specialty'],
     dimensions_cm: { length: 145, width: 80, height: 125 },
     volume_ft3: calcVolume(145, 80, 125),
     weight_kg: 105,
