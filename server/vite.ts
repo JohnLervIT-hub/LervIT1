@@ -26,6 +26,10 @@ export function log(message: string, source = "express") {
 // they are not on disk in prod. Dynamic imports keep this file from failing
 // to load in production — serveStatic() below is the only path prod uses.
 export async function setupVite(app: Express, server: Server) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("setupVite called in production — use serveStatic instead");
+  }
+
   const { createServer: createViteServer, createLogger } = await import("vite");
   const { nanoid } = await import("nanoid");
   const viteConfig = (await import("../vite.config")).default;
