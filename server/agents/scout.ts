@@ -44,6 +44,11 @@ const CRAIGSLIST_CREATE_THRESHOLD = 50;
 // RSS crawlers share this budget, so we pace every rss2json call by 2s.
 const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 
+// Reject signals older than this. Feeds go back weeks; anything older than a
+// week is stale relative to a moving decision window and just burns Haiku
+// scoring credits.
+const MAX_SIGNAL_AGE_DAYS = 7;
+
 // Reddit's public JSON API now returns 403 for unauthenticated User-Agents.
 // The .rss endpoint is served without auth (with browser-friendly caching)
 // and rss2json parses it identically to any other feed.
@@ -103,6 +108,7 @@ const GMAPS_LEAD_INTENT_SCORE = 75;
 interface CrawlResult {
   found: number;
   created: number;
+  staleFiltered: number;
 }
 
 interface ProcessSignalsResult {
@@ -114,6 +120,7 @@ interface ProcessSignalsResult {
   googleMaps: number;
   leadsCreated: number;
   leadsRouted: number;
+  staleFiltered: number;
 }
 
 export class ScoutAgent extends BaseAgent {
@@ -153,12 +160,14 @@ export class ScoutAgent extends BaseAgent {
       googleMaps: 0,
       leadsCreated: 0,
       leadsRouted: 0,
+      staleFiltered: 0,
     };
 
     try {
       const r = await this.crawlGoogleAlerts();
       results.googleAlerts = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Scout: Google Alerts failed');
     }
@@ -167,6 +176,7 @@ export class ScoutAgent extends BaseAgent {
       const r = await this.crawlReddit();
       results.reddit = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Scout: Reddit failed');
     }
@@ -175,6 +185,7 @@ export class ScoutAgent extends BaseAgent {
       const r = await this.crawlRentFaster();
       results.rentfaster = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Scout: RentFaster failed');
     }
@@ -183,6 +194,7 @@ export class ScoutAgent extends BaseAgent {
       const r = await this.crawlCraigslist();
       results.craigslist = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Scout: Craigslist failed');
     }
@@ -191,6 +203,7 @@ export class ScoutAgent extends BaseAgent {
       const r = await this.crawlKijiji();
       results.kijiji = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.warn({ err }, 'Scout: Kijiji failed');
     }
@@ -199,6 +212,7 @@ export class ScoutAgent extends BaseAgent {
       const r = await this.crawlGoogleMapsCompetitors();
       results.googleMaps = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.warn({ err }, 'Scout: Google Maps competitor crawl failed');
     }
@@ -247,11 +261,12 @@ export class ScoutAgent extends BaseAgent {
 
     if (feeds.length === 0) {
       logger.info('Scout: GOOGLE_ALERT_FEEDS unset — skipping Google Alerts crawl');
-      return { found: 0, created: 0 };
+      return { found: 0, created: 0, staleFiltered: 0 };
     }
 
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     for (let i = 0; i < feeds.length; i++) {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
@@ -303,6 +318,10 @@ export class ScoutAgent extends BaseAgent {
         const updated = entry.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? '';
 
         if (!title) continue;
+        if (!isSignalFresh(updated)) {
+          staleFiltered++;
+          continue;
+        }
         const fingerprint = link || title;
 
         const score = await this.scoreSignal(`${title} ${summary}`);
@@ -334,12 +353,13 @@ export class ScoutAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   private async crawlReddit(): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     for (let i = 0; i < REDDIT_FEEDS.length; i++) {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
@@ -354,6 +374,10 @@ export class ScoutAgent extends BaseAgent {
         const link = (item.link ?? '').trim();
         const fingerprint = link || title;
         if (!fingerprint || !title) continue;
+        if (!isSignalFresh(item.pubDate)) {
+          staleFiltered++;
+          continue;
+        }
 
         found++;
         const score = await this.scoreSignal(`${title}\n${description}`);
@@ -385,7 +409,7 @@ export class ScoutAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   private async crawlRentFaster(): Promise<CrawlResult> {
@@ -393,23 +417,29 @@ export class ScoutAgent extends BaseAgent {
     // shells the HTML page kept leaking through.
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     const xml = await fetchWithScrapingBee(RENTFASTER_RSS_URL, {
       source: 'rentfaster',
       renderJs: false,
     });
-    if (!xml) return { found: 0, created: 0 };
+    if (!xml) return { found: 0, created: 0, staleFiltered: 0 };
 
-    const titles = parseRssItemTitles(xml).filter(isRealRentFasterListing);
-    if (titles.length === 0) {
+    const items = parseRssItems(xml).filter(item => isRealRentFasterListing(item.title));
+    if (items.length === 0) {
       logger.warn(
         { source: 'rentfaster', bytes: xml.length },
         'Scout: rentfaster parsed 0 usable RSS titles',
       );
-      return { found: 0, created: 0 };
+      return { found: 0, created: 0, staleFiltered: 0 };
     }
 
-    for (const title of titles.slice(0, RENTFASTER_MAX_ITEMS)) {
+    for (const item of items.slice(0, RENTFASTER_MAX_ITEMS)) {
+      if (!isSignalFresh(item.pubDate)) {
+        staleFiltered++;
+        continue;
+      }
+      const title = item.title;
       const fingerprint = title.slice(0, 50);
       if (!fingerprint) continue;
       found++;
@@ -438,7 +468,7 @@ export class ScoutAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   private async crawlCraigslist(): Promise<CrawlResult> {
@@ -446,21 +476,31 @@ export class ScoutAgent extends BaseAgent {
     // property/medical listings that shouldn't create leads.
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     const html = await fetchWithScrapingBee(CRAIGSLIST_HTML_URL, { source: 'craigslist', renderJs: true });
-    if (!html) return { found: 0, created: 0 };
+    if (!html) return { found: 0, created: 0, staleFiltered: 0 };
 
-    const titles = parseListingTitles(html, 'craigslist');
-    if (titles.length === 0) {
+    const dated = parseCraigslistDatedItems(html);
+    const items: Array<{ title: string; pubDate: string | null }> =
+      dated.length > 0
+        ? dated.map(d => ({ title: d.title, pubDate: d.pubDate }))
+        : parseListingTitles(html, 'craigslist').map(t => ({ title: t, pubDate: null }));
+    if (items.length === 0) {
       logger.warn(
         { source: 'craigslist', bytes: html.length },
         'Scout: craigslist parsed 0 titles — markup may have changed',
       );
-      return { found: 0, created: 0 };
+      return { found: 0, created: 0, staleFiltered: 0 };
     }
 
-    for (const title of titles.slice(0, CRAIGSLIST_MAX_ITEMS)) {
+    for (const item of items.slice(0, CRAIGSLIST_MAX_ITEMS)) {
+      const title = item.title;
       if (!title) continue;
+      if (!isSignalFresh(item.pubDate)) {
+        staleFiltered++;
+        continue;
+      }
       found++;
       const score = await this.scoreSignal(title);
       logger.info(
@@ -496,7 +536,7 @@ export class ScoutAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   /**
@@ -508,7 +548,7 @@ export class ScoutAgent extends BaseAgent {
   private async fetchRss2Json(
     feedUrl: string,
     source: string,
-  ): Promise<Array<{ title?: string; description?: string; link?: string }> | null> {
+  ): Promise<Array<{ title?: string; description?: string; link?: string; pubDate?: string }> | null> {
     try {
       const params = new URLSearchParams({ rss_url: feedUrl });
       const apiKey =
@@ -539,7 +579,7 @@ export class ScoutAgent extends BaseAgent {
       const data = (await response.json()) as {
         status?: string;
         message?: string;
-        items?: Array<{ title?: string; description?: string; link?: string }>;
+        items?: Array<{ title?: string; description?: string; link?: string; pubDate?: string }>;
       };
       if (data.status !== 'ok' || !Array.isArray(data.items)) {
         logger.warn(
@@ -562,14 +602,15 @@ export class ScoutAgent extends BaseAgent {
     // markup change surface here is worth a WARN log, not a dependency.
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     const html = await fetchWithScrapingBee(KIJIJI_HTML_URL, { source: 'kijiji', renderJs: true });
-    if (!html) return { found: 0, created: 0 };
+    if (!html) return { found: 0, created: 0, staleFiltered: 0 };
 
     const titles = parseListingTitles(html, 'kijiji');
     if (titles.length === 0) {
       logger.warn({ source: 'kijiji', bytes: html.length }, 'Scout: kijiji parsed 0 titles — markup may have changed');
-      return { found: 0, created: 0 };
+      return { found: 0, created: 0, staleFiltered: 0 };
     }
 
     for (const title of titles.slice(0, KIJIJI_MAX_ITEMS)) {
@@ -602,7 +643,7 @@ export class ScoutAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   /**
@@ -614,6 +655,7 @@ export class ScoutAgent extends BaseAgent {
   private async crawlGoogleMapsCompetitors(): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     const places = await searchPlacesText(GMAPS_COMPETITOR_QUERY, 'google_maps');
     const competitors = places
@@ -702,7 +744,7 @@ export class ScoutAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   private async scoreSignal(text: string): Promise<number> {
@@ -770,6 +812,58 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Fresh iff pubDate is within MAX_SIGNAL_AGE_DAYS. Missing/unparseable dates
+ * pass — we'd rather score a possibly-stale item than silently drop feeds
+ * that don't publish timestamps.
+ */
+export function isSignalFresh(pubDate: string | null | undefined): boolean {
+  if (!pubDate) return true;
+  try {
+    const date = new Date(pubDate);
+    if (isNaN(date.getTime())) return true;
+    const ageDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+    return ageDays <= MAX_SIGNAL_AGE_DAYS;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Same as parseRssItemTitles but also carries the item's <pubDate> so callers
+ * can filter stale entries with isSignalFresh. Added when RentFaster started
+ * serving multi-week-old listings mixed in with fresh ones — filtering keeps
+ * Scout from re-scoring the backlog on every run.
+ */
+export function parseRssItems(xml: string): Array<{ title: string; pubDate: string | null }> {
+  const items: Array<{ title: string; pubDate: string | null }> = [];
+  const itemRegex = /<item\b[\s\S]*?<\/item>/g;
+  const titleRegex = /<title\b[^>]*>([\s\S]*?)<\/title>/;
+  const pubDateRegex = /<pubDate\b[^>]*>([\s\S]*?)<\/pubDate>/;
+  let m: RegExpExecArray | null;
+  while ((m = itemRegex.exec(xml)) !== null) {
+    const inner = m[0];
+    const t = titleRegex.exec(inner);
+    if (!t) continue;
+    let raw = t[1] ?? '';
+    raw = raw.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+    const cleaned = raw
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned.length < 5) continue;
+    const p = pubDateRegex.exec(inner);
+    const pubDate = p?.[1]?.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim() || null;
+    items.push({ title: cleaned, pubDate });
+  }
+  return items;
+}
+
+/**
  * Extract <title> content from RSS <item> blocks. Ignores the channel-level
  * <title> (the feed title itself) by requiring the title to sit inside an
  * <item>. Handles CDATA-wrapped titles too — RentFaster wraps some.
@@ -813,6 +907,44 @@ function isRealRentFasterListing(title: string): boolean {
     if (title.includes(phrase)) return false;
   }
   return true;
+}
+
+/**
+ * Craigslist search-results markup pairs each listing anchor with a
+ * <time datetime="…"> tag inside the same <li class="cl-static-search-result">
+ * (or <li class="result-row"> on the older layout). This parser scans those
+ * containers and returns title/pubDate/url triples so callers can drop stale
+ * rows before the Haiku scoring pass. Returns [] on markup drift; callers
+ * should fall back to parseListingTitles.
+ */
+export function parseCraigslistDatedItems(
+  html: string,
+): Array<{ title: string; pubDate: string | null; url: string | null }> {
+  const results: Array<{ title: string; pubDate: string | null; url: string | null }> = [];
+  const blockRegexes = [
+    /<li[^>]*class="[^"]*cl-static-search-result[^"]*"[\s\S]*?<\/li>/g,
+    /<li[^>]*class="[^"]*result-row[^"]*"[\s\S]*?<\/li>/g,
+  ];
+  const seen = new Set<string>();
+  for (const blockRegex of blockRegexes) {
+    let m: RegExpExecArray | null;
+    while ((m = blockRegex.exec(html)) !== null) {
+      const block = m[0];
+      const timeMatch = block.match(/<time[^>]*datetime="([^"]+)"/);
+      const linkMatch =
+        block.match(/<a[^>]*href="([^"]+)"[^>]*>[\s\S]{0,300}?<span[^>]*class="[^"]*label[^"]*"[^>]*>([^<]+)</) ??
+        block.match(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]{0,200}?)<\/a>/);
+      if (!linkMatch) continue;
+      const url = linkMatch[1].trim();
+      const title = linkMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      if (title.length < 5) continue;
+      const key = url || title;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push({ title, pubDate: timeMatch?.[1] ?? null, url });
+    }
+  }
+  return results;
 }
 
 /**

@@ -24,7 +24,7 @@ import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { fetchWithScrapingBee } from '../scraping-bee';
-import { parseListingTitles } from './scout';
+import { parseListingTitles, parseCraigslistDatedItems } from './scout';
 import { searchPlacesText } from './places-crawl';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
@@ -79,6 +79,23 @@ const GMAPS_OPERATOR_INTENT_SCORE = 70;
 // scoring prompt is being tuned. Raise back once scoring stabilises.
 const ROUTE_TO_JORDAN_SCORE = 50;
 
+// Reject signals older than this. Mirrors scout's MAX_SIGNAL_AGE_DAYS —
+// supply-side posters who advertised >1 week ago have usually filled the
+// booking they were chasing.
+const MAX_SIGNAL_AGE_DAYS = 7;
+
+function isSignalFresh(pubDate: string | null | undefined): boolean {
+  if (!pubDate) return true;
+  try {
+    const date = new Date(pubDate);
+    if (isNaN(date.getTime())) return true;
+    const ageDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+    return ageDays <= MAX_SIGNAL_AGE_DAYS;
+  } catch {
+    return true;
+  }
+}
+
 // Kijiji/Craigslist scraped pages include navigation chrome that the
 // generic title selector picks up. Filter these out before scoring so
 // we don't waste Haiku calls on "Explore", "Support", etc.
@@ -93,6 +110,7 @@ const NAV_ITEMS = new Set([
 interface CrawlResult {
   found: number;
   created: number;
+  staleFiltered: number;
 }
 
 interface ProcessSignalsResult {
@@ -102,6 +120,7 @@ interface ProcessSignalsResult {
   googleMaps: number;
   leadsCreated: number;
   leadsRouted: number;
+  staleFiltered: number;
 }
 
 export class RyanAgent extends BaseAgent {
@@ -135,12 +154,14 @@ export class RyanAgent extends BaseAgent {
       googleMaps: 0,
       leadsCreated: 0,
       leadsRouted: 0,
+      staleFiltered: 0,
     };
 
     try {
       const r = await this.crawlKijijiServices();
       results.kijiji = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Ryan: Kijiji Services crawl failed');
     }
@@ -149,6 +170,7 @@ export class RyanAgent extends BaseAgent {
       const r = await this.crawlCraigslistServices();
       results.craigslist = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Ryan: Craigslist services crawl failed');
     }
@@ -157,6 +179,7 @@ export class RyanAgent extends BaseAgent {
       const r = await this.crawlGoogleAlerts();
       results.googleAlerts = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Ryan: supply Google Alerts failed');
     }
@@ -165,6 +188,7 @@ export class RyanAgent extends BaseAgent {
       const r = await this.crawlGoogleMapsOperators();
       results.googleMaps = r.found;
       results.leadsCreated += r.created;
+      results.staleFiltered += r.staleFiltered;
     } catch (err) {
       logger.error({ err }, 'Ryan: Google Maps operator crawl failed');
     }
@@ -238,7 +262,7 @@ export class RyanAgent extends BaseAgent {
     const raw = process.env.GOOGLE_ALERT_SUPPLY_FEEDS?.trim();
     if (!raw) {
       logger.info('Ryan: GOOGLE_ALERT_SUPPLY_FEEDS unset — supply-alert crawl skipped');
-      return { found: 0, created: 0 };
+      return { found: 0, created: 0, staleFiltered: 0 };
     }
     const feedUrls = raw
       .split(',')
@@ -250,6 +274,7 @@ export class RyanAgent extends BaseAgent {
 
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
     for (let i = 0; i < feedUrls.length; i++) {
       if (i > 0) await sleep(INTER_FEED_DELAY_MS);
       const feedUrl = feedUrls[i];
@@ -301,6 +326,10 @@ export class RyanAgent extends BaseAgent {
 
         const text = `${title}\n${summary}`;
         if (!text.trim()) continue;
+        if (!isSignalFresh(updated)) {
+          staleFiltered++;
+          continue;
+        }
 
         const score = await this.scoreCandidate(text);
         logger.info(
@@ -344,7 +373,7 @@ export class RyanAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   /**
@@ -356,6 +385,7 @@ export class RyanAgent extends BaseAgent {
   private async crawlGoogleMapsOperators(): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     const places = await searchPlacesText(GMAPS_SUPPLY_QUERY, 'google_maps_supply');
     const smallOperators = places
@@ -424,7 +454,7 @@ export class RyanAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   /**
@@ -449,9 +479,10 @@ export class RyanAgent extends BaseAgent {
   }): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
+    let staleFiltered = 0;
 
     const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source, renderJs: true });
-    if (!html) return { found, created };
+    if (!html) return { found, created, staleFiltered };
 
     // Confirms which category Kijiji actually served (slug changes tend to
     // silently redirect us to the wrong grid — cleaning vs moving).
@@ -477,7 +508,7 @@ export class RyanAgent extends BaseAgent {
           { source: opts.source, bytes: html.length, rawCount: rawTitles.length },
           'Ryan: parsed 0 real listings after nav filter — markup may have changed',
         );
-        return { found, created };
+        return { found, created, staleFiltered };
       }
       for (const t of titles) items.push({ title: t, url: null });
       logger.info(
@@ -489,9 +520,30 @@ export class RyanAgent extends BaseAgent {
     const vetterQueue = createAgentQueue(QUEUE_NAMES.VETTER);
     let listingPageFetches = 0;
 
+    // Craigslist rows carry a <time datetime="…"> inside each result <li>;
+    // map URL → pubDate so we can drop stale rows before spending Haiku
+    // credits on them. Kijiji obfuscates dates on the search page, so we
+    // leave those items alone (spec: skip Kijiji HTML).
+    const craigslistDates = opts.source.startsWith('craigslist')
+      ? new Map(
+          parseCraigslistDatedItems(html)
+            .filter(d => d.url && d.pubDate)
+            .map(d => [d.url as string, d.pubDate as string]),
+        )
+      : null;
+
     for (const item of items.slice(0, opts.maxItems)) {
       const title = item.title;
       if (!title) continue;
+
+      if (craigslistDates && item.url) {
+        const pubDate = craigslistDates.get(item.url) ?? null;
+        if (!isSignalFresh(pubDate)) {
+          staleFiltered++;
+          continue;
+        }
+      }
+
       found++;
 
       const score = await this.scoreCandidate(title);
@@ -613,10 +665,11 @@ export class RyanAgent extends BaseAgent {
       }
     }
 
-    return { found, created };
+    return { found, created, staleFiltered };
   }
 
   private async wasSeen(sourceChannel: string, fingerprint: string): Promise<boolean> {
+    const sevenDaysAgo = new Date(Date.now() - MAX_SIGNAL_AGE_DAYS * 24 * 60 * 60 * 1000);
     const rows = await db
       .select({ id: leads.id })
       .from(leads)
@@ -624,6 +677,7 @@ export class RyanAgent extends BaseAgent {
         and(
           eq(leads.sourceChannel, sourceChannel),
           like(leads.notes, `%${fingerprint.slice(0, 50)}%`),
+          gte(leads.createdAt, sevenDaysAgo),
         ),
       )
       .limit(1);
