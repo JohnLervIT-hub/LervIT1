@@ -23,19 +23,23 @@ import { leads } from '@shared/schema';
 import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { fetchWithScrapingBee } from '../scraping-bee';
+import { parseListingTitles } from './scout';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
 
-// rss2json's free tier is ~10 req/min. Ryan's crawls share the same budget
-// pool with Scout, so we pace every request by 2s.
+// rss2json's free tier is ~10 req/min. Ryan's Google Alerts crawl shares
+// the same budget pool with Scout, so we pace every rss2json request by 2s.
+// (Kijiji + Craigslist go through ScrapingBee instead — see below.)
 const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 
-const KIJIJI_SERVICES_FEED =
-  'https://www.kijiji.ca/rss-srp-moving-storage/city-of-calgary/c146l1700199';
+// Kijiji + Craigslist block bot traffic at the origin (403 direct, 500 via
+// rss2json), so we hit their HTML search pages through ScrapingBee.
+const KIJIJI_SERVICES_HTML_URL =
+  'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
 const KIJIJI_MAX_ITEMS = 15;
 
-const CRAIGSLIST_LABOR_FEED =
-  'https://calgary.craigslist.org/search/lbs?format=rss';
+const CRAIGSLIST_LABOR_HTML_URL = 'https://calgary.craigslist.org/search/lbs';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
 const ROUTE_TO_JORDAN_SCORE = 60;
@@ -146,8 +150,8 @@ export class RyanAgent extends BaseAgent {
   }
 
   private async crawlKijijiServices(): Promise<CrawlResult> {
-    return this.crawlFeed({
-      feedUrl: KIJIJI_SERVICES_FEED,
+    return this.crawlScrapedListings({
+      pageUrl: KIJIJI_SERVICES_HTML_URL,
       source: 'kijiji_services',
       utmSource: 'kijiji',
       contactName: 'Kijiji Poster',
@@ -156,8 +160,8 @@ export class RyanAgent extends BaseAgent {
   }
 
   private async crawlCraigslistLabor(): Promise<CrawlResult> {
-    return this.crawlFeed({
-      feedUrl: CRAIGSLIST_LABOR_FEED,
+    return this.crawlScrapedListings({
+      pageUrl: CRAIGSLIST_LABOR_HTML_URL,
       source: 'craigslist_labor',
       utmSource: 'craigslist',
       contactName: 'Craigslist Poster',
@@ -180,7 +184,7 @@ export class RyanAgent extends BaseAgent {
     let created = 0;
     for (let i = 0; i < feedUrls.length; i++) {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
-      const r = await this.crawlFeed({
+      const r = await this.crawlRss2JsonFeed({
         feedUrl: feedUrls[i],
         source: 'google_alerts_supply',
         utmSource: 'google_alerts',
@@ -193,7 +197,69 @@ export class RyanAgent extends BaseAgent {
     return { found, created };
   }
 
-  private async crawlFeed(opts: {
+  /**
+   * ScrapingBee-backed crawler for sources blocked at origin (Kijiji /
+   * Craigslist). Fetches the HTML search page, extracts titles via the
+   * shared parseListingTitles helper, scores each with Haiku, dedups and
+   * inserts high-scoring rows.
+   */
+  private async crawlScrapedListings(opts: {
+    pageUrl: string;
+    source: string;
+    utmSource: string;
+    contactName: string;
+    maxItems: number;
+  }): Promise<CrawlResult> {
+    let found = 0;
+    let created = 0;
+
+    const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source });
+    if (!html) return { found, created };
+
+    const titles = parseListingTitles(html, opts.source);
+    if (titles.length === 0) {
+      logger.warn(
+        { source: opts.source, bytes: html.length },
+        'Ryan: parsed 0 titles — markup may have changed',
+      );
+      return { found, created };
+    }
+
+    for (const title of titles.slice(0, opts.maxItems)) {
+      if (!title) continue;
+      found++;
+
+      const score = await this.scoreCandidate(title);
+      logger.info(
+        { source: opts.source, score, title: title.slice(0, 80) },
+        'Ryan: signal scored',
+      );
+      if (score < ROUTE_TO_JORDAN_SCORE) continue;
+
+      const fingerprint = title.slice(0, 80);
+      if (!fingerprint) continue;
+      if (await this.wasSeen(opts.source, fingerprint)) continue;
+
+      await db.insert(leads).values({
+        contactName: opts.contactName,
+        sourceChannel: opts.source,
+        utmSource: opts.utmSource,
+        utmCampaign: 'ryan-brooks',
+        intentScore: score,
+        status: 'new',
+        notes: `${opts.source.replace('_', ' ')} listing: ${title}\nURL: ${opts.pageUrl}`,
+      });
+      created++;
+      logger.info(
+        { source: opts.source, title: title.slice(0, 60), score },
+        'Ryan: supply candidate created (scraped)',
+      );
+    }
+
+    return { found, created };
+  }
+
+  private async crawlRss2JsonFeed(opts: {
     feedUrl: string;
     source: string;
     utmSource: string;

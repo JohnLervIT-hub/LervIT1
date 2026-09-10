@@ -23,6 +23,7 @@ import { leads } from '@shared/schema';
 import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { fetchWithScrapingBee } from '../scraping-bee';
 
 const SCOUT_MODEL = 'claude-haiku-4-5-20251001';
 const HIGH_INTENT_THRESHOLD = 70;
@@ -51,17 +52,18 @@ const REDDIT_FEEDS = [
   'https://www.reddit.com/r/calgaryhousing/new.rss',
 ] as const;
 
-// Kijiji publishes an RSS feed per category. Going through rss2json avoids
-// the anti-bot fingerprinting that killed the browser-fetch and
-// puppeteer-based approaches. See docs/strategies/puppeteer-scraping.md.
-const KIJIJI_FEED =
-  'https://www.kijiji.ca/rss-srp-moving-storage/city-of-calgary/c146l1700199';
+// Kijiji, RentFaster, and Craigslist all block bot traffic at the origin
+// (403 direct, 500 through rss2json). They now go through ScrapingBee's
+// HTML proxy and we parse the search-results page ourselves. Reddit +
+// Google Alerts still work through rss2json.
+const KIJIJI_HTML_URL =
+  'https://www.kijiji.ca/b-moving-storage/calgary/c146l1700199';
 const KIJIJI_MAX_ITEMS = 15;
 
-const RENTFASTER_FEED = 'https://www.rentfaster.ca/rss/?city=calgary';
+const RENTFASTER_HTML_URL = 'https://www.rentfaster.ca/ab/calgary/rentals/';
 const RENTFASTER_MAX_ITEMS = 10;
 
-const CRAIGSLIST_FEED = 'https://calgary.craigslist.org/search/hhh?format=rss';
+const CRAIGSLIST_HTML_URL = 'https://calgary.craigslist.org/search/hhh';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
 interface CrawlResult {
@@ -298,76 +300,25 @@ export class ScoutAgent extends BaseAgent {
   }
 
   private async crawlRentFaster(): Promise<CrawlResult> {
-    return this.crawlRssWithStaticScore({
-      feedUrl: RENTFASTER_FEED,
+    return this.scrapeHtmlWithStaticScore({
+      pageUrl: RENTFASTER_HTML_URL,
       source: 'rentfaster',
       staticScore: RENTFASTER_STATIC_SCORE,
       maxItems: RENTFASTER_MAX_ITEMS,
       contactName: 'RentFaster Listing',
+      notesPrefix: 'New rental listing',
     });
   }
 
   private async crawlCraigslist(): Promise<CrawlResult> {
-    return this.crawlRssWithStaticScore({
-      feedUrl: CRAIGSLIST_FEED,
+    return this.scrapeHtmlWithStaticScore({
+      pageUrl: CRAIGSLIST_HTML_URL,
       source: 'craigslist',
       staticScore: CRAIGSLIST_STATIC_SCORE,
       maxItems: CRAIGSLIST_MAX_ITEMS,
       contactName: 'Craigslist Listing',
+      notesPrefix: 'Craigslist listing',
     });
-  }
-
-  /**
-   * Shared helper for RSS sources where every item gets the same static
-   * intent score (rentals/housing signals = "someone will need a mover").
-   * Skips per-item Anthropic scoring on high-volume static sources.
-   */
-  private async crawlRssWithStaticScore(opts: {
-    feedUrl: string;
-    source: string;
-    staticScore: number;
-    maxItems: number;
-    contactName: string;
-  }): Promise<CrawlResult> {
-    let found = 0;
-    let created = 0;
-
-    const items = await this.fetchRss2Json(opts.feedUrl, opts.source);
-    if (!items) return { found: 0, created: 0 };
-
-    for (const item of items.slice(0, opts.maxItems)) {
-      found++;
-      const title = (item.title ?? '').trim();
-      const description = (item.description ?? '').trim();
-      const link = (item.link ?? '').trim();
-      const fingerprint = link || title;
-      if (!fingerprint || !title) continue;
-      if (await this.wasSignalSeen(opts.source, fingerprint)) continue;
-
-      try {
-        await db.insert(leads).values({
-          contactName: opts.contactName,
-          sourceChannel: opts.source,
-          utmSource: opts.source,
-          utmCampaign: 'scout-reid',
-          intentScore: opts.staticScore,
-          status: 'new',
-          notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
-        });
-        created++;
-        logger.info(
-          { source: opts.source, title: title.slice(0, 60) },
-          'Scout: RSS lead created',
-        );
-      } catch (err) {
-        logger.error(
-          { err: (err as Error).message, source: opts.source, title: title.slice(0, 60) },
-          'Scout: RSS lead insert failed',
-        );
-      }
-    }
-
-    return { found, created };
   }
 
   /**
@@ -427,25 +378,28 @@ export class ScoutAgent extends BaseAgent {
   }
 
   private async crawlKijiji(): Promise<CrawlResult> {
-    // RSS via rss2json. Puppeteer was tried and archived — see
-    // docs/strategies/puppeteer-scraping.md. Kijiji publishes a per-category
-    // RSS feed which contains the same title/description/link data the
-    // headless browser was extracting, without any of the anti-bot risk.
+    // Kijiji blocks rss2json (500) and direct scrapers (403), so the search
+    // page comes through ScrapingBee. We regex-parse listing titles rather
+    // than pulling in a full HTML parser — the payload is small and the
+    // markup change surface here is worth a WARN log, not a dependency.
     let found = 0;
     let created = 0;
 
-    const items = await this.fetchRss2Json(KIJIJI_FEED, 'kijiji');
-    if (!items) return { found: 0, created: 0 };
+    const html = await fetchWithScrapingBee(KIJIJI_HTML_URL, { source: 'kijiji' });
+    if (!html) return { found: 0, created: 0 };
 
-    for (const item of items.slice(0, KIJIJI_MAX_ITEMS)) {
-      const title = (item.title ?? '').trim();
-      const description = (item.description ?? '').trim();
-      const link = (item.link ?? '').trim();
-      const fingerprint = link || title;
-      if (!fingerprint || !title) continue;
+    const titles = parseListingTitles(html, 'kijiji');
+    if (titles.length === 0) {
+      logger.warn({ source: 'kijiji', bytes: html.length }, 'Scout: kijiji parsed 0 titles — markup may have changed');
+      return { found: 0, created: 0 };
+    }
+
+    for (const title of titles.slice(0, KIJIJI_MAX_ITEMS)) {
+      const fingerprint = title;
+      if (!fingerprint) continue;
 
       found++;
-      const score = await this.scoreSignal(`${title}\n${description}`);
+      const score = await this.scoreSignal(title);
       logger.info({ score, title: title.slice(0, 80) }, 'Scout: signal scored');
       if (score < KIJIJI_CREATE_THRESHOLD) continue;
       if (await this.wasSignalSeen('kijiji', fingerprint)) continue;
@@ -458,10 +412,7 @@ export class ScoutAgent extends BaseAgent {
           utmCampaign: 'scout-reid',
           intentScore: score,
           status: 'new',
-          notes:
-            `Title: ${title}\n` +
-            `URL: ${link}\n` +
-            `Desc: ${description.slice(0, 200)}`,
+          notes: `Kijiji listing: ${title}\nURL: ${KIJIJI_HTML_URL}`,
         });
         created++;
         logger.info({ score, title: title.slice(0, 60) }, 'Scout: kijiji lead created');
@@ -469,6 +420,67 @@ export class ScoutAgent extends BaseAgent {
         logger.error(
           { err: (err as Error).message, title: title.slice(0, 60) },
           'Scout: kijiji lead insert failed',
+        );
+      }
+    }
+
+    return { found, created };
+  }
+
+  /**
+   * Twin of crawlRssWithStaticScore for sources that go through ScrapingBee
+   * (blocked at origin). Same static-score / dedup semantics; only the
+   * fetch + parse differ.
+   */
+  private async scrapeHtmlWithStaticScore(opts: {
+    pageUrl: string;
+    source: string;
+    staticScore: number;
+    maxItems: number;
+    contactName: string;
+    notesPrefix: string;
+  }): Promise<CrawlResult> {
+    let found = 0;
+    let created = 0;
+
+    const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source });
+    if (!html) return { found: 0, created: 0 };
+
+    const titles = parseListingTitles(html, opts.source);
+    if (titles.length === 0) {
+      logger.warn(
+        { source: opts.source, bytes: html.length },
+        'Scout: parsed 0 titles — markup may have changed',
+      );
+      return { found: 0, created: 0 };
+    }
+
+    for (const title of titles.slice(0, opts.maxItems)) {
+      const fingerprint = title.slice(0, 50);
+      if (!fingerprint) continue;
+
+      found++;
+      if (await this.wasSignalSeen(opts.source, fingerprint)) continue;
+
+      try {
+        await db.insert(leads).values({
+          contactName: opts.contactName,
+          sourceChannel: opts.source,
+          utmSource: opts.source,
+          utmCampaign: 'scout-reid',
+          intentScore: opts.staticScore,
+          status: 'new',
+          notes: `${opts.notesPrefix}: ${title}\nURL: ${opts.pageUrl}`,
+        });
+        created++;
+        logger.info(
+          { source: opts.source, title: title.slice(0, 60) },
+          'Scout: HTML lead created',
+        );
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, source: opts.source, title: title.slice(0, 60) },
+          'Scout: HTML lead insert failed',
         );
       }
     }
@@ -528,6 +540,50 @@ Return ONLY a number 0-100.`,
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Best-effort HTML listing-title extractor for Kijiji / RentFaster /
+ * Craigslist search pages. Tries a small ordered set of selectors and
+ * returns the first non-empty match set. Regex-based (not a full parser)
+ * because the payloads are small, we only care about titles, and we
+ * don't want to pull in cheerio just for three sites.
+ *
+ * Every source is logged with the selector that hit, so if a site
+ * changes its markup we can see which fallback triggered (or that
+ * nothing did) in prod logs without redeploying to bisect.
+ */
+export function parseListingTitles(html: string, source: string): string[] {
+  const strategies: Array<{ label: string; regex: RegExp }> = [
+    // Kijiji: <a data-testid="listing-title-…">Title</a> (also <h3 data-testid=…>).
+    { label: 'kijiji_listing_title', regex: /data-testid="listing-title[^"]*"[^>]*>([^<]+)</g },
+    // Craigslist: <span class="label">Title</span> on the search grid.
+    { label: 'craigslist_label',     regex: /<span[^>]*class="[^"]*\blabel\b[^"]*"[^>]*>([^<]+)</g },
+    // Craigslist alt: <a class="posting-title"><span class="titlestring">Title</span></a>.
+    { label: 'craigslist_titlestr',  regex: /<span[^>]*class="[^"]*\btitlestring\b[^"]*"[^>]*>([^<]+)</g },
+    // RentFaster: <h2 class="…listing…">Title</h2> variants.
+    { label: 'rentfaster_h2',        regex: /<h2[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</g },
+    // Generic fallback: any <h3> under an anchor (covers Kijiji card layouts).
+    { label: 'generic_h3',           regex: /<h3[^>]*>([^<]+)<\/h3>/g },
+  ];
+
+  for (const { label, regex } of strategies) {
+    const titles: string[] = [];
+    let m: RegExpExecArray | null;
+    // Reset lastIndex in case someone reuses this regex — /g stores state.
+    regex.lastIndex = 0;
+    while ((m = regex.exec(html)) !== null) {
+      const raw = m[1] ?? '';
+      const cleaned = raw.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      if (cleaned.length >= 5) titles.push(cleaned);
+    }
+    if (titles.length > 0) {
+      logger.info({ source, strategy: label, count: titles.length }, 'Scout: title parse');
+      return titles;
+    }
+  }
+
+  return [];
 }
 
 export const scout = new ScoutAgent();
