@@ -67,7 +67,12 @@ const MAX_LISTING_PAGES_PER_SOURCE = 5;
 // details fetch), keeps the run at ~$0.032.
 const GMAPS_SUPPLY_QUERY = 'moving companies calgary';
 const GMAPS_SMALL_OPERATOR_RATING_MIN = 4.0;
-const GMAPS_SMALL_OPERATOR_REVIEW_MAX = 30;
+// Loosened from 30 → 100 on 2026-09-10 — the sub-30 band was empty for
+// Calgary (small movers still tend to accumulate 30-80 reviews once they've
+// been operating a year+). 100 keeps out the multi-truck established
+// brands but includes recruitable owner-operators. Refine downward once
+// the sample log shows the actual review-count distribution.
+const GMAPS_SMALL_OPERATOR_REVIEW_MAX = 100;
 const GMAPS_MAX_OPERATORS = 10;
 const GMAPS_OPERATOR_INTENT_SCORE = 70;
 
@@ -277,13 +282,23 @@ export class RyanAgent extends BaseAgent {
       )
       .slice(0, GMAPS_MAX_OPERATORS);
 
+    // Emitted before slicing so we can see how many raw results Google
+    // returned vs. how many survived the rating/review-count gate. Sample
+    // capped at 3 to keep the log line lean.
     logger.info(
       {
         source: 'google_maps_supply',
         total: places.length,
-        smallOperators: smallOperators.length,
+        afterRatingFilter: smallOperators.length,
+        ratingMin: GMAPS_SMALL_OPERATOR_RATING_MIN,
+        reviewMax: GMAPS_SMALL_OPERATOR_REVIEW_MAX,
+        sample: places.slice(0, 3).map(p => ({
+          name: p.name,
+          rating: p.rating,
+          reviews: p.user_ratings_total,
+        })),
       },
-      'Ryan: Google Maps candidates',
+      'Places: filter results',
     );
 
     for (const place of smallOperators) {

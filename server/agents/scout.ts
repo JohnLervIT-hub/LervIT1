@@ -87,7 +87,12 @@ const CRAIGSLIST_MAX_ITEMS = 10;
 // Rating < 3.5 tends to be a poor customer experience; recent reviews from
 // those places are exactly the moving-intent signals Alex is built for.
 const GMAPS_COMPETITOR_QUERY = 'moving companies calgary';
-const GMAPS_COMPETITOR_RATING_THRESHOLD = 3.5;
+// Loosened from 3.5 → 4.0 on 2026-09-10 — the previous cutoff was empirically
+// filtering out ~all Calgary movers (most maintain 4+ stars via review
+// gaming), leaving Scout with no candidates. 4.0 still excludes the
+// top-rated brands and catches the "3.7-3.9, quietly unhappy customers"
+// band where Alex has the best chance of a switch conversation.
+const GMAPS_COMPETITOR_RATING_THRESHOLD = 4.0;
 const GMAPS_MAX_COMPETITORS = 10;
 const GMAPS_REVIEW_INTENT_THRESHOLD = 60;
 // The lead's stored intent — reviews come in noisy, so we cap the stored
@@ -578,9 +583,23 @@ export class ScoutAgent extends BaseAgent {
       )
       .slice(0, GMAPS_MAX_COMPETITORS);
 
+    // Emitted before the rating filter cuts in so we can eyeball the raw
+    // distribution from prod logs and re-tune GMAPS_COMPETITOR_RATING_THRESHOLD
+    // without a redeploy cycle. Sample capped at 3 so a fanout doesn't bloat
+    // the log line.
     logger.info(
-      { source: 'google_maps', total: places.length, competitors: competitors.length },
-      'Scout: Google Maps candidates',
+      {
+        source: 'google_maps',
+        total: places.length,
+        afterRatingFilter: competitors.length,
+        ratingThreshold: GMAPS_COMPETITOR_RATING_THRESHOLD,
+        sample: places.slice(0, 3).map(p => ({
+          name: p.name,
+          rating: p.rating,
+          reviews: p.user_ratings_total,
+        })),
+      },
+      'Places: filter results',
     );
 
     for (const place of competitors) {
