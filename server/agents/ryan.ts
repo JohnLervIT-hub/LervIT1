@@ -213,7 +213,7 @@ export class RyanAgent extends BaseAgent {
     let found = 0;
     let created = 0;
 
-    const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source });
+    const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source, renderJs: true });
     if (!html) return { found, created };
 
     const titles = parseListingTitles(html, opts.source);

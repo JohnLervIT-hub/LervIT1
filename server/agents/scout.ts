@@ -370,7 +370,7 @@ export class ScoutAgent extends BaseAgent {
     let found = 0;
     let created = 0;
 
-    const html = await fetchWithScrapingBee(CRAIGSLIST_HTML_URL, { source: 'craigslist' });
+    const html = await fetchWithScrapingBee(CRAIGSLIST_HTML_URL, { source: 'craigslist', renderJs: true });
     if (!html) return { found: 0, created: 0 };
 
     const titles = parseListingTitles(html, 'craigslist');
@@ -486,7 +486,7 @@ export class ScoutAgent extends BaseAgent {
     let found = 0;
     let created = 0;
 
-    const html = await fetchWithScrapingBee(KIJIJI_HTML_URL, { source: 'kijiji' });
+    const html = await fetchWithScrapingBee(KIJIJI_HTML_URL, { source: 'kijiji', renderJs: true });
     if (!html) return { found: 0, created: 0 };
 
     const titles = parseListingTitles(html, 'kijiji');
