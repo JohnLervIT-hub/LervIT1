@@ -655,12 +655,22 @@ export function parseListingTitles(html: string, source: string): string[] {
   // caller logs a "parsed 0 titles" WARN so we can bisect from prod logs.
   const strategies: Array<{ label: string; regex: RegExp }> = [
     // ─── Kijiji ─────────────────────────────────────────────────────
+    // Newest QA hook: <span|a data-qa="ad-title">Title</…>
+    { label: 'kijiji_data_qa_title',    regex: /data-qa="ad-title"[^>]*>([^<]+)</g },
     // Historic: <a data-testid="listing-title-…">Title</a>
-    { label: 'kijiji_data_testid',    regex: /data-testid="listing-title[^"]*"[^>]*>([^<]+)</g },
+    { label: 'kijiji_data_testid',      regex: /data-testid="listing-title[^"]*"[^>]*>([^<]+)</g },
+    // Listing card wrapper — title is a heading/anchor within the next ~800 chars.
+    { label: 'kijiji_data_listing_id',  regex: /data-listing-id="[^"]*"[\s\S]{0,800}?<(?:h\d|a|span)[^>]*>([^<]+)</g },
+    // Styled-components hash Kijiji ships with card titles.
+    { label: 'kijiji_sc_bdvtja',        regex: /class="[^"]*\bsc-bdVTJa\b[^"]*"[^>]*>([^<]+)</g },
     // Alt: any <a> under a class that looks like a listing card.
-    { label: 'kijiji_anchor_listing', regex: /<a[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</g },
+    { label: 'kijiji_anchor_listing',   regex: /<a[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</g },
+    // Broader: any element whose class attribute contains "listing".
+    { label: 'kijiji_listing_class',    regex: /<[a-z][a-z0-9]*[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</gi },
     // Alt: class-based title anchors — matches <div class="title"><a>Title</a>.
-    { label: 'kijiji_title_class',    regex: /class="[^"]*title[^"]*"[^>]*>\s*<a[^>]*>([^<]+)</g },
+    { label: 'kijiji_title_class',      regex: /class="[^"]*title[^"]*"[^>]*>\s*<a[^>]*>([^<]+)</g },
+    // Semantic: <article> container with a heading/anchor inside.
+    { label: 'kijiji_article',          regex: /<article[^>]*>[\s\S]{0,800}?<(?:h\d|a)[^>]*>([^<]+)</g },
 
     // ─── Craigslist ─────────────────────────────────────────────────
     // Current CL grid: <a class="posting-title"><span class="label">Title</span>.

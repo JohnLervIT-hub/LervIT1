@@ -77,11 +77,13 @@ export async function fetchWithScrapingBee(
       return null;
     }
     const body = await response.text();
-    // TEMPORARY debug: log three windows into the markup so we can bisect
+    // TEMPORARY debug: log four windows into the markup so we can bisect
     // the correct CSS selectors from Railway logs without a redeploy each
     // iteration. Head captures <meta>/<title> and confirms it isn't a
     // challenge/CAPTCHA page; early (3-4KB) and mid (5-6KB) usually
-    // straddle the listing container. Remove once selectors are locked in.
+    // straddle the listing container on smaller pages; deep (50-51KB) is
+    // where Kijiji's actual listing markup sits after the nav/hero chrome.
+    // Remove once selectors are locked in.
     logger.info(
       {
         source,
@@ -90,6 +92,7 @@ export async function fetchWithScrapingBee(
         snippetHead: body.slice(0, 500),
         snippetEarly: body.length > 3500 ? body.slice(3000, 4000) : null,
         snippetMid: body.length > 5500 ? body.slice(5000, 6000) : null,
+        snippetDeep: body.length > 50500 ? body.slice(50000, 51000) : null,
       },
       'ScrapingBee fetch ok (with debug snippet)',
     );
