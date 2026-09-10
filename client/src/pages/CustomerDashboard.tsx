@@ -199,7 +199,28 @@ export default function CustomerDashboard() {
       return !(b as any).hasSurvey && !localStorage.getItem(`survey_done_${b.id}`) && !surveyedBookingIds.current.has(b.id);
     });
     if (!candidate) return;
-    const timer = setTimeout(() => {
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      // Authoritative per-booking check against the DB before opening the
+      // dialog — the hasSurvey field on /api/bookings can be stale in the
+      // React Query cache window between submit and the next refetch.
+      try {
+        const res = await fetch(`/api/surveys/${candidate.id}`, { credentials: "include" });
+        if (res.ok) {
+          const existing = await res.json();
+          if (existing?.id) {
+            localStorage.setItem(`survey_done_${candidate.id}`, "1");
+            surveyedBookingIds.current.add(candidate.id);
+            return;
+          }
+        }
+      } catch {
+        // Fetch failure is non-fatal; fall through and open the dialog.
+        // The client-side localStorage + in-memory guards still protect
+        // against multiple opens within this session.
+      }
+      if (cancelled) return;
       setSurveyBooking(candidate);
       setSurveyStep(0);
       setSurveySubmitted(false);
@@ -209,7 +230,10 @@ export default function CustomerDashboard() {
       setSurveyComments('');
       setSurveyDialogOpen(true);
     }, 1200);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [bookings, isLoading, showTutorial, feedbackDialogOpen, surveyDialogOpen]);
 
   const handleTutorialComplete = async () => {

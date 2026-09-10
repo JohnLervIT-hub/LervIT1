@@ -12958,6 +12958,29 @@ Respond with VALID JSON only:
     }
   });
 
+  // Per-booking survey lookup — authoritative check for "did this user already
+  // submit a survey for this booking?" Used by the customer dashboard as a
+  // belt-and-suspenders guard around the hasSurvey field on /api/bookings.
+  // Returns the row (200) or null (200) — never 404 — so the client's fetch
+  // path stays simple.
+  app.get("/api/surveys/:bookingId", async (req: Request, res: Response) => {
+    try {
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+      const bookingId = req.params.bookingId;
+      if (!bookingId) return res.status(400).json({ error: "bookingId is required" });
+      const [row] = await db
+        .select()
+        .from(feedbackSurveys)
+        .where(and(eq(feedbackSurveys.bookingId, bookingId), eq(feedbackSurveys.userId, user.id)))
+        .limit(1);
+      res.json(row ?? null);
+    } catch (error) {
+      logger.error({ err: error }, '[Surveys] lookup failed');
+      res.status(500).json({ error: "Failed to load survey" });
+    }
+  });
+
   app.get("/api/admin/surveys", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
