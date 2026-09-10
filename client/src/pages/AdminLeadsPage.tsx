@@ -32,12 +32,24 @@ interface Lead {
   contactEmail: string | null;
   contactPhone: string | null;
   sourceChannel: string | null;
+  utmCampaign: string | null;
   intentScore: number | null;
   status: string | null;
   touchpoints: number | null;
   lastTouchedAt: string | null;
   notes: string | null;
   createdAt: string;
+}
+
+type Audience = "all" | "customers" | "movers";
+const AUDIENCE_TABS: Array<{ value: Audience; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "customers", label: "Customers" },
+  { value: "movers", label: "Mover Candidates" },
+];
+
+function isMoverCandidate(lead: Lead): boolean {
+  return lead.utmCampaign === "ryan-brooks";
 }
 
 interface ListResponse {
@@ -107,16 +119,18 @@ function temperatureToScore(t: Temperature): number {
 export default function AdminLeadsPage() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [audience, setAudience] = useState<Audience>("all");
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState<CreateLeadForm>(BLANK_FORM);
   const pageSize = 50;
 
   const { data, isLoading, error } = useQuery<ListResponse>({
-    queryKey: ["/api/admin/agent/leads", { status: statusFilter, page, pageSize }],
+    queryKey: ["/api/admin/agent/leads", { status: statusFilter, audience, page, pageSize }],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (audience !== "all") params.set("audience", audience);
       const res = await apiRequest("GET", `/api/admin/agent/leads?${params.toString()}`);
       return res.json();
     },
@@ -132,6 +146,27 @@ export default function AdminLeadsPage() {
     },
     onSuccess: () => {
       toast({ title: "Alex triggered", description: "Conversion touch sent." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Trigger failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const triggerJordan = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", "/api/admin/agent/jordan/trigger", {
+        action: "onboard_candidate",
+        leadId,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Jordan triggered", description: "Recruitment touch sent." });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
     },
     onError: (err: any) => {
@@ -254,7 +289,13 @@ export default function AdminLeadsPage() {
             <div>
               <CardTitle className="text-base">Leads</CardTitle>
               <CardDescription>
-                Scout Reid demand pipeline · {total} lead{total === 1 ? "" : "s"} total
+                {audience === "movers"
+                  ? "Ryan Brooks supply pipeline"
+                  : audience === "customers"
+                    ? "Scout Reid demand pipeline"
+                    : "Demand + supply pipelines"}
+                {" · "}
+                {total} lead{total === 1 ? "" : "s"} total
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -270,6 +311,22 @@ export default function AdminLeadsPage() {
                 </Button>
               ))}
             </div>
+          </div>
+          <div className="flex gap-1.5 pt-2" role="tablist" aria-label="Lead audience">
+            {AUDIENCE_TABS.map(t => (
+              <Button
+                key={t.value}
+                variant={audience === t.value ? "default" : "outline"}
+                size="sm"
+                role="tab"
+                aria-selected={audience === t.value}
+                onClick={() => { setAudience(t.value); setPage(1); }}
+                className="text-xs h-7 px-3"
+                data-testid={`tab-audience-${t.value}`}
+              >
+                {t.label}
+              </Button>
+            ))}
           </div>
         </CardHeader>
         <CardContent>
@@ -319,14 +376,26 @@ export default function AdminLeadsPage() {
                       </td>
                       <td className="py-2 pr-3">
                         <div className="flex gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={triggerAlex.isPending || lead.status === "converted" || lead.status === "cold"}
-                            onClick={() => triggerAlex.mutate(lead.id)}
-                          >
-                            <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Alex
-                          </Button>
+                          {isMoverCandidate(lead) ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={triggerJordan.isPending || lead.status === "converted" || lead.status === "cold"}
+                              onClick={() => triggerJordan.mutate(lead.id)}
+                              data-testid={`button-trigger-jordan-${lead.id}`}
+                            >
+                              <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Jordan
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={triggerAlex.isPending || lead.status === "converted" || lead.status === "cold"}
+                              onClick={() => triggerAlex.mutate(lead.id)}
+                            >
+                              <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Alex
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"

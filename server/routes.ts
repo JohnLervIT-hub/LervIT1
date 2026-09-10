@@ -13081,6 +13081,9 @@ Respond with VALID JSON only:
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const source = typeof req.query.source === 'string' ? req.query.source : undefined;
       const sinceParam = typeof req.query.since === 'string' ? req.query.since : undefined;
+      // audience: 'movers' keeps only Ryan's supply pipeline;
+      //          'customers' excludes it (everything else = demand-side).
+      const audience = typeof req.query.audience === 'string' ? req.query.audience : undefined;
       const page = Math.max(1, Number(req.query.page ?? 1));
       const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize ?? 50)));
 
@@ -13090,6 +13093,11 @@ Respond with VALID JSON only:
       if (sinceParam) {
         const since = new Date(sinceParam);
         if (!isNaN(since.getTime())) filters.push(sql`${leads.createdAt} >= ${since}`);
+      }
+      if (audience === 'movers') {
+        filters.push(eq(leads.utmCampaign, 'ryan-brooks'));
+      } else if (audience === 'customers') {
+        filters.push(sql`(${leads.utmCampaign} IS NULL OR ${leads.utmCampaign} <> 'ryan-brooks')`);
       }
       const whereClause = filters.length > 0 ? and(...filters) : undefined;
 
@@ -13264,6 +13272,106 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] alex/stats failed');
       res.status(500).json({ error: 'Failed to load Alex stats' });
+    }
+  });
+
+  // ===== RYAN BROOKS (HUNTER-S) + JORDAN HAYES (VETTER) — supply pipeline =====
+
+  // Manually trigger Ryan's supply crawl.
+  app.post("/api/admin/agent/ryan/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { ryan } = await import('./agents/ryan');
+      const action = (req.body?.action ?? 'process_signals') as string;
+      const allowed = new Set([
+        'process_signals',
+        'crawl_kijiji_services',
+        'crawl_craigslist_labor',
+        'crawl_supply_alerts',
+        'score_candidate',
+      ]);
+      if (!allowed.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const result = await ryan.run(action, req.body?.input ?? {});
+      res.json({ ok: true, action, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] ryan/trigger failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // Supply funnel — leads created by Ryan (utm_campaign='ryan-brooks').
+  app.get("/api/admin/agent/ryan/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const days = Math.max(1, Math.min(90, Number(req.query.days ?? 7)));
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const funnelRows = await db.execute(sql`
+        SELECT
+          COUNT(*)                                                   ::int AS total,
+          COUNT(*) FILTER (WHERE status = 'new')                     ::int AS new_,
+          COUNT(*) FILTER (WHERE status = 'contacted')               ::int AS contacted,
+          COUNT(*) FILTER (WHERE status = 'converted')               ::int AS converted,
+          COUNT(*) FILTER (WHERE status = 'cold')                    ::int AS cold
+        FROM leads
+        WHERE utm_campaign = 'ryan-brooks'
+          AND created_at >= ${since}
+      `);
+      const funnel = (funnelRows as any).rows?.[0] ?? { total: 0, new_: 0, contacted: 0, converted: 0, cold: 0 };
+
+      const sourceRows = await db.execute(sql`
+        SELECT
+          COALESCE(source_channel, 'unknown') AS source,
+          COUNT(*)                            ::int AS count
+        FROM leads
+        WHERE utm_campaign = 'ryan-brooks'
+          AND created_at >= ${since}
+        GROUP BY 1
+        ORDER BY count DESC
+      `);
+      const bySource = (sourceRows as any).rows ?? [];
+
+      const channelRows = await db.execute(sql`
+        SELECT
+          COALESCE(payload->>'channel', 'unknown')                   AS channel,
+          COUNT(*)                                                   ::int AS touches,
+          COUNT(*) FILTER (WHERE (payload->>'delivered') = 'true')   ::int AS delivered
+        FROM business_events
+        WHERE event_type IN ('lead.mover_contacted','lead.mover_touched')
+          AND created_at >= ${since}
+        GROUP BY 1
+        ORDER BY touches DESC
+      `);
+      const byChannel = (channelRows as any).rows ?? [];
+
+      res.json({ days, since: since.toISOString(), funnel, bySource, byChannel });
+    } catch (err) {
+      logger.error({ err }, '[Admin] ryan/stats failed');
+      res.status(500).json({ error: 'Failed to load Ryan stats' });
+    }
+  });
+
+  // Manually trigger Jordan on a specific candidate lead.
+  app.post("/api/admin/agent/jordan/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { jordan } = await import('./agents/jordan');
+      const action = (req.body?.action ?? 'onboard_candidate') as string;
+      if (action === 'onboard_candidate' || action === 'send_touch') {
+        if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
+        const input = {
+          leadId: String(req.body.leadId),
+          touchNumber: Number(req.body.touchNumber ?? 2),
+        };
+        const result = await jordan.run(action, input);
+        return res.json({ ok: true, action, result });
+      }
+      return res.status(400).json({ error: `Unsupported action: ${action}` });
+    } catch (err) {
+      logger.error({ err }, '[Admin] jordan/trigger failed');
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 

@@ -12,6 +12,7 @@ import { emitEvent } from './events';
 import { xavier } from './agents/xavier';
 import { scout } from './agents/scout';
 import { alex } from './agents/alex';
+import { ryan } from './agents/ryan';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -139,6 +140,21 @@ export function initBackgroundJobs() {
         logger.info({ event: 'scout_daily_crawl', results }, 'Scout Reid daily crawl complete');
       } catch (err) {
         logger.error({ err, event: 'scout_daily_crawl' }, 'Scout daily crawl failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 07:00 Calgary — Ryan Brooks (HUNTER-S) crawls supply signals and
+  // routes high-intent mover candidates to Jordan on the vetter queue.
+  // Runs in parallel with Scout — separate lock so a slow Scout run doesn't
+  // starve Ryan (both are I/O-bound crawls, not CPU-heavy).
+  cron.schedule('0 7 * * *', async () => {
+    await withJobLock('ryan_daily_crawl', async () => {
+      try {
+        const results = await ryan.run('process_signals', {});
+        logger.info({ event: 'ryan_daily_crawl', results }, 'Ryan Brooks daily crawl complete');
+      } catch (err) {
+        logger.error({ err, event: 'ryan_daily_crawl' }, 'Ryan daily crawl failed');
       }
     });
   }, TZ);

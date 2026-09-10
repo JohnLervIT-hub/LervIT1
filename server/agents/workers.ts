@@ -15,6 +15,8 @@ import { getRedisConnection, QUEUE_NAMES } from '../queue';
 import { logger } from '../logger';
 import { alex } from './alex';
 import { scout } from './scout';
+import { ryan } from './ryan';
+import { jordan } from './jordan';
 import type { BaseAgent } from './base';
 
 let workersStarted = false;
@@ -38,8 +40,12 @@ export function startAgentWorkers(): void {
 
   spawnWorker(QUEUE_NAMES.CLOSER_D, alex, 3);
   spawnWorker(QUEUE_NAMES.HUNTER_D, scout, 1);
+  spawnWorker(QUEUE_NAMES.HUNTER_S, ryan, 1);
+  spawnWorker(QUEUE_NAMES.VETTER, jordan, 3);
 
-  logger.info('Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d)');
+  logger.info(
+    'Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d), Ryan Brooks (hunter-s), Jordan Hayes (vetter)',
+  );
 }
 
 function spawnWorker(queueName: string, agent: BaseAgent, concurrency: number): Worker {
