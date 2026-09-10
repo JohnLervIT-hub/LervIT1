@@ -13590,11 +13590,30 @@ Respond with VALID JSON only:
     console.log('[http] upgrade request:', req.url, 'from', socket.remoteAddress);
   });
 
-  // Initialize WebSocket server for real-time mover notifications
-  moverWebSocket.initialize(httpServer);
-  // Initialize WebSocket server for real-time customer notifications
-  customerWebSocket.initialize(httpServer);
-  adminVoiceWebSocket.initialize(httpServer);
-  
+  // Each WebSocket init is wrapped independently — a failure in one
+  // subsystem (mover, customer, admin-voice) previously threw synchronously
+  // through the registerRoutes → server.listen chain and, on Railway, the
+  // process-level uncaughtException handler classified it as transient
+  // (message includes "WebSocket") and swallowed it. Result: no listener,
+  // no logs, Railway 502. Fail-open here so the HTTP surface still binds.
+  try {
+    moverWebSocket.initialize(httpServer);
+    logger.info('Mover WebSocket initialized');
+  } catch (err) {
+    logger.error({ err }, 'Mover WebSocket init FAILED — continuing without it');
+  }
+  try {
+    customerWebSocket.initialize(httpServer);
+    logger.info('Customer WebSocket initialized');
+  } catch (err) {
+    logger.error({ err }, 'Customer WebSocket init FAILED — continuing without it');
+  }
+  try {
+    adminVoiceWebSocket.initialize(httpServer);
+    logger.info('Admin voice WebSocket initialized');
+  } catch (err) {
+    logger.error({ err }, 'Admin voice WebSocket init FAILED — continuing without it');
+  }
+
   return httpServer;
 }

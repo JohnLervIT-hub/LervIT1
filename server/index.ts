@@ -203,6 +203,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Set to true inside the server.listen() callback. Used by the
+// uncaughtException handler to decide whether to swallow transient errors
+// (safe after the server is up) or fail loudly (during startup, where
+// swallowing a WebSocket init failure would produce a silent zombie).
+let serverStarted = false;
+
 (async () => {
   try {
     const server = await registerRoutes(app);
@@ -236,6 +242,12 @@ app.use((req, res, next) => {
     console.log(`Starting server on port ${port} (NODE_ENV: ${process.env.NODE_ENV || 'development'})...`);
     
     server.listen(port, "0.0.0.0", () => {
+      serverStarted = true;
+      // console.log first so Railway's log tail flushes it immediately —
+      // pino has a small buffer that can hide the "Server ready" line on
+      // fast-crashing containers. The structured pino log follows so
+      // downstream log processors still see the event.
+      console.log(`Server ready on port ${port}`);
       logger.info({ port, env: process.env.NODE_ENV || 'development' }, `Server listening on port ${port}`);
 
       // Warm up database connections in background (non-blocking)
@@ -324,6 +336,17 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('uncaughtException', (error) => {
   const msg = error?.message ?? '';
+
+  // NEVER swallow errors before the server binds. A "WebSocket" or
+  // "ECONNRESET" thrown during registerRoutes / WS init would otherwise
+  // be classified as transient and returned from — leaving a zombie
+  // process with no HTTP listener, and Railway 502ing every request.
+  // See the isTransient block below for the runtime-only carve-out.
+  if (!serverStarted) {
+    console.error('[FATAL] Uncaught exception during startup (before server.listen fired):', error);
+    setTimeout(() => process.exit(1), 500);
+    return;
+  }
 
   // Transient infrastructure errors — log and survive. The pool/driver will
   // recover on the next query. Exiting here would cause unnecessary restarts
