@@ -1,5 +1,6 @@
 [build]
 builder = "dockerfile"
+buildArgs = ["VITE_GOOGLE_MAPS_API_KEY", "VITE_GOOGLE_MAPS_ID", "VITE_STRIPE_PUBLIC_KEY", "VITE_ENABLE_ENTERPRISE"]
 
 [deploy]
 startCommand = "sh -c 'node scripts/startup-migrate.js && node dist/index.js'"
