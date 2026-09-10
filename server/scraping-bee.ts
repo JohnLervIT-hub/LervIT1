@@ -77,18 +77,18 @@ export async function fetchWithScrapingBee(
       return null;
     }
     const body = await response.text();
-    // TEMPORARY debug: log the actual markup so we can bisect the correct
-    // CSS selectors in parseListingTitles from Railway logs without a
-    // redeploy each iteration. Two slices — head captures <meta>/<title>
-    // and confirms it isn't a challenge/CAPTCHA page; mid captures the
-    // listing container that's usually 4-8KB in. Remove once selectors
-    // for Kijiji / Craigslist / RentFaster are locked in.
+    // TEMPORARY debug: log three windows into the markup so we can bisect
+    // the correct CSS selectors from Railway logs without a redeploy each
+    // iteration. Head captures <meta>/<title> and confirms it isn't a
+    // challenge/CAPTCHA page; early (3-4KB) and mid (5-6KB) usually
+    // straddle the listing container. Remove once selectors are locked in.
     logger.info(
       {
         source,
         url,
         bytes: body.length,
         snippetHead: body.slice(0, 500),
+        snippetEarly: body.length > 3500 ? body.slice(3000, 4000) : null,
         snippetMid: body.length > 5500 ? body.slice(5000, 6000) : null,
       },
       'ScrapingBee fetch ok (with debug snippet)',

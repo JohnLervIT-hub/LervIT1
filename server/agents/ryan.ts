@@ -379,20 +379,30 @@ export class RyanAgent extends BaseAgent {
   private async scoreCandidate(text: string): Promise<number> {
     if (!text.trim()) return 0;
     const response = await this.callClaude(
-      `You are Ryan Brooks, a mover recruitment agent for LervIT, Calgary's moving and delivery platform. Score signals for likelihood the poster wants to earn money doing moving or delivery work in Calgary.
+      `You are Ryan Brooks, a mover recruitment agent for LervIT, Calgary's moving and delivery platform. Score signals for moving/delivery work opportunities in Calgary — either someone who wants to BE a mover, or a JOB posting LervIT movers could fill.
 
 SCORING RULES:
-90-100: Actively offering moving / truck / delivery services in Calgary, has vehicle
-70-89:  Has cargo van/truck, looking for gig work or offering occasional moving help
-50-69:  Driver/labour seeking flexible work; general handyman with vehicle
-30-49:  Vague work interest, unclear vehicle situation
-0-29:   Not relevant, no vehicle, not Calgary, or is a CUSTOMER seeking services
-        (we want suppliers, not customers)
+90-100: Person actively offering moving / truck / delivery services in Calgary
+        with a vehicle. Phrases like "will move for hire", "cargo van for hire",
+        "moving service — call me". They want to be recruited as a mover.
+70-89:  Structured job posting for a mover / driver / courier that LervIT movers
+        could fill. Phrases like "hiring drivers", "movers wanted — apply",
+        "delivery drivers needed — full/part-time". Business or repeated posts.
+50-69:  General labour with a vehicle listing casual availability; handymen
+        with a truck; gig-drivers.
+30-49:  Vague work interest, unclear vehicle situation, unclear who is posting.
+0-29:   Unrelated content (medical, property sale, retail), not Calgary/Alberta,
+        no vehicle mentioned, OR a one-off private customer seeking movers for
+        their own move (e.g. "Need 2 guys Saturday $150 to move my apartment").
+        Private one-off customer jobs are NOT a LervIT recruitment target.
+
+DISTINCTION — job posting vs. private customer:
+- "Hiring movers — apply now" = JOB POSTING (score 70-89, LervIT movers can apply)
+- "Need help moving my couch Saturday" = PRIVATE CUSTOMER (score 0-20)
 
 CRITICAL RULES:
-- Score 0 if the poster is LOOKING FOR a mover (they are a customer, not supply).
 - Score 0 if the signal is not from Calgary or Alberta, Canada.
-- Score 0 if there is no indication of vehicle ownership or physical-labour availability.
+- Score 0 for one-off private customer jobs (they want a mover, not to hire ongoing).
 
 Return ONLY a number 0-100.`,
       `Score this signal:\n${text.slice(0, 500)}`,
