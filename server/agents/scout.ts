@@ -600,17 +600,38 @@ function isRealRentFasterListing(title: string): boolean {
  * nothing did) in prod logs without redeploying to bisect.
  */
 export function parseListingTitles(html: string, source: string): string[] {
+  // Ladder is ordered most-specific to least-specific. First strategy that
+  // yields >= 1 usable title wins. If none match we return [] and the
+  // caller logs a "parsed 0 titles" WARN so we can bisect from prod logs.
   const strategies: Array<{ label: string; regex: RegExp }> = [
-    // Kijiji: <a data-testid="listing-title-…">Title</a> (also <h3 data-testid=…>).
-    { label: 'kijiji_listing_title', regex: /data-testid="listing-title[^"]*"[^>]*>([^<]+)</g },
-    // Craigslist: <span class="label">Title</span> on the search grid.
-    { label: 'craigslist_label',     regex: /<span[^>]*class="[^"]*\blabel\b[^"]*"[^>]*>([^<]+)</g },
-    // Craigslist alt: <a class="posting-title"><span class="titlestring">Title</span></a>.
-    { label: 'craigslist_titlestr',  regex: /<span[^>]*class="[^"]*\btitlestring\b[^"]*"[^>]*>([^<]+)</g },
-    // RentFaster: <h2 class="…listing…">Title</h2> variants.
-    { label: 'rentfaster_h2',        regex: /<h2[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</g },
-    // Generic fallback: any <h3> under an anchor (covers Kijiji card layouts).
-    { label: 'generic_h3',           regex: /<h3[^>]*>([^<]+)<\/h3>/g },
+    // ─── Kijiji ─────────────────────────────────────────────────────
+    // Historic: <a data-testid="listing-title-…">Title</a>
+    { label: 'kijiji_data_testid',    regex: /data-testid="listing-title[^"]*"[^>]*>([^<]+)</g },
+    // Alt: any <a> under a class that looks like a listing card.
+    { label: 'kijiji_anchor_listing', regex: /<a[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</g },
+    // Alt: class-based title anchors — matches <div class="title"><a>Title</a>.
+    { label: 'kijiji_title_class',    regex: /class="[^"]*title[^"]*"[^>]*>\s*<a[^>]*>([^<]+)</g },
+
+    // ─── Craigslist ─────────────────────────────────────────────────
+    // Current CL grid: <a class="posting-title"><span class="label">Title</span>.
+    { label: 'craigslist_label',      regex: /<span[^>]*class="[^"]*\blabel\b[^"]*"[^>]*>([^<]+)</g },
+    // 2024+ CL static search result wrapper.
+    { label: 'craigslist_static',     regex: /class="cl-static-search-result"[\s\S]{0,400}?<a[^>]*>([^<]+)<\/a>/g },
+    // Historic posting-title span nested inside anchor.
+    { label: 'craigslist_posting',    regex: /<a[^>]*class="[^"]*posting-title[^"]*"[^>]*>[\s\S]{0,200}?<span[^>]*>([^<]+)<\/span>/g },
+    // Alt: titlestring span.
+    { label: 'craigslist_titlestr',   regex: /<span[^>]*class="[^"]*\btitlestring\b[^"]*"[^>]*>([^<]+)</g },
+
+    // ─── RentFaster ─────────────────────────────────────────────────
+    // Vue card: <div class="listing …"> … <h1|h2|h3>Title</h1|h2|h3>.
+    { label: 'rentfaster_listing_h',  regex: /<div[^>]*class="[^"]*listing[^"]*"[\s\S]{0,600}?<h\d[^>]*>([^<]+)<\/h\d>/g },
+    // Alt: h2 whose class includes "listing".
+    { label: 'rentfaster_h2',         regex: /<h2[^>]*class="[^"]*listing[^"]*"[^>]*>([^<]+)</g },
+    // Alt: any element with class="title" — RentFaster + generic.
+    { label: 'rentfaster_title',      regex: /class="[^"]*\btitle\b[^"]*"[^>]*>([^<]+)</g },
+
+    // ─── Generic fallbacks ──────────────────────────────────────────
+    { label: 'generic_h3_h4',         regex: /<h[34][^>]*>([^<]+)<\/h[34]>/g },
   ];
 
   for (const { label, regex } of strategies) {
