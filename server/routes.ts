@@ -13235,7 +13235,13 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       const { scout } = await import('./agents/scout');
       const action = (req.body?.action ?? 'process_signals') as string;
-      const allowed = new Set(['process_signals', 'crawl_google_alerts', 'crawl_kijiji', 'score_lead']);
+      const allowed = new Set([
+        'process_signals',
+        'crawl_google_alerts',
+        'crawl_kijiji',
+        'crawl_google_maps',
+        'score_lead',
+      ]);
       if (!allowed.has(action)) {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
@@ -13323,6 +13329,7 @@ Respond with VALID JSON only:
         'crawl_kijiji_services',
         'crawl_craigslist_services',
         'crawl_supply_alerts',
+        'crawl_google_maps',
         'score_candidate',
       ]);
       if (!allowed.has(action)) {

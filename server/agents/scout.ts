@@ -24,6 +24,7 @@ import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { fetchWithScrapingBee } from '../scraping-bee';
+import { searchPlacesText, getPlaceDetails } from './places-crawl';
 
 const SCOUT_MODEL = 'claude-haiku-4-5-20251001';
 const HIGH_INTENT_THRESHOLD = 70;
@@ -82,6 +83,18 @@ const RENTFASTER_MAX_ITEMS = 10;
 const CRAIGSLIST_HTML_URL = 'https://calgary.craigslist.org/search/lbs';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
+// Google Places crawl — unhappy customers of competitor moving companies.
+// Rating < 3.5 tends to be a poor customer experience; recent reviews from
+// those places are exactly the moving-intent signals Alex is built for.
+const GMAPS_COMPETITOR_QUERY = 'moving companies calgary';
+const GMAPS_COMPETITOR_RATING_THRESHOLD = 3.5;
+const GMAPS_MAX_COMPETITORS = 10;
+const GMAPS_REVIEW_INTENT_THRESHOLD = 60;
+// The lead's stored intent — reviews come in noisy, so we cap the stored
+// value at 75 to keep them below organic high-intent Kijiji/Reddit signals
+// that go straight to Alex.
+const GMAPS_LEAD_INTENT_SCORE = 75;
+
 interface CrawlResult {
   found: number;
   created: number;
@@ -93,6 +106,7 @@ interface ProcessSignalsResult {
   rentfaster: number;
   craigslist: number;
   kijiji: number;
+  googleMaps: number;
   leadsCreated: number;
   leadsRouted: number;
 }
@@ -115,6 +129,8 @@ export class ScoutAgent extends BaseAgent {
         return this.crawlCraigslist();
       case 'crawl_kijiji':
         return this.crawlKijiji();
+      case 'crawl_google_maps':
+        return this.crawlGoogleMapsCompetitors();
       case 'score_lead':
         return this.scoreSignal(String(input?.text ?? ''));
       default:
@@ -129,6 +145,7 @@ export class ScoutAgent extends BaseAgent {
       rentfaster: 0,
       craigslist: 0,
       kijiji: 0,
+      googleMaps: 0,
       leadsCreated: 0,
       leadsRouted: 0,
     };
@@ -171,6 +188,14 @@ export class ScoutAgent extends BaseAgent {
       results.leadsCreated += r.created;
     } catch (err) {
       logger.warn({ err }, 'Scout: Kijiji failed');
+    }
+
+    try {
+      const r = await this.crawlGoogleMapsCompetitors();
+      results.googleMaps = r.found;
+      results.leadsCreated += r.created;
+    } catch (err) {
+      logger.warn({ err }, 'Scout: Google Maps competitor crawl failed');
     }
 
     const highIntent = await db
@@ -526,6 +551,92 @@ export class ScoutAgent extends BaseAgent {
           { err: (err as Error).message, title: title.slice(0, 60) },
           'Scout: kijiji lead insert failed',
         );
+      }
+    }
+
+    return { found, created };
+  }
+
+  /**
+   * Google Places crawler — pulls competitors' recent negative reviews and
+   * surfaces the ones with clear moving intent. Two Places API calls per
+   * competitor (list + details) so the loop is capped to
+   * GMAPS_MAX_COMPETITORS to keep spend at ~$0.20/run.
+   */
+  private async crawlGoogleMapsCompetitors(): Promise<CrawlResult> {
+    let found = 0;
+    let created = 0;
+
+    const places = await searchPlacesText(GMAPS_COMPETITOR_QUERY, 'google_maps');
+    const competitors = places
+      .filter(
+        p =>
+          typeof p.rating === 'number' &&
+          p.rating < GMAPS_COMPETITOR_RATING_THRESHOLD &&
+          typeof p.user_ratings_total === 'number' &&
+          p.user_ratings_total > 0,
+      )
+      .slice(0, GMAPS_MAX_COMPETITORS);
+
+    logger.info(
+      { source: 'google_maps', total: places.length, competitors: competitors.length },
+      'Scout: Google Maps candidates',
+    );
+
+    for (const place of competitors) {
+      const details = await getPlaceDetails(place.place_id, 'google_maps');
+      if (!details?.reviews?.length) continue;
+
+      // Look at the most-recent low-star reviews — those are the customers
+      // most likely to still be shopping for a replacement mover.
+      const recent = details.reviews
+        .filter(r => typeof r.rating === 'number' && r.rating <= 3 && r.text)
+        .slice(0, 3);
+
+      for (const review of recent) {
+        found++;
+        const score = await this.scoreSignal(
+          `${review.text}\n(review of ${place.name}, ${review.rating}★)`,
+        );
+        logger.info(
+          {
+            source: 'google_maps',
+            competitor: place.name,
+            reviewerRating: review.rating,
+            movingIntent: score,
+          },
+          'Scout: Google Maps review scored',
+        );
+        if (score < GMAPS_REVIEW_INTENT_THRESHOLD) continue;
+
+        const fingerprint = `${place.place_id}:${review.author_name}:${review.text.slice(0, 40)}`;
+        if (await this.wasSignalSeen('google_maps', fingerprint)) continue;
+
+        try {
+          await db.insert(leads).values({
+            contactName: review.author_name || 'Google reviewer',
+            sourceChannel: 'google_maps',
+            utmSource: 'google_maps',
+            utmCampaign: 'scout-reid',
+            intentScore: GMAPS_LEAD_INTENT_SCORE,
+            status: 'new',
+            notes:
+              `Unhappy customer of ${place.name} (${place.rating}★)\n` +
+              `Reviewer: ${review.author_name} — ${review.rating}★ ${review.relative_time_description ?? ''}\n` +
+              `Review: ${review.text.slice(0, 400)}\n` +
+              `Fingerprint: ${fingerprint}`,
+          });
+          created++;
+          logger.info(
+            { source: 'google_maps', competitor: place.name, reviewer: review.author_name },
+            'Scout: Google Maps lead created',
+          );
+        } catch (err) {
+          logger.error(
+            { err: (err as Error).message, source: 'google_maps', competitor: place.name },
+            'Scout: Google Maps lead insert failed',
+          );
+        }
       }
     }
 

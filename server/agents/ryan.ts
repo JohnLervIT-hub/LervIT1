@@ -25,6 +25,7 @@ import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { fetchWithScrapingBee } from '../scraping-bee';
 import { parseListingTitles } from './scout';
+import { searchPlacesText } from './places-crawl';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -60,6 +61,16 @@ const CRAIGSLIST_MAX_ITEMS = 10;
 // every other day, and easy to lower here without redeploying selectors).
 const MAX_LISTING_PAGES_PER_SOURCE = 5;
 
+// Google Places crawl — small good-rated operators are recruitment gold:
+// they've got real customers but no critical mass, so a LervIT partnership
+// is a step up rather than a competitor threat. Text-search only (no
+// details fetch), keeps the run at ~$0.032.
+const GMAPS_SUPPLY_QUERY = 'moving companies calgary';
+const GMAPS_SMALL_OPERATOR_RATING_MIN = 4.0;
+const GMAPS_SMALL_OPERATOR_REVIEW_MAX = 30;
+const GMAPS_MAX_OPERATORS = 10;
+const GMAPS_OPERATOR_INTENT_SCORE = 70;
+
 // Temporarily lowered from 60 → 50 to capture more candidates while the
 // scoring prompt is being tuned. Raise back once scoring stabilises.
 const ROUTE_TO_JORDAN_SCORE = 50;
@@ -84,6 +95,7 @@ interface ProcessSignalsResult {
   kijiji: number;
   craigslist: number;
   googleAlerts: number;
+  googleMaps: number;
   leadsCreated: number;
   leadsRouted: number;
 }
@@ -102,6 +114,8 @@ export class RyanAgent extends BaseAgent {
         return this.crawlCraigslistServices();
       case 'crawl_supply_alerts':
         return this.crawlGoogleAlerts();
+      case 'crawl_google_maps':
+        return this.crawlGoogleMapsOperators();
       case 'score_candidate':
         return this.scoreCandidate(String(input?.text ?? ''));
       default:
@@ -114,6 +128,7 @@ export class RyanAgent extends BaseAgent {
       kijiji: 0,
       craigslist: 0,
       googleAlerts: 0,
+      googleMaps: 0,
       leadsCreated: 0,
       leadsRouted: 0,
     };
@@ -140,6 +155,14 @@ export class RyanAgent extends BaseAgent {
       results.leadsCreated += r.created;
     } catch (err) {
       logger.error({ err }, 'Ryan: supply Google Alerts failed');
+    }
+
+    try {
+      const r = await this.crawlGoogleMapsOperators();
+      results.googleMaps = r.found;
+      results.leadsCreated += r.created;
+    } catch (err) {
+      logger.error({ err }, 'Ryan: Google Maps operator crawl failed');
     }
 
     // Route high-intent unrouted candidates to Jordan on the vetter queue.
@@ -229,6 +252,76 @@ export class RyanAgent extends BaseAgent {
       found += r.found;
       created += r.created;
     }
+    return { found, created };
+  }
+
+  /**
+   * Google Places crawler — surfaces small, well-rated Calgary movers as
+   * recruitment candidates. No details fetch (business name + rating +
+   * review count from the text search is enough context for Jordan's
+   * first-touch outreach), so the whole crawl is one Places API call.
+   */
+  private async crawlGoogleMapsOperators(): Promise<CrawlResult> {
+    let found = 0;
+    let created = 0;
+
+    const places = await searchPlacesText(GMAPS_SUPPLY_QUERY, 'google_maps_supply');
+    const smallOperators = places
+      .filter(
+        p =>
+          typeof p.rating === 'number' &&
+          p.rating >= GMAPS_SMALL_OPERATOR_RATING_MIN &&
+          typeof p.user_ratings_total === 'number' &&
+          p.user_ratings_total > 0 &&
+          p.user_ratings_total < GMAPS_SMALL_OPERATOR_REVIEW_MAX,
+      )
+      .slice(0, GMAPS_MAX_OPERATORS);
+
+    logger.info(
+      {
+        source: 'google_maps_supply',
+        total: places.length,
+        smallOperators: smallOperators.length,
+      },
+      'Ryan: Google Maps candidates',
+    );
+
+    for (const place of smallOperators) {
+      found++;
+      const fingerprint = `place:${place.place_id}`;
+      if (await this.wasSeen('google_maps_supply', fingerprint)) continue;
+
+      try {
+        await db.insert(leads).values({
+          contactName: place.name,
+          sourceChannel: 'google_maps_supply',
+          utmSource: 'google_maps',
+          utmCampaign: 'ryan-brooks',
+          intentScore: GMAPS_OPERATOR_INTENT_SCORE,
+          status: 'new',
+          notes:
+            `Small operator: ${place.name} - ${place.rating}★ (${place.user_ratings_total} reviews)\n` +
+            (place.formatted_address ? `Address: ${place.formatted_address}\n` : '') +
+            `Fingerprint: ${fingerprint}`,
+        });
+        created++;
+        logger.info(
+          {
+            source: 'google_maps_supply',
+            name: place.name,
+            rating: place.rating,
+            reviews: place.user_ratings_total,
+          },
+          'Ryan: Google Maps operator lead created',
+        );
+      } catch (err) {
+        logger.error(
+          { err: (err as Error).message, source: 'google_maps_supply', name: place.name },
+          'Ryan: Google Maps operator lead insert failed',
+        );
+      }
+    }
+
     return { found, created };
   }
 
