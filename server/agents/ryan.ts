@@ -37,13 +37,13 @@ const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
 // Kijiji + Craigslist block bot traffic at the origin (403 direct, 500 via
 // rss2json), so we hit their HTML search pages through ScrapingBee.
 //
-// URL slug fix: /b-moving-storage/calgary/c146l1700199 was returning
-// cleaning-service ads (c146 currently canonicalises to "Cleaners &
-// Cleaning" on Kijiji). The `b-moving-packing` slug hits the intended
-// "Moving & Packing Services" listing set. We log the fetched page's
-// <title> after every crawl so a future re-slug is easy to spot in prod.
+// Category ID fix: c146 canonicalises to Kijiji's "Cleaning & Housekeeping
+// Jobs" category (verified via <title> probe on 2026-09-10). The correct
+// "Moving & Storage" category is c144 — the URL slug is cosmetic, only the
+// trailing c{cat}l{loc} tuple selects the grid. We log the fetched page's
+// <title> after every crawl so a future re-numbering is easy to spot.
 const KIJIJI_SERVICES_HTML_URL =
-  'https://www.kijiji.ca/b-moving-packing/calgary/c146l1700199';
+  'https://www.kijiji.ca/b-moving-storage/calgary/c144l1700199';
 const KIJIJI_BASE_URL = 'https://www.kijiji.ca';
 const KIJIJI_MAX_ITEMS = 15;
 
