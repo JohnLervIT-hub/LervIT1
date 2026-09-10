@@ -38,11 +38,18 @@ export function RecruitmentPipelineCard() {
       return res.json();
     },
     onSuccess: (data) => {
-      const r = data?.result ?? {};
-      toast({
-        title: "Ryan triggered",
-        description: `Kijiji ${r.kijiji ?? 0} · Craigslist ${r.craigslist ?? 0} · Alerts ${r.googleAlerts ?? 0}; created ${r.leadsCreated ?? 0}, routed ${r.leadsRouted ?? 0}.`,
-      });
+      if (data?.queued) {
+        toast({
+          title: "Ryan queued",
+          description: `Job ${data.jobId ?? ""} accepted. Crawl runs in background (~2–10 min); candidates appear as they're created.`,
+        });
+      } else {
+        const r = data?.result ?? {};
+        toast({
+          title: "Ryan completed",
+          description: `Kijiji ${r.kijiji ?? 0} · Craigslist ${r.craigslist ?? 0} · Alerts ${r.googleAlerts ?? 0}; created ${r.leadsCreated ?? 0}, routed ${r.leadsRouted ?? 0}.`,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/ryan/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
     },

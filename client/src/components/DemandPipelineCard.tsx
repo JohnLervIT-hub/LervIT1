@@ -37,11 +37,18 @@ export function DemandPipelineCard() {
       return res.json();
     },
     onSuccess: (data) => {
-      const r = data?.result ?? {};
-      toast({
-        title: "Scout triggered",
-        description: `Found ${r.googleAlerts ?? 0} GA + ${r.kijiji ?? 0} Kijiji; created ${r.leadsCreated ?? 0}, routed ${r.leadsRouted ?? 0}.`,
-      });
+      if (data?.queued) {
+        toast({
+          title: "Scout queued",
+          description: `Job ${data.jobId ?? ""} accepted. Crawl runs in background (~2–10 min); leads appear as they're created.`,
+        });
+      } else {
+        const r = data?.result ?? {};
+        toast({
+          title: "Scout completed",
+          description: `Found ${r.googleAlerts ?? 0} GA + ${r.kijiji ?? 0} Kijiji; created ${r.leadsCreated ?? 0}, routed ${r.leadsRouted ?? 0}.`,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/alex/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
     },

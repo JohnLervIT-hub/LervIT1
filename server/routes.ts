@@ -66,6 +66,7 @@ import { circuitBreakers } from "./circuit-breaker";
 import { calculatePartnerNet } from "@shared/pricing";
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
+import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -13233,7 +13234,6 @@ Respond with VALID JSON only:
   app.post("/api/admin/agent/scout/trigger", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const { scout } = await import('./agents/scout');
       const action = (req.body?.action ?? 'process_signals') as string;
       const allowed = new Set([
         'process_signals',
@@ -13245,8 +13245,18 @@ Respond with VALID JSON only:
       if (!allowed.has(action)) {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
-      const result = await scout.run(action, req.body?.input ?? {});
-      res.json({ ok: true, action, result });
+      const input = req.body?.input ?? {};
+
+      const queue = createAgentQueue(QUEUE_NAMES.HUNTER_D);
+      if (queue) {
+        const job = await queue.add(action, input);
+        return res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+      }
+
+      // Redis unavailable (local dev without REDIS_URL) — fall back to blocking run.
+      const { scout } = await import('./agents/scout');
+      const result = await scout.run(action, input);
+      res.json({ ok: true, queued: false, action, result });
     } catch (err) {
       logger.error({ err }, '[Admin] scout/trigger failed');
       res.status(500).json({ error: (err as Error).message });
@@ -13322,7 +13332,6 @@ Respond with VALID JSON only:
   app.post("/api/admin/agent/ryan/trigger", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const { ryan } = await import('./agents/ryan');
       const action = (req.body?.action ?? 'process_signals') as string;
       const allowed = new Set([
         'process_signals',
@@ -13335,8 +13344,18 @@ Respond with VALID JSON only:
       if (!allowed.has(action)) {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
-      const result = await ryan.run(action, req.body?.input ?? {});
-      res.json({ ok: true, action, result });
+      const input = req.body?.input ?? {};
+
+      const queue = createAgentQueue(QUEUE_NAMES.HUNTER_S);
+      if (queue) {
+        const job = await queue.add(action, input);
+        return res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+      }
+
+      // Redis unavailable (local dev without REDIS_URL) — fall back to blocking run.
+      const { ryan } = await import('./agents/ryan');
+      const result = await ryan.run(action, input);
+      res.json({ ok: true, queued: false, action, result });
     } catch (err) {
       logger.error({ err }, '[Admin] ryan/trigger failed');
       res.status(500).json({ error: (err as Error).message });
