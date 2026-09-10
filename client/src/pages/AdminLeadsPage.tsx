@@ -156,7 +156,7 @@ export default function AdminLeadsPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const pageSize = 50;
+  const pageSize = 20;
 
   const openAddContact = (lead: Lead) => {
     setSelectedLead(lead);
