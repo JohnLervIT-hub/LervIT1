@@ -307,6 +307,12 @@ export class ScoutAgent extends BaseAgent {
       maxItems: RENTFASTER_MAX_ITEMS,
       contactName: 'RentFaster Listing',
       notesPrefix: 'New rental listing',
+      // RentFaster renders its listing list client-side (Vue), so we need
+      // ScrapingBee to actually execute the JS before returning HTML.
+      renderJs: true,
+      // Even after JS render, the DOM contains Vue template shells and
+      // navigation labels. Strip anything that clearly isn't a listing.
+      filterTitle: isRealRentFasterListing,
     });
   }
 
@@ -439,18 +445,33 @@ export class ScoutAgent extends BaseAgent {
     maxItems: number;
     contactName: string;
     notesPrefix: string;
+    renderJs?: boolean;
+    // Optional per-source predicate to strip UI-chrome or template-shell
+    // strings that parseListingTitles can't distinguish from real listings
+    // (e.g. Vue's `{{price}}` shells on RentFaster).
+    filterTitle?: (title: string) => boolean;
   }): Promise<CrawlResult> {
     let found = 0;
     let created = 0;
 
-    const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source });
+    const html = await fetchWithScrapingBee(opts.pageUrl, {
+      source: opts.source,
+      renderJs: opts.renderJs,
+    });
     if (!html) return { found: 0, created: 0 };
 
-    const titles = parseListingTitles(html, opts.source);
+    const parsed = parseListingTitles(html, opts.source);
+    const titles = opts.filterTitle ? parsed.filter(opts.filterTitle) : parsed;
+    if (opts.filterTitle && parsed.length !== titles.length) {
+      logger.info(
+        { source: opts.source, before: parsed.length, after: titles.length },
+        'Scout: title filter applied',
+      );
+    }
     if (titles.length === 0) {
       logger.warn(
-        { source: opts.source, bytes: html.length },
-        'Scout: parsed 0 titles — markup may have changed',
+        { source: opts.source, bytes: html.length, parsedBeforeFilter: parsed.length },
+        'Scout: parsed 0 usable titles — markup may have changed',
       );
       return { found: 0, created: 0 };
     }
@@ -501,13 +522,23 @@ Cities that score 0:
 San Jose, Toronto, Vancouver, Edmonton, New York, London — any non-Calgary
 location. Calgary signals only.
 
+IMPORTANT DISTINCTION (rentals):
+- Someone POSTING an apartment for rent = LANDLORD (score 20-30 — they
+  may need movers for tenant turnover, but it's low priority and not the
+  poster's own move). Phrases like "Available September 15", "For rent",
+  "Newly renovated 2BR", "$1,850/month", "pet friendly" = landlord post.
+- Someone LOOKING for an apartment to rent = FUTURE MOVER (score 60-80 —
+  they will need a mover when they find a place). Phrases like "looking
+  for an apartment", "hunting for a rental", "need a 2BR by October".
+- Someone actively planning a move = ACTIVE MOVER (score 80-95). Phrases
+  like "upcoming move", "need a mover", "moving next weekend".
+
 IMPORTANT RULES:
 - 'moving beyond', 'moving forward', 'moving past' = FIGURATIVE = score 0-5
 - Someone physically relocating home/office in Calgary = 70-100
 - Someone needing furniture delivery in Calgary = 60-80
 - Someone selling items before a Calgary move = 50-70
 - News articles about city development = 0-10
-- Real estate listings in Calgary (for sale/rent) = 40-60 (they signal someone will need to move)
 - Job postings for movers/drivers = 0 (supply side, not demand)
 
 Return ONLY a number 0-100.`,
@@ -540,6 +571,21 @@ Return ONLY a number 0-100.`,
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * RentFaster's listing container also contains Vue template shells and
+ * navigation chrome that parseListingTitles picks up as h2/listing hits.
+ * Everything real is a street address / property name; the noise is UI.
+ */
+function isRealRentFasterListing(title: string): boolean {
+  if (title.length <= 10) return false;
+  if (title.includes('{{')) return false; // unrendered Vue templates
+  const chromePhrases = ['Filter', 'Want more', 'Results', 'Sign in', 'Sign up', 'Refine'];
+  for (const phrase of chromePhrases) {
+    if (title.includes(phrase)) return false;
+  }
+  return true;
 }
 
 /**

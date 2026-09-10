@@ -25,10 +25,18 @@ const SCRAPINGBEE_TIMEOUT_MS = 30_000;
 
 export async function fetchWithScrapingBee(
   url: string,
-  opts: { source?: string } = {},
+  opts: {
+    source?: string;
+    // render_js=true is 5× the credits (5 vs 1) but is required for
+    // SPA-style pages that render their listing list client-side
+    // (RentFaster is the current use case). Default false — Kijiji and
+    // Craigslist render their search results server-side.
+    renderJs?: boolean;
+  } = {},
 ): Promise<string | null> {
   const apiKey = process.env.SCRAPINGBEE_API_KEY?.trim();
   const source = opts.source ?? 'unknown';
+  const renderJs = opts.renderJs === true;
 
   if (!apiKey) {
     logger.warn({ source, url }, 'ScrapingBee: SCRAPINGBEE_API_KEY not set — fetch skipped');
@@ -38,8 +46,11 @@ export async function fetchWithScrapingBee(
   const params = new URLSearchParams({
     api_key: apiKey,
     url,
-    render_js: 'false',
+    render_js: renderJs ? 'true' : 'false',
   });
+  // wait= is only respected when render_js=true; skip it otherwise so
+  // ScrapingBee doesn't reject the request with an unknown-param error.
+  if (renderJs) params.set('wait', '2000');
   const proxyUrl = `${SCRAPINGBEE_ENDPOINT}?${params.toString()}`;
 
   // Log the request with the api_key redacted so we can confirm the
