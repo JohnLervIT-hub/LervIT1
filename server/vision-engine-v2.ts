@@ -53,6 +53,156 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;  // When to fully trust database match
 
+// AUTOGEN:REF_DIMS:START — regenerate with: npm run generate:dims (source: shared/furniture-database.ts)
+const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (use these):
+
+BEDS:
+• Twin bed frame (standard): ~191×99×40cm, 35kg
+• Twin bed frame with storage drawers: ~191×99×43cm, 55kg
+• Full/Double bed frame: ~191×137×40cm, 45kg
+• Queen bed frame: ~203×152×40cm, 55kg
+• Queen platform bed with headboard: ~210×165×110cm, 75kg
+• King bed frame: ~203×193×40cm, 70kg
+• Bunk bed (twin over twin): ~200×100×170cm, 80kg
+• Crib / Toddler bed: ~130×70×100cm, 20kg
+• Daybed with trundle: ~200×100×90cm, 55kg
+• Twin mattress: ~191×99×20cm, 20kg
+• Full/Double mattress: ~191×137×22cm, 30kg
+• Queen mattress: ~203×152×25cm, 40kg
+• King mattress: ~203×193×25cm, 50kg
+• King adjustable bed base: ~203×192×40cm, 100kg
+• Queen adjustable bed base: ~203×153×40cm, 75kg
+
+SOFAS:
+• 2-seater loveseat sofa: ~150×85×85cm, 45kg
+• 3-seater sofa: ~210×90×85cm, 70kg
+• Small L-shaped sectional sofa (2-piece, apartment-size): ~230×150×85cm, 70kg
+• Medium L-shaped sectional sofa (3-piece, standard): ~300×180×85cm, 120kg
+• Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized): ~370×220×90cm, 170kg
+• Small U-shaped sectional sofa (compact, 3-piece): ~280×200×85cm, 130kg
+• Medium U-shaped sectional sofa (standard, 4-5 piece): ~350×250×85cm, 180kg
+• Large U-shaped sectional sofa (oversized, 6+ piece): ~420×300×90cm, 240kg
+• Twin sofa bed (loveseat sleeper, pull-out twin): ~170×90×85cm, 55kg
+• Full/Double sofa bed (3-seat sleeper, pull-out double): ~200×95×85cm, 75kg
+• Queen sofa bed (large sleeper, pull-out queen): ~230×100×90cm, 95kg
+• Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~250×170×85cm, 110kg
+• Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~290×200×90cm, 145kg
+• Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~340×220×90cm, 180kg
+
+TABLES:
+• Dining table (4-person): ~120×75×75cm, 35kg
+• Dining table (6-person): ~180×90×75cm, 50kg
+• Dining table (8-person): ~240×100×75cm, 70kg
+• Coffee table: ~120×60×45cm, 25kg
+• Side table / End table: ~50×50×55cm, 12kg
+• Console table / Entry table: ~120×35×80cm, 20kg
+• Office desk (standard): ~150×75×75cm, 40kg
+• L-shaped desk: ~180×150×75cm, 65kg
+• Standing desk (electric): ~150×75×125cm, 55kg
+
+CHAIRS:
+• Recliner sofa (3-seat): ~230×100×100cm, 110kg
+• Armchair / Accent chair: ~85×85×90cm, 30kg
+• Single recliner chair: ~90×85×100cm, 45kg
+• Dining chair: ~45×50×90cm, 8kg
+• Office chair (ergonomic): ~65×65×110cm, 18kg
+• Gaming chair: ~70×70×130cm, 25kg
+• Upholstered accent chair: ~75×70×95cm, 12kg
+• Accent chair (wingback): ~80×75×105cm, 15kg
+• Lounge chair / Club chair: ~85×80×90cm, 20kg
+• Recliner chair: ~90×85×100cm, 35kg
+• Barrel chair / Swivel chair: ~75×75×80cm, 14kg
+
+STORAGE:
+• 6-drawer dresser: ~150×50×85cm, 70kg
+• Tall dresser / Chest of drawers: ~80×45×130cm, 55kg
+• Nightstand / Bedside table: ~50×40×55cm, 15kg
+• Wardrobe / Armoire: ~120×60×200cm, 100kg
+• Bookshelf (5-shelf): ~80×30×180cm, 40kg
+• TV stand / Entertainment center: ~150×45×55cm, 40kg
+
+APPLIANCES:
+• Refrigerator (standard top-freezer): ~75×70×170cm, 90kg
+• French door refrigerator: ~90×80×180cm, 130kg
+• Washing machine (front-load): ~60×65×85cm, 75kg
+• Clothes dryer: ~60×65×85cm, 55kg
+• Dishwasher: ~60×60×85cm, 45kg
+• Stove / Range (electric): ~76×70×115cm, 70kg
+• Microwave (countertop): ~50×40×30cm, 15kg
+• Window air conditioner: ~60×50×40cm, 35kg
+• Portable air conditioner: ~45×40×80cm, 30kg
+• Chest freezer: ~110×65×85cm, 55kg
+• Upright freezer: ~70×65×170cm, 80kg
+• Stove / Range (gas): ~76×70×115cm, 80kg
+• Washing machine (top-load): ~60×60×105cm, 65kg
+• Stacked washer/dryer combo: ~65×65×180cm, 130kg
+• Mini fridge / Bar fridge: ~48×45×50cm, 20kg
+• Wall oven: ~60×60×90cm, 55kg
+• Range hood / Exhaust hood: ~76×50×30cm, 15kg
+• Water heater (tank): ~50×50×150cm, 55kg
+• Space heater / Portable heater: ~40×25×55cm, 8kg
+• Dehumidifier: ~40×30×60cm, 15kg
+• French door refrigerator (4-door, large): ~91×84×178cm, 138kg
+
+ELECTRONICS:
+• 32-inch TV: ~73×7×44cm, 5kg
+• 40-inch TV: ~92×7×54cm, 8kg
+• 43-inch TV: ~97×7×57cm, 9kg
+• 50-inch TV: ~113×8×66cm, 14kg
+• 55-inch TV: ~125×8×72cm, 18kg
+• 65-inch TV: ~145×10×85cm, 25kg
+• 75-inch TV: ~168×10×97cm, 35kg
+• 85-inch TV: ~191×12×110cm, 45kg
+• Computer monitor (27-32 inch): ~70×25×50cm, 8kg
+• Desktop computer (tower): ~50×25×50cm, 15kg
+• 82-inch TV: ~185×6×105cm, 48kg
+• 86-inch TV: ~191×6×109cm, 45kg
+• 98-inch TV: ~219×4×125cm, 62kg
+
+OUTDOOR:
+• BBQ grill (propane): ~140×60×115cm, 50kg
+• Patio furniture set (4-piece): ~150×80×90cm, 45kg
+• Lawn mower (push): ~150×55×100cm, 35kg
+• Bicycle (adult): ~180×60×110cm, 15kg
+
+EXERCISE:
+• Treadmill: ~180×80×150cm, 100kg
+• Exercise bike / Stationary bike: ~120×55×130cm, 55kg
+• Home gym / Multi-station weight machine: ~160×125×211cm, 100kg
+
+SPECIALTY:
+• Upright piano: ~150×60×130cm, 250kg
+• Moving box (small): ~40×30×30cm, 15kg
+• Moving box (medium): ~50×40×40cm, 20kg
+• Moving box (large): ~60×50×50cm, 25kg
+• Baby grand piano: ~161×149×101cm, 290kg
+• Grand piano (concert / full size): ~186×149×101cm, 325kg
+• Hot tub / Spa (6-person): ~213×213×90cm, 450kg
+• Hot tub / Spa (4-person): ~185×185×85cm, 300kg
+• Gun safe (large, 30+ gun capacity): ~107×70×184cm, 422kg
+• Gun safe (medium, 12-24 gun capacity): ~90×55×150cm, 180kg
+• Pool table / Billiard table (8-foot): ~257×145×81cm, 409kg
+• Pool table / Billiard table (9-foot): ~284×158×81cm, 520kg
+• Massage chair (zero gravity / full body): ~145×80×125cm, 105kg
+• Pinball machine: ~140×69×192cm, 113kg
+• Arcade game cabinet (upright): ~76×61×178cm, 80kg
+• Motorcycle (standard / cruiser): ~220×80×110cm, 200kg
+• Motorcycle (touring / Harley-Davidson): ~240×95×120cm, 357kg
+
+LUGGAGE:
+• Handbag / Purse: ~35×15×25cm, 2kg
+• Messenger bag / Crossbody bag: ~40×12×30cm, 3kg
+• Backpack: ~45×30×55cm, 5kg
+• Duffel bag / Gym bag: ~60×30×35cm, 8kg
+• Weekender bag / Travel bag: ~55×25×35cm, 6kg
+• Carry-on suitcase / Cabin luggage: ~55×35×23cm, 10kg
+• Medium suitcase: ~68×45×28cm, 15kg
+• Large suitcase: ~78×52×32cm, 23kg
+• Tote bag / Shopping bag: ~40×15×35cm, 3kg
+• Laundry bag / Laundry basket: ~50×40×60cm, 10kg
+• Garment bag / Suit bag: ~60×5×100cm, 4kg`;
+// AUTOGEN:REF_DIMS:END
+
 // In-memory result cache — two layers:
 //   1. By URL  → instant hit when the exact same URL is re-analyzed
 //   2. By content hash → same physical file uploaded twice (different URL) still hits cache
@@ -489,41 +639,7 @@ PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
 - Use standard furniture dimensions for the identified type
 - Be consistent: same item type = same dimensions
 
-REFERENCE DIMENSIONS (use these):
-• Twin bed frame: ~191×99×40cm, 35kg
-• Queen bed frame: ~203×152×40cm, 55kg
-• King bed frame: ~203×193×40cm, 70kg
-• 2-seater loveseat: ~150×85×85cm, 45kg
-• 3-seater sofa: ~210×90×85cm, 70kg
-• Small L-shaped sectional (2-piece): ~230×150×85cm, 70kg
-• Medium L-shaped sectional (3-piece): ~300×180×85cm, 120kg
-• Large L-shaped sectional (4-5 piece): ~370×220×90cm, 170kg
-• Small U-shaped sectional (3-piece): ~280×200×85cm, 130kg
-• Medium U-shaped sectional (4-5 piece): ~350×250×85cm, 180kg
-• Large U-shaped sectional (6+ piece): ~420×300×90cm, 240kg
-• Twin sofa bed (loveseat sleeper): ~170×90×85cm, 55kg
-• Full/Double sofa bed (3-seat sleeper): ~200×95×85cm, 75kg
-• Queen sofa bed (large sleeper): ~230×100×90cm, 95kg
-• Small sectional sofa bed (2-piece, sleeper+chaise): ~250×170×85cm, 110kg
-• Medium sectional sofa bed (3-piece, sleeper+storage): ~290×200×90cm, 145kg
-• Large sectional sofa bed (4+ piece, sleeper+storage): ~340×220×90cm, 180kg
-• 4-person dining table: ~120×75×75cm, 35kg
-• 6-person dining table: ~180×90×75cm, 50kg
-• Coffee table: ~120×60×45cm, 25kg
-• Office desk: ~150×75×75cm, 40kg
-• 6-drawer dresser: ~150×50×85cm, 70kg
-• Standard refrigerator: ~75×70×170cm, 90kg
-• French door fridge: ~90×80×180cm, 130kg
-• 55" TV: ~125×8×72cm, 18kg
-• 65" TV: ~145×10×85cm, 25kg
-• Washing machine: ~60×65×85cm, 75kg
-• Small handbag/purse: ~30×15×20cm, 0.5kg
-• Backpack: ~45×30×20cm, 1kg
-• Duffel bag: ~60×35×30cm, 1.5kg
-• Carry-on suitcase: ~55×35×25cm, 3kg
-• Medium suitcase: ~65×45×30cm, 4kg
-• Large suitcase: ~75×50×35cm, 5kg
-• Travel bag: ~50×30×25cm, 1kg
+${REFERENCE_DIMENSIONS}
 
 BOX / STORAGE SCENE COUNTING (CRITICAL — read this if you see multiple boxes):
 If the image shows a scene with many cardboard moving boxes (not a single item):
