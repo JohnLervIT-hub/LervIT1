@@ -7,7 +7,7 @@ import pgSession from "connect-pg-simple";
 import memorystore from "memorystore";
 import compression from "compression";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { serveStatic, log } from "./vite";
 import { pool } from "./db";
 import { logger, logEvent } from "./logger";
 import { randomBytes } from "crypto";
@@ -226,8 +226,12 @@ let serverStarted = false;
 
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route
-    // doesn't interfere with the other routes
+    // doesn't interfere with the other routes.
+    // Dynamic import + string-based specifier keeps esbuild from bundling
+    // ./vite-dev.ts (and the transitive `vite` package) into the prod build.
     if (app.get("env") === "development") {
+      const devModule = "./vite-dev.js";
+      const { setupVite } = await import(devModule);
       await setupVite(app, server);
     } else {
       serveStatic(app);

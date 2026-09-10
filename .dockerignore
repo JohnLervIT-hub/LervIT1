@@ -14,6 +14,9 @@ test-results/
 website-standalone/node_modules
 website-standalone/dist
 docs/
+# Dev-only Vite integration — must never enter the production image, since
+# esbuild would otherwise follow any accidental import back to `vite` itself.
+server/vite-dev.ts
 # NOTE: attached_assets/ is NOT excluded — it's a source directory
 # aliased as @assets in vite.config.ts and imported by many
 # components (SplashScreen, HeroSection, HowItWorksSection, etc.).
