@@ -5,11 +5,11 @@
  * to hire movers, Ryan hunts *suppliers* — people offering moving/delivery
  * labour or vehicles, whom LervIT can recruit onto the platform.
  *
- * Sources (all Calgary-scoped, all RSS via rss2json for the same anti-bot
- * reasons documented in scout.ts):
- *   - Kijiji "Moving & Storage" services listings
- *   - Craigslist Calgary "labor / moving" (`lbs`) category
- *   - Google Alerts feeds targeted at supply-side keywords
+ * Sources (all Calgary-scoped, all fetched through ScrapingBee — origin
+ * blocks direct scraping and rss2json chokes on Atom, see scout.ts):
+ *   - Kijiji "Moving & Storage" services listings (HTML)
+ *   - Craigslist Calgary "labor / moving" (`lbs`) category (HTML)
+ *   - Google Alerts feeds targeted at supply-side keywords (Atom XML)
  *     (env: GOOGLE_ALERT_SUPPLY_FEEDS — separate from GOOGLE_ALERT_FEEDS)
  *
  * Candidates scoring >= 60 get routed onto the `vetter` BullMQ queue where
@@ -29,10 +29,9 @@ import { searchPlacesText } from './places-crawl';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
 
-// rss2json's free tier is ~10 req/min. Ryan's Google Alerts crawl shares
-// the same budget pool with Scout, so we pace every rss2json request by 2s.
-// (Kijiji + Craigslist go through ScrapingBee instead — see below.)
-const RSS2JSON_INTER_FEED_DELAY_MS = 2000;
+// 2s pacing between ScrapingBee feed fetches — polite to Google Alerts'
+// Atom endpoint and keeps us well under ScrapingBee's per-second limits.
+const INTER_FEED_DELAY_MS = 2000;
 
 // Kijiji + Craigslist block bot traffic at the origin (403 direct, 500 via
 // rss2json), so we hit their HTML search pages through ScrapingBee.
@@ -232,6 +231,9 @@ export class RyanAgent extends BaseAgent {
     });
   }
 
+  // Google Alerts serves Atom XML, not RSS — rss2json returns 500/422, so
+  // we fetch the feed through ScrapingBee (render_js=false, 1 credit each)
+  // and parse the Atom entries directly. Budget: 10 supply feeds × 1 credit/run.
   private async crawlGoogleAlerts(): Promise<CrawlResult> {
     const raw = process.env.GOOGLE_ALERT_SUPPLY_FEEDS?.trim();
     if (!raw) {
@@ -243,20 +245,78 @@ export class RyanAgent extends BaseAgent {
       .map(s => s.trim())
       .filter(Boolean);
 
+    const source = 'google_alerts_supply';
+    const maxItems = 25;
+
     let found = 0;
     let created = 0;
     for (let i = 0; i < feedUrls.length; i++) {
-      if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
-      const r = await this.crawlRss2JsonFeed({
-        feedUrl: feedUrls[i],
-        source: 'google_alerts_supply',
-        utmSource: 'google_alerts',
-        contactName: 'Unknown',
-        maxItems: 25,
-      });
-      found += r.found;
-      created += r.created;
+      if (i > 0) await sleep(INTER_FEED_DELAY_MS);
+      const feedUrl = feedUrls[i];
+
+      const xml = await fetchWithScrapingBee(feedUrl, { source, renderJs: false });
+      if (!xml) continue;
+
+      const entries = (xml.match(/<entry>([\s\S]*?)<\/entry>/g) ?? []).slice(0, maxItems);
+
+      for (const entry of entries) {
+        found++;
+        const rawTitle =
+          entry.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/)?.[1] ?? '';
+        const title = rawTitle.replace(/<[^>]+>/g, '').trim();
+        const link = entry.match(/<link[^>]*href="([^"]+)"/)?.[1] ?? '';
+        const summary =
+          entry
+            .match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]
+            ?.replace(/<[^>]+>/g, '')
+            .trim() ?? '';
+        const updated = entry.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? '';
+
+        const text = `${title}\n${summary}`;
+        if (!text.trim()) continue;
+
+        const score = await this.scoreCandidate(text);
+        logger.info(
+          { source, score, title: title.slice(0, 80), pubDate: updated },
+          'Ryan: GA signal scored',
+        );
+        if (score < ROUTE_TO_JORDAN_SCORE) continue;
+
+        const fingerprint = (link || title).slice(0, 80);
+        if (!fingerprint || fingerprint.length < 5) {
+          logger.warn({ source, fingerprint }, 'Ryan: skipping — empty or too-short fingerprint');
+          continue;
+        }
+        if (await this.wasSeen(source, fingerprint)) continue;
+
+        logger.info(
+          { fingerprint: fingerprint.slice(0, 50), score, source },
+          'Ryan: attempting GA lead insert',
+        );
+        try {
+          await db.insert(leads).values({
+            contactName: 'Unknown',
+            sourceChannel: source,
+            utmSource: 'google_alerts',
+            utmCampaign: 'ryan-brooks',
+            intentScore: score,
+            status: 'new',
+            notes: `Title: ${title}\nURL: ${link}\nDesc: ${summary.slice(0, 300)}`,
+          });
+          created++;
+          logger.info(
+            { source, title: title.slice(0, 60), score },
+            'Ryan: GA lead inserted successfully',
+          );
+        } catch (err) {
+          logger.error(
+            { err: err instanceof Error ? err.message : String(err), source, fingerprint },
+            'Ryan: GA lead insert FAILED',
+          );
+        }
+      }
     }
+
     return { found, created };
   }
 
@@ -527,126 +587,6 @@ export class RyanAgent extends BaseAgent {
     }
 
     return { found, created };
-  }
-
-  private async crawlRss2JsonFeed(opts: {
-    feedUrl: string;
-    source: string;
-    utmSource: string;
-    contactName: string;
-    maxItems: number;
-  }): Promise<CrawlResult> {
-    let found = 0;
-    let created = 0;
-
-    const items = await this.fetchRss2Json(opts.feedUrl, opts.source);
-    if (!items) return { found, created };
-
-    for (const item of items.slice(0, opts.maxItems)) {
-      found++;
-      const title = String(item.title ?? '').trim();
-      const description = String(item.description ?? '').trim();
-      const link = String(item.link ?? '').trim();
-      const text = `${title}\n${description}`;
-      if (!text.trim()) continue;
-
-      const score = await this.scoreCandidate(text);
-      logger.info(
-        { source: opts.source, score, title: title.slice(0, 80) },
-        'Ryan: signal scored',
-      );
-      if (score < ROUTE_TO_JORDAN_SCORE) continue;
-
-      const fingerprint = (link || title).slice(0, 80);
-      if (!fingerprint || fingerprint.length < 5) {
-        logger.warn(
-          { source: opts.source, fingerprint },
-          'Ryan: skipping — empty or too-short fingerprint',
-        );
-        continue;
-      }
-      if (await this.wasSeen(opts.source, fingerprint)) continue;
-
-      logger.info(
-        { fingerprint: fingerprint.slice(0, 50), score, source: opts.source },
-        'Ryan: attempting lead insert',
-      );
-      try {
-        await db.insert(leads).values({
-          contactName: opts.contactName,
-          sourceChannel: opts.source,
-          utmSource: opts.utmSource,
-          utmCampaign: 'ryan-brooks',
-          intentScore: score,
-          status: 'new',
-          notes: `Title: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 300)}`,
-        });
-        created++;
-        logger.info(
-          { source: opts.source, title: title.slice(0, 60), score },
-          'Ryan: lead inserted successfully',
-        );
-      } catch (err) {
-        logger.error(
-          { err: err instanceof Error ? err.message : String(err), source: opts.source, fingerprint },
-          'Ryan: lead insert FAILED',
-        );
-      }
-    }
-
-    return { found, created };
-  }
-
-  /**
-   * Shared rss2json proxy fetcher. Mirrors Scout's helper — same headers,
-   * same key fallback (RSS2JSON_API_KEY → RSSBRIDGE_API_KEY), same redacted
-   * URL log so we can confirm keyed calls in prod.
-   */
-  private async fetchRss2Json(
-    feedUrl: string,
-    source: string,
-  ): Promise<Array<{ title?: string; description?: string; link?: string }> | null> {
-    try {
-      const params = new URLSearchParams({ rss_url: feedUrl });
-      const apiKey =
-        process.env.RSS2JSON_API_KEY?.trim() || process.env.RSSBRIDGE_API_KEY?.trim();
-      if (apiKey) params.set('api_key', apiKey);
-      const proxyUrl = `https://api.rss2json.com/v1/api.json?${params.toString()}`;
-
-      const logParams = new URLSearchParams(params);
-      if (apiKey) logParams.set('api_key', 'REDACTED');
-      logger.info(
-        { source, url: `https://api.rss2json.com/v1/api.json?${logParams.toString()}`, keyed: !!apiKey },
-        'Ryan: rss2json fetch',
-      );
-
-      const response = await fetch(proxyUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-      });
-      if (!response.ok) {
-        logger.warn(
-          { source, status: response.status, feedUrl },
-          'Ryan: rss2json fetch non-200',
-        );
-        return null;
-      }
-      const data = (await response.json()) as {
-        status?: string;
-        message?: string;
-        items?: Array<{ title?: string; description?: string; link?: string }>;
-      };
-      if (data.status !== 'ok' || !Array.isArray(data.items)) {
-        logger.warn(
-          { source, feedUrl, status: data.status, message: data.message },
-          'Ryan: rss2json returned non-ok',
-        );
-        return null;
-      }
-      return data.items;
-    } catch (err) {
-      logger.error({ err, source, feedUrl }, 'Ryan: rss2json request threw');
-      return null;
-    }
   }
 
   private async wasSeen(sourceChannel: string, fingerprint: string): Promise<boolean> {

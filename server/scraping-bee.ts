@@ -1,9 +1,11 @@
 /**
  * ScrapingBee HTML proxy — used for sources whose origin blocks direct
- * scraping AND blocks rss2json's fetcher (Kijiji, RentFaster, Craigslist).
+ * scraping AND blocks rss2json's fetcher (Kijiji, RentFaster, Craigslist),
+ * plus Google Alerts (rss2json returns 500/422 on Atom feeds, so we fetch
+ * the Atom XML directly through ScrapingBee and parse it in the caller).
  *
- * Reddit + Google Alerts still work through rss2json, so those crawlers
- * do NOT go through this helper — cheaper and no rendering overhead.
+ * Reddit still works through rss2json, so that crawler does NOT go through
+ * this helper — cheaper and no rendering overhead.
  *
  * ScrapingBee auto-handles headless render + IP rotation; we pass
  * render_js=false because these are HTML pages, not SPAs, and JS render

@@ -236,6 +236,9 @@ export class ScoutAgent extends BaseAgent {
     return results;
   }
 
+  // Google Alerts serves Atom XML, not RSS. rss2json chokes on it (500/422),
+  // so we pull the feed through ScrapingBee (render_js=false, 1 credit) and
+  // parse the Atom entries directly. Budget: 8 demand feeds × 1 credit/run.
   private async crawlGoogleAlerts(): Promise<CrawlResult> {
     const feeds = (process.env.GOOGLE_ALERT_FEEDS ?? '')
       .split(',')
@@ -254,19 +257,35 @@ export class ScoutAgent extends BaseAgent {
       if (i > 0) await sleep(RSS2JSON_INTER_FEED_DELAY_MS);
       const feedUrl = feeds[i];
 
-      const items = await this.fetchRss2Json(feedUrl, 'google_alerts');
-      if (!items) continue;
+      const xml = await fetchWithScrapingBee(feedUrl, {
+        source: 'google_alerts',
+        renderJs: false,
+      });
+      if (!xml) continue;
 
-      for (const item of items) {
+      const entries = xml.match(/<entry>([\s\S]*?)<\/entry>/g) ?? [];
+
+      for (const entry of entries) {
         found++;
-        const title = (item.title ?? '').trim();
-        const description = (item.description ?? '').trim();
-        const link = (item.link ?? '').trim();
-        const fingerprint = link || title;
-        if (!fingerprint) continue;
+        const rawTitle =
+          entry.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/)?.[1] ?? '';
+        const title = rawTitle.replace(/<[^>]+>/g, '').trim();
+        const link = entry.match(/<link[^>]*href="([^"]+)"/)?.[1] ?? '';
+        const summary =
+          entry
+            .match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]
+            ?.replace(/<[^>]+>/g, '')
+            .trim() ?? '';
+        const updated = entry.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? '';
 
-        const score = await this.scoreSignal(`${title} ${description}`);
-        logger.info({ score, title: title.slice(0, 80) }, 'Scout: signal scored');
+        if (!title) continue;
+        const fingerprint = link || title;
+
+        const score = await this.scoreSignal(`${title} ${summary}`);
+        logger.info(
+          { score, title: title.slice(0, 80), pubDate: updated },
+          'Scout: GA signal scored',
+        );
         if (score < GOOGLE_ALERTS_CREATE_THRESHOLD) continue;
         if (await this.wasSignalSeen('google_alerts', fingerprint)) continue;
 
@@ -278,14 +297,14 @@ export class ScoutAgent extends BaseAgent {
             utmCampaign: 'scout-reid',
             intentScore: score,
             status: 'new',
-            notes: `Signal: ${title}\nURL: ${link}\nDesc: ${description.slice(0, 200)}`,
+            notes: `Signal: ${title}\nURL: ${link}\nDesc: ${summary.slice(0, 200)}`,
           });
           created++;
-          logger.info({ score, title: title.slice(0, 50) }, 'Scout: lead created');
+          logger.info({ score, title: title.slice(0, 50) }, 'Scout: GA lead created');
         } catch (err) {
           logger.error(
             { err: (err as Error).message, title: title.slice(0, 80) },
-            'Scout: lead insert failed',
+            'Scout: GA lead insert failed',
           );
         }
       }
