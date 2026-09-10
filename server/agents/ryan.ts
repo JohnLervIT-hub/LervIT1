@@ -42,7 +42,20 @@ const KIJIJI_MAX_ITEMS = 15;
 const CRAIGSLIST_LABOR_HTML_URL = 'https://calgary.craigslist.org/search/lbs';
 const CRAIGSLIST_MAX_ITEMS = 10;
 
-const ROUTE_TO_JORDAN_SCORE = 60;
+// Temporarily lowered from 60 → 50 to capture more candidates while the
+// scoring prompt is being tuned. Raise back once scoring stabilises.
+const ROUTE_TO_JORDAN_SCORE = 50;
+
+// Kijiji/Craigslist scraped pages include navigation chrome that the
+// generic title selector picks up. Filter these out before scoring so
+// we don't waste Haiku calls on "Explore", "Support", etc.
+const NAV_ITEMS = new Set([
+  'kijiji', 'explore', 'support', 'sign in',
+  'sign up', 'post ad', 'my account', 'help',
+  'safety tips', 'about', 'careers', 'contact',
+  'français', 'english', 'all categories',
+  'my favourites', 'my messages', 'my ads',
+]);
 
 interface CrawlResult {
   found: number;
@@ -216,11 +229,14 @@ export class RyanAgent extends BaseAgent {
     const html = await fetchWithScrapingBee(opts.pageUrl, { source: opts.source, renderJs: true });
     if (!html) return { found, created };
 
-    const titles = parseListingTitles(html, opts.source);
+    const rawTitles = parseListingTitles(html, opts.source);
+    const titles = rawTitles.filter(
+      t => t.length > 15 && !NAV_ITEMS.has(t.toLowerCase().trim()),
+    );
     if (titles.length === 0) {
       logger.warn(
-        { source: opts.source, bytes: html.length },
-        'Ryan: parsed 0 titles — markup may have changed',
+        { source: opts.source, bytes: html.length, rawCount: rawTitles.length },
+        'Ryan: parsed 0 real listings after nav filter — markup may have changed',
       );
       return { found, created };
     }
@@ -413,30 +429,29 @@ export class RyanAgent extends BaseAgent {
   private async scoreCandidate(text: string): Promise<number> {
     if (!text.trim()) return 0;
     const response = await this.callClaude(
-      `You are Ryan Brooks, a mover recruitment agent for LervIT, Calgary's moving and delivery platform. Score signals for moving/delivery work opportunities in Calgary — either someone who wants to BE a mover, or a JOB posting LervIT movers could fill.
+      `You are Ryan Brooks, a supply-side agent for LervIT, Calgary's moving and delivery platform. Score signals for jobs LervIT movers could be dispatched to, or people we could recruit as movers.
 
 SCORING RULES:
-90-100: Person actively offering moving / truck / delivery services in Calgary
-        with a vehicle. Phrases like "will move for hire", "cargo van for hire",
-        "moving service — call me". They want to be recruited as a mover.
-70-89:  Structured job posting for a mover / driver / courier that LervIT movers
-        could fill. Phrases like "hiring drivers", "movers wanted — apply",
-        "delivery drivers needed — full/part-time". Business or repeated posts.
-50-69:  General labour with a vehicle listing casual availability; handymen
-        with a truck; gig-drivers.
-30-49:  Vague work interest, unclear vehicle situation, unclear who is posting.
-0-29:   Unrelated content (medical, property sale, retail), not Calgary/Alberta,
-        no vehicle mentioned, OR a one-off private customer seeking movers for
-        their own move (e.g. "Need 2 guys Saturday $150 to move my apartment").
-        Private one-off customer jobs are NOT a LervIT recruitment target.
-
-DISTINCTION — job posting vs. private customer:
-- "Hiring movers — apply now" = JOB POSTING (score 70-89, LervIT movers can apply)
-- "Need help moving my couch Saturday" = PRIVATE CUSTOMER (score 0-20)
+90-100: Someone HIRING movers/helpers for a job LervIT movers can fill.
+        "Looking for 2 guys to move furniture", "Need movers this weekend",
+        "Hiring moving helpers", "Need help moving Saturday $200".
+        These are JOBS LervIT movers can fill — the highest-value signal.
+70-89:  Person offering moving/delivery services in Calgary with a
+        truck/van looking for work. "Cargo van for hire",
+        "Will move for hire — have truck", "Moving service — call me".
+        Recruit them as movers.
+50-69:  Structured commercial job posting for a mover/driver/courier.
+        "Hiring drivers — full/part-time", "Movers wanted — apply now",
+        "Delivery drivers needed". Business or ongoing positions.
+30-49:  Vague work interest, unclear vehicle situation, unclear intent.
+0-29:   Unrelated content: news articles about delivery drivers,
+        crime reports mentioning drivers/movers, property sales, retail,
+        medical. Anything not related to the Calgary moving industry,
+        or not from Calgary/Alberta.
 
 CRITICAL RULES:
 - Score 0 if the signal is not from Calgary or Alberta, Canada.
-- Score 0 for one-off private customer jobs (they want a mover, not to hire ongoing).
+- Score 0 for pure news/crime articles even if they mention "movers" or "drivers".
 
 Return ONLY a number 0-100.`,
       `Score this signal:\n${text.slice(0, 500)}`,
