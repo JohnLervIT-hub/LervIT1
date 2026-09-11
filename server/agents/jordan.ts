@@ -264,12 +264,21 @@ async function sendJordanEmail(to: string, subject: string, body: string): Promi
     .filter(Boolean)
     .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
     .join('');
+  const appBase = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+  const header = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee;">
+    <img src="${appBase}/avatars/jordan-hayes.png" width="44" height="44" style="border-radius:50%;object-fit:cover;border:2px solid #e2e8f0;" alt="Jordan Hayes" />
+    <div>
+      <p style="margin:0;font-weight:600;font-size:15px;color:#1a1a1a;">Jordan Hayes</p>
+      <p style="margin:0;color:#64748b;font-size:13px;">Mover Recruitment · LervIT Calgary</p>
+    </div>
+  </div>`;
   const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
+    ${header}
     ${paragraphs}
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
     <p style="font-size:12px;color:#999;">
       LervIT Technologies · Calgary, AB ·
-      <a href="${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/unsubscribe">Unsubscribe</a>
+      <a href="${appBase}/unsubscribe">Unsubscribe</a>
     </p>
   </div>`;
   try {

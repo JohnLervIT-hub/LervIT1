@@ -7,7 +7,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, Zap } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface VictorStats {
   dispatchedToday: number;
@@ -25,11 +26,8 @@ export function VictorNashCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="w-4 h-4 text-blue-600" />
-              Victor Nash — Dispatch
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="victor-nash" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Runs on every new pending booking · Escalates to Xavier if no movers accept
             </CardDescription>
           </div>

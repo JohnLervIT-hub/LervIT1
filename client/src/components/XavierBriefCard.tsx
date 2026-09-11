@@ -18,7 +18,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { format } from "date-fns";
 
 interface XavierBrief {
@@ -75,11 +76,8 @@ export function XavierBriefCard() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Xavier Cole (APEX) — Daily Brief
-              </CardTitle>
-              <CardDescription>
+              <AgentAvatar agentKey="xavier-cole" size="md" showName showRole />
+              <CardDescription className="mt-1.5">
                 CEO agent brief. Auto-runs daily at 06:05 Calgary time.
               </CardDescription>
             </div>

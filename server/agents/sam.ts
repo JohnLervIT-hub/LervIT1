@@ -1194,7 +1194,15 @@ async function sendSamEmail(to: string, subject: string, innerHtml: string): Pro
     logger.warn('Sam: RESEND_API_KEY not set — email skipped');
     return false;
   }
+  const header = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee;">
+    <img src="${APP_BASE_URL}/avatars/sam-carter.png" width="44" height="44" style="border-radius:50%;object-fit:cover;border:2px solid #e2e8f0;" alt="Sam Carter" />
+    <div>
+      <p style="margin:0;font-weight:600;font-size:15px;color:#1a1a1a;">Sam Carter</p>
+      <p style="margin:0;color:#64748b;font-size:13px;">B2B Sales · LervIT Calgary</p>
+    </div>
+  </div>`;
   const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
+    ${header}
     ${innerHtml}
     <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
     <p style="font-size:12px;color:#999;">

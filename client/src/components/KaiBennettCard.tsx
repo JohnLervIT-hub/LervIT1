@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCcw } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface KaiStats {
   customersContacted: number;
@@ -51,11 +52,8 @@ export function KaiBennettCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <RefreshCcw className="w-4 h-4 text-purple-600" />
-              Kai Bennett — Retention
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="kai-bennett" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Winback for dormant customers + reactivation for inactive movers · Promo: KAI15
             </CardDescription>
           </div>

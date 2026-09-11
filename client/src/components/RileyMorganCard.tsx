@@ -3,7 +3,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, UserCheck } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface RileyStats {
   moversVerified: number;
@@ -49,11 +50,8 @@ export function RileyMorganCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-green-600" />
-              Riley Morgan — Onboarding
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="riley-morgan" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Activates newly verified movers + customers · Nudges day 3 / 7 / 14
             </CardDescription>
           </div>

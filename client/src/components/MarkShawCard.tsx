@@ -4,7 +4,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Activity } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface MarkAlert {
   id: string;
@@ -70,11 +71,8 @@ export function MarkShawCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="w-4 h-4 text-amber-600" />
-              Mark Shaw — PULSE
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="mark-shaw" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Scans active trips for GPS silence, overtime, and no-start · Alerts Xavier on high severity
             </CardDescription>
           </div>

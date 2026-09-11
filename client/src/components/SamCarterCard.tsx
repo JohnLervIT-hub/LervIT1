@@ -5,7 +5,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Briefcase, ExternalLink } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface B2BLead {
   id: string;
@@ -69,11 +70,8 @@ export function SamCarterCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-emerald-600" />
-              Sam Carter — B2B Sales
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="sam-carter" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Prospects fleet partners · Auto-invites warm leads · Tracks onboarding progress
             </CardDescription>
           </div>

@@ -5,7 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Users, ExternalLink } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface Funnel {
   total: number;
@@ -73,7 +74,7 @@ export function RecruitmentPipelineCard() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              <Users className="w-4 h-4" />
+              <AgentAvatar agentKey="ryan-brooks" size="sm" />
               Recruitment Pipeline
             </CardTitle>
             <CardDescription>
