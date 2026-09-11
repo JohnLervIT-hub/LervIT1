@@ -24,6 +24,7 @@ export const QUEUE_NAMES = {
   MAGNET: 'magnet',
   COMPLIANCE: 'compliance',
   ONBOARD: 'onboard',
+  SALES: 'sales',
 } as const;
 
 let _connection: IORedis | null = null;

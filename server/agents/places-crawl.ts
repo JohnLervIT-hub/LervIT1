@@ -146,3 +146,49 @@ export async function getPlaceDetails(
     return null;
   }
 }
+
+/**
+ * Contact-tier details for a place_id — fetches phone + website in addition
+ * to the basic fields. Kept separate from `getPlaceDetails` because Contact-
+ * tier fields (formatted_phone_number) sit in a pricier SKU; Scout/Ryan
+ * don't need them and shouldn't pay for them. Sam (SALES) uses this to
+ * populate B2B lead contact info from Google Places.
+ */
+export async function getPlaceContactDetails(
+  placeId: string,
+  source: string,
+): Promise<PlaceDetails | null> {
+  const key = getKey();
+  if (!key) return null;
+
+  const fields = 'place_id,name,formatted_phone_number,website,formatted_address';
+  const url =
+    `${DETAILS_URL}?place_id=${encodeURIComponent(placeId)}` +
+    `&fields=${encodeURIComponent(fields)}&key=${key}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      logger.warn(
+        { source, placeId, status: response.status },
+        'Places: contact details non-200',
+      );
+      return null;
+    }
+    const data = (await response.json()) as {
+      status?: string;
+      error_message?: string;
+      result?: PlaceDetails;
+    };
+    if (data.status !== 'OK') {
+      logger.warn(
+        { source, placeId, status: data.status, error: data.error_message },
+        'Places: contact details non-OK status',
+      );
+      return null;
+    }
+    return data.result ?? null;
+  } catch (err) {
+    logger.error({ err, source, placeId }, 'Places: contact details threw');
+    return null;
+  }
+}

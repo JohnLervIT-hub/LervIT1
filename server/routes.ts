@@ -13308,6 +13308,122 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== SAM CARTER (SALES) =====
+
+  const SAM_ACTIONS = new Set([
+    'scan_b2b_prospects',
+    'scan_stuck_partners',
+    'send_b2b_touch',
+    'send_partner_followup',
+    'escalate_hot_lead',
+  ]);
+
+  // Manually enqueue a Sam action. Scans + touches always run through the
+  // queue rather than in-request — matches Riley/Kai pattern.
+  app.post("/api/admin/agent/sam/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!SAM_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const samQueue = createAgentQueue(QUEUE_NAMES.SALES);
+      if (!samQueue) {
+        return res.status(503).json({ error: 'SALES queue unavailable (REDIS_URL not configured)' });
+      }
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+      const job = await samQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] sam/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // B2B pipeline view. Filters leads where leadType='b2b'; optional stage
+  // query param narrows by dealStage.
+  app.get("/api/admin/agent/sam/pipeline", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const stage = typeof req.query.stage === 'string' ? req.query.stage.trim() : '';
+      const conditions = [eq(leads.leadType, 'b2b')];
+      if (stage) conditions.push(eq(leads.dealStage, stage));
+      const rows = await db
+        .select()
+        .from(leads)
+        .where(and(...conditions))
+        .orderBy(desc(leads.updatedAt))
+        .limit(200);
+      res.json({ count: rows.length, stage: stage || 'all', leads: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] sam/pipeline: failed');
+      res.status(500).json({ error: 'Failed to load B2B pipeline' });
+    }
+  });
+
+  // Update B2B-specific fields on a lead. Auto-hook: when dealStage
+  // transitions to 'warm', enqueue escalate_hot_lead so John gets an SMS via
+  // Xavier. This is distinct from the narrow /contact PATCH used by Scout.
+  const SAM_LEAD_STAGES = new Set(['prospect', 'contacted', 'warm', 'meeting', 'closed', 'lost']);
+  const SAM_LEAD_INDUSTRIES = new Set([
+    'real_estate', 'property_management', 'corporate', 'university', 'insurance', 'moving_company', 'other',
+  ]);
+  app.patch("/api/admin/agent/leads/:id/b2b", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const body = req.body ?? {};
+
+      const [existing] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: 'Lead not found' });
+
+      const update: Record<string, any> = { updatedAt: new Date() };
+      if (typeof body.companyName === 'string') update.companyName = body.companyName.trim() || null;
+      if (typeof body.industry === 'string') {
+        if (!SAM_LEAD_INDUSTRIES.has(body.industry)) {
+          return res.status(400).json({ error: `Invalid industry: ${body.industry}` });
+        }
+        update.industry = body.industry;
+      }
+      if (typeof body.estimatedMonthlyMoves === 'number' && Number.isFinite(body.estimatedMonthlyMoves)) {
+        update.estimatedMonthlyMoves = Math.max(0, Math.floor(body.estimatedMonthlyMoves));
+      }
+      if (typeof body.dealStage === 'string') {
+        if (!SAM_LEAD_STAGES.has(body.dealStage)) {
+          return res.status(400).json({ error: `Invalid dealStage: ${body.dealStage}` });
+        }
+        update.dealStage = body.dealStage;
+      }
+      if (typeof body.leadType === 'string' && (body.leadType === 'b2c' || body.leadType === 'b2b')) {
+        update.leadType = body.leadType;
+      }
+      if (typeof body.notes === 'string') update.notes = body.notes;
+
+      const [updated] = await db
+        .update(leads)
+        .set(update)
+        .where(eq(leads.id, req.params.id))
+        .returning();
+
+      // Auto-hook: dealStage transitioned INTO 'warm' → enqueue Sam's hot-lead
+      // escalation so Xavier SMSes John. Dedup handled inside Sam.
+      if (update.dealStage === 'warm' && existing.dealStage !== 'warm') {
+        try {
+          const samQueue = createAgentQueue(QUEUE_NAMES.SALES);
+          if (samQueue) {
+            await samQueue.add('escalate_hot_lead', { leadId: updated.id });
+          }
+        } catch (qErr) {
+          logger.warn({ err: qErr, leadId: updated.id }, 'Sam: hot-lead auto-escalation enqueue failed');
+        }
+      }
+
+      res.json({ lead: updated });
+    } catch (err) {
+      logger.error({ err }, '[Admin] lead b2b patch failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // ===== SCOUT REID (HUNTER-D) + ALEX MORGAN (CLOSER-D) =====
 
   // List leads with filters + pagination.

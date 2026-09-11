@@ -1906,6 +1906,14 @@ export const leads = pgTable("leads", {
   convertedBookingId: varchar("converted_booking_id").references(() => bookings.id),
   assignedAgent: text("assigned_agent"),
   notes: text("notes"),
+  // B2B sales pipeline (Sam Carter — SALES). All nullable so existing rows
+  // stay valid; leadType defaults to 'b2c' to keep existing rows classified.
+  companyName: text("company_name"),
+  leadType: text("lead_type").notNull().default("b2c"),               // 'b2c' | 'b2b'
+  industry: text("industry"),                                          // 'real_estate' | 'property_management' | 'corporate' | 'university' | 'insurance' | 'moving_company' | 'other'
+  dealStage: text("deal_stage").default("prospect"),                   // 'prospect' | 'contacted' | 'warm' | 'meeting' | 'closed' | 'lost'
+  estimatedMonthlyMoves: integer("estimated_monthly_moves"),
+  lastContactedAt: timestamp("last_contacted_at"),                     // Sam-specific touch timestamp (distinct from lastTouchedAt which Alex/Riley/Kai also use)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -1914,6 +1922,8 @@ export const leads = pgTable("leads", {
   createdAtIdx: index("leads_created_at_idx").on(table.createdAt),
   phoneIdx: index("leads_contact_phone_idx").on(table.contactPhone),
   emailIdx: index("leads_contact_email_idx").on(table.contactEmail),
+  leadTypeIdx: index("leads_lead_type_idx").on(table.leadType),
+  dealStageIdx: index("leads_deal_stage_idx").on(table.dealStage),
 }));
 
 // d) kpi_targets — revenue / retention / conversion goals

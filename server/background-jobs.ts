@@ -16,6 +16,7 @@ import { ryan } from './agents/ryan';
 import { victor } from './agents/victor';
 import { mark } from './agents/mark';
 import { kai } from './agents/kai';
+import { sam } from './agents/sam';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -238,6 +239,34 @@ export function initBackgroundJobs() {
         logger.info({ event: 'kai_scan_movers', result }, 'Kai mover scan complete');
       } catch (err) {
         logger.error({ err, event: 'kai_scan_movers' }, 'Kai mover scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 10:00 Calgary — Sam Carter (SALES) sweeps five Places queries for
+  // B2B prospects and enqueues first touches. Cost is ~5 text-searches + up
+  // to 5 details calls (negligible).
+  cron.schedule('0 10 * * *', async () => {
+    await withJobLock('sam_scan_b2b_prospects', async () => {
+      try {
+        const result = await sam.run('scan_b2b_prospects', {});
+        logger.info({ event: 'sam_scan_b2b_prospects', result }, 'Sam B2B scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'sam_scan_b2b_prospects' }, 'Sam B2B scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 10:15 Calgary — Sam Carter (SALES) sweeps partners stuck at
+  // status='invited' for 7+ days and enqueues follow-up touches. T3 emits
+  // sales.partner_stuck so Xavier can surface it in the daily brief.
+  cron.schedule('15 10 * * *', async () => {
+    await withJobLock('sam_scan_stuck_partners', async () => {
+      try {
+        const result = await sam.run('scan_stuck_partners', {});
+        logger.info({ event: 'sam_scan_stuck_partners', result }, 'Sam partner scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'sam_scan_stuck_partners' }, 'Sam partner scan failed');
       }
     });
   }, TZ);
