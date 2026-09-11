@@ -13141,6 +13141,7 @@ Respond with VALID JSON only:
     try {
       if (!requireAdmin(req, res)) return;
       const limit = Math.max(1, Math.min(30, Number(req.query.limit ?? 7)));
+      const days = Math.max(1, Math.min(30, Number(req.query.days ?? 7)));
       const rows = await db
         .select({
           id: businessEvents.id,
@@ -13148,7 +13149,10 @@ Respond with VALID JSON only:
           payload: businessEvents.payload,
         })
         .from(businessEvents)
-        .where(eq(businessEvents.eventType, 'apex.daily_brief'))
+        .where(and(
+          eq(businessEvents.eventType, 'apex.daily_brief'),
+          sql`${businessEvents.createdAt} > NOW() - (${days} || ' days')::interval`,
+        ))
         .orderBy(desc(businessEvents.createdAt))
         .limit(limit);
 

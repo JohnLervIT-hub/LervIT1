@@ -1,9 +1,23 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
@@ -20,9 +34,17 @@ interface BriefsResponse {
 
 export function XavierBriefCard() {
   const { toast } = useToast();
+  const [days, setDays] = useState("3");
 
   const { data, isLoading, error } = useQuery<BriefsResponse>({
-    queryKey: ["/api/admin/agent/xavier/briefs"],
+    queryKey: ["/api/admin/agent/xavier/briefs", { days }],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/agent/xavier/briefs?days=${days}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`Failed to load briefs: ${res.status}`);
+      return res.json();
+    },
   });
 
   const triggerMutation = useMutation({
@@ -45,6 +67,7 @@ export function XavierBriefCard() {
 
   const briefs = data?.briefs ?? [];
   const latest = briefs[0];
+  const previous = briefs.slice(1);
 
   return (
     <div className="space-y-4">
@@ -60,20 +83,34 @@ export function XavierBriefCard() {
                 CEO agent brief. Auto-runs daily at 06:05 Calgary time.
               </CardDescription>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => triggerMutation.mutate()}
-              disabled={triggerMutation.isPending}
-              data-testid="button-xavier-trigger"
-            >
-              {triggerMutation.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-              )}
-              Trigger Now
-            </Button>
+            <div className="flex items-center gap-2">
+              <Select value={days} onValueChange={setDays}>
+                <SelectTrigger className="h-7 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Today</SelectItem>
+                  <SelectItem value="3">Last 3 days</SelectItem>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="14">Last 14 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => triggerMutation.mutate()}
+                disabled={triggerMutation.isPending}
+                data-testid="button-xavier-trigger"
+              >
+                {triggerMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Trigger Now
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -96,7 +133,7 @@ export function XavierBriefCard() {
           {latest && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary">Latest</Badge>
+                <Badge variant="secondary">Latest Brief</Badge>
                 <span>
                   {format(new Date(latest.generatedAt ?? latest.createdAt), "PPpp")}
                 </span>
@@ -109,23 +146,27 @@ export function XavierBriefCard() {
         </CardContent>
       </Card>
 
-      {briefs.length > 1 && (
+      {previous.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Previous Briefs</CardTitle>
-            <CardDescription>Last {briefs.length - 1} briefs</CardDescription>
+            <CardDescription>Last {previous.length} briefs</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {briefs.slice(1).map(b => (
-              <div key={b.id} className="border-t pt-3 first:border-t-0 first:pt-0">
-                <div className="text-xs text-muted-foreground mb-1.5">
-                  {format(new Date(b.generatedAt ?? b.createdAt), "PPpp")}
-                </div>
-                <pre className="text-sm whitespace-pre-wrap font-sans">
-                  {b.brief ?? "(empty)"}
-                </pre>
-              </div>
-            ))}
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full">
+              {previous.map(b => (
+                <AccordionItem key={b.id} value={b.id}>
+                  <AccordionTrigger className="text-sm">
+                    {format(new Date(b.generatedAt ?? b.createdAt), "MMM d, h:mm a")}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <pre className="text-sm whitespace-pre-wrap font-sans bg-muted/40 p-3 rounded-md">
+                      {b.brief ?? "(empty)"}
+                    </pre>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </CardContent>
         </Card>
       )}
