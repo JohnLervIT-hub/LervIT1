@@ -1167,7 +1167,7 @@ export default function AdminDashboard() {
                             <span className="truncate">{booking.dropoffAddress?.split(",")[0] || "Dropoff"}</span>
                           </div>
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
-                            <span>{booking.preferredDate ? format(new Date(booking.preferredDate), "MMM d, yyyy") : "No date"}</span>
+                            <span>{booking.preferredDate ? format(new Date(booking.preferredDate), "MMM d, yyyy 'at' h:mm a") : "No date"}</span>
                             <span className="capitalize">{booking.loadSize || "Unknown load"}</span>
                             {booking.mover ? (
                               <span className="flex items-center gap-1">
@@ -1463,7 +1463,7 @@ export default function AdminDashboard() {
                       </div>
                       <p className="font-medium">
                         {selectedBooking.preferredDate 
-                          ? format(new Date(selectedBooking.preferredDate), "EEEE, MMM d, yyyy")
+                          ? format(new Date(selectedBooking.preferredDate), "EEEE, MMM d, yyyy 'at' h:mm a")
                           : "Not scheduled"}
                       </p>
                     </div>
