@@ -8098,6 +8098,67 @@ Respond with VALID JSON only:
           } catch (notifErr) {
             console.error('Support ticket notification failed:', notifErr);
           }
+
+          // Send email notification to customer
+          try {
+            const customer = await db.select({
+              email: usersTable.email,
+              name: usersTable.name,
+            })
+            .from(usersTable)
+            .where(eq(usersTable.id, ticket[0].userId))
+            .limit(1);
+
+            if (customer[0]?.email) {
+              const { Resend } = await import('resend');
+              const resend = new Resend(process.env.RESEND_API_KEY);
+
+              await resend.emails.send({
+                from: 'LervIT Support <support@lervit.com>',
+                replyTo: 'support@lervit.com',
+                to: customer[0].email,
+                subject: `Re: ${ticket[0].subject}`,
+                html: `<div style="font-family:-apple-system,BlinkMacSystemFont,
+                                   'Segoe UI',sans-serif;font-size:15px;
+                                   line-height:1.6;color:#1a1a1a;
+                                   max-width:560px;">
+                  <p>Hi ${customer[0].name?.split(' ')[0] ?? 'there'},</p>
+                  <p>Our support team has replied to your ticket
+                     <strong>"${ticket[0].subject}"</strong>:</p>
+                  <div style="background:#f8fafc;border-left:3px solid #2563eb;
+                              border-radius:4px;padding:16px;margin:16px 0;
+                              color:#374151;font-size:14px;">
+                    ${rawReplyMessage}
+                  </div>
+                  <p>
+                    <a href="https://app.lervit.com/support/${req.params.id}"
+                       style="background:#2563eb;color:white;
+                              padding:10px 20px;border-radius:8px;
+                              text-decoration:none;display:inline-block;
+                              font-weight:500;font-size:14px;">
+                      View Full Conversation →
+                    </a>
+                  </p>
+                  <p style="color:#64748b;font-size:13px;
+                            margin-top:24px;border-top:1px solid #e2e8f0;
+                            padding-top:16px;">
+                    LervIT Support · Calgary, AB<br/>
+                    Reply to this email or visit your
+                    <a href="https://app.lervit.com/support"
+                       style="color:#2563eb;">support portal</a>
+                  </p>
+                </div>`
+              });
+
+              logger.info({
+                ticketId: req.params.id,
+                email: customer[0].email
+              }, 'Support reply email sent');
+            }
+          } catch (emailErr) {
+            logger.warn({ emailErr },
+              'Support reply email failed — non-fatal');
+          }
         }
       }
       await db.update(supportTickets)
