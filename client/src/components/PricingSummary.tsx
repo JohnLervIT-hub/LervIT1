@@ -372,12 +372,12 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-green-700 dark:text-green-400 leading-tight">
-                Save 20% on this move
+                Save 10% on this move
               </p>
               <p className="text-xs text-green-700/70 dark:text-green-500 mt-0.5 leading-relaxed">
                 Sign in or create a free account and apply code{" "}
-                <span className="font-semibold text-green-700 dark:text-green-400">LERVIT20</span>{" "}
-                at checkout — valid on your first 2 moves.
+                <span className="font-semibold text-green-700 dark:text-green-400">LERVIT10</span>{" "}
+                at checkout — valid on your first Move.
               </p>
               <div className="flex items-center gap-2 mt-2">
                 <a

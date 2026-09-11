@@ -156,7 +156,7 @@ export function generateTechnicalBriefPdf(res: Response) {
     "Multi-step booking flow with mandatory load photo upload and AI load estimation",
     "Uber-style proximity matching — top 5 movers ranked by driving distance (15–50 km radius)",
     "Real-time GPS tracking with live ETA and 6-stage move progress indicators",
-    "Saved payment cards, promo codes (LERVIT20, 20% off first 2 moves), and Stripe-secured checkout",
+    "Saved payment cards, promo codes (LERVIT10, 10% off first Move), and Stripe-secured checkout",
     "Abandoned booking recovery with automated email/SMS reminders (up to 3 per booking)",
   ].forEach((b) => bullet(doc, b));
 

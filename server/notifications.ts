@@ -1531,7 +1531,7 @@ class NotificationService {
     const formattedDate = formatCalgaryDate(booking.preferredDate, 'TBD');
     const price = booking.price ? `$${parseFloat(booking.price).toFixed(2)}` : 'TBD';
     const promoInfo = booking.promoCode 
-      ? `<li><strong>Promo Code:</strong> ${booking.promoCode} (-${booking.discountPercent || 20}%)</li>` 
+      ? `<li><strong>Promo Code:</strong> ${booking.promoCode} (-${booking.discountPercent || 10}%)</li>`
       : '';
 
     const body = `

@@ -16,7 +16,7 @@ const tutorialSteps = [
     icon: Sparkles,
     title: "Welcome to LervIT!",
     description: "We're Calgary's smartest moving platform. Let us show you how easy it is to book a move.",
-    highlight: "20% OFF your first 2 moves! Use code LERVIT20",
+    highlight: "10% OFF your first Move! Use code LERVIT10",
     highlightColor: "bg-green-500",
   },
   {
