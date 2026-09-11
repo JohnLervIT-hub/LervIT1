@@ -39,8 +39,8 @@ import {
   Menu,
   Calendar,
 } from "lucide-react";
-import { SiLinkedin, SiX, SiInstagram, SiFacebook } from "react-icons/si";
-import heroImage from "/assets/calgary_mover_loading_furniture.png";
+import { FaLinkedin, FaTwitter, FaInstagram, FaFacebook } from "react-icons/fa";
+const heroImage = "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800";
 
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
@@ -157,7 +157,7 @@ export default function LandingPage() {
                     </div>
                     <div className="border-t pt-6">
                       <p className="text-sm text-muted-foreground mb-2">Join 500+ Calgary movers</p>
-                      <a href="https://lervit.com/signup?role=mover" onClick={() => setMobileMenuOpen(false)}>
+                      <a href="/become-a-mover" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="secondary" className="w-full gap-2">
                           <Truck className="w-4 h-4" /> Become a Mover
                         </Button>
@@ -688,7 +688,7 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <a href="https://lervit.com/signup?role=mover">
+                  <a href="/become-a-mover">
                     <Button size="lg" variant="secondary" className="w-full sm:w-auto gap-2" data-testid="button-become-mover">
                       Become a Mover <ArrowRight className="w-5 h-5" />
                     </Button>
@@ -839,7 +839,7 @@ export default function LandingPage() {
                 Book a Move Now <ArrowRight className="w-5 h-5" />
               </Button>
             </a>
-            <a href="https://lervit.com/signup?role=mover">
+            <a href="/become-a-mover">
               <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2 bg-transparent border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10" data-testid="button-cta-drive">
                 Drive with LervIT <Truck className="w-5 h-5" />
               </Button>
@@ -864,16 +864,16 @@ export default function LandingPage() {
               </p>
               <div className="flex gap-4">
                 <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                  <SiX className="w-5 h-5" />
+                  <FaTwitter className="w-5 h-5" />
                 </a>
                 <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                  <SiFacebook className="w-5 h-5" />
+                  <FaFacebook className="w-5 h-5" />
                 </a>
                 <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                  <SiInstagram className="w-5 h-5" />
+                  <FaInstagram className="w-5 h-5" />
                 </a>
                 <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                  <SiLinkedin className="w-5 h-5" />
+                  <FaLinkedin className="w-5 h-5" />
                 </a>
               </div>
             </div>

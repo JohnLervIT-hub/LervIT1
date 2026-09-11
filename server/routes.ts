@@ -13188,6 +13188,72 @@ Respond with VALID JSON only:
     }
   });
 
+  // Public mover application intake. Called from the /become-a-mover page
+  // on the marketing site (website-standalone). Creates a high-intent
+  // recruitment lead (intentScore 90) and hands it to Jordan (VETTER)
+  // for immediate onboarding follow-up.
+  app.post("/api/apply/mover", async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+      const email = typeof body.email === 'string' ? body.email.trim() : '';
+      const neighbourhood = typeof body.neighbourhood === 'string' ? body.neighbourhood.trim() : '';
+      const vehicleType = typeof body.vehicleType === 'string' ? body.vehicleType.trim() : '';
+      const vehicleYear = typeof body.vehicleYear === 'string' ? body.vehicleYear.trim() : '';
+      const vehicleMake = typeof body.vehicleMake === 'string' ? body.vehicleMake.trim() : '';
+      const canMoveFurniture = body.canMoveFurniture === true || body.canMoveFurniture === 'true';
+      const availability: string[] = Array.isArray(body.availability)
+        ? body.availability.filter((s: unknown) => typeof s === 'string')
+        : [];
+      const minJobsPerWeek = typeof body.minJobsPerWeek === 'string' ? body.minJobsPerWeek.trim() : '';
+      const referralSource = typeof body.referralSource === 'string' ? body.referralSource.trim() : '';
+
+      if (!name) return res.status(400).json({ error: 'Name is required' });
+      if (!phone && !email) return res.status(400).json({ error: 'Phone or email is required' });
+
+      const notes = [
+        'Mover Application',
+        `Vehicle: ${[vehicleType, vehicleYear, vehicleMake].filter(Boolean).join(' ') || 'Not specified'}`,
+        `Can move furniture: ${canMoveFurniture ? 'Yes' : 'No'}`,
+        `Neighbourhood: ${neighbourhood || 'Not specified'}`,
+        `Availability: ${availability.length ? availability.join(', ') : 'Not specified'}`,
+        `Min jobs/week: ${minJobsPerWeek || 'Not specified'}`,
+        `Referral: ${referralSource || 'Not specified'}`,
+      ].join('\n');
+
+      const [lead] = await db.insert(leads).values({
+        contactName: name,
+        contactEmail: email || null,
+        contactPhone: phone || null,
+        sourceChannel: 'mover_application',
+        utmSource: referralSource || 'direct',
+        utmCampaign: 'ryan-brooks',
+        intentScore: 90,
+        status: 'new',
+        notes,
+      }).returning({ id: leads.id });
+
+      const jordanQueue = createAgentQueue(QUEUE_NAMES.VETTER);
+      if (jordanQueue) {
+        try {
+          await jordanQueue.add('onboard_candidate', { leadId: lead.id });
+        } catch (queueErr) {
+          logger.warn({ err: queueErr, leadId: lead.id }, '[mover_application] jordan enqueue failed');
+        }
+      } else {
+        logger.warn({ leadId: lead.id }, '[mover_application] jordan queue unavailable — lead saved');
+      }
+
+      await emitEvent('lead.mover_application', 'lead', lead.id, { vehicleType, neighbourhood });
+
+      return res.status(201).json({ ok: true, leadId: lead.id });
+    } catch (err) {
+      logger.error({ err }, '[mover_application] failed');
+      return res.status(500).json({ error: 'Application failed. Please try again.' });
+    }
+  });
+
   // Manually create a lead (admin-entered warm intro, phone call, referral, etc.).
   app.post("/api/admin/agent/leads", async (req: Request, res: Response) => {
     try {
@@ -13204,6 +13270,9 @@ Respond with VALID JSON only:
       const notes = typeof body.notes === 'string' ? body.notes.trim() || null : null;
       const intentScore = Math.max(0, Math.min(100, Number(body.intentScore ?? 80)));
       const status = typeof body.status === 'string' && body.status.trim() ? body.status.trim() : 'new';
+      const utmCampaign = typeof body.utmCampaign === 'string' && body.utmCampaign.trim()
+        ? body.utmCampaign.trim()
+        : 'admin-manual';
 
       const [row] = await db.insert(leads).values({
         contactName,
@@ -13211,7 +13280,7 @@ Respond with VALID JSON only:
         contactPhone,
         sourceChannel,
         utmSource: sourceChannel,
-        utmCampaign: 'admin-manual',
+        utmCampaign,
         notes,
         intentScore,
         status,

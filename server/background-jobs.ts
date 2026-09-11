@@ -1716,25 +1716,31 @@ async function moverActivityRollup() {
     const allMovers = await db.select().from(movers);
 
     // Aggregate today's completed + declined counts per mover in one pass.
-    const completedRows = await db.execute<{ mover_id: string; count: number }>(sql`
+    type MoverCountRow = { mover_id: string; count: number };
+    const unwrap = <T>(result: unknown): T[] =>
+      Array.isArray(result) ? (result as T[]) : (((result as { rows?: T[] })?.rows) ?? []);
+
+    const completedResult = await db.execute<MoverCountRow>(sql`
       SELECT mover_id, COUNT(*)::int AS count
       FROM bookings
       WHERE mover_id IS NOT NULL
         AND status = 'completed'
         AND updated_at >= ${startOfToday}
       GROUP BY mover_id
-    `) as unknown as Array<{ mover_id: string; count: number }>;
+    `);
+    const completedRows = unwrap<MoverCountRow>(completedResult);
     const completedByMover = new Map<string, number>(
       completedRows.map(r => [r.mover_id, r.count]),
     );
 
-    const declinedRows = await db.execute<{ mover_id: string; count: number }>(sql`
+    const declinedResult = await db.execute<MoverCountRow>(sql`
       SELECT mover_id, COUNT(*)::int AS count
       FROM job_notifications
       WHERE status = 'declined'
         AND (responded_at IS NOT NULL AND responded_at >= ${startOfToday})
       GROUP BY mover_id
-    `) as unknown as Array<{ mover_id: string; count: number }>;
+    `);
+    const declinedRows = unwrap<MoverCountRow>(declinedResult);
     const declinedByMover = new Map<string, number>(
       declinedRows.map(r => [r.mover_id, r.count]),
     );

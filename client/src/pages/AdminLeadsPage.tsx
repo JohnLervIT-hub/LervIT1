@@ -105,6 +105,22 @@ const SOURCE_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
+const MOVER_SOURCE_OPTIONS = [
+  { value: "kijiji", label: "Kijiji" },
+  { value: "craigslist", label: "Craigslist" },
+  { value: "reddit", label: "Reddit" },
+  { value: "facebook", label: "Facebook" },
+  { value: "direct", label: "Direct" },
+  { value: "referral", label: "Referral" },
+] as const;
+
+const MOVER_VEHICLE_OPTIONS = [
+  { value: "suv", label: "SUV / Car" },
+  { value: "pickup", label: "Pickup Truck" },
+  { value: "van", label: "Cargo Van" },
+  { value: "truck", label: "Moving Truck" },
+] as const;
+
 const ALEX_AUTO_TRIGGER_THRESHOLD = 50;
 
 const TEMPERATURE_OPTIONS = [
@@ -130,6 +146,7 @@ interface CreateLeadForm {
   sourceChannel: string;
   notes: string;
   temperature: Temperature;
+  vehicleType: string;
 }
 
 const BLANK_FORM: CreateLeadForm = {
@@ -139,6 +156,7 @@ const BLANK_FORM: CreateLeadForm = {
   sourceChannel: "personal",
   notes: "",
   temperature: DEFAULT_TEMPERATURE,
+  vehicleType: "",
 };
 
 function temperatureToScore(t: Temperature): number {
@@ -284,14 +302,20 @@ export default function AdminLeadsPage() {
 
   const createLead = useMutation({
     mutationFn: async (input: CreateLeadForm) => {
+      const isMoverAdd = audience === "movers";
+      const vehicleLine = isMoverAdd && input.vehicleType
+        ? `Vehicle: ${MOVER_VEHICLE_OPTIONS.find(o => o.value === input.vehicleType)?.label ?? input.vehicleType}`
+        : "";
+      const combinedNotes = [vehicleLine, input.notes.trim()].filter(Boolean).join('\n') || undefined;
       const res = await apiRequest("POST", "/api/admin/agent/leads", {
         contactName: input.contactName.trim(),
         contactEmail: input.contactEmail.trim() || undefined,
         contactPhone: input.contactPhone.trim() || undefined,
         sourceChannel: input.sourceChannel,
-        notes: input.notes.trim() || undefined,
+        notes: combinedNotes,
         intentScore: temperatureToScore(input.temperature),
         status: "new",
+        utmCampaign: isMoverAdd ? "ryan-brooks" : undefined,
       });
       const body = (await res.json()) as { lead?: Lead };
       if (!body.lead) throw new Error("Server did not return a lead");
@@ -354,7 +378,13 @@ export default function AdminLeadsPage() {
         <div className="flex gap-2">
           <Button
             size="sm"
-            onClick={() => { setForm(BLANK_FORM); setAddOpen(true); }}
+            onClick={() => {
+              setForm({
+                ...BLANK_FORM,
+                sourceChannel: audience === "movers" ? "kijiji" : "personal",
+              });
+              setAddOpen(true);
+            }}
             data-testid="button-add-lead"
           >
             <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Lead
@@ -564,9 +594,11 @@ export default function AdminLeadsPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add lead</DialogTitle>
+            <DialogTitle>{audience === "movers" ? "Add Mover Candidate" : "Add lead"}</DialogTitle>
             <DialogDescription>
-              Manually add a warm intro, referral, or phone lead. Scores ≥ {ALEX_AUTO_TRIGGER_THRESHOLD} auto-trigger Alex.
+              {audience === "movers"
+                ? `Manually add a driver or mover to the recruitment pipeline. Jordan auto-triggers on scores ≥ ${ALEX_AUTO_TRIGGER_THRESHOLD}.`
+                : `Manually add a warm intro, referral, or phone lead. Scores ≥ ${ALEX_AUTO_TRIGGER_THRESHOLD} auto-trigger Alex.`}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -619,12 +651,30 @@ export default function AdminLeadsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SOURCE_OPTIONS.map(o => (
+                  {(audience === "movers" ? MOVER_SOURCE_OPTIONS : SOURCE_OPTIONS).map(o => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {audience === "movers" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="lead-vehicle">Vehicle Type</Label>
+                <Select
+                  value={form.vehicleType}
+                  onValueChange={v => setForm(f => ({ ...f, vehicleType: v }))}
+                >
+                  <SelectTrigger id="lead-vehicle" data-testid="select-lead-vehicle">
+                    <SelectValue placeholder="Select vehicle…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MOVER_VEHICLE_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="lead-notes">Notes</Label>
               <Textarea
