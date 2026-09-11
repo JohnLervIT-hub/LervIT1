@@ -71,7 +71,7 @@ export class JordanAgent extends BaseAgent {
       return { skipped: true, reason: 'no_contact_details' };
     }
 
-    const applyLink = `${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/become-a-mover`;
+    const applyLink = 'https://app.lervit.com/signup';
 
     const raw = await this.callClaude(
       `You are Jordan Hayes, a mover recruitment specialist at LervIT, Calgary's
@@ -90,6 +90,8 @@ LervIT mover benefits to weave in (pick the ones that fit the signal):
 - Calgary's fastest-growing move platform
 - No experience needed — just a vehicle
 
+Include this sign up link so they can create their mover account: ${applyLink}
+
 Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.`,
       `Candidate signal:
 Source: ${lead.sourceChannel ?? 'unknown'}
@@ -97,7 +99,7 @@ Notes: ${(lead.notes ?? '').slice(0, 300)}
 Intent score: ${lead.intentScore}
 
 Write recruitment email with CTA "Apply to become a LervIT mover".
-Apply link: ${applyLink}`,
+Sign up link: ${applyLink}`,
       JORDAN_EMAIL_MODEL,
       600,
     );
@@ -160,7 +162,7 @@ Apply link: ${applyLink}`,
       return { skipped: true, reason: `lead is ${lead.status}` };
     }
 
-    const applyLink = `${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/become-a-mover`;
+    const applyLink = 'https://app.lervit.com/signup';
     let channel: 'email' | 'sms' = 'email';
     let delivered = false;
 
@@ -176,7 +178,7 @@ the candidate context. Include apply link.
 Not pushy. Total under 160 characters.
 Return only the SMS text, nothing else.`,
         `Follow up for: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 100)}
-Apply link: ${applyLink}`,
+Sign up link: ${applyLink}`,
         JORDAN_SMS_MODEL,
         120,
       );
@@ -196,7 +198,7 @@ Warm, brief, not pushy. 2-3 paragraphs.
 Format: first line "SUBJECT: <subject>", blank line, then the body.`,
         `Candidate context: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 200)}
 Touch number: ${touchNumber} of 4
-Apply link: ${applyLink}`,
+Sign up link: ${applyLink}`,
         JORDAN_EMAIL_MODEL,
         500,
       );
