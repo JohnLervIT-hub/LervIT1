@@ -51,6 +51,7 @@ interface Lead {
   intentScore: number | null;
   status: string | null;
   leadType: string | null;
+  dealStage: string | null;
   touchpoints: number | null;
   lastTouchedAt: string | null;
   notes: string | null;
@@ -70,6 +71,10 @@ function isMoverCandidate(lead: Lead): boolean {
 
 function isSamProspect(lead: Lead): boolean {
   return lead.leadType === "b2b" && (lead.sourceChannel?.startsWith("sam_") ?? false);
+}
+
+function canAutoInvite(lead: Lead): boolean {
+  return isSamProspect(lead) && lead.dealStage === "warm";
 }
 
 function extractUrl(notes: string | null | undefined): string | null {
@@ -302,6 +307,30 @@ export default function AdminLeadsPage() {
     onError: (err: any) => {
       toast({
         title: "Trigger failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const autoInvitePartner = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", "/api/admin/agent/sam/trigger", {
+        action: "auto_invite_partner",
+        input: { leadId },
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Auto-invite queued",
+        description: "Sam will create the partner + send the fleet invite if guardrails pass.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Auto-invite failed",
         description: err?.message ?? "Unknown error",
         variant: "destructive",
       });
@@ -555,15 +584,35 @@ export default function AdminLeadsPage() {
                               <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Jordan
                             </Button>
                           ) : isSamProspect(lead) ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={triggerSam.isPending || lead.status === "converted" || lead.status === "cold"}
-                              onClick={() => triggerSam.mutate(lead.id)}
-                              data-testid={`button-trigger-sam-${lead.id}`}
-                            >
-                              <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Sam
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={triggerSam.isPending || lead.status === "converted" || lead.status === "cold"}
+                                onClick={() => triggerSam.mutate(lead.id)}
+                                data-testid={`button-trigger-sam-${lead.id}`}
+                              >
+                                <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Sam
+                              </Button>
+                              {canAutoInvite(lead) && (
+                                <Button
+                                  size="sm"
+                                  disabled={autoInvitePartner.isPending}
+                                  onClick={() => {
+                                    if (window.confirm(
+                                      `Invite ${lead.contactName ?? lead.contactEmail ?? "this lead"} as a fleet partner?\n\n` +
+                                      `Sam will create the partner record, generate an invite token, and email the "fleet partner account is ready" link. Guardrails (rating ≥ 4.0, 10+ reviews) are checked server-side.`,
+                                    )) {
+                                      autoInvitePartner.mutate(lead.id);
+                                    }
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  data-testid={`button-auto-invite-${lead.id}`}
+                                >
+                                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Invite as Partner
+                                </Button>
+                              )}
+                            </>
                           ) : (
                             <Button
                               size="sm"
