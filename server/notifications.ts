@@ -289,12 +289,20 @@ class NotificationService {
       });
       
       const result = await response.json();
-      
+
       if (!response.ok) {
+        // 40021 = destination is not a mobile number (business landline).
+        // Expected for B2B outbound — don't spam error logs.
+        const firstErrorCode = result?.errors?.[0]?.code;
+        if (String(firstErrorCode) === '40021') {
+          console.warn('[SMS] Skipped — destination not mobile:', formattedPhone);
+          console.log('---\n');
+          return false;
+        }
         console.error('[SMS] Telnyx API error:', result);
         return false;
       }
-      
+
       console.log('[SMS] Sent successfully! ID:', result.data?.id);
       console.log('---\n');
       return true;

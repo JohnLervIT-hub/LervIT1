@@ -74,6 +74,12 @@ const PARTNER_TOUCH_DELAYS_DAYS: Record<2 | 3, number> = { 2: 14, 3: 30 };
 // Fleet partner guardrails — a lead has to clear both to auto-invite.
 const AUTO_INVITE_MIN_RATING = 4.0;
 const AUTO_INVITE_MIN_REVIEWS = 10;
+
+// Prospect-scan guardrails. Companies with >200 reviews are established
+// competitors, not partnership candidates — target smaller operators.
+const PROSPECT_MIN_RATING = 4.0;
+const PROSPECT_MIN_REVIEWS = 10;
+const PROSPECT_MAX_REVIEWS = 200;
 const INVITE_TOKEN_TTL_DAYS = 7;
 const ONBOARDING_STALL_HOURS = 24;   // step incomplete this long → nudge
 const ONBOARDING_NUDGE_DEDUP_DAYS = 3; // don't renudge same step within N days
@@ -90,12 +96,20 @@ const ONBOARDING_STEP_ORDER: OnboardingStep[] = [
 // Fleet operator queries only. Corporate accounts (property mgmt, real estate,
 // O&G, student housing, insurance) require the Phase 7 corporate portal and
 // are intentionally excluded until that ships.
+//
+// Targeted at individual operators and small fleets. Generic queries like
+// "moving company calgary" return established competitors (500-1,400+ reviews),
+// not partnership candidates.
 const PROSPECT_QUERIES: Array<{ query: string; industry: string; source: string }> = [
-  { query: 'moving company calgary',      industry: 'moving_company',   source: 'sam_places_moving_co' },
-  { query: 'delivery company calgary',    industry: 'delivery_company', source: 'sam_places_delivery_co' },
-  { query: 'logistics company calgary',   industry: 'logistics',        source: 'sam_places_logistics' },
-  { query: 'courier service calgary',     industry: 'courier',          source: 'sam_places_courier' },
-  { query: 'truck rental calgary',        industry: 'logistics',        source: 'sam_places_truck_rental' },
+  { query: 'delivery company calgary',      industry: 'delivery_company', source: 'sam_places_delivery_co' },
+  { query: 'logistics company calgary',     industry: 'logistics',        source: 'sam_places_logistics' },
+  { query: 'courier service calgary',       industry: 'courier',          source: 'sam_places_courier' },
+  { query: 'truck rental calgary',          industry: 'logistics',        source: 'sam_places_truck_rental' },
+  { query: 'man with a truck calgary',      industry: 'moving_company',   source: 'sam_places_man_with_truck' },
+  { query: 'delivery driver calgary',       industry: 'delivery_company', source: 'sam_places_delivery_driver' },
+  { query: 'cargo van for hire calgary',    industry: 'logistics',        source: 'sam_places_cargo_van' },
+  { query: 'small moving service calgary',  industry: 'moving_company',   source: 'sam_places_small_moving' },
+  { query: 'furniture delivery calgary',    industry: 'delivery_company', source: 'sam_places_furniture_delivery' },
 ];
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -124,6 +138,7 @@ interface ProspectScanResult {
   scanned: number;
   duplicatesSkipped: number;
   noPhoneSkipped: number;
+  guardrailSkipped: number;
   created: number;
   byIndustry: Record<string, number>;
 }
@@ -171,6 +186,7 @@ export class SamAgent extends BaseAgent {
       scanned: 0,
       duplicatesSkipped: 0,
       noPhoneSkipped: 0,
+      guardrailSkipped: 0,
       created: 0,
       byIndustry: {},
     };
@@ -218,6 +234,20 @@ export class SamAgent extends BaseAgent {
 
     for (const c of candidates) {
       if (result.created >= MAX_NEW_PROSPECTS_PER_RUN) break;
+
+      // Rating/review-count guardrail — target smaller operators. >200 reviews
+      // means established competitor, not partnership candidate.
+      const rating = c.rating;
+      const reviews = c.userRatingsTotal ?? 0;
+      if (
+        typeof rating !== 'number' ||
+        rating < PROSPECT_MIN_RATING ||
+        reviews < PROSPECT_MIN_REVIEWS ||
+        reviews > PROSPECT_MAX_REVIEWS
+      ) {
+        result.guardrailSkipped++;
+        continue;
+      }
 
       // Cheap DB dedup by companyName before we pay for a details call.
       const [existingByName] = await db
@@ -314,21 +344,13 @@ export class SamAgent extends BaseAgent {
     const companyLabel = lead.companyName ?? lead.contactName ?? 'your team';
     const industry = lead.industry ?? 'other';
 
-    // Channel selection: email preferred when we have one; SMS fallback.
-    // T2 flips the preference — it's a short check-in that reads better as SMS.
-    const preferEmail = touchNumber !== 2;
-    let emailSent = false;
-    let smsSent = false;
-
-    if (preferEmail && lead.contactEmail) {
-      emailSent = await this.sendB2BEmail(lead.contactEmail, companyLabel, industry, touchNumber);
-    } else if (lead.contactPhone) {
-      smsSent = await this.sendB2BSms(lead.contactPhone, companyLabel, industry, touchNumber);
-    } else if (lead.contactEmail) {
-      emailSent = await this.sendB2BEmail(lead.contactEmail, companyLabel, industry, touchNumber);
-    } else {
-      return { skipped: true, reason: 'no reachable channel', touchNumber };
+    // Email-only cadence. B2B numbers scraped from Google Places are almost
+    // always business landlines — Telnyx rejects them (error 40021), so SMS
+    // touches were a no-op that also burned quota.
+    if (!lead.contactEmail) {
+      return { skipped: true, reason: 'no contactEmail', touchNumber };
     }
+    const emailSent = await this.sendB2BEmail(lead.contactEmail, companyLabel, industry, touchNumber);
 
     // Update touch tracking + move dealStage forward on T1 or T4.
     const nextDealStage =
@@ -371,13 +393,12 @@ export class SamAgent extends BaseAgent {
     await emitEvent(`sales.b2b_touch${touchNumber}`, 'lead', leadId, {
       agentName: this.name,
       touchNumber,
-      channel: emailSent ? 'email' : 'sms',
+      channel: 'email',
       email: emailSent,
-      sms: smsSent,
       dealStage: nextDealStage,
     });
 
-    return { success: true, touchNumber, email: emailSent, sms: smsSent, dealStage: nextDealStage };
+    return { success: true, touchNumber, email: emailSent, dealStage: nextDealStage };
   }
 
   private async sendB2BEmail(
@@ -388,20 +409,6 @@ export class SamAgent extends BaseAgent {
   ): Promise<boolean> {
     const { subject, html } = b2bEmailContent(companyLabel, industry, touchNumber);
     return sendSamEmail(to, subject, html);
-  }
-
-  private async sendB2BSms(
-    to: string,
-    companyLabel: string,
-    industry: string,
-    touchNumber: number,
-  ): Promise<boolean> {
-    const text = b2bSmsText(companyLabel, industry, touchNumber);
-    return notificationService.sendSMS({
-      to,
-      message: text.slice(0, 160),
-      type: 'booking_update',
-    });
   }
 
   // ─── STUCK-PARTNER TRACK ──────────────────────────────
@@ -1109,14 +1116,33 @@ function b2bEmailContent(companyLabel: string, industry: string, touchNumber: nu
           <p>Would a 15-minute call this week make sense? Reply with a time or start here: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a></p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
+    case 2:
+      return {
+        subject: `Bigger jobs at checkout — BNPL on every LervIT booking`,
+        html: `<p>Hi ${first},</p>
+          <p>Quick follow-up. One reason ${companyLabel} would do well on LervIT: <strong>every customer sees a Buy-Now-Pay-Later option at checkout</strong>. That's Klarna/Affirm-style financing built into our booking flow, at no cost to you.</p>
+          <p><strong>What that means for your fleet:</strong></p>
+          <ul>
+            <li>Customers book bigger jobs — full homes instead of single-room hops</li>
+            <li>You still get paid in full, up front — LervIT + our BNPL partner carry the credit risk, not you</li>
+            <li>85% payout per job via Stripe Connect</li>
+            <li>No CapEx, no monthly platform fee</li>
+          </ul>
+          <p>Worth a 15-minute call to see if the volume makes sense? Or start here: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a></p>
+          <p>Sam Carter<br/>LervIT Partnerships</p>`,
+      };
     case 3:
       return {
-        subject: `Bookings ready for your fleet — LervIT`,
+        subject: `How LervIT compares — for ${companyLabel}`,
         html: `<p>Hi ${first},</p>
-          <p>Circling back — LervIT sends booking jobs to Calgary fleet partners, and I still think ${companyLabel} would be a strong fit.</p>
-          <p><strong>What you get as a fleet partner:</strong></p>
-          ${FLEET_PITCH_BULLETS}
-          <p>Partner portal: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a> — or reply here and I'll walk you through it live.</p>
+          <p>Circling back one more time. A few Calgary ${label}s have asked how LervIT compares to running their own bookings or listing on other platforms — here's the short version:</p>
+          <ul>
+            <li><strong>vs. your own site:</strong> we bring the demand — SEO, paid, and referral traffic feed straight into your dispatch</li>
+            <li><strong>vs. Uber/TaskRabbit-style apps:</strong> 85% payout per job (vs. their 60-75%), and you keep control of pricing and coverage zones</li>
+            <li><strong>vs. Kijiji/Facebook leads:</strong> pre-qualified, paid bookings — no chasing tire-kickers</li>
+            <li><strong>Setup cost:</strong> free to join. No monthly fee, no CapEx.</li>
+          </ul>
+          <p>Partner portal: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a> — or reply and I'll walk you through it live.</p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
     case 4:
@@ -1128,22 +1154,6 @@ function b2bEmailContent(companyLabel: string, industry: string, touchNumber: nu
           <p>If bringing your fleet onto a booking platform ever makes sense — bring your drivers, we send the jobs, 85% payout per job, BNPL for your customers, free to join. The partner portal (<a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a>) has everything, and I'm at ${SAM_EMAIL} whenever it makes sense.</p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
-  }
-}
-
-function b2bSmsText(companyLabel: string, industry: string, touchNumber: number): string {
-  const first = firstName(companyLabel);
-  const label = industryLabel(industry);
-  switch (touchNumber) {
-    case 1:
-      return `Hi ${first}, Sam from LervIT. Join as a fleet partner — bring your drivers, we send jobs, 85% payout, BNPL for customers, free to join. ${PARTNERS_PORTAL_URL}`;
-    case 2:
-      return `Hi ${first}, Sam from LervIT following up. LervIT sends booking jobs to Calgary ${label}s — 85% payout, free to join. Interested? ${PARTNERS_PORTAL_URL}`;
-    case 3:
-      return `Hi ${first}, Sam from LervIT. Wrapping up — fleet partners bring drivers, we send jobs, 85% payout, BNPL at checkout. Worth a look? ${PARTNERS_PORTAL_URL}`;
-    case 4:
-    default:
-      return `Hi ${first}, last note from Sam at LervIT. If bringing your fleet onto a booking platform makes sense: ${PARTNERS_PORTAL_URL}. Thanks.`;
   }
 }
 
