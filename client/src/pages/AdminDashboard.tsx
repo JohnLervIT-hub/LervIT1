@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, ChevronLeft, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter, Building2, FileText, BookOpen, Download, ZoomIn, Images } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, ChevronLeft, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter, Building2, FileText, BookOpen, Download, ZoomIn, Images, Heart, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
@@ -268,6 +268,41 @@ function GrowthDashboard() {
     },
   });
 
+  const recoverAbandonedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agent/alex/trigger", {
+        action: "recover_abandoned",
+        input: {},
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Alex Morgan", description: "Recovery emails queued for abandoned bookings" });
+      queryClient.invalidateQueries({
+        predicate: q => typeof q.queryKey[0] === 'string' && (q.queryKey[0] as string).startsWith("/api/admin/growth-metrics"),
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Recovery failed", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const winbackDormantMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agent/kai/trigger", {
+        action: "scan_dormant_customers",
+        input: {},
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Kai Bennett", description: "Winback scan queued — KAI15 emails sending" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Winback failed", description: err?.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -424,6 +459,21 @@ function GrowthDashboard() {
                 <span className="text-muted-foreground">Verified</span>
                 <Badge variant="outline">{metrics.users.verifiedMovers}</Badge>
               </div>
+            </div>
+            <div className="mt-3 pt-3 border-t">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => winbackDormantMutation.mutate()}
+                disabled={winbackDormantMutation.isPending}
+                data-testid="button-kai-winback-dormant"
+              >
+                {winbackDormantMutation.isPending
+                  ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  : <Heart className="w-3.5 h-3.5 mr-1.5" />}
+                Winback Dormant Customers → Kai
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -652,6 +702,20 @@ function GrowthDashboard() {
               <p className="text-2xl font-bold">{metrics.abandoned.recoveryRate}%</p>
               <p className="text-xs text-muted-foreground">Recovery Rate</p>
             </div>
+          </div>
+          <div className="flex justify-center mt-4 pt-4 border-t">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => recoverAbandonedMutation.mutate()}
+              disabled={recoverAbandonedMutation.isPending || metrics.abandoned.pending === 0}
+              data-testid="button-alex-recover-abandoned"
+            >
+              {recoverAbandonedMutation.isPending
+                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+              Recover Abandoned ({metrics.abandoned.pending}) → Alex
+            </Button>
           </div>
         </CardContent>
       </Card>

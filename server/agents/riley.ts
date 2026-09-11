@@ -82,9 +82,65 @@ export class RileyAgent extends BaseAgent {
         return this.sendMoverNudge(input as MoverNudgeInput);
       case 'customer_nudge':
         return this.sendCustomerNudge(input as CustomerNudgeInput);
+      case 'scan_inactive_movers':
+        return this.scanInactiveMovers();
       default:
         throw new Error(`Riley: unknown action "${action}"`);
     }
+  }
+
+  // ─── ONBOARD SCAN (verified <30d, no accepted jobs) ─────────
+  //
+  // Sibling to Kai.scanInactiveMovers (which handles verified movers 30d+ old).
+  // Riley owns the newly-verified window so the two agents don't double-SMS.
+
+  private async scanInactiveMovers() {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * DAY_MS);
+    const nudgeCooldown = new Date(Date.now() - 7 * DAY_MS);
+
+    const rows = await db.execute(sql`
+      SELECT m.id AS "moverId", m.user_id AS "userId"
+      FROM movers m
+      WHERE m.is_verified = true
+        AND m.created_at >= ${thirtyDaysAgo}
+        AND NOT EXISTS (
+          SELECT 1 FROM bookings b
+          WHERE b.mover_id = m.id AND b.status <> 'cancelled'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM business_events be
+          WHERE be.entity_id = m.id
+            AND be.event_type = 'riley.mover_nudge'
+            AND be.created_at >= ${nudgeCooldown}
+        )
+      LIMIT 25
+    `);
+
+    const candidates = (rows.rows ?? []) as Array<{ moverId: string; userId: string }>;
+
+    const queue = createAgentQueue(QUEUE_NAMES.ONBOARD);
+    if (!queue) {
+      logger.warn('Riley.scanInactiveMovers: ONBOARD queue unavailable');
+      return { scanned: candidates.length, queued: 0, reason: 'queue unavailable' };
+    }
+
+    let queued = 0;
+    for (const c of candidates) {
+      try {
+        await queue.add('mover_nudge', { moverId: c.moverId, userId: c.userId, touchNumber: 2 });
+        queued++;
+      } catch (err) {
+        logger.error({ err, moverId: c.moverId }, 'Riley.scanInactiveMovers: enqueue failed');
+      }
+    }
+
+    await emitEvent('riley.scan_inactive_movers', 'agent', 'onboard', {
+      agentName: this.name,
+      scanned: candidates.length,
+      queued,
+    });
+
+    return { scanned: candidates.length, queued };
   }
 
   // ─── MOVER TRACK ────────────────────────────────────────────

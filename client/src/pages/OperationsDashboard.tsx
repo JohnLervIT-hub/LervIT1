@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Cell, AreaChart, Area,
 } from "recharts";
-import { TrendingUp, Users, Truck, Clock, CheckCircle2, AlertTriangle, Zap, Star, Target, Activity, Eye, MousePointerClick } from "lucide-react";
+import { TrendingUp, Users, Truck, Clock, CheckCircle2, AlertTriangle, Zap, Star, Target, Activity, Eye, MousePointerClick, Loader2, RefreshCcw, UserCheck } from "lucide-react";
 
 // ---- types ----
 type AnalyticsSummary = {
@@ -143,11 +146,67 @@ function RevenueTooltip({ active, payload, label }: any) {
 }
 
 export default function OperationsDashboard() {
+  const { toast } = useToast();
   const [analyticsRange, setAnalyticsRange] = useState("30");
 
   const { data, isLoading, error, refetch } = useQuery<OpsMetrics>({
     queryKey: ["/api/admin/ops-metrics"],
     refetchInterval: 30000,
+  });
+
+  const dispatchAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agent/victor/trigger", {
+        action: "dispatch_pending",
+        input: {},
+      });
+      return res.json();
+    },
+    onSuccess: (payload) => {
+      const r = payload?.result ?? {};
+      toast({
+        title: "Victor Nash",
+        description: r.queued
+          ? `Dispatching ${r.pendingCount ?? "pending"} bookings...`
+          : "No pending bookings to dispatch",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-metrics"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Dispatch failed", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const reactivateMoverMutation = useMutation({
+    mutationFn: async (moverId: string) => {
+      const res = await apiRequest("POST", "/api/admin/agent/kai/trigger", {
+        action: "send_mover_reactivation",
+        input: { moverId, touchNumber: 1 },
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Kai Bennett", description: "Reactivation message queued" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Reactivation failed", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const onboardInactiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agent/riley/trigger", {
+        action: "scan_inactive_movers",
+        input: {},
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Riley Morgan", description: "Onboarding nudges queued for inactive movers" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Onboarding failed", description: err?.message, variant: "destructive" });
+    },
   });
 
   const { data: analyticsData, isLoading: analyticsLoading } = useQuery<AnalyticsSummary>({
@@ -564,6 +623,46 @@ export default function OperationsDashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* Agent action buttons */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Agent Actions</CardTitle>
+              <CardDescription>Trigger agent workflows for the current ops state.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => dispatchAllMutation.mutate()}
+                  disabled={dispatchAllMutation.isPending || liveOps.pendingJobs === 0}
+                  data-testid="button-victor-dispatch-all"
+                >
+                  {dispatchAllMutation.isPending
+                    ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    : <Zap className="w-3.5 h-3.5 mr-1.5" />}
+                  Dispatch Pending ({liveOps.pendingJobs}) → Victor
+                </Button>
+              </div>
+              {liveOps.onlineMovers === 0 && (
+                <div className="mt-3 pt-3 border-t">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onboardInactiveMutation.mutate()}
+                    disabled={onboardInactiveMutation.isPending}
+                    data-testid="button-riley-onboard-inactive"
+                  >
+                    {onboardInactiveMutation.isPending
+                      ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      : <UserCheck className="w-3.5 h-3.5 mr-1.5" />}
+                    Onboard Inactive Movers → Riley
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ===== MOVER PERFORMANCE ===== */}
@@ -615,6 +714,20 @@ export default function OperationsDashboard() {
                               )}
                               {m.rating !== null && (
                                 <p className="text-xs text-muted-foreground">{m.rating.toFixed(1)} ★</p>
+                              )}
+                              {(m.completedMoves === 0 || (m.acceptanceRate !== null && m.acceptanceRate < 30)) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 text-xs mt-1 px-2"
+                                  onClick={() => reactivateMoverMutation.mutate(m.moverId)}
+                                  disabled={reactivateMoverMutation.isPending}
+                                  title="Send reactivation message via Kai"
+                                  data-testid={`button-kai-reactivate-${m.moverId}`}
+                                >
+                                  <RefreshCcw className="w-3 h-3 mr-1" />
+                                  Reactivate
+                                </Button>
                               )}
                             </td>
                             <td className="py-2 pr-4 text-right tabular-nums">{m.totalOffers}</td>

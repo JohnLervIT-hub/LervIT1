@@ -21,7 +21,7 @@
  *     in this first pass.
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { BaseAgent } from './base';
 import { db } from '../db';
 import { bookings, users, businessEvents, BOOKING_STATUSES } from '@shared/schema';
@@ -30,6 +30,7 @@ import { dispatchBooking } from '../dispatch';
 import { emitEvent } from '../events';
 import { xavier } from './xavier';
 import { logger } from '../logger';
+import { createAgentQueue, QUEUE_NAMES } from './queue';
 
 interface DispatchInput {
   bookingId: string;
@@ -50,9 +51,51 @@ export class VictorAgent extends BaseAgent {
         return this.dispatch(input as DispatchInput);
       case 'escalate_no_movers':
         return this.escalateNoMovers(input as EscalateNoMoversInput);
+      case 'dispatch_pending':
+        return this.dispatchAllPending();
       default:
         throw new Error(`Victor: unknown action "${action}"`);
     }
+  }
+
+  private async dispatchAllPending() {
+    const pending = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(and(
+        eq(bookings.status, BOOKING_STATUSES.PENDING),
+        eq(bookings.paymentStatus, 'paid'),
+        isNull(bookings.moverId),
+      ));
+
+    const pendingCount = pending.length;
+    if (pendingCount === 0) {
+      return { pendingCount: 0, queued: false, reason: 'no pending bookings' };
+    }
+
+    const queue = createAgentQueue(QUEUE_NAMES.DISPATCH);
+    if (!queue) {
+      logger.warn('Victor.dispatchAllPending: DISPATCH queue unavailable — REDIS_URL not set');
+      return { pendingCount, queued: false, reason: 'queue unavailable' };
+    }
+
+    let queued = 0;
+    for (const b of pending) {
+      try {
+        await queue.add('dispatch', { bookingId: b.id });
+        queued++;
+      } catch (err) {
+        logger.error({ err, bookingId: b.id }, 'Victor.dispatchAllPending: enqueue failed');
+      }
+    }
+
+    await emitEvent('dispatch.bulk_triggered', 'agent', this.code, {
+      agentName: this.name,
+      pendingCount,
+      queued,
+    });
+
+    return { pendingCount, queued: true, jobsEnqueued: queued };
   }
 
   private async dispatch({ bookingId }: DispatchInput) {

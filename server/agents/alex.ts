@@ -12,7 +12,7 @@
  * "LervIT <support@lervit.com>"). SMS goes through notificationService.
  */
 
-import { and, eq, gte } from 'drizzle-orm';
+import { and, eq, gte, lte, ne } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { BaseAgent } from './base';
 import { db } from '../db';
@@ -58,10 +58,48 @@ export class AlexAgent extends BaseAgent {
       case 'send_touch':
         return this.sendTouch(input as SendTouchInput);
       case 'recover_abandoned':
+        if (!input?.bookingId) {
+          return this.recoverAbandonedBulk();
+        }
         return this.recoverAbandoned(input as RecoverAbandonedInput);
       default:
         throw new Error(`Alex: unknown action "${action}"`);
     }
+  }
+
+  private async recoverAbandonedBulk() {
+    const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const rows = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(and(
+        eq(bookings.status, 'pending'),
+        ne(bookings.paymentStatus, 'paid'),
+        lte(bookings.createdAt, cutoff),
+      ));
+
+    const count = rows.length;
+    if (count === 0) {
+      return { count: 0, queued: false, reason: 'no abandoned bookings' };
+    }
+
+    const queue = createAgentQueue(QUEUE_NAMES.CLOSER_D);
+    if (!queue) {
+      logger.warn('Alex.recoverAbandonedBulk: CLOSER_D queue unavailable');
+      return { count, queued: false, reason: 'queue unavailable' };
+    }
+
+    let queued = 0;
+    for (const b of rows) {
+      try {
+        await queue.add('recover_abandoned', { bookingId: b.id });
+        queued++;
+      } catch (err) {
+        logger.error({ err, bookingId: b.id }, 'Alex.recoverAbandonedBulk: enqueue failed');
+      }
+    }
+
+    return { count, queued: true, jobsEnqueued: queued };
   }
 
   private async convertLead({ leadId }: ConvertLeadInput) {

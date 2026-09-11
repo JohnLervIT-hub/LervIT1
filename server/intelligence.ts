@@ -44,6 +44,14 @@ export interface IntelligenceSummary {
     stuck_jobs: number;
     incidents: number;
   };
+  live_ops: {
+    pending_dispatch: number;
+    acceptance_rate: number;
+  };
+  abandoned: {
+    pending: number;
+    recovery_rate: number;
+  };
   kpi_deltas: {
     vs_yesterday: {
       revenue: number;
@@ -155,6 +163,36 @@ export async function buildIntelligenceSummary(): Promise<IntelligenceSummary> {
     throw err;
   }
 
+  let liveOpsRow: { pending_dispatch: number; paid_total: number; paid_with_mover: number } | undefined;
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'pending' AND payment_status = 'paid' AND mover_id IS NULL)::int AS pending_dispatch,
+        COUNT(*) FILTER (WHERE payment_status IN ('paid','succeeded'))::int AS paid_total,
+        COUNT(*) FILTER (WHERE payment_status IN ('paid','succeeded') AND mover_id IS NOT NULL AND status IN ('confirmed','in_progress','completed'))::int AS paid_with_mover
+      FROM bookings
+    `);
+    liveOpsRow = (result as any).rows?.[0];
+  } catch (err) {
+    logger.error({ err }, 'intelligence: live_ops query failed');
+    throw err;
+  }
+
+  let abandonedRow: { pending: number; recovered: number; total: number } | undefined;
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE recovered = false)::int AS pending,
+        COUNT(*) FILTER (WHERE recovered = true)::int AS recovered,
+        COUNT(*)::int AS total
+      FROM abandoned_bookings
+    `);
+    abandonedRow = (result as any).rows?.[0];
+  } catch (err) {
+    logger.error({ err }, 'intelligence: abandoned_bookings query failed');
+    throw err;
+  }
+
   let ydayRow: { revenue: string; completed: number } | undefined;
   try {
     const result = await db.execute(sql`
@@ -255,6 +293,18 @@ export async function buildIntelligenceSummary(): Promise<IntelligenceSummary> {
       sla_breaches: alertCounts?.sla_breaches ?? 0,
       stuck_jobs: alertCounts?.stuck_jobs ?? 0,
       incidents: incidentRow?.open_incidents ?? 0,
+    },
+    live_ops: {
+      pending_dispatch: liveOpsRow?.pending_dispatch ?? 0,
+      acceptance_rate: (liveOpsRow?.paid_total ?? 0) > 0
+        ? Math.round(((liveOpsRow!.paid_with_mover) / liveOpsRow!.paid_total) * 100)
+        : 0,
+    },
+    abandoned: {
+      pending: abandonedRow?.pending ?? 0,
+      recovery_rate: (abandonedRow?.total ?? 0) > 0
+        ? Math.round(((abandonedRow!.recovered) / abandonedRow!.total) * 100)
+        : 0,
     },
     kpi_deltas: {
       vs_yesterday: {

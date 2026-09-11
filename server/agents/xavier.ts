@@ -70,10 +70,11 @@ ${JSON.stringify(summary, null, 2)}
 
 Include:
 1. Revenue snapshot (today vs target)
-2. Active operations status
-3. Mover supply health
-4. Any alerts or escalations
-5. Top 3 priorities for John today
+2. Live operations: pending_dispatch (paid jobs awaiting a mover) and acceptance_rate
+3. Mover supply health (online, available, inactive_7d)
+4. Growth: abandoned.pending and abandoned.recovery_rate
+5. Any alerts or escalations (sla_breaches, stuck_jobs, incidents)
+6. Top 3 priorities for John today
 
 Keep it under 300 words. Direct and actionable.`,
       XAVIER_MODEL,

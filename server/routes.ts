@@ -13196,7 +13196,7 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       const { victor } = await import('./agents/victor');
       const action = (req.body?.action ?? 'dispatch') as string;
-      if (action !== 'dispatch' && action !== 'escalate_no_movers') {
+      if (action !== 'dispatch' && action !== 'escalate_no_movers' && action !== 'dispatch_pending') {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
       const result = await victor.run(action, req.body?.input ?? {});
@@ -13285,6 +13285,7 @@ Respond with VALID JSON only:
     'customer_verified',
     'mover_nudge',
     'customer_nudge',
+    'scan_inactive_movers',
   ]);
   app.post("/api/admin/agent/riley/trigger", async (req: Request, res: Response) => {
     try {
@@ -13831,8 +13832,11 @@ Respond with VALID JSON only:
         return res.json({ ok: true, action, result });
       }
       if (action === 'recover_abandoned') {
-        if (!req.body?.bookingId) return res.status(400).json({ error: 'bookingId required' });
-        const result = await alex.run('recover_abandoned', { bookingId: String(req.body.bookingId) });
+        const bookingId = req.body?.bookingId ?? req.body?.input?.bookingId;
+        const result = await alex.run(
+          'recover_abandoned',
+          bookingId ? { bookingId: String(bookingId) } : {},
+        );
         return res.json({ ok: true, action, result });
       }
       return res.status(400).json({ error: `Unsupported action: ${action}` });
