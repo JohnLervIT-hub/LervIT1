@@ -5,11 +5,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, Lock } from "lucide-react";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, CheckCircle, Lock, User, Phone, Mail, Shield, Star, ArrowRight } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import type { PriceBreakdown } from "@shared/pricing";
 import { VOLUME_LOAD_FEE_PER_CUFT } from "@shared/pricing";
 import { useAuth } from "@/contexts/AuthContext";
+
+export interface CapturedContact {
+  name: string;
+  phone: string;
+  email: string;
+}
 
 interface PromoState {
   code: string;
@@ -27,9 +34,12 @@ interface PricingSummaryProps {
   showPromoInput?: boolean;
   appliedPromo?: PromoState | null;
   onPromoApplied?: (promo: PromoState | null) => void;
+  onContactCapture?: (contact: CapturedContact) => void | Promise<void>;
+  contactCaptured?: boolean;
+  isLoggedIn?: boolean;
 }
 
-export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showPromoInput = false, appliedPromo, onPromoApplied }: PricingSummaryProps) {
+export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showPromoInput = false, appliedPromo, onPromoApplied, onContactCapture, contactCaptured = false, isLoggedIn = false }: PricingSummaryProps) {
   const { user } = useAuth();
   const [promoInput, setPromoInput] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
@@ -182,6 +192,8 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
   const discountMultiplier = hasPromo ? (1 - appliedPromo.discountPercent / 100) : 1;
   const discountedTotal = breakdown.totalCost * discountMultiplier;
 
+  const shouldGate = !contactCaptured && !isLoggedIn && breakdown.totalCost > 0 && !!onContactCapture;
+
   return (
     <Card className={`${className} overflow-hidden`} data-testid="pricing-summary">
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
@@ -199,6 +211,11 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
       </div>
 
       <CardContent className="pt-0 space-y-4">
+        <div className={cn("relative", shouldGate && "min-h-[440px]")}>
+        <div className={cn(
+          "space-y-4 transition-all duration-500",
+          shouldGate && "blur-sm pointer-events-none select-none opacity-60"
+        )}>
         <div className="space-y-2">
           {visibleFees.map((item) => (
             <div 
@@ -331,6 +348,13 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
             </div>
           </div>
         </div>
+        </div>
+        {shouldGate && onContactCapture && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <LeadCaptureOverlay onSubmit={onContactCapture} totalCost={breakdown.totalCost} />
+          </div>
+        )}
+        </div>
 
         {hasPromo && (
           <div className="flex items-center gap-1.5 justify-center">
@@ -383,3 +407,184 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     </Card>
   );
 });
+
+function LeadCaptureOverlay({
+  onSubmit,
+  totalCost,
+}: {
+  onSubmit: (contact: CapturedContact) => void | Promise<void>;
+  totalCost: number;
+}) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const nameValid = name.trim().length > 1;
+  const phoneValid = phone.trim().length >= 10;
+  const emailValid = email.includes('@') && email.includes('.');
+  const isValid = nameValid && (phoneValid || emailValid);
+
+  const handleSubmit = useCallback(async () => {
+    if (!isValid || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      setShowSuccess(true);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await onSubmit({ name: name.trim(), phone: phone.trim(), email: email.trim() });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isValid, isSubmitting, name, phone, email, onSubmit]);
+
+  if (showSuccess) {
+    return (
+      <div
+        className="w-full bg-background/95 backdrop-blur-md rounded-xl border shadow-xl p-6 mx-2 text-center animate-in fade-in duration-300"
+        data-testid="lead-capture-success"
+      >
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-500/20 mb-2">
+          <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+        </div>
+        <p className="font-semibold text-sm">Your price is unlocked!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="w-full bg-background/95 backdrop-blur-md rounded-xl border shadow-xl p-5 mx-2 animate-in fade-in slide-in-from-bottom-2 duration-300"
+      data-testid="lead-capture-overlay"
+    >
+      <div className="text-center mb-4">
+        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mb-2">
+          <Lock className="w-5 h-5 text-primary" />
+        </div>
+        <h3 className="font-semibold text-sm">Your price is ready</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Enter your details to unlock your instant quote
+        </p>
+      </div>
+
+      <div className="bg-primary/5 rounded-lg px-4 py-2.5 mb-4 text-center">
+        <p className="text-xs text-muted-foreground">Estimated Total</p>
+        <p className="text-2xl font-bold tracking-tight filter blur-sm select-none">
+          ${totalCost.toFixed(2)}
+        </p>
+        <p className="text-xs text-muted-foreground">CAD</p>
+      </div>
+
+      <div className="space-y-2.5">
+        <div
+          className={cn(
+            "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all duration-200",
+            focused === 'name' ? "border-primary ring-1 ring-primary/20" : "border-border"
+          )}
+        >
+          <User className="w-4 h-4 text-muted-foreground shrink-0" />
+          <input
+            type="text"
+            placeholder="Full name"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onFocus={() => setFocused('name')}
+            onBlur={() => setFocused(null)}
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/60"
+            autoComplete="name"
+            data-testid="input-capture-name"
+          />
+          {nameValid && (
+            <CheckCircle className="w-4 h-4 text-green-500 shrink-0 animate-in fade-in duration-200" />
+          )}
+        </div>
+
+        <div
+          className={cn(
+            "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all duration-200",
+            focused === 'phone' ? "border-primary ring-1 ring-primary/20" : "border-border"
+          )}
+        >
+          <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+          <input
+            type="tel"
+            placeholder="Phone number (403, 587, 825)"
+            value={phone}
+            onChange={e => setPhone(e.target.value.replace(/[^\d\s\-\(\)\+]/g, ''))}
+            onFocus={() => setFocused('phone')}
+            onBlur={() => setFocused(null)}
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/60"
+            autoComplete="tel"
+            data-testid="input-capture-phone"
+          />
+          {phoneValid && (
+            <CheckCircle className="w-4 h-4 text-green-500 shrink-0 animate-in fade-in duration-200" />
+          )}
+        </div>
+
+        <div
+          className={cn(
+            "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all duration-200",
+            focused === 'email' ? "border-primary ring-1 ring-primary/20" : "border-border"
+          )}
+        >
+          <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+          <input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onFocus={() => setFocused('email')}
+            onBlur={() => setFocused(null)}
+            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/60"
+            autoComplete="email"
+            data-testid="input-capture-email"
+          />
+          {emailValid && (
+            <CheckCircle className="w-4 h-4 text-green-500 shrink-0 animate-in fade-in duration-200" />
+          )}
+        </div>
+      </div>
+
+      <Button
+        onClick={handleSubmit}
+        disabled={!isValid || isSubmitting}
+        className="w-full mt-3 gap-2 h-11 text-sm font-semibold"
+        size="lg"
+        data-testid="button-unlock-price"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Getting your price...
+          </>
+        ) : (
+          <>
+            <Zap className="w-4 h-4" />
+            Unlock My Price
+            <ArrowRight className="w-4 h-4" />
+          </>
+        )}
+      </Button>
+
+      <div className="mt-3 space-y-1.5">
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+          <Shield className="w-3 h-3 text-green-500" />
+          <span>No spam. No obligation. Cancel anytime.</span>
+        </div>
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+          <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+          <span>5.0 stars · 17 verified Google reviews</span>
+        </div>
+      </div>
+
+      <p className="text-center text-xs text-muted-foreground mt-3">
+        Already have an account?{' '}
+        <a href="/login" className="text-primary font-medium hover:underline">
+          Sign in
+        </a>
+      </p>
+    </div>
+  );
+}

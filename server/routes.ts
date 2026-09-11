@@ -13146,6 +13146,48 @@ Respond with VALID JSON only:
     }
   });
 
+  // Public quote-form capture. Called from the price-estimate overlay in
+  // RequestMove when the visitor hasn't authenticated. Creates a warm
+  // (intentScore 85) lead and hands it to Alex for immediate follow-up.
+  app.post("/api/leads/capture", async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+      const email = typeof body.email === 'string' ? body.email.trim() : '';
+      const notes = typeof body.notes === 'string' ? body.notes.trim() : '';
+
+      if (!name) return res.status(400).json({ error: 'name is required' });
+      if (!phone && !email) {
+        return res.status(400).json({ error: 'phone or email is required' });
+      }
+
+      const [row] = await db.insert(leads).values({
+        contactName: name,
+        contactEmail: email || null,
+        contactPhone: phone || null,
+        sourceChannel: 'quote_form',
+        utmSource: 'quote_form',
+        utmCampaign: 'scout-reid',
+        intentScore: 85,
+        status: 'new',
+        notes: `Quote form capture — ${notes || 'Load details step'}`,
+      }).returning({ id: leads.id });
+
+      const alexQueue = createAgentQueue(QUEUE_NAMES.CLOSER_D);
+      if (alexQueue) {
+        await alexQueue.add('convert_lead', { leadId: row.id });
+      } else {
+        logger.warn({ leadId: row.id }, '[quote_form] alex queue unavailable — lead not routed');
+      }
+
+      res.status(201).json({ ok: true, leadId: row.id });
+    } catch (err) {
+      logger.error({ err }, '[quote_form] lead capture failed');
+      res.status(500).json({ error: 'Failed to capture lead' });
+    }
+  });
+
   // Manually create a lead (admin-entered warm intro, phone call, referral, etc.).
   app.post("/api/admin/agent/leads", async (req: Request, res: Response) => {
     try {

@@ -178,6 +178,8 @@ export default function RequestMove() {
   const { toast } = useToast();
   const { track } = useAnalytics("booking_flow");
   const [step, setStep] = useState(1);
+  const [contactCaptured, setContactCaptured] = useState(false);
+  const [capturedContact, setCapturedContact] = useState<{ name: string; phone: string; email: string } | null>(null);
   // Format a Date as YYYY-MM-DDTHH:MM in the user's LOCAL timezone
   // (datetime-local inputs require local time, NOT UTC ISO strings)
   const toLocalDT = (d: Date) => {
@@ -248,6 +250,40 @@ export default function RequestMove() {
       setPromoLoading(false);
     }
   }, [promoInput]);
+
+  const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
+    try {
+      const res = await apiRequest("POST", "/api/leads/capture", {
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
+        source: 'quote_form',
+        notes: `Pickup: ${pickupAddress} → Dropoff: ${dropoffAddress}`,
+      });
+      if (res.ok) {
+        setCapturedContact(contact);
+        setContactCaptured(true);
+        try {
+          sessionStorage.setItem('lervit_contact', JSON.stringify(contact));
+        } catch {}
+      } else {
+        setContactCaptured(true);
+      }
+    } catch (err) {
+      console.error('Lead capture failed:', err);
+      setContactCaptured(true);
+    }
+  }, [pickupAddress, dropoffAddress]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('lervit_contact');
+      if (saved) {
+        setContactCaptured(true);
+        setCapturedContact(JSON.parse(saved));
+      }
+    } catch {}
+  }, []);
 
   // Step 1 interactive map — fully imperative (no @react-google-maps/api component layer)
   const { isLoaded: mapsIsLoaded, loadMaps } = useGoogleMaps();
@@ -2834,13 +2870,16 @@ export default function RequestMove() {
           {/* Right column: Live Pricing Summary + nav buttons (steps 2 & 3) */}
           {step > 1 && (
             <div className="flex flex-col gap-4 lg:sticky lg:top-20">
-              <PricingSummary 
+              <PricingSummary
                 breakdown={priceBreakdown}
                 isCalculating={isCalculatingPrice}
                 error={pricingError}
                 showPromoInput={false}
                 appliedPromo={appliedPromo}
                 onPromoApplied={setAppliedPromo}
+                contactCaptured={contactCaptured || !!user}
+                isLoggedIn={!!user}
+                onContactCapture={handleContactCapture}
               />
               <div className="flex justify-between gap-4">
                 <Button
