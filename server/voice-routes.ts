@@ -368,6 +368,11 @@ async function startFallback(call: typeof voiceCalls.$inferSelect) {
     // ring-timeout hangup landed — treat as missed, not as a fallback failure.
     if (isTelnyxCallAlreadyEndedError(error)) {
       logger.info({ callId: claimed.id }, "Call already ended before fallback — marking missed");
+      // Force terminal routing state to break retry loop even if the row is
+      // already status='missed' (markInboundMissed is a no-op in that case).
+      await db.update(voiceCalls)
+        .set({ routingState: "fallback_started", routingLeaseUntil: null, updatedAt: new Date() })
+        .where(eq(voiceCalls.id, claimed.id));
       await markInboundMissed(claimed.id);
       return;
     }
