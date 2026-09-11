@@ -15,6 +15,7 @@ import { alex } from './agents/alex';
 import { ryan } from './agents/ryan';
 import { victor } from './agents/victor';
 import { mark } from './agents/mark';
+import { kai } from './agents/kai';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -210,6 +211,33 @@ export function initBackgroundJobs() {
         logger.info({ event: 'mark_scan_active_trips', summary }, 'Mark Shaw scan complete');
       } catch (err) {
         logger.error({ err, event: 'mark_scan_active_trips' }, 'Mark Shaw scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 09:30 Calgary — Kai Bennett (RETAIN) sweeps dormant customers and
+  // enqueues winback touches. Capped at 5 contacts per run.
+  cron.schedule('30 9 * * *', async () => {
+    await withJobLock('kai_scan_customers', async () => {
+      try {
+        const result = await kai.run('scan_dormant_customers', {});
+        logger.info({ event: 'kai_scan_customers', result }, 'Kai customer scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'kai_scan_customers' }, 'Kai customer scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 09:45 Calgary — Kai Bennett (RETAIN) sweeps inactive movers and
+  // enqueues reactivation touches. Offset from customer scan so scans don't
+  // share a DB tick.
+  cron.schedule('45 9 * * *', async () => {
+    await withJobLock('kai_scan_movers', async () => {
+      try {
+        const result = await kai.run('scan_inactive_movers', {});
+        logger.info({ event: 'kai_scan_movers', result }, 'Kai mover scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'kai_scan_movers' }, 'Kai mover scan failed');
       }
     });
   }, TZ);

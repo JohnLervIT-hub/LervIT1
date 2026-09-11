@@ -3711,27 +3711,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const normalizedCode = code.trim().toUpperCase();
 
-      if (normalizedCode !== "LERVIT10") {
-        return res.status(200).json({ valid: false, message: "Invalid promo code" });
-      }
-
       const latestUser = await storage.getUser(user.id);
       if (!latestUser) {
         return res.status(200).json({ valid: false, message: "User not found" });
       }
 
-      if ((latestUser.promoUsesCount || 0) >= 1) {
-        return res.status(200).json({ valid: false, message: "You've already used this promo code on your first Move" });
+      if (normalizedCode === "LERVIT10") {
+        if ((latestUser.promoUsesCount || 0) >= 1) {
+          return res.status(200).json({ valid: false, message: "You've already used this promo code on your first Move" });
+        }
+        const usesRemaining = 1 - (latestUser.promoUsesCount || 0);
+        return res.status(200).json({
+          valid: true,
+          code: "LERVIT10",
+          discountPercent: 10,
+          usesRemaining,
+          message: `10% off applied! Valid on your first Move.`
+        });
       }
 
-      const usesRemaining = 1 - (latestUser.promoUsesCount || 0);
-      return res.status(200).json({
-        valid: true,
-        code: "LERVIT10",
-        discountPercent: 10,
-        usesRemaining,
-        message: `10% off applied! Valid on your first Move.`
-      });
+      if (normalizedCode === "KAI15") {
+        // KAI15 is a winback code — one use per customer, independent of
+        // LERVIT10 (which fires promoUsesCount for first-move discounts).
+        // Gate on prior KAI15 usage in the bookings table.
+        const [priorKai15] = await db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(bookings)
+          .where(and(eq(bookings.customerId, user.id), eq(bookings.promoCode, 'KAI15')));
+        if ((priorKai15?.n ?? 0) >= 1) {
+          return res.status(200).json({ valid: false, message: "You've already used this winback code" });
+        }
+        return res.status(200).json({
+          valid: true,
+          code: "KAI15",
+          discountPercent: 15,
+          usesRemaining: 1,
+          message: `15% off applied! Valid on your next move.`,
+        });
+      }
+
+      return res.status(200).json({ valid: false, message: "Invalid promo code" });
     } catch (error: any) {
       console.error("Promo validation error:", error);
       return res.status(500).json({ valid: false, message: "Failed to validate promo code" });
@@ -3857,6 +3876,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Stripe auto-payout gives mover 85% of discounted price
         // Balance owed = 85% of original - 85% of discounted = 85% * discountAmount
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
+      } else if (submittedPromo === "KAI15" && latestUser) {
+        // KAI15 winback — one use per customer, gated on prior KAI15 bookings
+        // rather than promoUsesCount so LERVIT10 users can still redeem it.
+        const [priorKai15] = await db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(bookings)
+          .where(and(eq(bookings.customerId, user.id), eq(bookings.promoCode, 'KAI15')));
+        if ((priorKai15?.n ?? 0) < 1) {
+          promoCode = "KAI15";
+          discountPercent = 15;
+          discountAmount = Math.round(priceBreakdown.totalCost * 0.15 * 100) / 100;
+          finalPrice = priceBreakdown.totalCost - discountAmount;
+          discountReason = `KAI15 promo - 15% off (winback)`;
+          moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
+        }
       }
       
       // Attribution — accept UTM / channel hints from body, query, or headers.
@@ -5362,6 +5396,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingBooking.promoCode === "LERVIT10") {
         discountPercent = 10;
         discountAmount = priceBreakdown.totalCost * 0.10;
+        discountReason = existingBooking.discountReason;
+        finalPrice = priceBreakdown.totalCost - discountAmount;
+        moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
+      } else if (existingBooking.promoCode === "KAI15") {
+        discountPercent = 15;
+        discountAmount = priceBreakdown.totalCost * 0.15;
         discountReason = existingBooking.discountReason;
         finalPrice = priceBreakdown.totalCost - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
@@ -13234,6 +13274,36 @@ Respond with VALID JSON only:
       res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
     } catch (err) {
       logger.error({ err }, '[Admin] riley/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ===== KAI BENNETT (RETAIN) =====
+
+  // Manually enqueue a Kai action. Scans are heavy so always run through
+  // the queue rather than in-request — matches Riley's pattern.
+  const KAI_ACTIONS = new Set([
+    'scan_dormant_customers',
+    'scan_inactive_movers',
+    'send_customer_winback',
+    'send_mover_reactivation',
+  ]);
+  app.post("/api/admin/agent/kai/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!KAI_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const kaiQueue = createAgentQueue(QUEUE_NAMES.RETAIN);
+      if (!kaiQueue) {
+        return res.status(503).json({ error: 'RETAIN queue unavailable (REDIS_URL not configured)' });
+      }
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+      const job = await kaiQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] kai/trigger: failed');
       res.status(500).json({ error: (err as Error).message });
     }
   });
