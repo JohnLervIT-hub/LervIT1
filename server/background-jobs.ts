@@ -271,6 +271,21 @@ export function initBackgroundJobs() {
     });
   }, TZ);
 
+  // Daily 11:00 Calgary — Sam Carter (SALES) checks partners at
+  // status='onboarding'. Nudges the first incomplete step if stalled >24h
+  // and queues onboarding_complete_alert when all four flags flip so John
+  // can activate.
+  cron.schedule('0 11 * * *', async () => {
+    await withJobLock('sam_check_onboarding_progress', async () => {
+      try {
+        const result = await sam.run('check_onboarding_progress', {});
+        logger.info({ event: 'sam_check_onboarding_progress', result }, 'Sam onboarding scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'sam_check_onboarding_progress' }, 'Sam onboarding scan failed');
+      }
+    });
+  }, TZ);
+
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
 
   // One-shot startup cleanup: catches any stale pending_payment / abandoned

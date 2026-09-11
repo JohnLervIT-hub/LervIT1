@@ -1,40 +1,52 @@
 /**
- * Sam Carter (SALES) — B2B outbound prospecting + stuck-partner follow-up.
+ * Sam Carter (SALES) — B2B outbound prospecting + full fleet partner
+ * onboarding.
  *
  * Actions:
- *   - `scan_b2b_prospects`     : daily Google Places sweep across five Calgary
- *                                B2B queries. Creates up to 5 new b2b leads
- *                                per run and enqueues the first touch.
- *   - `send_b2b_touch`         : one touch (T1..T4). Prefers email when the
- *                                lead has one, falls back to SMS. At T4 flips
- *                                dealStage='lost' if still at 'contacted' or
- *                                'prospect' (respects admin overrides that
- *                                advanced the deal manually).
- *   - `scan_stuck_partners`    : daily sweep of partners stuck at
- *                                status='invited' for 7+ days. Enqueues one
- *                                follow-up per partner per scan.
- *   - `send_partner_followup`  : one touch (T1..T3). T3 emits
- *                                'sales.partner_stuck' so Xavier can surface
- *                                the count in his daily brief.
- *   - `escalate_hot_lead`      : called by the admin lead-update endpoint
- *                                when dealStage transitions to 'warm', or
- *                                manually via /api/admin/agent/sam/trigger.
- *                                Fires xavier.escalate (medium severity).
+ *   - `scan_b2b_prospects`         : daily Google Places sweep across five
+ *                                    Calgary fleet queries. Creates up to 5
+ *                                    new b2b leads per run.
+ *   - `send_b2b_touch`             : one touch (T1..T4). Email-first with
+ *                                    SMS fallback. T4 flips dealStage='lost'
+ *                                    if still 'contacted'/'prospect'.
+ *   - `scan_stuck_partners`        : daily sweep of partners stuck at
+ *                                    status='invited' for 7+ days.
+ *   - `send_partner_followup`      : one touch (T1..T3). T3 emits
+ *                                    'sales.partner_stuck'.
+ *   - `escalate_hot_lead`          : Xavier escalate (medium) when dealStage
+ *                                    flips to 'warm'.
+ *   - `auto_invite_partner`        : guardrailed conversion of a 'warm' b2b
+ *                                    lead into a partner + partnerInvite +
+ *                                    invite email. Emits sales.partner_invited
+ *                                    and escalates to Xavier.
+ *   - `check_onboarding_progress`  : daily 11:00 AM sweep of partners at
+ *                                    status='onboarding'. Nudges the first
+ *                                    incomplete step (dedup: 3 days) and
+ *                                    queues onboarding_complete_alert when
+ *                                    all four flags flip.
+ *   - `onboarding_complete_alert`  : Xavier escalate (high) to John with
+ *                                    an activation CTA. Emits
+ *                                    sales.onboarding_complete.
  *
  * Emails are persona-branded ("Sam Carter | LervIT <sam.carter@lervit.com>")
  * via Resend directly, matching Alex/Riley/Kai. SMS through notificationService.
  * B2B leads created here carry sourceChannel='sam_places' and
  * assignedAgent='Sam Carter' for admin filtering.
  *
+ * partnerInvites.invitedBy is null for Sam-created invites: the FK
+ * references users.id and Sam isn't a real user. Sam-created partners carry
+ * a marker in partners.adminNotes so admins can distinguish them.
+ *
  * Corporate accounts (O&G, property mgmt, real estate) → Phase 7 corporate
  * portal. Not targeted until portal exists.
  */
 
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { randomBytes } from 'crypto';
 import { Resend } from 'resend';
 import { BaseAgent } from './base';
 import { db } from '../db';
-import { leads, partners, users, businessEvents } from '@shared/schema';
+import { leads, partners, partnerInvites, users, businessEvents } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService } from '../notifications';
 import { logger } from '../logger';
@@ -58,6 +70,22 @@ const PLACES_PER_QUERY = 20; // Places text search returns up to ~20 first-page
 
 const B2B_TOUCH_DELAYS_DAYS: Record<2 | 3 | 4, number> = { 2: 3, 3: 7, 4: 14 };
 const PARTNER_TOUCH_DELAYS_DAYS: Record<2 | 3, number> = { 2: 14, 3: 30 };
+
+// Fleet partner guardrails — a lead has to clear both to auto-invite.
+const AUTO_INVITE_MIN_RATING = 4.0;
+const AUTO_INVITE_MIN_REVIEWS = 10;
+const INVITE_TOKEN_TTL_DAYS = 7;
+const ONBOARDING_STALL_HOURS = 24;   // step incomplete this long → nudge
+const ONBOARDING_NUDGE_DEDUP_DAYS = 3; // don't renudge same step within N days
+const MAX_ONBOARDING_NUDGES_PER_RUN = 10;
+
+type OnboardingStep = 'profile' | 'coverage' | 'compliance' | 'testBooking';
+const ONBOARDING_STEP_ORDER: OnboardingStep[] = [
+  'profile',
+  'coverage',
+  'compliance',
+  'testBooking',
+];
 
 // Fleet operator queries only. Corporate accounts (property mgmt, real estate,
 // O&G, student housing, insurance) require the Phase 7 corporate portal and
@@ -84,6 +112,12 @@ interface PartnerFollowupInput {
 }
 interface EscalateHotLeadInput {
   leadId: string;
+}
+interface AutoInviteInput {
+  leadId: string;
+}
+interface OnboardingCompleteAlertInput {
+  partnerId: string;
 }
 
 interface ProspectScanResult {
@@ -119,6 +153,12 @@ export class SamAgent extends BaseAgent {
         return this.sendPartnerFollowup(input as PartnerFollowupInput);
       case 'escalate_hot_lead':
         return this.escalateHotLead(input as EscalateHotLeadInput);
+      case 'auto_invite_partner':
+        return this.autoInvitePartner(input as AutoInviteInput);
+      case 'check_onboarding_progress':
+        return this.checkOnboardingProgress();
+      case 'onboarding_complete_alert':
+        return this.onboardingCompleteAlert(input as OnboardingCompleteAlertInput);
       default:
         throw new Error(`Sam: unknown action "${action}"`);
     }
@@ -537,12 +577,485 @@ export class SamAgent extends BaseAgent {
 
     return { success: true, leadId, xavierResult };
   }
+
+  // ─── FLEET PARTNER ONBOARDING ─────────────────────────
+
+  /**
+   * Convert a 'warm' b2b lead into a fleet partner + partnerInvite. Enforces
+   * rating/reviews guardrails and dedups against existing partners + invites.
+   */
+  private async autoInvitePartner({ leadId }: AutoInviteInput) {
+    if (!leadId) throw new Error('Sam.autoInvitePartner: leadId required');
+
+    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
+    if (!lead) return { skipped: true, reason: 'lead not found', leadId };
+
+    if (lead.leadType !== 'b2b') {
+      return { skipped: true, reason: `leadType is ${lead.leadType}, need b2b`, leadId };
+    }
+    if (lead.dealStage !== 'warm') {
+      return { skipped: true, reason: `dealStage is ${lead.dealStage}, need warm`, leadId };
+    }
+    if (!lead.contactEmail) {
+      return { skipped: true, reason: 'no contactEmail', leadId };
+    }
+    if (!lead.companyName) {
+      return { skipped: true, reason: 'no companyName', leadId };
+    }
+
+    const { rating, reviewCount } = parseRatingFromNotes(lead.notes);
+    if (rating === null || rating < AUTO_INVITE_MIN_RATING) {
+      return {
+        skipped: true,
+        reason: `rating ${rating ?? 'unknown'} below ${AUTO_INVITE_MIN_RATING}`,
+        leadId,
+      };
+    }
+    if (reviewCount === null || reviewCount < AUTO_INVITE_MIN_REVIEWS) {
+      return {
+        skipped: true,
+        reason: `reviewCount ${reviewCount ?? 'unknown'} below ${AUTO_INVITE_MIN_REVIEWS}`,
+        leadId,
+      };
+    }
+
+    // Dedup: existing partner with same legal name.
+    const [existingPartner] = await db
+      .select({ id: partners.id })
+      .from(partners)
+      .where(eq(partners.legalName, lead.companyName))
+      .limit(1);
+    if (existingPartner) {
+      return { skipped: true, reason: 'partner already exists', leadId, partnerId: existingPartner.id };
+    }
+
+    // Dedup: any open invite for this email.
+    const [existingInvite] = await db
+      .select({ id: partnerInvites.id })
+      .from(partnerInvites)
+      .where(and(eq(partnerInvites.email, lead.contactEmail), isNull(partnerInvites.usedAt)))
+      .limit(1);
+    if (existingInvite) {
+      return { skipped: true, reason: 'invite already exists for email', leadId, inviteId: existingInvite.id };
+    }
+
+    const address = parseAddressFromNotes(lead.notes);
+    const adminNoteLines = [
+      'Auto-invited by Sam Carter (SALES).',
+      `Company: ${lead.companyName}`,
+      `Rating: ${rating}★ (${reviewCount} reviews)`,
+      `Industry: ${lead.industry ?? 'unknown'}`,
+      `Source lead: ${lead.id}`,
+    ];
+
+    // Create the partners row (status='invited' — flips to 'onboarding' when
+    // the invitee accepts).
+    const [partner] = await db
+      .insert(partners)
+      .values({
+        name: lead.companyName,
+        legalName: lead.companyName,
+        status: 'invited',
+        primaryOpsContact: lead.contactName ?? null,
+        primaryOpsEmail: lead.contactEmail,
+        primaryOpsPhone: lead.contactPhone ?? null,
+        phone: lead.contactPhone ?? null,
+        address: address ?? null,
+        adminNotes: adminNoteLines.join('\n'),
+      })
+      .returning();
+    if (!partner) {
+      return { skipped: true, reason: 'partner insert returned no row', leadId };
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + INVITE_TOKEN_TTL_DAYS * DAY_MS);
+
+    const [invite] = await db
+      .insert(partnerInvites)
+      .values({
+        partnerId: partner.id,
+        email: lead.contactEmail,
+        name: lead.contactName ?? null,
+        role: 'partner_admin',
+        token,
+        expiresAt,
+        invitedBy: null, // Sam is a system agent — no users.id row
+      })
+      .returning();
+
+    const activationUrl = `${APP_BASE_URL}/partner/activate?token=${token}`;
+    const { subject, html } = partnerInviteEmail({
+      companyName: lead.companyName,
+      contactName: lead.contactName,
+      activationUrl,
+    });
+    const emailSent = await sendSamEmail(lead.contactEmail, subject, html);
+
+    await db
+      .update(leads)
+      .set({
+        dealStage: 'invited',
+        status: 'contacted',
+        touchpoints: (lead.touchpoints ?? 0) + 1,
+        lastTouchedAt: new Date(),
+        lastContactedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(leads.id, leadId));
+
+    await emitEvent('sales.partner_invited', 'partner', partner.id, {
+      agentName: this.name,
+      leadId,
+      partnerId: partner.id,
+      company: lead.companyName,
+      rating,
+      reviewCount,
+      inviteEmail: lead.contactEmail,
+      emailSent,
+    });
+
+    // Xavier escalation — Craft describes what happened; Claude composes the
+    // outbound SMS. Severity 'medium' so we don't wake John up.
+    let xavierResult: any = null;
+    try {
+      xavierResult = await xavier.run('escalate', {
+        issue:
+          `Sam invited ${lead.companyName} as fleet partner. ` +
+          `Guardrails: ${rating}★, ${reviewCount} reviews. ` +
+          `Activate when onboarding complete.`,
+        severity: 'medium',
+        agentName: this.name,
+        data: {
+          leadId,
+          partnerId: partner.id,
+          inviteId: invite?.id,
+          company: lead.companyName,
+          rating,
+          reviewCount,
+          contactName: lead.contactName,
+          contactEmail: lead.contactEmail,
+          contactPhone: lead.contactPhone,
+        },
+      });
+    } catch (err) {
+      logger.error({ err, leadId, partnerId: partner.id }, 'Sam: Xavier escalate (invite) failed');
+    }
+
+    logger.info(
+      { leadId, partnerId: partner.id, emailSent },
+      'Sam: fleet partner auto-invited',
+    );
+
+    return {
+      success: true,
+      leadId,
+      partnerId: partner.id,
+      inviteId: invite?.id,
+      emailSent,
+      xavierSmsSent: !!xavierResult?.smsSent,
+    };
+  }
+
+  /**
+   * Sweep partners at status='onboarding'. Nudge the first incomplete step
+   * if it has been stalled >24h; queue onboarding_complete_alert when all
+   * four flags flip. Dedups nudges per (partner, step) via businessEvents.
+   */
+  private async checkOnboardingProgress() {
+    const result = {
+      scanned: 0,
+      nudged: 0,
+      completed: 0,
+      skipped: 0,
+    };
+
+    const onboarding = await db
+      .select()
+      .from(partners)
+      .where(eq(partners.status, 'onboarding'));
+    result.scanned = onboarding.length;
+
+    const queue = createAgentQueue(QUEUE_NAMES.SALES);
+    if (!queue && onboarding.length > 0) {
+      logger.warn('Sam: SALES queue unavailable — onboarding scan cannot enqueue');
+    }
+
+    for (const p of onboarding) {
+      if (result.nudged >= MAX_ONBOARDING_NUDGES_PER_RUN) {
+        result.skipped++;
+        continue;
+      }
+
+      const stepFlags: Record<OnboardingStep, boolean> = {
+        profile: p.profileComplete,
+        coverage: p.coverageComplete,
+        compliance: p.complianceComplete,
+        testBooking: p.testBookingComplete,
+      };
+      const allComplete = ONBOARDING_STEP_ORDER.every(s => stepFlags[s]);
+
+      if (allComplete) {
+        // Dedup so we only queue the alert once per partner.
+        const [prior] = await db
+          .select({ id: businessEvents.id })
+          .from(businessEvents)
+          .where(
+            and(
+              eq(businessEvents.eventType, 'sales.onboarding_complete'),
+              eq(businessEvents.entityId, p.id),
+            ),
+          )
+          .limit(1);
+        if (prior) {
+          result.skipped++;
+          continue;
+        }
+        if (queue) {
+          try {
+            await queue.add('onboarding_complete_alert', { partnerId: p.id });
+            result.completed++;
+          } catch (err) {
+            logger.error({ err, partnerId: p.id }, 'Sam: failed to queue onboarding_complete_alert');
+          }
+        }
+        continue;
+      }
+
+      // Only nudge if the partner hasn't touched their record in >24h — a
+      // rough proxy for "this step has been sitting". Reset by any admin or
+      // partner update.
+      const hoursSinceUpdate = (Date.now() - new Date(p.updatedAt).getTime()) / (60 * 60 * 1000);
+      if (hoursSinceUpdate < ONBOARDING_STALL_HOURS) {
+        result.skipped++;
+        continue;
+      }
+
+      const nextStep = ONBOARDING_STEP_ORDER.find(s => !stepFlags[s]);
+      if (!nextStep) {
+        result.skipped++;
+        continue;
+      }
+
+      // Dedup: skip if we already nudged this partner on this step recently.
+      const cutoff = new Date(Date.now() - ONBOARDING_NUDGE_DEDUP_DAYS * DAY_MS);
+      const recent = await db.execute(sql`
+        SELECT id FROM business_events
+        WHERE entity_type = 'partner'
+          AND entity_id = ${p.id}
+          AND event_type = 'sales.onboarding_nudge'
+          AND created_at > ${cutoff}
+          AND payload->>'step' = ${nextStep}
+        LIMIT 1
+      `);
+      if ((recent.rows ?? []).length > 0) {
+        result.skipped++;
+        continue;
+      }
+
+      const toEmail = p.primaryOpsEmail || p.billingEmail;
+      if (!toEmail) {
+        result.skipped++;
+        continue;
+      }
+
+      const activationLink = `${APP_BASE_URL}/partner`;
+      const { subject, html } = onboardingNudgeEmail({
+        partnerName: p.name,
+        contactName: p.primaryOpsContact,
+        step: nextStep,
+        activationLink,
+      });
+      const emailSent = await sendSamEmail(toEmail, subject, html);
+
+      await emitEvent('sales.onboarding_nudge', 'partner', p.id, {
+        agentName: this.name,
+        step: nextStep,
+        emailSent,
+      });
+      result.nudged++;
+    }
+
+    logger.info({ result }, 'Sam: onboarding progress scan complete');
+    return result;
+  }
+
+  /**
+   * Fires once per partner when all four onboarding flags are set. Sends
+   * a high-severity Xavier alert to John so he can activate the partner.
+   */
+  private async onboardingCompleteAlert({ partnerId }: OnboardingCompleteAlertInput) {
+    if (!partnerId) throw new Error('Sam.onboardingCompleteAlert: partnerId required');
+
+    const [partner] = await db
+      .select()
+      .from(partners)
+      .where(eq(partners.id, partnerId))
+      .limit(1);
+    if (!partner) return { skipped: true, reason: 'partner not found', partnerId };
+
+    // Idempotency guard — if the event already fired, don't double-alert.
+    const [prior] = await db
+      .select({ id: businessEvents.id })
+      .from(businessEvents)
+      .where(
+        and(
+          eq(businessEvents.eventType, 'sales.onboarding_complete'),
+          eq(businessEvents.entityId, partnerId),
+        ),
+      )
+      .limit(1);
+    if (prior) {
+      return { skipped: true, reason: 'already alerted', partnerId };
+    }
+
+    // Pull rating/reviews from the partner's admin notes, which Sam wrote at
+    // invite time.
+    const { rating, reviewCount } = parseRatingFromNotes(partner.adminNotes);
+    const activateUrl = `${APP_BASE_URL}/admin/partners`;
+
+    let xavierResult: any = null;
+    try {
+      xavierResult = await xavier.run('escalate', {
+        issue:
+          `${partner.name} completed fleet onboarding. ` +
+          (rating !== null
+            ? `Rating: ${rating}★ (${reviewCount ?? 0} reviews). `
+            : '') +
+          `Ready to activate: ${activateUrl}`,
+        severity: 'high',
+        agentName: this.name,
+        data: {
+          partnerId,
+          partnerName: partner.name,
+          rating,
+          reviewCount,
+          activateUrl,
+        },
+      });
+    } catch (err) {
+      logger.error({ err, partnerId }, 'Sam: Xavier escalate (onboarding_complete) failed');
+    }
+
+    await emitEvent('sales.onboarding_complete', 'partner', partnerId, {
+      agentName: this.name,
+      partnerName: partner.name,
+      rating,
+      reviewCount,
+      xavierSmsSent: !!xavierResult?.smsSent,
+    });
+
+    return { success: true, partnerId, xavierSmsSent: !!xavierResult?.smsSent };
+  }
 }
 
 // ─── copy builders ────────────────────────────────────────
 
 function firstName(fullName: string | null | undefined): string {
   return fullName?.split(' ')[0] ?? 'there';
+}
+
+function parseRatingFromNotes(notes: string | null | undefined): {
+  rating: number | null;
+  reviewCount: number | null;
+} {
+  if (!notes) return { rating: null, reviewCount: null };
+  const match = notes.match(/Rating:\s*([\d.]+)★\s*\((\d+)\s*reviews?\)/i);
+  if (!match) return { rating: null, reviewCount: null };
+  const rating = Number.parseFloat(match[1]);
+  const reviewCount = Number.parseInt(match[2], 10);
+  return {
+    rating: Number.isFinite(rating) ? rating : null,
+    reviewCount: Number.isFinite(reviewCount) ? reviewCount : null,
+  };
+}
+
+function parseAddressFromNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const match = notes.match(/^Address:\s*(.+)$/m);
+  return match ? match[1].trim() : null;
+}
+
+function partnerInviteEmail(args: {
+  companyName: string;
+  contactName: string | null;
+  activationUrl: string;
+}): { subject: string; html: string } {
+  const first = firstName(args.contactName);
+  return {
+    subject: `Your LervIT fleet partner account is ready`,
+    html: `<p>Hi ${first},</p>
+      <p>Welcome to LervIT — we've set up a fleet partner account for <strong>${args.companyName}</strong> and you're four steps away from receiving live booking traffic in Calgary.</p>
+      <p><strong>Setup takes about 30 minutes:</strong></p>
+      <ol>
+        <li>Profile — company details and dispatch contacts</li>
+        <li>Coverage — service zones and vehicle classes</li>
+        <li>Compliance — insurance, cargo liability, business registration</li>
+        <li>Test booking — one end-to-end dispatch to confirm you're ready</li>
+      </ol>
+      <p><strong>Once you're live:</strong></p>
+      <ul>
+        <li>Bring your drivers, we send the jobs</li>
+        <li>85% payout per job via Stripe Connect</li>
+        <li>Custom dispatch dashboard</li>
+        <li>BNPL for your customers at checkout</li>
+        <li>Free to join — no CapEx</li>
+      </ul>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${args.activationUrl}" style="background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Start Setup →</a>
+      </p>
+      <p style="font-size:13px;color:#666;">If the button doesn't work, paste this into your browser:<br/><a href="${args.activationUrl}">${args.activationUrl}</a></p>
+      <p>Reply to this email if you get stuck — I'll help personally.</p>
+      <p>Sam Carter<br/>LervIT Partnerships</p>`,
+  };
+}
+
+const ONBOARDING_STEP_COPY: Record<OnboardingStep, {
+  index: number;
+  label: string;
+  todo: string;
+}> = {
+  profile: {
+    index: 1,
+    label: 'Profile',
+    todo: 'company details and dispatch contacts',
+  },
+  coverage: {
+    index: 2,
+    label: 'Coverage',
+    todo: 'your service zones and vehicle classes',
+  },
+  compliance: {
+    index: 3,
+    label: 'Compliance',
+    todo: 'insurance certificate, cargo liability, and business registration',
+  },
+  testBooking: {
+    index: 4,
+    label: 'Test Booking',
+    todo: 'one end-to-end dispatch to confirm you\'re ready to receive live jobs',
+  },
+};
+
+function onboardingNudgeEmail(args: {
+  partnerName: string;
+  contactName: string | null;
+  step: OnboardingStep;
+  activationLink: string;
+}): { subject: string; html: string } {
+  const first = firstName(args.contactName);
+  const copy = ONBOARDING_STEP_COPY[args.step];
+  return {
+    subject: `Step ${copy.index} of 4 — finish your LervIT ${copy.label.toLowerCase()} setup`,
+    html: `<p>Hi ${first},</p>
+      <p>You're on <strong>Step ${copy.index}: ${copy.label}</strong> — the last thing between ${args.partnerName} and live booking traffic on LervIT. Here's how to complete it in about 2 minutes:</p>
+      <p><strong>Step ${copy.index} — ${copy.label}:</strong> add ${copy.todo}.</p>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${args.activationLink}" style="background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Continue Setup →</a>
+      </p>
+      <p>If anything is blocking you — a doc you can't find, a coverage zone that doesn't fit — reply to this email and I'll unblock it personally.</p>
+      <p>Sam Carter<br/>LervIT Partnerships</p>`,
+  };
 }
 
 function formatProspectNotes(c: {

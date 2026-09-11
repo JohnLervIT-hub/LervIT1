@@ -13316,6 +13316,9 @@ Respond with VALID JSON only:
     'send_b2b_touch',
     'send_partner_followup',
     'escalate_hot_lead',
+    'auto_invite_partner',
+    'check_onboarding_progress',
+    'onboarding_complete_alert',
   ]);
 
   // Manually enqueue a Sam action. Scans + touches always run through the
