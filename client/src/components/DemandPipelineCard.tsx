@@ -72,11 +72,8 @@ export function DemandPipelineCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <AgentAvatar agentKey="scout-reid" size="sm" />
-              Demand Pipeline
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="alex-morgan" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Scout Reid crawls daily at 07:00 · Alex Morgan sequences touches over 72h
             </CardDescription>
           </div>

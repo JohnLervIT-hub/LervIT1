@@ -91,7 +91,7 @@ export const AGENT_PROFILES: Record<string, {
   'sam-carter': {
     name: 'Sam Carter',
     code: 'SALES',
-    role: 'B2B Sales',
+    role: 'B2B Fleet Sales',
     email: 'sam.carter@lervit.com',
     avatar: '/avatars/sam-carter.png',
     color: '#059669',
@@ -136,10 +136,10 @@ export const AGENT_PROFILES: Record<string, {
 };
 
 export const DEFAULT_AVATAR = (name: string) =>
-  `https://api.dicebear.com/7.x/personas/png?seed=${encodeURIComponent(name.replace(/\s+/g, ''))}&size=200`;
+  `https://api.dicebear.com/7.x/initials/png?seed=${encodeURIComponent(name)}&size=200&backgroundColor=1e293b&textColor=94a3b8`;
 
 export const getAgentAvatar = (agentKey: string): string => {
   const profile = AGENT_PROFILES[agentKey];
-  if (!profile) return DEFAULT_AVATAR(agentKey);
+  if (!profile?.avatar) return DEFAULT_AVATAR(agentKey);
   return profile.avatar;
 };

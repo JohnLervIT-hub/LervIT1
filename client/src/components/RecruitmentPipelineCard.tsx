@@ -73,11 +73,8 @@ export function RecruitmentPipelineCard() {
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <AgentAvatar agentKey="ryan-brooks" size="sm" />
-              Recruitment Pipeline
-            </CardTitle>
-            <CardDescription>
+            <AgentAvatar agentKey="jordan-hayes" size="md" showName showRole />
+            <CardDescription className="mt-1.5">
               Ryan Brooks crawls daily at 07:00 · Jordan Hayes sequences 4 touches over 72h
             </CardDescription>
           </div>

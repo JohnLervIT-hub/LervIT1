@@ -9,7 +9,7 @@ interface AgentAvatarProps {
   className?: string;
 }
 
-const sizeClasses = {
+const sizes = {
   sm: 'w-8 h-8',
   md: 'w-10 h-10',
   lg: 'w-14 h-14',
@@ -24,12 +24,12 @@ export function AgentAvatar({
 }: AgentAvatarProps) {
   const profile = AGENT_PROFILES[agentKey];
   const name = profile?.name ?? agentKey;
-  const avatar = profile?.avatar ?? DEFAULT_AVATAR(name);
+  const src = profile?.avatar ?? DEFAULT_AVATAR(name);
 
   return (
     <div className={cn('flex items-center gap-2.5', className)}>
       <img
-        src={avatar}
+        src={src}
         alt={name}
         onError={(e) => {
           const img = e.currentTarget;
@@ -37,18 +37,18 @@ export function AgentAvatar({
           if (img.src !== fallback) img.src = fallback;
         }}
         className={cn(
-          sizeClasses[size],
-          'rounded-full object-cover',
-          'ring-2 ring-background shadow-sm',
+          sizes[size],
+          'rounded-full object-cover object-top',
+          'ring-2 ring-background shadow-sm flex-shrink-0',
         )}
       />
       {(showName || showRole) && (
-        <div>
+        <div className="min-w-0">
           {showName && (
-            <p className="text-sm font-semibold leading-tight">{name}</p>
+            <p className="text-sm font-semibold leading-tight truncate">{name}</p>
           )}
           {showRole && profile?.role && (
-            <p className="text-xs text-muted-foreground">{profile.role}</p>
+            <p className="text-xs text-muted-foreground truncate">{profile.role}</p>
           )}
         </div>
       )}

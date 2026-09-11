@@ -371,13 +371,17 @@ async function sendAlexEmail(to: string, subject: string, body: string): Promise
     .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
     .join('');
   const appBase = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
-  const header = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee;">
-    <img src="${appBase}/avatars/alex-morgan.png" width="44" height="44" style="border-radius:50%;object-fit:cover;border:2px solid #e2e8f0;" alt="Alex Morgan" />
-    <div>
-      <p style="margin:0;font-weight:600;font-size:15px;color:#1a1a1a;">Alex Morgan</p>
-      <p style="margin:0;color:#64748b;font-size:13px;">Moving Specialist · LervIT Calgary</p>
-    </div>
-  </div>`;
+  const header = `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">
+    <tr>
+      <td width="52" valign="middle">
+        <img src="${appBase}/avatars/alex-morgan.png" width="44" height="44" style="border-radius:50%;object-fit:cover;display:block;" alt="Alex Morgan" />
+      </td>
+      <td valign="middle" style="padding-left:12px;">
+        <div style="font-weight:600;font-size:15px;color:#1a1a1a;line-height:1.2;">Alex Morgan</div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">Moving Specialist · LervIT Calgary</div>
+      </td>
+    </tr>
+  </table>`;
   const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
     ${header}
     ${paragraphs}

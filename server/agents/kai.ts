@@ -458,13 +458,17 @@ async function sendKaiEmail(to: string, subject: string, innerHtml: string): Pro
     logger.warn('Kai: RESEND_API_KEY not set — email skipped');
     return false;
   }
-  const header = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee;">
-    <img src="${APP_BASE_URL}/avatars/kai-bennett.png" width="44" height="44" style="border-radius:50%;object-fit:cover;border:2px solid #e2e8f0;" alt="Kai Bennett" />
-    <div>
-      <p style="margin:0;font-weight:600;font-size:15px;color:#1a1a1a;">Kai Bennett</p>
-      <p style="margin:0;color:#64748b;font-size:13px;">Retention Specialist · LervIT Calgary</p>
-    </div>
-  </div>`;
+  const header = `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">
+    <tr>
+      <td width="52" valign="middle">
+        <img src="${APP_BASE_URL}/avatars/kai-bennett.png" width="44" height="44" style="border-radius:50%;object-fit:cover;display:block;" alt="Kai Bennett" />
+      </td>
+      <td valign="middle" style="padding-left:12px;">
+        <div style="font-weight:600;font-size:15px;color:#1a1a1a;line-height:1.2;">Kai Bennett</div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">Retention Specialist · LervIT Calgary</div>
+      </td>
+    </tr>
+  </table>`;
   const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
     ${header}
     ${innerHtml}
