@@ -13203,6 +13203,30 @@ Respond with VALID JSON only:
     }
   });
 
+  // Victor dispatch stats — today's dispatched + escalated counts.
+  app.get("/api/admin/agent/victor/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const rows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE event_type = 'dispatch.dispatched')            ::int AS dispatched_today,
+          COUNT(*) FILTER (WHERE event_type = 'dispatch.escalated_no_movers')   ::int AS escalations_today
+        FROM business_events
+        WHERE created_at >= date_trunc('day', now())
+          AND event_type IN ('dispatch.dispatched', 'dispatch.escalated_no_movers')
+      `);
+      const r = (rows as any).rows?.[0] ?? { dispatched_today: 0, escalations_today: 0 };
+      res.json({
+        dispatchedToday: r.dispatched_today ?? 0,
+        escalationsToday: r.escalations_today ?? 0,
+        avgDispatchMinutes: null,
+      });
+    } catch (err) {
+      logger.error({ err }, '[Admin] victor/stats failed');
+      res.status(500).json({ error: 'Failed to load Victor stats' });
+    }
+  });
+
   // ===== MARK SHAW (PULSE) =====
 
   // Recent PULSE alerts from business_events (all pulse.* types, newest first).
@@ -13278,6 +13302,35 @@ Respond with VALID JSON only:
     }
   });
 
+  // Riley onboarding stats — last 7 days.
+  app.get("/api/admin/agent/riley/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const rows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE event_type = 'riley.mover_verified')                        ::int AS movers_verified,
+          COUNT(*) FILTER (WHERE event_type = 'riley.customer_verified')                     ::int AS customers_verified,
+          COUNT(*) FILTER (WHERE event_type IN ('riley.mover_nudge','riley.customer_nudge')) ::int AS nudges_sent,
+          COUNT(*) FILTER (WHERE event_type = 'riley.stripe_connected')                      ::int AS stripe_connected
+        FROM business_events
+        WHERE created_at >= ${since}
+          AND event_type LIKE 'riley.%'
+      `);
+      const r = (rows as any).rows?.[0] ?? {};
+      res.json({
+        moversVerified: r.movers_verified ?? 0,
+        customersVerified: r.customers_verified ?? 0,
+        nudgesSent: r.nudges_sent ?? 0,
+        stripeConnected: r.stripe_connected ?? 0,
+        period: '7 days',
+      });
+    } catch (err) {
+      logger.error({ err }, '[Admin] riley/stats failed');
+      res.status(500).json({ error: 'Failed to load Riley stats' });
+    }
+  });
+
   // ===== KAI BENNETT (RETAIN) =====
 
   // Manually enqueue a Kai action. Scans are heavy so always run through
@@ -13305,6 +13358,39 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] kai/trigger: failed');
       res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // Kai retention stats — last 7 days.
+  app.get("/api/admin/agent/kai/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const eventRows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE event_type LIKE 'kai.customer_winback%')       ::int AS customers_contacted,
+          COUNT(*) FILTER (WHERE event_type LIKE 'kai.mover_reactivation%')     ::int AS movers_reactivated
+        FROM business_events
+        WHERE created_at >= ${since}
+          AND event_type LIKE 'kai.%'
+      `);
+      const e = (eventRows as any).rows?.[0] ?? {};
+      const redemptionRows = await db.execute(sql`
+        SELECT COUNT(*)::int AS redemptions
+        FROM bookings
+        WHERE promo_code = 'KAI15'
+          AND created_at >= ${since}
+      `);
+      const kai15 = (redemptionRows as any).rows?.[0]?.redemptions ?? 0;
+      res.json({
+        customersContacted: e.customers_contacted ?? 0,
+        moversReactivated: e.movers_reactivated ?? 0,
+        kai15Redemptions: kai15,
+        period: '7 days',
+      });
+    } catch (err) {
+      logger.error({ err }, '[Admin] kai/stats failed');
+      res.status(500).json({ error: 'Failed to load Kai stats' });
     }
   });
 

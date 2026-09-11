@@ -66,6 +66,11 @@ export class RileyAgent extends BaseAgent {
   readonly model = RILEY_MODEL;
 
   protected async execute(action: string, input: Record<string, any>): Promise<any> {
+    // Dev/test dry-run: admin dashboard "Test Mover" uses moverId/userId = 'test'.
+    // Short-circuit so no real DB lookups or emails fire.
+    if (input?.moverId === 'test' || input?.userId === 'test') {
+      return { skipped: true, reason: 'test dry run', action };
+    }
     switch (action) {
       case 'mover_verified':
         return this.onMoverVerified(input as MoverVerifiedInput);

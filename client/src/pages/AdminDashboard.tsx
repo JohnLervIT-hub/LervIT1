@@ -5,6 +5,11 @@ const OperationsDashboard = lazy(() => import("@/pages/OperationsDashboard"));
 import { XavierBriefCard } from "@/components/XavierBriefCard";
 import { DemandPipelineCard } from "@/components/DemandPipelineCard";
 import { RecruitmentPipelineCard } from "@/components/RecruitmentPipelineCard";
+import { VictorNashCard } from "@/components/VictorNashCard";
+import { MarkShawCard } from "@/components/MarkShawCard";
+import { RileyMorganCard } from "@/components/RileyMorganCard";
+import { KaiBennettCard } from "@/components/KaiBennettCard";
+import { SamCarterCard } from "@/components/SamCarterCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1245,9 +1250,29 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="apex" className="space-y-4 mt-4">
-            <DemandPipelineCard />
-            <RecruitmentPipelineCard />
+            {/* Xavier at top — command center */}
             <XavierBriefCard />
+
+            {/* Demand + Supply row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <DemandPipelineCard />
+              <RecruitmentPipelineCard />
+            </div>
+
+            {/* Operations row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <VictorNashCard />
+              <MarkShawCard />
+            </div>
+
+            {/* Lifecycle row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RileyMorganCard />
+              <KaiBennettCard />
+            </div>
+
+            {/* Sales — full width */}
+            <SamCarterCard />
           </TabsContent>
 
         </Tabs>
