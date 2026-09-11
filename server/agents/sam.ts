@@ -25,6 +25,9 @@
  * via Resend directly, matching Alex/Riley/Kai. SMS through notificationService.
  * B2B leads created here carry sourceChannel='sam_places' and
  * assignedAgent='Sam Carter' for admin filtering.
+ *
+ * Corporate accounts (O&G, property mgmt, real estate) → Phase 7 corporate
+ * portal. Not targeted until portal exists.
  */
 
 import { and, eq, gte, sql } from 'drizzle-orm';
@@ -56,12 +59,15 @@ const PLACES_PER_QUERY = 20; // Places text search returns up to ~20 first-page
 const B2B_TOUCH_DELAYS_DAYS: Record<2 | 3 | 4, number> = { 2: 3, 3: 7, 4: 14 };
 const PARTNER_TOUCH_DELAYS_DAYS: Record<2 | 3, number> = { 2: 14, 3: 30 };
 
+// Fleet operator queries only. Corporate accounts (property mgmt, real estate,
+// O&G, student housing, insurance) require the Phase 7 corporate portal and
+// are intentionally excluded until that ships.
 const PROSPECT_QUERIES: Array<{ query: string; industry: string; source: string }> = [
-  { query: 'property management calgary',    industry: 'property_management', source: 'sam_places_property_mgmt' },
-  { query: 'real estate brokerage calgary',  industry: 'real_estate',         source: 'sam_places_real_estate' },
-  { query: 'corporate relocation calgary',   industry: 'corporate',           source: 'sam_places_corporate' },
-  { query: 'moving company calgary',         industry: 'moving_company',      source: 'sam_places_moving_co' },
-  { query: 'student housing calgary',        industry: 'university',          source: 'sam_places_student_housing' },
+  { query: 'moving company calgary',      industry: 'moving_company',   source: 'sam_places_moving_co' },
+  { query: 'delivery company calgary',    industry: 'delivery_company', source: 'sam_places_delivery_co' },
+  { query: 'logistics company calgary',   industry: 'logistics',        source: 'sam_places_logistics' },
+  { query: 'courier service calgary',     industry: 'courier',          source: 'sam_places_courier' },
+  { query: 'truck rental calgary',        industry: 'logistics',        source: 'sam_places_truck_rental' },
 ];
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -531,68 +537,53 @@ function firstName(fullName: string | null | undefined): string {
 
 function industryLabel(industry: string): string {
   switch (industry) {
-    case 'property_management': return 'property management team';
-    case 'real_estate':         return 'brokerage';
-    case 'corporate':           return 'corporate relocation team';
-    case 'university':          return 'student housing operation';
-    case 'moving_company':      return 'moving company';
-    case 'insurance':           return 'claims team';
-    default:                    return 'team';
+    case 'moving_company':   return 'moving company';
+    case 'delivery_company': return 'delivery company';
+    case 'logistics':        return 'logistics company';
+    case 'courier':          return 'courier service';
+    default:                 return 'fleet operator';
   }
 }
 
-function industryHook(industry: string): string {
-  switch (industry) {
-    case 'property_management':
-      return 'Tenants moving in and out generate a constant stream of coordination work. LervIT gives your team one dashboard for every move — instant AI quotes, verified Calgary movers, real-time status.';
-    case 'real_estate':
-      return 'Closing a home is smoother when the movers are already booked. LervIT lets your agents drop a listing into a quote in 30 seconds and hand a booking confirmation to the client at close.';
-    case 'corporate':
-      return 'Employee relocations are painful when procurement has to negotiate every move. LervIT gives HR a preferred rate on demand — instant AI quote, transparent pricing, one invoice per quarter.';
-    case 'university':
-      return 'Move-in / move-out weeks are chaos. LervIT dispatches verified Calgary movers to student housing at scale, with a single point of contact for your ops team.';
-    case 'moving_company':
-      return 'LervIT is bookings, dispatch, GPS, and Stripe Connect payouts in one platform — free to integrate. You keep 85% of every job we send you, no CapEx.';
-    case 'insurance':
-      return 'Displaced-family placements move faster when the mover is one click away. LervIT gives claims teams a standing rate with same-day availability.';
-    default:
-      return 'LervIT is Calgary\'s AI-powered moving platform — instant quotes, verified movers, transparent pricing.';
-  }
-}
+const FLEET_PITCH_BULLETS = `<ul>
+  <li>Bring your drivers, we send the jobs</li>
+  <li>Custom dispatch dashboard</li>
+  <li>85% payout per job</li>
+  <li>BNPL for your customers</li>
+  <li>Free to join</li>
+</ul>`;
 
 function b2bEmailContent(companyLabel: string, industry: string, touchNumber: number): { subject: string; html: string } {
+  const first = firstName(companyLabel);
+  const label = industryLabel(industry);
   switch (touchNumber) {
     case 1:
       return {
-        subject: `Quick idea for ${companyLabel}`,
-        html: `<p>Hi ${firstName(companyLabel)},</p>
-          <p>I'm Sam Carter at LervIT — Calgary's AI-powered moving platform. I'm reaching out because ${industryHook(industry)}</p>
-          <p>A few things worth knowing:</p>
-          <ul>
-            <li>Instant AI-generated quotes from a photo of the load</li>
-            <li>Verified Calgary movers with GPS-tracked jobs</li>
-            <li>Stripe Connect payouts + BNPL (Afterpay / Klarna) at customer checkout</li>
-            <li>Custom platform-fee rate for high-volume ${industryLabel(industry)}s</li>
-          </ul>
-          <p>Would a 15-minute call this week make sense? Reply with a time or book directly: <a href="${APP_BASE_URL}/partners">${APP_BASE_URL}/partners</a></p>
+        subject: `Join LervIT as a fleet partner`,
+        html: `<p>Hi ${first},</p>
+          <p>I'm Sam Carter at LervIT — Calgary's AI-powered moving platform. We're looking for Calgary ${label}s to run jobs on our platform as fleet partners.</p>
+          <p><strong>Join LervIT as a fleet partner:</strong></p>
+          ${FLEET_PITCH_BULLETS}
+          <p>Would a 15-minute call this week make sense? Reply with a time or start here: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a></p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
     case 3:
       return {
-        subject: `How a ${industryLabel(industry)} in Calgary uses LervIT`,
-        html: `<p>Hi ${firstName(companyLabel)},</p>
-          <p>Circling back briefly — a Calgary ${industryLabel(industry)} we work with cut their move coordination time roughly in half by handing quoting + dispatch to LervIT.</p>
-          <p>The short version: one dashboard, verified movers, transparent per-move pricing, weekly or per-move invoicing. Setup is measured in days, not months.</p>
-          <p>If it's worth a look, here's the partner portal: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a> — or reply here and I'll walk you through it live.</p>
+        subject: `Bookings ready for your fleet — LervIT`,
+        html: `<p>Hi ${first},</p>
+          <p>Circling back — LervIT sends booking jobs to Calgary fleet partners, and I still think ${companyLabel} would be a strong fit.</p>
+          <p><strong>What you get as a fleet partner:</strong></p>
+          ${FLEET_PITCH_BULLETS}
+          <p>Partner portal: <a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a> — or reply here and I'll walk you through it live.</p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
     case 4:
     default:
       return {
         subject: `Closing the loop — LervIT for ${companyLabel}`,
-        html: `<p>Hi ${firstName(companyLabel)},</p>
+        html: `<p>Hi ${first},</p>
           <p>I don't want to keep landing in your inbox uninvited, so this is my last note.</p>
-          <p>If move-coordination volume ever becomes a headache, we're the platform Calgary ${industryLabel(industry)}s reach for. The partner portal (<a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a>) has everything, and I'm at ${SAM_EMAIL} whenever it makes sense.</p>
+          <p>If bringing your fleet onto a booking platform ever makes sense — bring your drivers, we send the jobs, 85% payout per job, BNPL for your customers, free to join. The partner portal (<a href="${PARTNERS_PORTAL_URL}">${PARTNERS_PORTAL_URL}</a>) has everything, and I'm at ${SAM_EMAIL} whenever it makes sense.</p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
   }
@@ -600,16 +591,17 @@ function b2bEmailContent(companyLabel: string, industry: string, touchNumber: nu
 
 function b2bSmsText(companyLabel: string, industry: string, touchNumber: number): string {
   const first = firstName(companyLabel);
+  const label = industryLabel(industry);
   switch (touchNumber) {
     case 1:
-      return `Hi ${first}, Sam from LervIT. We help Calgary ${industryLabel(industry)}s handle move coordination — instant AI quotes, verified movers. 15-min call this week? ${PARTNERS_PORTAL_URL}`;
+      return `Hi ${first}, Sam from LervIT. Join as a fleet partner — bring your drivers, we send jobs, 85% payout, BNPL for customers, free to join. ${PARTNERS_PORTAL_URL}`;
     case 2:
-      return `Hi ${first}, Sam from LervIT following up. Did the note about our moving platform for ${industryLabel(industry)}s land? Happy to walk through it: ${PARTNERS_PORTAL_URL}`;
+      return `Hi ${first}, Sam from LervIT following up. LervIT sends booking jobs to Calgary ${label}s — 85% payout, free to join. Interested? ${PARTNERS_PORTAL_URL}`;
     case 3:
-      return `Hi ${first}, Sam from LervIT. Wrapping up my outreach — Calgary ${industryLabel(industry)}s save real time on move coordination via LervIT. Interested? ${PARTNERS_PORTAL_URL}`;
+      return `Hi ${first}, Sam from LervIT. Wrapping up — fleet partners bring drivers, we send jobs, 85% payout, BNPL at checkout. Worth a look? ${PARTNERS_PORTAL_URL}`;
     case 4:
     default:
-      return `Hi ${first}, last note from Sam at LervIT. If move coordination ever gets painful, the partner portal is at ${PARTNERS_PORTAL_URL}. Thanks for your time.`;
+      return `Hi ${first}, last note from Sam at LervIT. If bringing your fleet onto a booking platform makes sense: ${PARTNERS_PORTAL_URL}. Thanks.`;
   }
 }
 
