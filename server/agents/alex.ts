@@ -163,8 +163,12 @@ Write a conversion email. Include:
       channel = 'sms';
       const smsBody = await this.callClaude(
         `You are Alex from LervIT, a Calgary moving platform.
-Write a brief, friendly SMS follow-up. Under 160 characters. Include a booking link. Not pushy.
-Return only the SMS text — no subject, no greetings from you.`,
+Write a brief, friendly SMS follow-up.
+Start with: 'Hi, Alex from LervIT here! '
+Then add personalized follow-up based on
+the lead context. Include booking link.
+Not pushy. Total under 160 characters.
+Return only the SMS text, nothing else.`,
         `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
 Link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/request-move`,
         ALEX_SMS_MODEL,
