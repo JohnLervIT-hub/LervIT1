@@ -557,6 +557,7 @@ interface VisionDetectionResult {
     height_cm: number;
   };
   estimatedWeight?: number;
+  quantity?: number;
 }
 
 /**
@@ -584,6 +585,21 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
             text: `You are the LervIT Vision Engine 2.0, an expert at identifying furniture and household items for a moving company.
 
 Analyze this image and identify the item with maximum detail.
+
+ITEM IDENTIFICATION:
+Identify the PRIMARY item occupying ≥85% of the visual frame.
+
+For FURNITURE SETS (dining table with chairs, bed with headboard, sofa with ottoman):
+- Identify the DOMINANT item as the primary
+- Use quantity field for counted pieces:
+  e.g. dining chairs visible = quantity: 6
+- Name includes set context:
+  e.g. "Dining chair (from 6-person set)"
+
+IGNORE:
+- Background items not being photographed
+- Decorative items (plants, lamps, artwork)
+- Items at edges clearly not the subject
 
 IDENTIFY:
 1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
@@ -641,6 +657,19 @@ PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
 
 ${REFERENCE_DIMENSIONS}
 
+DINING & SEATING (missing from above):
+- Dining chair: ~55×55×90cm, 8kg
+- Bar stool (counter height): ~40×40×75cm, 5kg
+- Bar stool (bar height): ~40×40×90cm, 6kg
+- Armchair / Accent chair: ~85×85×90cm, 35kg
+- Nightstand / Bedside table: ~50×45×60cm, 15kg
+- TV stand / Media console: ~150×45×55cm, 40kg
+- Bookshelf (5-tier, IKEA Billy): ~80×28×202cm, 30kg
+- Filing cabinet (2-drawer): ~47×62×71cm, 25kg
+- Filing cabinet (4-drawer): ~47×62×132cm, 45kg
+- BBQ grill (propane): ~140×60×115cm, 50kg
+- Snowblower (2-stage): ~70×55×100cm, 95kg
+
 BOX / STORAGE SCENE COUNTING (CRITICAL — read this if you see multiple boxes):
 If the image shows a scene with many cardboard moving boxes (not a single item):
 • Your PRIMARY job is to COUNT every box as accurately as possible.
@@ -654,6 +683,14 @@ If the image shows a scene with many cardboard moving boxes (not a single item):
 • estimatedWeight = quantity × kg_per_box (small=15kg, medium=20kg, large=25kg when packed).
 • Example correct output: itemName="38 moving boxes (large)", quantity=38, dimensions=60×50×50, estimatedWeight=950
 
+SIZING RULE:
+When uncertain between two size estimates, always choose the LARGER option.
+Moving trucks need real-world space. Underestimating causes job failures and driver disputes.
+
+QUANTITY FIELD:
+For sets or counted items, include quantity.
+Example: dining chairs detected = 6
+
 Return ONLY valid JSON (no markdown):
 {
   "itemName": "detailed descriptive name",
@@ -661,7 +698,8 @@ Return ONLY valid JSON (no markdown):
   "subcategory": "specific subcategory",
   "confidence": 0.0-1.0,
   "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
-  "estimatedWeight": number in kg
+  "estimatedWeight": number in kg,
+  "quantity": number (default 1)
 }`
           },
           {
@@ -695,6 +733,7 @@ Return ONLY valid JSON (no markdown):
     confidence: result.confidence || 0.5,
     estimatedDimensions: result.estimatedDimensions,
     estimatedWeight: result.estimatedWeight,
+    quantity: typeof result.quantity === 'number' ? result.quantity : undefined,
   };
 }
 
@@ -798,10 +837,10 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       visionResult.category = categoryCorrection.category;
     }
     
-    // STEP 2.6: Detect quantity (e.g., "pair of chairs" = 2)
+    // STEP 2.6: Detect quantity — prefer model-provided field, fall back to string parsing
     const quantityInfo = detectQuantity(visionResult.itemName);
-    const quantity = quantityInfo.quantity;
-    
+    const quantity = visionResult.quantity ?? quantityInfo.quantity ?? 1;
+
     // Use single-item name for database matching if quantity > 1
     const matchName = quantity > 1 ? quantityInfo.singleItemName : visionResult.itemName;
     const modifiedVisionResult = { ...visionResult, itemName: matchName };
