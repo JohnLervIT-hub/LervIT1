@@ -110,7 +110,7 @@ async function archiveRecording(mediaId: string, callId: string, mediaKey: strin
   try {
     const { bytes, contentType } = await downloadRecording(url);
     const safeKey = crypto.createHash("sha256").update(mediaKey).digest("hex");
-    const objectKey = `${objectStorage.getPrivateObjectDir().replace(/\/$/, "")}/voice-recordings/${callId}/${safeKey}.mp3`;
+    const objectKey = `voice-recordings/${callId}/${safeKey}.mp3`;
     await objectStorage.uploadFile(objectKey, bytes, contentType);
     await db.update(voiceMedia).set({ privateObjectKey: objectKey, storageStatus: "stored", storageUrl: null, contentType, archiveLeaseUntil: null, archiveLastError: null }).where(eq(voiceMedia.id, mediaId));
   } catch (error) {
