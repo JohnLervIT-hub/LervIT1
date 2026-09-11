@@ -17,6 +17,8 @@ import { alex } from './alex';
 import { scout } from './scout';
 import { ryan } from './ryan';
 import { jordan } from './jordan';
+import { victor } from './victor';
+import { mark } from './mark';
 import type { BaseAgent } from './base';
 
 let workersStarted = false;
@@ -42,9 +44,11 @@ export function startAgentWorkers(): void {
   spawnWorker(QUEUE_NAMES.HUNTER_D, scout, 1);
   spawnWorker(QUEUE_NAMES.HUNTER_S, ryan, 1);
   spawnWorker(QUEUE_NAMES.VETTER, jordan, 3);
+  spawnWorker(QUEUE_NAMES.DISPATCH, victor, 3);
+  spawnWorker(QUEUE_NAMES.PULSE, mark, 1);
 
   logger.info(
-    'Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d), Ryan Brooks (hunter-s), Jordan Hayes (vetter)',
+    'Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d), Ryan Brooks (hunter-s), Jordan Hayes (vetter), Victor Nash (dispatch), Mark Shaw (pulse)',
   );
 }
 

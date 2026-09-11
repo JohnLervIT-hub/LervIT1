@@ -13,6 +13,8 @@ import { xavier } from './agents/xavier';
 import { scout } from './agents/scout';
 import { alex } from './agents/alex';
 import { ryan } from './agents/ryan';
+import { victor } from './agents/victor';
+import { mark } from './agents/mark';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -198,6 +200,20 @@ export function initBackgroundJobs() {
     await withJobLock('mover_activity_rollup', moverActivityRollup);
   }, TZ);
 
+  // Every 5 min at :04/:09/... — Mark Shaw (PULSE) sweeps active trips for
+  // GPS silence, overtime, no-start, and customer-uninformed conditions.
+  // Offset from :00/:05 to avoid colliding with the notification-expiry job.
+  cron.schedule('4-59/5 * * * *', async () => {
+    await withJobLock('mark_scan_active_trips', async () => {
+      try {
+        const summary = await mark.run('scan_active_trips', {});
+        logger.info({ event: 'mark_scan_active_trips', summary }, 'Mark Shaw scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'mark_scan_active_trips' }, 'Mark Shaw scan failed');
+      }
+    });
+  }, TZ);
+
   logger.info({ event: 'background_jobs', action: 'started' }, 'Background jobs started');
 
   // One-shot startup cleanup: catches any stale pending_payment / abandoned
@@ -283,6 +299,16 @@ async function redispatchIfAllExpired(bookingIds: string[]) {
           { event: 'redispatch_cap_reached', bookingId, totalNotifs: allNotifs.length },
           'Auto re-dispatch cap reached — admin manual assignment required'
         );
+        // Hand off to Victor (DISPATCH) so John gets an SMS via Xavier. Victor
+        // dedups internally so repeat cap hits within 6h stay quiet.
+        try {
+          await victor.run('escalate_no_movers', {
+            bookingId,
+            notificationCount: allNotifs.length,
+          });
+        } catch (escErr) {
+          logEvent.error('redispatch_cap_victor_escalate', escErr, { bookingId });
+        }
         // Notify customer that no movers could be found
         try {
           const [customer] = await db

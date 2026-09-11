@@ -13096,6 +13096,69 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== VICTOR NASH (DISPATCH) =====
+
+  // Manually trigger Victor: run initial dispatch for a booking, or force the
+  // no-mover escalation (used mainly for testing the Xavier hand-off).
+  app.post("/api/admin/agent/victor/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { victor } = await import('./agents/victor');
+      const action = (req.body?.action ?? 'dispatch') as string;
+      if (action !== 'dispatch' && action !== 'escalate_no_movers') {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const result = await victor.run(action, req.body?.input ?? {});
+      res.json({ ok: true, action, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] victor/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ===== MARK SHAW (PULSE) =====
+
+  // Recent PULSE alerts from business_events (all pulse.* types, newest first).
+  app.get("/api/admin/agent/mark/alerts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 25)));
+      const rows = await db
+        .select({
+          id: businessEvents.id,
+          eventType: businessEvents.eventType,
+          entityId: businessEvents.entityId,
+          payload: businessEvents.payload,
+          createdAt: businessEvents.createdAt,
+        })
+        .from(businessEvents)
+        .where(sql`${businessEvents.eventType} LIKE 'pulse.%'`)
+        .orderBy(desc(businessEvents.createdAt))
+        .limit(limit);
+      res.json({ alerts: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] mark/alerts: failed');
+      res.status(500).json({ error: 'Failed to load Mark alerts' });
+    }
+  });
+
+  // Manually trigger Mark: full active-trip scan, or single-booking evaluation.
+  app.post("/api/admin/agent/mark/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { mark } = await import('./agents/mark');
+      const action = (req.body?.action ?? 'scan_active_trips') as string;
+      if (action !== 'scan_active_trips' && action !== 'check_booking') {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const result = await mark.run(action, req.body?.input ?? {});
+      res.json({ ok: true, action, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] mark/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // ===== SCOUT REID (HUNTER-D) + ALEX MORGAN (CLOSER-D) =====
 
   // List leads with filters + pagination.
