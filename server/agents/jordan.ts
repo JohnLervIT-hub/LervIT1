@@ -174,7 +174,7 @@ Write a brief, friendly SMS follow-up to
 someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
 Then add personalized follow-up based on
-the candidate context. Include apply link.
+the candidate context. Include sign up link.
 Not pushy. Total under 160 characters.
 Return only the SMS text, nothing else.`,
         `Follow up for: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 100)}
