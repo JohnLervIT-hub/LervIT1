@@ -23,6 +23,7 @@ export const QUEUE_NAMES = {
   VOICE_AGENT: 'voice-agent',
   MAGNET: 'magnet',
   COMPLIANCE: 'compliance',
+  ONBOARD: 'onboard',
 } as const;
 
 let _connection: IORedis | null = null;

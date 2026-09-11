@@ -1219,7 +1219,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       notificationService.sendWelcomeEmail(user.email, user.name, user.role).catch((err) => {
         console.error("Failed to send welcome email (non-critical):", err);
       });
-      
+
+      // Hand off to Riley (ONBOARD) for the customer nudge sequence. Movers get
+      // a separate track via mover_verified when all 7 docs are approved, so
+      // gate this to role='customer' to avoid overlapping the two tracks.
+      if (user.role === 'customer') {
+        try {
+          const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
+          if (rileyQueue) {
+            await rileyQueue.add('customer_verified', { userId: user.id });
+          }
+        } catch (qErr) {
+          logger.warn({ err: qErr, userId: user.id }, 'Riley: customer_verified enqueue failed');
+        }
+      }
+
       res.json({ message: "Email verified successfully! Welcome to LervIT." });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -2843,11 +2857,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (allApproved) {
           // Update mover's documentsVerified to true
-          await storage.updateMover(item.moverId, { 
+          await storage.updateMover(item.moverId, {
             documentsVerified: true,
-            isVerified: true 
+            isVerified: true
           });
-          console.log(`[Notification] All verification items approved for mover ${item.moverId}. Mover is now fully verified.`);
+          logger.info({ moverId: item.moverId }, '[Notification] All verification items approved. Mover is now fully verified.');
+
+          // Hand off to Riley (ONBOARD) for the congratulations + first-job
+          // nudge sequence. Non-blocking — a queue failure must not roll back
+          // the verification write.
+          try {
+            const rileyMover = await storage.getMover(item.moverId);
+            if (rileyMover) {
+              const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
+              if (rileyQueue) {
+                await rileyQueue.add('mover_verified', {
+                  moverId: rileyMover.id,
+                  userId: rileyMover.userId,
+                });
+                logger.info({ moverId: rileyMover.id }, 'Riley: mover_verified queued');
+              } else {
+                logger.warn({ moverId: rileyMover.id }, 'Riley: ONBOARD queue unavailable');
+              }
+            }
+          } catch (qErr) {
+            logger.warn({ err: qErr, moverId: item.moverId }, 'Riley: mover_verified enqueue failed');
+          }
         }
       } else if (status === 'Rejected') {
         console.log(`[Notification] Verification item ${item.type} rejected for mover ${item.moverId}: ${rejectionReason}`);
@@ -6415,10 +6450,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // AUTO-TRANSFER: If mover just became fully onboarded, process any pending earnings
             if (!wasFullyOnboarded && isNowFullyOnboarded) {
-              logEvent.payment('mover_onboarding_complete_auto_transfer_check', { 
+              logEvent.payment('mover_onboarding_complete_auto_transfer_check', {
                 moverId: moverAccount.moverId,
                 stripeAccountId: updatedAccount.id,
               });
+
+              // Hand off to Riley (ONBOARD) for the payouts-live SMS.
+              try {
+                const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
+                if (rileyQueue) {
+                  await rileyQueue.add('stripe_connected', {
+                    moverId: moverAccount.moverId,
+                  });
+                }
+              } catch (qErr) {
+                logger.warn({ err: qErr, moverId: moverAccount.moverId }, 'Riley: stripe_connected enqueue failed');
+              }
               
               // Find pending earnings for this mover that need transfer
               const pendingEarnings = await db.select()
@@ -13155,6 +13202,38 @@ Respond with VALID JSON only:
       res.json({ ok: true, action, result });
     } catch (err) {
       logger.error({ err }, '[Admin] mark/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ===== RILEY MORGAN (ONBOARD) =====
+
+  // Manually enqueue a Riley action. Unlike Xavier/Victor/Mark which run
+  // synchronously, Riley's touches are delay-scheduled — always go through
+  // the queue so BullMQ handles retries and the timing model stays consistent.
+  const RILEY_ACTIONS = new Set([
+    'mover_verified',
+    'stripe_connected',
+    'customer_verified',
+    'mover_nudge',
+    'customer_nudge',
+  ]);
+  app.post("/api/admin/agent/riley/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!RILEY_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
+      if (!rileyQueue) {
+        return res.status(503).json({ error: 'ONBOARD queue unavailable (REDIS_URL not configured)' });
+      }
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+      const job = await rileyQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] riley/trigger: failed');
       res.status(500).json({ error: (err as Error).message });
     }
   });

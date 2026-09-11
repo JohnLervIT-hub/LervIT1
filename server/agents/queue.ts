@@ -43,7 +43,7 @@ export function createAgentQueue(name: string, opts: Partial<QueueOptions> = {})
 }
 
 /**
- * Convenience: pre-create all 11 agent queues. Safe to call at boot;
+ * Convenience: pre-create all agent queues. Safe to call at boot;
  * subsequent calls return the cached instances.
  */
 export function initAgentQueues(): void {
@@ -59,6 +59,7 @@ export function initAgentQueues(): void {
     QUEUE_NAMES.VOICE_AGENT,
     QUEUE_NAMES.MAGNET,
     QUEUE_NAMES.COMPLIANCE,
+    QUEUE_NAMES.ONBOARD,
   ];
   for (const name of agentNames) createAgentQueue(name);
 }
