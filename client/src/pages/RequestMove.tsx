@@ -253,34 +253,6 @@ export default function RequestMove() {
     }
   }, [promoInput]);
 
-  const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
-    try {
-      const linkedQuoteId = quoteId ?? (() => {
-        try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
-      })();
-      const res = await apiRequest("POST", "/api/leads/capture", {
-        name: contact.name,
-        phone: contact.phone,
-        email: contact.email,
-        source: 'quote_form',
-        notes: `Pickup: ${pickupAddress} → Dropoff: ${dropoffAddress}`,
-        quoteId: linkedQuoteId,
-      });
-      if (res.ok) {
-        setCapturedContact(contact);
-        setContactCaptured(true);
-        try {
-          sessionStorage.setItem('lervit_contact', JSON.stringify(contact));
-        } catch {}
-      } else {
-        setContactCaptured(true);
-      }
-    } catch (err) {
-      console.error('Lead capture failed:', err);
-      setContactCaptured(true);
-    }
-  }, [pickupAddress, dropoffAddress, quoteId]);
-
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem('lervit_contact');
@@ -392,6 +364,66 @@ export default function RequestMove() {
   const identifiedItemsRef = useRef<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
+
+  const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
+    try {
+      const linkedQuoteId = quoteId ?? (() => {
+        try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
+      })();
+
+      const VEHICLE_LABELS: Record<string, string> = {
+        car: 'SUV',
+        pickup: 'Pickup Truck',
+        van: 'Cargo Van',
+        truck: 'Moving Truck',
+      };
+      const VEHICLE_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+      const tiers = ['car', 'pickup', 'van', 'truck'] as const;
+      const maxTier = identifiedItems.reduce(
+        (m, it) => Math.max(m, VEHICLE_RANK[it.vehicleType || 'car'] ?? 0),
+        0,
+      );
+      const vehicleKey = identifiedItems.length > 0 ? tiers[maxTier] : null;
+      const distanceKm = priceBreakdown?.distanceKm || estimateDistance;
+
+      const quoteContext = {
+        totalPrice: priceBreakdown?.totalCost
+          ? `$${parseFloat(String(priceBreakdown.totalCost)).toFixed(2)} CAD`
+          : null,
+        items: identifiedItems.length > 0
+          ? identifiedItems
+              .map(i => i.itemName)
+              .filter((n): n is string => !!n)
+              .join(', ')
+          : null,
+        vehicleLabel: vehicleKey ? VEHICLE_LABELS[vehicleKey] : null,
+        distanceKm: distanceKm ? parseFloat(String(distanceKm)).toFixed(1) : null,
+        numberOfMovers: numberOfMovers ?? 1,
+      };
+
+      const res = await apiRequest("POST", "/api/leads/capture", {
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
+        source: 'quote_form',
+        notes: `Pickup: ${pickupAddress} → Dropoff: ${dropoffAddress}`,
+        quoteContext,
+        quoteId: linkedQuoteId,
+      });
+      if (res.ok) {
+        setCapturedContact(contact);
+        setContactCaptured(true);
+        try {
+          sessionStorage.setItem('lervit_contact', JSON.stringify(contact));
+        } catch {}
+      } else {
+        setContactCaptured(true);
+      }
+    } catch (err) {
+      console.error('Lead capture failed:', err);
+      setContactCaptured(true);
+    }
+  }, [pickupAddress, dropoffAddress, quoteId, identifiedItems, priceBreakdown, estimateDistance, numberOfMovers]);
   
   // Field validation error states
   const [pickupAccessError, setPickupAccessError] = useState(false);
@@ -537,6 +569,7 @@ export default function RequestMove() {
           if (typeof quote.numberOfMovers === 'number') setNumberOfMovers(quote.numberOfMovers);
           setQuoteId(quote.id);
           try { sessionStorage.setItem('lervit_quote_id', quote.id); } catch {}
+          if (quote.hasContact) setContactCaptured(true);
           setStep(3);
           window.history.replaceState({}, '', '/request-move');
           toast({

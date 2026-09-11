@@ -13653,7 +13653,7 @@ Respond with VALID JSON only:
           .set({ status: 'viewed', updatedAt: new Date() })
           .where(eq(quotes.id, id));
       }
-      return res.json(quote);
+      return res.json({ ...quote, hasContact: !!quote.leadId });
     } catch (err) {
       logger.error({ err }, '[quotes] fetch failed');
       return res.status(500).json({ error: 'Failed to fetch quote' });
@@ -13687,12 +13687,32 @@ Respond with VALID JSON only:
       const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
       const email = typeof body.email === 'string' ? body.email.trim() : '';
       const notes = typeof body.notes === 'string' ? body.notes.trim() : '';
+      const quoteContext = body.quoteContext && typeof body.quoteContext === 'object'
+        ? body.quoteContext as {
+            totalPrice?: string | null;
+            items?: string | null;
+            vehicleLabel?: string | null;
+            distanceKm?: string | null;
+            numberOfMovers?: number;
+          }
+        : null;
       const quoteId = typeof body.quoteId === 'string' && body.quoteId ? body.quoteId : null;
 
       if (!name) return res.status(400).json({ error: 'name is required' });
       if (!phone && !email) {
         return res.status(400).json({ error: 'phone or email is required' });
       }
+
+      const notesLines: string[] = [];
+      if (notes) notesLines.push(notes);
+      if (quoteContext?.totalPrice) notesLines.push(`Quote: ${quoteContext.totalPrice}`);
+      if (quoteContext?.items) notesLines.push(`Items: ${quoteContext.items}`);
+      if (quoteContext?.vehicleLabel) notesLines.push(`Vehicle: ${quoteContext.vehicleLabel}`);
+      if (quoteContext?.distanceKm) notesLines.push(`Distance: ${quoteContext.distanceKm}km`);
+      if (quoteContext?.numberOfMovers && quoteContext.numberOfMovers > 1) {
+        notesLines.push(`Movers: ${quoteContext.numberOfMovers} needed`);
+      }
+      const finalNotes = notesLines.length > 0 ? notesLines.join('\n') : 'Quote form capture';
 
       const [row] = await db.insert(leads).values({
         contactName: name,
@@ -13703,7 +13723,7 @@ Respond with VALID JSON only:
         utmCampaign: 'scout-reid',
         intentScore: 85,
         status: 'new',
-        notes: `Quote form capture — ${notes || 'Load details step'}`,
+        notes: finalNotes,
         quoteId,
       }).returning({ id: leads.id });
 

@@ -112,20 +112,42 @@ export class AlexAgent extends BaseAgent {
     const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
     const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
 
+    const notes = lead.notes ?? '';
+    const hasQuote = notes.includes('Quote:');
+    const price = notes.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
+    const items = notes.match(/Items: ([^\n]+)/)?.[1];
+    const vehicle = notes.match(/Vehicle: ([^\n]+)/)?.[1];
+    const movers = notes.match(/Movers: (\d+)/)?.[1];
+
     const raw = await this.callClaude(
       `You are Alex Morgan, a warm and professional conversion specialist at LervIT,
 Calgary's AI-powered moving platform.
 Write a short, personalized email to convert this lead into a booking.
 Be friendly, specific, and include a clear call to action.
 Tone: warm, helpful, not pushy.
-Length: 3-4 short paragraphs.
 End with "Alex" and "LervIT Team".
 Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.`,
       `Lead details:
 Source: ${lead.sourceChannel}
-Notes: ${lead.notes ?? 'Calgary area move'}
 Intent score: ${lead.intentScore}
+${hasQuote ? `
+QUOTE DETAILS (reference these specifically):
+  Price: ${price ?? 'see quote'}
+  Items: ${items ?? 'household items'}
+  Vehicle: ${vehicle ?? 'appropriate vehicle'}
+  ${movers ? `Movers needed: ${movers}` : ''}
 
+IMPORTANT:
+  - Mention the exact price in subject line
+  - Reference specific items being moved
+  - Make customer feel you reviewed their order
+  - Subject format: "Your [item] move — [price]"
+  - Keep email under 120 words
+  - Sound personal not automated
+` : `
+  Context: ${notes || 'Calgary area move'}
+  Keep email warm and general.
+`}
 Write a conversion email. Include:
 1. Personalized opening based on their signal
 2. Brief mention of LervIT's AI pricing
@@ -203,13 +225,13 @@ Write a conversion email. Include:
 
     if (touchNumber === 2 && lead.contactPhone) {
       channel = 'sms';
+      const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
       const smsBody = await this.callClaude(
-        `You are Alex from LervIT, a Calgary moving platform.
-Write a brief, friendly SMS follow-up.
-Start with: 'Hi, Alex from LervIT here! '
-Then add personalized follow-up based on
-the lead context. Include booking link.
-Not pushy. Total under 160 characters.
+        `Write SMS under 160 chars.
+Start: 'Hi, Alex from LervIT here! '
+${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
+Include quote link or booking link.
+Mention LERVIT10 for 10% off.
 Return only the SMS text, nothing else.`,
         `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
 Link: ${bookingLink}`,
