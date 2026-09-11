@@ -41,7 +41,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -3993,6 +3993,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         utmSource: (booking as any).utmSource ?? null,
         utmCampaign: (booking as any).utmCampaign ?? null,
       });
+
+      // Link anonymous quote → booking (non-fatal). Client may send quoteId
+      // directly, or we fall back to a quote already attached to the lead
+      // matched by contact email/phone.
+      try {
+        const clientQuoteId = typeof req.body?.quoteId === 'string' ? req.body.quoteId : null;
+        let quoteIdToConvert = clientQuoteId;
+        if (!quoteIdToConvert && user.email) {
+          const [linked] = await db
+            .select({ quoteId: leads.quoteId })
+            .from(leads)
+            .where(and(eq(leads.contactEmail, user.email), isNotNull(leads.quoteId)))
+            .orderBy(desc(leads.createdAt))
+            .limit(1);
+          quoteIdToConvert = linked?.quoteId ?? null;
+        }
+        if (quoteIdToConvert) {
+          await db.update(quotes).set({
+            status: 'booked',
+            bookingId: booking.id,
+            updatedAt: new Date(),
+          }).where(eq(quotes.id, quoteIdToConvert));
+        }
+      } catch (err) {
+        logger.warn({ err, bookingId: booking.id }, 'quote conversion failed (non-fatal)');
+      }
 
       // Note: Confirmation email and mover matching happen AFTER payment succeeds (in Stripe webhook)
       // Do NOT send booking confirmation here - booking is still pending payment
@@ -13568,6 +13594,89 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== QUOTES =====
+  // Anonymous quote persistence. Saved from the /request-move overlay the
+  // moment a price is computed — before contact capture — so Alex can email
+  // a /quote/:id link that restores the exact quote.
+
+  const QUOTE_TTL_MS = 48 * 60 * 60 * 1000;
+
+  app.post("/api/quotes", async (req: Request, res: Response) => {
+    try {
+      const b = req.body ?? {};
+      const pickupAddress = typeof b.pickupAddress === 'string' ? b.pickupAddress.trim() : '';
+      if (!pickupAddress) {
+        return res.status(400).json({ error: 'pickupAddress required' });
+      }
+      const toDec = (v: unknown): string | null => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n.toString() : null;
+      };
+      const expiresAt = new Date(Date.now() + QUOTE_TTL_MS);
+      const [quote] = await db.insert(quotes).values({
+        pickupAddress,
+        dropoffAddress: typeof b.dropoffAddress === 'string' ? b.dropoffAddress : null,
+        distanceKm: toDec(b.distanceKm),
+        loadSize: typeof b.loadSize === 'string' ? b.loadSize : null,
+        itemsJson: b.itemsJson ?? null,
+        vehicleType: typeof b.vehicleType === 'string' ? b.vehicleType : null,
+        numberOfMovers: Number.isFinite(Number(b.numberOfMovers)) ? Number(b.numberOfMovers) : 1,
+        totalPrice: toDec(b.totalPrice),
+        baseFee: toDec(b.baseFee),
+        distanceFee: toDec(b.distanceFee),
+        loadFee: toDec(b.loadFee),
+        status: 'pending',
+        expiresAt,
+      }).returning();
+      return res.status(201).json({
+        ok: true,
+        quoteId: quote.id,
+        expiresAt: quote.expiresAt,
+      });
+    } catch (err) {
+      logger.error({ err }, '[quotes] save failed');
+      return res.status(500).json({ error: 'Failed to save quote' });
+    }
+  });
+
+  app.get("/api/quotes/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const [quote] = await db.select().from(quotes).where(eq(quotes.id, id)).limit(1);
+      if (!quote) return res.status(404).json({ error: 'Quote not found' });
+      if (new Date() > new Date(quote.expiresAt)) {
+        return res.status(410).json({ error: 'Quote expired', expiredAt: quote.expiresAt });
+      }
+      if (quote.status === 'pending') {
+        await db.update(quotes)
+          .set({ status: 'viewed', updatedAt: new Date() })
+          .where(eq(quotes.id, id));
+      }
+      return res.json(quote);
+    } catch (err) {
+      logger.error({ err }, '[quotes] fetch failed');
+      return res.status(500).json({ error: 'Failed to fetch quote' });
+    }
+  });
+
+  app.patch("/api/quotes/:id/convert", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { bookingId, leadId } = req.body ?? {};
+      await db.update(quotes).set({
+        status: 'booked',
+        bookingId: bookingId ?? null,
+        leadId: leadId ?? null,
+        updatedAt: new Date(),
+      }).where(eq(quotes.id, id));
+      return res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, '[quotes] convert failed');
+      return res.status(500).json({ error: 'Failed to convert quote' });
+    }
+  });
+
   // Public quote-form capture. Called from the price-estimate overlay in
   // RequestMove when the visitor hasn't authenticated. Creates a warm
   // (intentScore 85) lead and hands it to Alex for immediate follow-up.
@@ -13578,6 +13687,7 @@ Respond with VALID JSON only:
       const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
       const email = typeof body.email === 'string' ? body.email.trim() : '';
       const notes = typeof body.notes === 'string' ? body.notes.trim() : '';
+      const quoteId = typeof body.quoteId === 'string' && body.quoteId ? body.quoteId : null;
 
       if (!name) return res.status(400).json({ error: 'name is required' });
       if (!phone && !email) {
@@ -13594,7 +13704,18 @@ Respond with VALID JSON only:
         intentScore: 85,
         status: 'new',
         notes: `Quote form capture — ${notes || 'Load details step'}`,
+        quoteId,
       }).returning({ id: leads.id });
+
+      if (quoteId) {
+        try {
+          await db.update(quotes)
+            .set({ leadId: row.id, updatedAt: new Date() })
+            .where(eq(quotes.id, quoteId));
+        } catch (err) {
+          logger.warn({ err, quoteId, leadId: row.id }, '[quote_form] quote back-link failed (non-fatal)');
+        }
+      }
 
       const alexQueue = createAgentQueue(QUEUE_NAMES.CLOSER_D);
       if (alexQueue) {

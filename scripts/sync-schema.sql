@@ -1565,3 +1565,36 @@ CREATE INDEX IF NOT EXISTS "admin_audit_log_created_at_idx"
 
 CREATE INDEX IF NOT EXISTS "admin_audit_log_resource_idx"
   ON "admin_audit_log" ("resource_type", "resource_id");
+
+-- Anonymous quote persistence for the /request-move overlay. Rows link
+-- forward to leads / bookings once the visitor identifies themselves and
+-- checks out. IDs are prefixed 'q_' so the /quote/:id share-link is
+-- obviously a quote and not a booking or user id.
+CREATE TABLE IF NOT EXISTS "quotes" (
+  "id" varchar PRIMARY KEY DEFAULT ('q_' || gen_random_uuid()::text),
+  "pickup_address" text NOT NULL,
+  "dropoff_address" text,
+  "distance_km" decimal(8, 2),
+  "load_size" text,
+  "items_json" jsonb,
+  "vehicle_type" text,
+  "number_of_movers" integer DEFAULT 1,
+  "total_price" decimal(10, 2),
+  "base_fee" decimal(10, 2),
+  "distance_fee" decimal(10, 2),
+  "load_fee" decimal(10, 2),
+  "lead_id" varchar REFERENCES "leads" ("id"),
+  "booking_id" varchar REFERENCES "bookings" ("id"),
+  "status" text NOT NULL DEFAULT 'pending',
+  "expires_at" timestamp NOT NULL,
+  "created_at" timestamp NOT NULL DEFAULT NOW(),
+  "updated_at" timestamp NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "quotes_status_idx"      ON "quotes" ("status");
+CREATE INDEX IF NOT EXISTS "quotes_lead_id_idx"     ON "quotes" ("lead_id");
+CREATE INDEX IF NOT EXISTS "quotes_booking_id_idx"  ON "quotes" ("booking_id");
+CREATE INDEX IF NOT EXISTS "quotes_created_at_idx"  ON "quotes" ("created_at");
+
+ALTER TABLE "leads"
+  ADD COLUMN IF NOT EXISTS "quote_id" varchar REFERENCES "quotes" ("id");

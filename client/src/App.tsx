@@ -49,6 +49,7 @@ import NotFound from "@/pages/not-found";
 // Lazy load heavy pages for better initial load
 const BrowseMovers = lazy(() => import("@/pages/BrowseMovers"));
 const RequestMove = lazy(() => import("@/pages/RequestMove"));
+const QuotePage = lazy(() => import("@/pages/QuotePage"));
 const CustomerDashboard = lazy(() => import("@/pages/CustomerDashboard"));
 const MyBookings = lazy(() => import("@/pages/MyBookings"));
 const MoverDashboard = lazy(() => import("@/pages/MoverDashboard"));
@@ -188,6 +189,7 @@ function Router() {
         <Route path="/browse-movers" component={BrowseMovers} />
         <Route path="/support" component={Support} />
         <Route path="/request-move" component={RequestMove} />
+        <Route path="/quote/:id" component={QuotePage} />
 
         {/* Customer-Only Routes */}
         <Route path="/dashboard">

@@ -109,6 +109,9 @@ export class AlexAgent extends BaseAgent {
       return { skipped: true, reason: `lead is ${lead.status}` };
     }
 
+    const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+    const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
+
     const raw = await this.callClaude(
       `You are Alex Morgan, a warm and professional conversion specialist at LervIT,
 Calgary's AI-powered moving platform.
@@ -127,7 +130,8 @@ Write a conversion email. Include:
 1. Personalized opening based on their signal
 2. Brief mention of LervIT's AI pricing
 3. Clear CTA: "Get your free instant quote"
-4. Link placeholder: [QUOTE_LINK]`,
+4. Link placeholder: [QUOTE_LINK]
+   ${lead.quoteId ? '(This link reopens their exact saved quote — reference it naturally.)' : ''}`,
       ALEX_EMAIL_MODEL,
       600,
     );
@@ -136,10 +140,7 @@ Write a conversion email. Include:
       raw,
       'Your Calgary move — instant quote from LervIT',
     );
-    const bodyWithLink = body.replace(
-      /\[QUOTE_LINK\]/g,
-      `${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/request-move`,
-    );
+    const bodyWithLink = body.replace(/\[QUOTE_LINK\]/g, bookingLink);
 
     let emailSent = false;
     if (lead.contactEmail) {
@@ -194,6 +195,9 @@ Write a conversion email. Include:
       return { skipped: true, reason: `lead is ${lead.status}` };
     }
 
+    const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+    const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
+
     let channel: 'email' | 'sms' = 'email';
     let delivered = false;
 
@@ -208,7 +212,7 @@ the lead context. Include booking link.
 Not pushy. Total under 160 characters.
 Return only the SMS text, nothing else.`,
         `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
-Link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/request-move`,
+Link: ${bookingLink}`,
         ALEX_SMS_MODEL,
         120,
       );
@@ -228,7 +232,8 @@ Warm, brief, not pushy. 2-3 paragraphs.
 Format: first line "SUBJECT: <subject>", blank line, then the body.`,
         `Lead context: ${lead.notes ?? 'Calgary move inquiry'}
 Touch number: ${touchNumber} of 4
-Quote link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/request-move`,
+Quote link: ${bookingLink}
+${lead.quoteId ? '(This link reopens their exact saved quote.)' : ''}`,
         ALEX_EMAIL_MODEL,
         500,
       );

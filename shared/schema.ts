@@ -1914,6 +1914,8 @@ export const leads = pgTable("leads", {
   dealStage: text("deal_stage").default("prospect"),                   // 'prospect' | 'contacted' | 'warm' | 'meeting' | 'closed' | 'lost'
   estimatedMonthlyMoves: integer("estimated_monthly_moves"),
   lastContactedAt: timestamp("last_contacted_at"),                     // Sam-specific touch timestamp (distinct from lastTouchedAt which Alex/Riley/Kai also use)
+  // Anonymous quote captured before contact — see `quotes` table below.
+  quoteId: varchar("quote_id").references((): any => quotes.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -1925,6 +1927,44 @@ export const leads = pgTable("leads", {
   leadTypeIdx: index("leads_lead_type_idx").on(table.leadType),
   dealStageIdx: index("leads_deal_stage_idx").on(table.dealStage),
 }));
+
+// Anonymous quote persistence. Captured from the /request-move quote overlay
+// before contact details are collected. Linked back to a lead once the
+// visitor submits their name/phone/email, and to a booking on checkout.
+// Quote IDs are prefixed with 'q_' for readability in URLs like /quote/q_...
+export const quotes = pgTable("quotes", {
+  id: varchar("id").primaryKey().default(sql`'q_' || gen_random_uuid()::text`),
+  // Route
+  pickupAddress: text("pickup_address").notNull(),
+  dropoffAddress: text("dropoff_address"),
+  distanceKm: decimal("distance_km", { precision: 8, scale: 2 }),
+  // Load details
+  loadSize: text("load_size"),
+  itemsJson: jsonb("items_json"),
+  vehicleType: text("vehicle_type"),
+  numberOfMovers: integer("number_of_movers").default(1),
+  // Price breakdown
+  totalPrice: decimal("total_price", { precision: 10, scale: 2 }),
+  baseFee: decimal("base_fee", { precision: 10, scale: 2 }),
+  distanceFee: decimal("distance_fee", { precision: 10, scale: 2 }),
+  loadFee: decimal("load_fee", { precision: 10, scale: 2 }),
+  // Relationships (populated lazily as the funnel advances)
+  leadId: varchar("lead_id").references((): any => leads.id),
+  bookingId: varchar("booking_id").references((): any => bookings.id),
+  // Lifecycle: 'pending' → 'viewed' → 'booked' | 'expired'
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("quotes_status_idx").on(table.status),
+  leadIdIdx: index("quotes_lead_id_idx").on(table.leadId),
+  bookingIdIdx: index("quotes_booking_id_idx").on(table.bookingId),
+  createdAtIdx: index("quotes_created_at_idx").on(table.createdAt),
+}));
+
+export type Quote = typeof quotes.$inferSelect;
+export type InsertQuote = typeof quotes.$inferInsert;
 
 // d) kpi_targets — revenue / retention / conversion goals
 export const kpiTargets = pgTable("kpi_targets", {

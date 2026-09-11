@@ -180,6 +180,8 @@ export default function RequestMove() {
   const [step, setStep] = useState(1);
   const [contactCaptured, setContactCaptured] = useState(false);
   const [capturedContact, setCapturedContact] = useState<{ name: string; phone: string; email: string } | null>(null);
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const quoteSaveInFlight = useRef(false);
   // Format a Date as YYYY-MM-DDTHH:MM in the user's LOCAL timezone
   // (datetime-local inputs require local time, NOT UTC ISO strings)
   const toLocalDT = (d: Date) => {
@@ -253,12 +255,16 @@ export default function RequestMove() {
 
   const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
     try {
+      const linkedQuoteId = quoteId ?? (() => {
+        try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
+      })();
       const res = await apiRequest("POST", "/api/leads/capture", {
         name: contact.name,
         phone: contact.phone,
         email: contact.email,
         source: 'quote_form',
         notes: `Pickup: ${pickupAddress} → Dropoff: ${dropoffAddress}`,
+        quoteId: linkedQuoteId,
       });
       if (res.ok) {
         setCapturedContact(contact);
@@ -273,7 +279,7 @@ export default function RequestMove() {
       console.error('Lead capture failed:', err);
       setContactCaptured(true);
     }
-  }, [pickupAddress, dropoffAddress]);
+  }, [pickupAddress, dropoffAddress, quoteId]);
 
   useEffect(() => {
     try {
@@ -322,6 +328,59 @@ export default function RequestMove() {
   });
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
+
+  // Auto-save the anonymous quote to /api/quotes once a price is computed.
+  // Fires exactly once per session — quoteSaveInFlight guards strict-mode
+  // double-fires; setQuoteId gates the effect itself thereafter.
+  useEffect(() => {
+    if (
+      quoteId ||
+      quoteSaveInFlight.current ||
+      !priceBreakdown ||
+      priceBreakdown.totalCost <= 0 ||
+      !pickupAddress ||
+      step < 2
+    ) {
+      return;
+    }
+    quoteSaveInFlight.current = true;
+
+    const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+    const tiers = ['car', 'pickup', 'van', 'truck'] as const;
+    const maxTier = identifiedItems.reduce(
+      (m, it) => Math.max(m, VEHICLE_TIER_RANK[it.vehicleType || 'car'] ?? 0),
+      0,
+    );
+    const vehicleType = identifiedItems.length > 0 ? tiers[maxTier] : null;
+
+    fetch('/api/quotes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pickupAddress,
+        dropoffAddress,
+        distanceKm: priceBreakdown.distanceKm || estimateDistance,
+        loadSize,
+        itemsJson: identifiedItems.length > 0 ? identifiedItems : null,
+        vehicleType,
+        numberOfMovers,
+        totalPrice: priceBreakdown.totalCost,
+        baseFee: priceBreakdown.baseFee,
+        distanceFee: priceBreakdown.distanceFee,
+        loadFee: priceBreakdown.loadSizeFee,
+      }),
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.quoteId) {
+          setQuoteId(data.quoteId);
+          try { sessionStorage.setItem('lervit_quote_id', data.quoteId); } catch {}
+        } else {
+          quoteSaveInFlight.current = false;
+        }
+      })
+      .catch(() => { quoteSaveInFlight.current = false; });
+  }, [priceBreakdown?.totalCost, quoteId, pickupAddress, step]);
 
   // Single mover warning state
   const [showSingleMoverWarning, setShowSingleMoverWarning] = useState(false);
@@ -461,6 +520,33 @@ export default function RequestMove() {
     const urlLoadSize = wouterParams.get('loadSize') || windowParams.get('loadSize');
     const resumeStepParam = wouterParams.get('resumeStep') || windowParams.get('resumeStep');
     const abandonedId = wouterParams.get('abandonedId') || windowParams.get('abandonedId');
+    const quoteIdParam = wouterParams.get('quote') || windowParams.get('quote');
+
+    // PRIORITY -1: Restore anonymous quote by id (e.g. /request-move?quote=q_...).
+    // Takes precedence over abandoned/pickup restore paths.
+    if (quoteIdParam) {
+      hasRestoredRef.current = true;
+      fetch(`/api/quotes/${quoteIdParam}`)
+        .then(async r => (r.ok ? r.json() : null))
+        .then(quote => {
+          if (!quote?.id) return;
+          if (quote.pickupAddress) setPickupAddress(quote.pickupAddress);
+          if (quote.dropoffAddress) setDropoffAddress(quote.dropoffAddress);
+          if (quote.loadSize) setLoadSize(quote.loadSize);
+          if (Array.isArray(quote.itemsJson)) setIdentifiedItems(quote.itemsJson);
+          if (typeof quote.numberOfMovers === 'number') setNumberOfMovers(quote.numberOfMovers);
+          setQuoteId(quote.id);
+          try { sessionStorage.setItem('lervit_quote_id', quote.id); } catch {}
+          setStep(3);
+          window.history.replaceState({}, '', '/request-move');
+          toast({
+            title: 'Quote restored',
+            description: 'We reopened your saved quote — you can review and book.',
+          });
+        })
+        .catch(() => {});
+      return;
+    }
 
     // PRIORITY 0: Fetch abandoned booking data from server if abandonedId is provided
     if (abandonedId && !pickup && !dropoff) {
@@ -1780,6 +1866,9 @@ export default function RequestMove() {
         heavyItemCount: countHeavyItems(identifiedItems),
         heavyItemFeeOverride: getItemTypePremium(identifiedItems),
         promoCode: appliedPromo?.code || undefined,
+        quoteId: quoteId ?? (() => {
+          try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
+        })(),
       };
       createBookingMutation.mutate(bookingData);
     }
