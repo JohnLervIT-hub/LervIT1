@@ -50,6 +50,7 @@ interface Lead {
   utmCampaign: string | null;
   intentScore: number | null;
   status: string | null;
+  leadType: string | null;
   touchpoints: number | null;
   lastTouchedAt: string | null;
   notes: string | null;
@@ -65,6 +66,10 @@ const AUDIENCE_TABS: Array<{ value: Audience; label: string }> = [
 
 function isMoverCandidate(lead: Lead): boolean {
   return lead.utmCampaign === "ryan-brooks";
+}
+
+function isSamProspect(lead: Lead): boolean {
+  return lead.leadType === "b2b" && (lead.sourceChannel?.startsWith("sam_") ?? false);
 }
 
 function extractUrl(notes: string | null | undefined): string | null {
@@ -271,6 +276,27 @@ export default function AdminLeadsPage() {
     },
     onSuccess: () => {
       toast({ title: "Jordan triggered", description: "Recruitment touch sent." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Trigger failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const triggerSam = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", "/api/admin/agent/sam/trigger", {
+        action: "send_b2b_touch",
+        input: { leadId, touchNumber: 1 },
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Sam triggered", description: "B2B outreach touch queued." });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
     },
     onError: (err: any) => {
@@ -527,6 +553,16 @@ export default function AdminLeadsPage() {
                               data-testid={`button-trigger-jordan-${lead.id}`}
                             >
                               <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Jordan
+                            </Button>
+                          ) : isSamProspect(lead) ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={triggerSam.isPending || lead.status === "converted" || lead.status === "cold"}
+                              onClick={() => triggerSam.mutate(lead.id)}
+                              data-testid={`button-trigger-sam-${lead.id}`}
+                            >
+                              <Zap className="w-3.5 h-3.5 mr-1" /> Trigger Sam
                             </Button>
                           ) : (
                             <Button

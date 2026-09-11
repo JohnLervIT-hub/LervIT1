@@ -143,7 +143,15 @@ export class SamAgent extends BaseAgent {
 
     // Collect + dedupe across the five queries by place_id.
     const seenPlaceIds = new Set<string>();
-    const candidates: Array<{ placeId: string; name: string; address?: string; industry: string; source: string }> = [];
+    const candidates: Array<{
+      placeId: string;
+      name: string;
+      address?: string;
+      rating?: number;
+      userRatingsTotal?: number;
+      industry: string;
+      source: string;
+    }> = [];
 
     for (const { query, industry, source } of PROSPECT_QUERIES) {
       try {
@@ -155,6 +163,8 @@ export class SamAgent extends BaseAgent {
             placeId: p.place_id,
             name: p.name,
             address: p.formatted_address,
+            rating: p.rating,
+            userRatingsTotal: p.user_ratings_total,
             industry,
             source,
           });
@@ -224,7 +234,7 @@ export class SamAgent extends BaseAgent {
           status: 'new',
           intentScore: 60, // B2B outbound — inferred fit, not signaled intent
           assignedAgent: 'Sam Carter',
-          notes: c.address ? `Places address: ${c.address}` : null,
+          notes: formatProspectNotes(c),
         })
         .returning();
 
@@ -533,6 +543,25 @@ export class SamAgent extends BaseAgent {
 
 function firstName(fullName: string | null | undefined): string {
   return fullName?.split(' ')[0] ?? 'there';
+}
+
+function formatProspectNotes(c: {
+  name: string;
+  industry: string;
+  address?: string;
+  rating?: number;
+  userRatingsTotal?: number;
+}): string {
+  const lines = [
+    `Company: ${c.name}`,
+    `Industry: ${c.industry}`,
+  ];
+  if (c.address) lines.push(`Address: ${c.address}`);
+  if (typeof c.rating === 'number') {
+    const reviews = c.userRatingsTotal ?? 0;
+    lines.push(`Rating: ${c.rating}★ (${reviews} reviews)`);
+  }
+  return lines.join('\n');
 }
 
 function industryLabel(industry: string): string {
