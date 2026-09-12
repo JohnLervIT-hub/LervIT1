@@ -13790,6 +13790,12 @@ Respond with VALID JSON only:
 
   const QUOTE_TTL_MS = 48 * 60 * 60 * 1000;
 
+  // 6-char base62 slug (~56B combinations — collision-safe at Calgary volume)
+  const generateQuoteShortId = (): string => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
   app.post("/api/quotes", async (req: Request, res: Response) => {
     try {
       const b = req.body ?? {};
@@ -13803,33 +13809,69 @@ Respond with VALID JSON only:
         return Number.isFinite(n) ? n.toString() : null;
       };
       const expiresAt = new Date(Date.now() + QUOTE_TTL_MS);
-      const [quote] = await db.insert(quotes).values({
-        pickupAddress,
-        dropoffAddress: typeof b.dropoffAddress === 'string' ? b.dropoffAddress : null,
-        pickupLat: toDec(b.pickupLat),
-        pickupLng: toDec(b.pickupLng),
-        dropoffLat: toDec(b.dropoffLat),
-        dropoffLng: toDec(b.dropoffLng),
-        distanceKm: toDec(b.distanceKm),
-        loadSize: typeof b.loadSize === 'string' ? b.loadSize : null,
-        itemsJson: b.itemsJson ?? null,
-        vehicleType: typeof b.vehicleType === 'string' ? b.vehicleType : null,
-        numberOfMovers: Number.isFinite(Number(b.numberOfMovers)) ? Number(b.numberOfMovers) : 1,
-        totalPrice: toDec(b.totalPrice),
-        baseFee: toDec(b.baseFee),
-        distanceFee: toDec(b.distanceFee),
-        loadFee: toDec(b.loadFee),
-        status: 'pending',
-        expiresAt,
-      }).returning();
+
+      // Retry-on-collision loop. Collision is astronomically unlikely (6-char base62
+      // over Calgary quote volume), but the unique constraint would throw if it hit.
+      let quote: typeof quotes.$inferSelect | undefined;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const shortId = generateQuoteShortId();
+          [quote] = await db.insert(quotes).values({
+            shortId,
+            pickupAddress,
+            dropoffAddress: typeof b.dropoffAddress === 'string' ? b.dropoffAddress : null,
+            pickupLat: toDec(b.pickupLat),
+            pickupLng: toDec(b.pickupLng),
+            dropoffLat: toDec(b.dropoffLat),
+            dropoffLng: toDec(b.dropoffLng),
+            distanceKm: toDec(b.distanceKm),
+            loadSize: typeof b.loadSize === 'string' ? b.loadSize : null,
+            itemsJson: b.itemsJson ?? null,
+            vehicleType: typeof b.vehicleType === 'string' ? b.vehicleType : null,
+            numberOfMovers: Number.isFinite(Number(b.numberOfMovers)) ? Number(b.numberOfMovers) : 1,
+            totalPrice: toDec(b.totalPrice),
+            baseFee: toDec(b.baseFee),
+            distanceFee: toDec(b.distanceFee),
+            loadFee: toDec(b.loadFee),
+            status: 'pending',
+            expiresAt,
+          }).returning();
+          break;
+        } catch (insertErr: any) {
+          const msg = String(insertErr?.message ?? '');
+          if (attempt < 4 && msg.includes('short_id')) continue;
+          throw insertErr;
+        }
+      }
+      if (!quote) throw new Error('quote insert failed after retries');
       return res.status(201).json({
         ok: true,
         quoteId: quote.id,
+        shortId: quote.shortId,
         expiresAt: quote.expiresAt,
       });
     } catch (err) {
       logger.error({ err }, '[quotes] save failed');
       return res.status(500).json({ error: 'Failed to save quote' });
+    }
+  });
+
+  // SMS-friendly short quote URL. Resolves shortId to full quote id and redirects.
+  app.get("/q/:shortId", async (req: Request, res: Response) => {
+    try {
+      const { shortId } = req.params;
+      if (!/^[a-zA-Z0-9]{6}$/.test(shortId)) {
+        return res.redirect('/request-move');
+      }
+      const [quote] = await db.select({ id: quotes.id })
+        .from(quotes)
+        .where(eq(quotes.shortId, shortId))
+        .limit(1);
+      if (!quote) return res.redirect('/request-move');
+      return res.redirect(`/quote/${quote.id}`);
+    } catch (err) {
+      logger.warn({ err }, '[quotes] short-id redirect failed');
+      return res.redirect('/request-move');
     }
   });
 
@@ -13887,6 +13929,8 @@ Respond with VALID JSON only:
             vehicleLabel?: string | null;
             distanceKm?: string | null;
             numberOfMovers?: number;
+            pickupAddress?: string | null;
+            dropoffAddress?: string | null;
           }
         : null;
       const quoteId = typeof body.quoteId === 'string' && body.quoteId ? body.quoteId : null;
@@ -13898,6 +13942,8 @@ Respond with VALID JSON only:
 
       const notesLines: string[] = [];
       if (notes) notesLines.push(notes);
+      if (quoteContext?.pickupAddress) notesLines.push(`Pickup: ${quoteContext.pickupAddress}`);
+      if (quoteContext?.dropoffAddress) notesLines.push(`Dropoff: ${quoteContext.dropoffAddress}`);
       if (quoteContext?.totalPrice) notesLines.push(`Quote: ${quoteContext.totalPrice}`);
       if (quoteContext?.items) notesLines.push(`Items: ${quoteContext.items}`);
       if (quoteContext?.vehicleLabel) notesLines.push(`Vehicle: ${quoteContext.vehicleLabel}`);

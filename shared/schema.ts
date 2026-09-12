@@ -1939,6 +1939,9 @@ export const leads = pgTable("leads", {
 // Quote IDs are prefixed with 'q_' for readability in URLs like /quote/q_...
 export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`'q_' || gen_random_uuid()::text`),
+  // Short base62 slug used for SMS-friendly quote URLs (/q/:shortId).
+  // Nullable so pre-existing quotes remain valid.
+  shortId: text("short_id").unique(),
   // Route
   pickupAddress: text("pickup_address").notNull(),
   dropoffAddress: text("dropoff_address"),

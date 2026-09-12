@@ -1,6 +1,9 @@
 import type { Booking, User, Mover } from "@shared/schema";
 import { Resend } from 'resend';
+import { and, eq, gte } from 'drizzle-orm';
 import { getBaseUrl } from './utils/urls';
+import { db } from './db';
+import { businessEvents } from '@shared/schema';
 
 // Calgary timezone used for all date formatting in emails, SMS, and logs
 const CALGARY_TZ = 'America/Edmonton';
@@ -367,14 +370,39 @@ class NotificationService {
     if (!telnyxApiKey || !telnyxPhoneNumber) {
       console.log('[SMS] Telnyx not configured - SMS logged only');
       // Mask verification codes in logs for security
-      const maskedMessage = notification.type === 'phone_verification' 
+      const maskedMessage = notification.type === 'phone_verification'
         ? notification.message.replace(/\d{6}/, '******')
         : notification.message;
       console.log('Message:', maskedMessage);
       console.log('---\n');
       return false;
     }
-    
+
+    // Per-phone rate limit: max 1 SMS per hour. OTP + job alerts bypass
+    // because both are strictly time-critical for their respective flows.
+    const RATE_LIMITED_TYPES: SMSNotification['type'][] = ['booking_update', 'payment_confirmation', 'pilot_status'];
+    if (RATE_LIMITED_TYPES.includes(notification.type)) {
+      try {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const [recent] = await db.select({ id: businessEvents.id })
+          .from(businessEvents)
+          .where(and(
+            eq(businessEvents.eventType, 'sms.sent'),
+            eq(businessEvents.entityType, 'phone'),
+            eq(businessEvents.entityId, formattedPhone),
+            gte(businessEvents.createdAt, oneHourAgo),
+          ))
+          .limit(1);
+        if (recent) {
+          console.warn('[SMS] Rate limited — 1 SMS/hr per number:', formattedPhone);
+          console.log('---\n');
+          return false;
+        }
+      } catch (rlErr) {
+        console.warn('[SMS] Rate-limit lookup failed — proceeding:', rlErr);
+      }
+    }
+
     try {
       const response = await fetch('https://api.telnyx.com/v2/messages', {
         method: 'POST',
@@ -389,24 +417,47 @@ class NotificationService {
           ...(telnyxMessagingProfileId && { messaging_profile_id: telnyxMessagingProfileId }),
         }),
       });
-      
+
       const result = await response.json();
 
       if (!response.ok) {
-        // 40021 = destination is not a mobile number (business landline).
-        // Expected for B2B outbound — don't spam error logs.
-        const firstErrorCode = result?.errors?.[0]?.code;
-        if (String(firstErrorCode) === '40021') {
-          console.warn('[SMS] Skipped — destination not mobile:', formattedPhone);
-          console.log('---\n');
-          return false;
+        const errorCode = String(result?.errors?.[0]?.code ?? '');
+        switch (errorCode) {
+          case '40021':
+            // Destination is not a mobile number (business landline) — expected for B2B.
+            console.warn('[SMS] Skipped — destination not mobile:', formattedPhone);
+            console.log('---\n');
+            return false;
+          case '40010':
+            console.warn('[SMS] Skipped — recipient opted out:', formattedPhone);
+            console.log('---\n');
+            return false;
+          case '40008':
+            console.warn('[SMS] Skipped — number blocked:', formattedPhone);
+            console.log('---\n');
+            return false;
+          default:
+            console.error('[SMS] Telnyx API error:', result);
+            return false;
         }
-        console.error('[SMS] Telnyx API error:', result);
-        return false;
       }
 
       console.log('[SMS] Sent successfully! ID:', result.data?.id);
       console.log('---\n');
+
+      // Record for rate limiter (fire-and-forget)
+      if (RATE_LIMITED_TYPES.includes(notification.type)) {
+        db.insert(businessEvents).values({
+          eventType: 'sms.sent',
+          entityType: 'phone',
+          entityId: formattedPhone,
+          payload: { type: notification.type },
+          source: 'system',
+        }).catch((err) => {
+          console.warn('[SMS] Failed to record rate-limit event:', err);
+        });
+      }
+
       return true;
     } catch (error: any) {
       console.error('[SMS] Failed to send:', error.message);

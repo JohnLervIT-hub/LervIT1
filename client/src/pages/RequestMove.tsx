@@ -404,6 +404,8 @@ export default function RequestMove() {
         vehicleLabel: vehicleKey ? VEHICLE_LABELS[vehicleKey] : null,
         distanceKm: distanceKm ? parseFloat(String(distanceKm)).toFixed(1) : null,
         numberOfMovers: numberOfMovers ?? 1,
+        pickupAddress: pickupAddress || null,
+        dropoffAddress: dropoffAddress || null,
       };
 
       const res = await apiRequest("POST", "/api/leads/capture", {

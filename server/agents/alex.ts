@@ -16,7 +16,7 @@ import { and, eq, lte, ne } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { leads, bookings, users } from '@shared/schema';
+import { leads, bookings, users, quotes } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
@@ -36,6 +36,82 @@ const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
 };
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Trimmed street/city string suitable for prompt injection ("71 Cityside Terrace NE").
+type QuoteAddresses = {
+  pickupAddress: string | null;
+  dropoffAddress: string | null;
+  shortId: string | null;
+};
+
+async function fetchQuoteAddresses(quoteId: string | null | undefined): Promise<QuoteAddresses | null> {
+  if (!quoteId) return null;
+  try {
+    const [row] = await db
+      .select({
+        pickupAddress: quotes.pickupAddress,
+        dropoffAddress: quotes.dropoffAddress,
+        shortId: quotes.shortId,
+      })
+      .from(quotes)
+      .where(eq(quotes.id, quoteId))
+      .limit(1);
+    return row ?? null;
+  } catch (err) {
+    logger.warn({ err, quoteId }, 'Alex: fetchQuoteAddresses failed');
+    return null;
+  }
+}
+
+function trimArea(address: string | null | undefined): string | null {
+  if (!address) return null;
+  return address.split(',')[0]?.trim() || null;
+}
+
+function bookingLinkFor(baseUrl: string, lead: { quoteId: string | null }, quoteAddresses: QuoteAddresses | null): string {
+  if (quoteAddresses?.shortId) return `${baseUrl}/q/${quoteAddresses.shortId}`;
+  if (lead.quoteId) return `${baseUrl}/quote/${lead.quoteId}`;
+  return `${baseUrl}/request-move`;
+}
+
+// SMS consent gate. Leads sourced from web forms have implied consent; leads
+// scraped from public listings (Kijiji/Craigslist/RentFaster/Google Alerts) do not.
+// Explicit SMS channel override in admin UI counts as consent.
+function hasSmsConsent(lead: { sourceChannel: string | null; utmSource: string | null }, channelOverride?: 'email' | 'sms'): boolean {
+  if (channelOverride === 'sms') return true;
+  const consentSources = new Set(['quote_form', 'manual', 'contact_form', 'signup']);
+  if (lead.sourceChannel && consentSources.has(lead.sourceChannel)) return true;
+  if (lead.utmSource && consentSources.has(lead.utmSource)) return true;
+  return false;
+}
+
+// SMS_STOP_SUFFIX kept short (GSM-7) — CTIA A2P 10DLC requires an opt-out
+// affordance on cold/marketing SMS.
+const SMS_STOP_SUFFIX = ' Rply STOP to opt out';
+const SMS_PREFIX = 'Hi, Alex from LervIT here! ';
+
+// Compose an SMS from Claude-generated body + a deterministic booking link + opt-out
+// suffix, respecting the 160-char GSM-7 single-segment budget. Strips non-GSM
+// characters so smart quotes / em-dashes don't silently force UCS-2 encoding.
+export function buildAlexSms(claudeBody: string, bookingLink: string, prefix: string = SMS_PREFIX): string {
+  const cleanBody = claudeBody
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/[^\x00-\x7F]/g, '')
+    .trim();
+
+  const separator = '\n';
+  const reserved = prefix.length + separator.length + bookingLink.length + SMS_STOP_SUFFIX.length;
+  const bodyBudget = Math.max(0, 160 - reserved);
+
+  let truncatedBody = cleanBody;
+  if (cleanBody.length > bodyBudget) {
+    truncatedBody = cleanBody.slice(0, bodyBudget).replace(/\s+\S*$/, '').trimEnd();
+  }
+
+  return `${prefix}${truncatedBody}${separator}${bookingLink}${SMS_STOP_SUFFIX}`;
+}
 
 interface ConvertLeadInput {
   leadId: string;
@@ -159,7 +235,10 @@ export class AlexAgent extends BaseAgent {
     }
 
     const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
-    const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
+    const quoteAddresses = await fetchQuoteAddresses(lead.quoteId);
+    const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
+    const pickupArea = trimArea(quoteAddresses?.pickupAddress);
+    const dropoffArea = trimArea(quoteAddresses?.dropoffAddress);
 
     const notes = lead.notes ?? '';
     const hasQuote = notes.includes('Quote:');
@@ -175,10 +254,14 @@ Write a short, personalized email to convert this lead into a booking.
 Be friendly, specific, and include a clear call to action.
 Tone: warm, helpful, not pushy.
 End with "Alex" and "LervIT Team".
-Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.`,
+Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.
+
+IMPORTANT: Only reference specific locations, neighborhoods, street names, or addresses if they are explicitly provided in the lead details below. NEVER invent or guess a location. If no address is provided, use generic language like "your Calgary move".`,
       `Lead details:
 Source: ${lead.sourceChannel}
 Intent score: ${lead.intentScore}
+Pickup area: ${pickupArea ?? 'not available'}
+Dropoff area: ${dropoffArea ?? 'not available'}
 ${hasQuote ? `
 QUOTE DETAILS (reference these specifically):
   Price: ${price ?? 'see quote'}
@@ -189,7 +272,9 @@ QUOTE DETAILS (reference these specifically):
 IMPORTANT:
   - Reference specific items being moved
   - Make customer feel you reviewed their order
-  - Subject format: "Re: your move from [pickup area]" or "Your [item] move is ready"
+  - ${pickupArea
+      ? `Subject format: "Re: your move from ${pickupArea}" — use the REAL pickup area shown above, do not invent`
+      : `Subject format: "Your Calgary move quote" or "Your moving quote is ready" — no location placeholders`}
   - Never include dollar amounts in the subject line
   - Keep email under 120 words
   - Sound personal not automated
@@ -286,36 +371,51 @@ Write a conversion email. Include:
     }
 
     const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
-    const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
+    const quoteAddresses = await fetchQuoteAddresses(lead.quoteId);
+    const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
+    const pickupArea = trimArea(quoteAddresses?.pickupAddress);
+    const dropoffArea = trimArea(quoteAddresses?.dropoffAddress);
 
     let channel: 'email' | 'sms' = 'email';
     let delivered = false;
 
-    if (touchNumber === 2 && lead.contactPhone) {
+    // Cold-lead SMS suppression: only send SMS to leads that entered via a
+    // channel with implied opt-in. Scout-scraped leads fall through to email.
+    const smsAllowed = touchNumber === 2 && lead.contactPhone && hasSmsConsent(lead);
+
+    if (touchNumber === 2 && lead.contactPhone && !smsAllowed) {
+      logger.info({ leadId, sourceChannel: lead.sourceChannel }, 'Alex.sendTouch: SMS suppressed — no consent, falling through to email');
+    }
+
+    if (smsAllowed) {
       channel = 'sms';
       const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
-      const smsBody = await this.callClaude(
-        `Write SMS under 160 chars.
-Start: 'Hi, Alex from LervIT here! '
+      // Budget: 160 - prefix(28) - newline(1) - link(~30) - stop(~22) ≈ 79
+      const claudeBody = await this.callClaude(
+        `Write an SMS body only (no greeting, no URL, no opt-out language).
+Length: STRICTLY under 79 characters.
 ${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
-Include quote link or booking link.
-Mention LERVIT10 for 10% off.
-Return only the SMS text, nothing else.`,
+Mention promo code LERVIT10 for 10% off if it fits within the character budget.
+The greeting "Hi, Alex from LervIT here! ", a booking link, and "Rply STOP to opt out" are appended automatically — do NOT include them.
+IMPORTANT: Never invent or guess neighborhood names, street names, or addresses. Only reference locations that appear below.
+Return only the body text.`,
         `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
-Link: ${bookingLink}`,
+Pickup area: ${pickupArea ?? 'not available'}
+Dropoff area: ${dropoffArea ?? 'not available'}`,
         ALEX_SMS_MODEL,
         120,
       );
+      const smsMessage = buildAlexSms(claudeBody, bookingLink);
       if (options.dryRun) {
         return {
           dryRun: true,
           wouldContact: [leadId],
-          preview: { to: lead.contactPhone, channel: 'sms', body: smsBody.trim().slice(0, 160) },
+          preview: { to: lead.contactPhone, channel: 'sms', body: smsMessage },
         };
       }
       delivered = await notificationService.sendSMS({
-        to: lead.contactPhone,
-        message: smsBody.trim().slice(0, 160),
+        to: lead.contactPhone!,
+        message: smsMessage,
         type: 'booking_update',
       });
     } else if (lead.contactEmail) {
@@ -432,23 +532,35 @@ Complete link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/payment/$
       return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
+    // Even for admin-initiated manual sends, the LEAD must have opted in via
+    // a channel with implied consent. Operator click ≠ CTIA/CRTC consent.
+    if (!hasSmsConsent(lead)) {
+      logger.info({ leadId: lead.id, sourceChannel: lead.sourceChannel }, 'Alex.sendManualSms: no lead consent — skipping SMS');
+      return { skipped: true, reason: 'no_sms_consent' };
+    }
+
     const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
-    const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
+    const quoteAddresses = await fetchQuoteAddresses(lead.quoteId);
+    const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
+    const pickupArea = trimArea(quoteAddresses?.pickupAddress);
+    const dropoffArea = trimArea(quoteAddresses?.dropoffAddress);
     const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
 
-    const raw = await this.callClaude(
-      `Write SMS under 160 chars.
-Start: 'Hi, Alex from LervIT here! '
+    const claudeBody = await this.callClaude(
+      `Write an SMS body only (no greeting, no URL, no opt-out language).
+Length: STRICTLY under 79 characters.
 ${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
-Include quote link or booking link.
-Mention LERVIT10 for 10% off.
-Return only the SMS text, nothing else.`,
+Mention promo code LERVIT10 for 10% off if it fits within the character budget.
+The greeting "Hi, Alex from LervIT here! ", a booking link, and "Rply STOP to opt out" are appended automatically — do NOT include them.
+IMPORTANT: Never invent or guess neighborhood names, street names, or addresses. Only reference locations that appear below.
+Return only the body text.`,
       `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
-Link: ${bookingLink}`,
+Pickup area: ${pickupArea ?? 'not available'}
+Dropoff area: ${dropoffArea ?? 'not available'}`,
       ALEX_SMS_MODEL,
       120,
     );
-    const message = raw.trim().slice(0, 160);
+    const message = buildAlexSms(claudeBody, bookingLink);
 
     if (options.dryRun) {
       return {
