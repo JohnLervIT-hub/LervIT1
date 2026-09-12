@@ -44,7 +44,7 @@
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { Resend } from 'resend';
-import { BaseAgent } from './base';
+import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { leads, partners, partnerInvites, users, businessEvents } from '@shared/schema';
 import { emitEvent } from '../events';
@@ -53,6 +53,20 @@ import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { searchPlacesText, getPlaceContactDetails } from './places-crawl';
 import { xavier } from './xavier';
+import { wasContactedToday } from './dedupe';
+
+const SAM_B2B_TOUCH_EVENTS = [
+  'sales.b2b_touch1',
+  'sales.b2b_touch2',
+  'sales.b2b_touch3',
+  'sales.b2b_touch4',
+];
+const SAM_PARTNER_FOLLOWUP_EVENTS = [
+  'sales.partner_followup1',
+  'sales.partner_followup2',
+  'sales.partner_followup3',
+  'sales.partner_followup4',
+];
 
 // ─── constants ────────────────────────────────────────────
 
@@ -156,16 +170,20 @@ export class SamAgent extends BaseAgent {
   code = 'sales';
   readonly model = SAM_MODEL;
 
-  protected async execute(action: string, input: Record<string, any>): Promise<any> {
+  protected async execute(
+    action: string,
+    input: Record<string, any>,
+    options: AgentRunOptions = {},
+  ): Promise<any> {
     switch (action) {
       case 'scan_b2b_prospects':
         return this.scanB2BProspects();
       case 'send_b2b_touch':
-        return this.sendB2BTouch(input as B2BTouchInput);
+        return this.sendB2BTouch(input as B2BTouchInput, options);
       case 'scan_stuck_partners':
         return this.scanStuckPartners();
       case 'send_partner_followup':
-        return this.sendPartnerFollowup(input as PartnerFollowupInput);
+        return this.sendPartnerFollowup(input as PartnerFollowupInput, options);
       case 'escalate_hot_lead':
         return this.escalateHotLead(input as EscalateHotLeadInput);
       case 'auto_invite_partner':
@@ -326,7 +344,7 @@ export class SamAgent extends BaseAgent {
     return result;
   }
 
-  private async sendB2BTouch({ leadId, touchNumber }: B2BTouchInput) {
+  private async sendB2BTouch({ leadId, touchNumber }: B2BTouchInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 4) {
       throw new Error(`Sam.sendB2BTouch: invalid touchNumber ${touchNumber}`);
     }
@@ -341,6 +359,17 @@ export class SamAgent extends BaseAgent {
       return { skipped: true, reason: `dealStage is ${lead.dealStage}`, touchNumber };
     }
 
+    // Dedupe: at most one Sam B2B touch per lead per day, regardless of touch number.
+    const dedupe = await wasContactedToday({
+      entityId: leadId,
+      entityType: 'lead',
+      eventTypes: SAM_B2B_TOUCH_EVENTS,
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId, touchNumber, lastEvent: dedupe.lastEvent }, 'Sam.sendB2BTouch: skipping — already touched today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
+    }
+
     const companyLabel = lead.companyName ?? lead.contactName ?? 'your team';
     const industry = lead.industry ?? 'other';
 
@@ -349,6 +378,13 @@ export class SamAgent extends BaseAgent {
     // touches were a no-op that also burned quota.
     if (!lead.contactEmail) {
       return { skipped: true, reason: 'no contactEmail', touchNumber };
+    }
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [leadId],
+        preview: { to: lead.contactEmail, channel: 'email', company: companyLabel, industry, touchNumber },
+      };
     }
     const emailSent = await this.sendB2BEmail(lead.contactEmail, companyLabel, industry, touchNumber);
 
@@ -469,7 +505,7 @@ export class SamAgent extends BaseAgent {
     return result;
   }
 
-  private async sendPartnerFollowup({ partnerId, touchNumber }: PartnerFollowupInput) {
+  private async sendPartnerFollowup({ partnerId, touchNumber }: PartnerFollowupInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 3) {
       throw new Error(`Sam.sendPartnerFollowup: invalid touchNumber ${touchNumber}`);
     }
@@ -482,6 +518,16 @@ export class SamAgent extends BaseAgent {
       return { skipped: true, reason: `partner status is ${partner.status}`, touchNumber };
     }
 
+    // Dedupe: at most one Sam partner follow-up per partner per day.
+    const dedupe = await wasContactedToday({
+      entityId: partnerId,
+      entityType: 'partner',
+      eventTypes: SAM_PARTNER_FOLLOWUP_EVENTS,
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
+    }
+
     const contactEmail = partner.primaryOpsEmail || partner.billingEmail;
     const contactPhone = partner.primaryOpsPhone || partner.phone;
     const opsName = partner.primaryOpsContact || partner.name;
@@ -491,6 +537,9 @@ export class SamAgent extends BaseAgent {
 
     if (touchNumber === 2 && contactPhone) {
       const text = `Hi ${firstName(opsName)}, Sam from LervIT. Your partner onboarding is only a few steps from live — I can walk you through it in 10 min. Reply here or log in: ${PARTNERS_PORTAL_URL}`;
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [partnerId], preview: { to: contactPhone, channel: 'sms', body: text.slice(0, 160), touchNumber } };
+      }
       smsSent = await notificationService.sendSMS({
         to: contactPhone,
         message: text.slice(0, 160),
@@ -498,6 +547,9 @@ export class SamAgent extends BaseAgent {
       });
     } else if (contactEmail) {
       const { subject, html } = partnerFollowupEmail(partner.name, opsName ?? null, touchNumber);
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [partnerId], preview: { to: contactEmail, channel: 'email', subject, touchNumber } };
+      }
       emailSent = await sendSamEmail(contactEmail, subject, html);
     } else {
       return { skipped: true, reason: 'no reachable channel', touchNumber };

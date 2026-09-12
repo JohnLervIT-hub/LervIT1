@@ -64,7 +64,13 @@ function spawnWorker(queueName: string, agent: BaseAgent, concurrency: number): 
 
   const worker = new Worker(
     queueName,
-    async (job: Job) => agent.run(job.name, job.data ?? {}),
+    async (job: Job) => {
+      // Extract dry-run from job payload if present — set at enqueue time by
+      // trigger endpoints that pass dry_run through.
+      const data = (job.data ?? {}) as Record<string, any> & { _dryRun?: boolean };
+      const { _dryRun, ...input } = data;
+      return agent.run(job.name, input, { dryRun: _dryRun === true });
+    },
     { connection, concurrency },
   );
 

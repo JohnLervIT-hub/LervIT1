@@ -22,13 +22,14 @@
 
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
-import { BaseAgent } from './base';
+import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { users, movers, bookings } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { wasContactedWithinDays } from './dedupe';
 
 const RILEY_EMAIL = process.env.RILEY_EMAIL?.trim() || 'riley.morgan@lervit.com';
 const RILEY_FROM = `Riley Morgan | LervIT <${RILEY_EMAIL}>`;
@@ -65,7 +66,11 @@ export class RileyAgent extends BaseAgent {
   code = 'onboard';
   readonly model = RILEY_MODEL;
 
-  protected async execute(action: string, input: Record<string, any>): Promise<any> {
+  protected async execute(
+    action: string,
+    input: Record<string, any>,
+    options: AgentRunOptions = {},
+  ): Promise<any> {
     // Dev/test dry-run: admin dashboard "Test Mover" uses moverId/userId = 'test'.
     // Short-circuit so no real DB lookups or emails fire.
     if (input?.moverId === 'test' || input?.userId === 'test') {
@@ -79,9 +84,9 @@ export class RileyAgent extends BaseAgent {
       case 'customer_verified':
         return this.onCustomerVerified(input as CustomerVerifiedInput);
       case 'mover_nudge':
-        return this.sendMoverNudge(input as MoverNudgeInput);
+        return this.sendMoverNudge(input as MoverNudgeInput, options);
       case 'customer_nudge':
-        return this.sendCustomerNudge(input as CustomerNudgeInput);
+        return this.sendCustomerNudge(input as CustomerNudgeInput, options);
       case 'scan_inactive_movers':
         return this.scanInactiveMovers();
       default:
@@ -249,7 +254,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
     return { success: true, track: 'mover', event: 'stripe_connected', sms: smsSent };
   }
 
-  private async sendMoverNudge({ moverId, userId, touchNumber }: MoverNudgeInput) {
+  private async sendMoverNudge({ moverId, userId, touchNumber }: MoverNudgeInput, options: AgentRunOptions = {}) {
     if (touchNumber < 2 || touchNumber > 4) {
       throw new Error(`Riley.sendMoverNudge: invalid touchNumber ${touchNumber}`);
     }
@@ -263,6 +268,16 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
       return { skipped: true, reason: 'mover active', touchNumber };
     }
 
+    // Dedupe: at most one Riley mover nudge per 7 days.
+    const dedupe = await wasContactedWithinDays({
+      entityId: moverId,
+      eventTypes: ['riley.mover_nudge'],
+      days: 7,
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_nudged_within_7d', lastEvent: dedupe.lastEvent, daysAgo: dedupe.daysAgo };
+    }
+
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return { skipped: true, reason: 'user not found' };
 
@@ -271,6 +286,10 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
     let smsSent = false;
 
     if (touchNumber === 2 && user.email) {
+      const subject = 'Have you accepted your first job yet?';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [moverId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const body =
         `Hi ${firstName},\n\n` +
         `I noticed you haven't accepted your first LervIT job yet. Jobs are waiting in your area!\n\n` +
@@ -282,15 +301,22 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
         ctaHtml('Open Dashboard →', `${APP_BASE_URL}/mover-dashboard`) +
         `Questions? Reply to this email anytime.\n\n` +
         `Riley Morgan\nLervIT Onboarding`;
-      emailSent = await sendRileyEmail(user.email, 'Have you accepted your first job yet?', body);
+      emailSent = await sendRileyEmail(user.email, subject, body);
     } else if (touchNumber === 3 && user.phone) {
       const smsText = `Hi ${firstName}, Riley from LervIT. Jobs are waiting in your area — open the app to start earning: ${APP_BASE_URL}/mover-dashboard`;
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [moverId], preview: { to: user.phone, channel: 'sms', body: smsText.slice(0, 160), touchNumber } };
+      }
       smsSent = await notificationService.sendSMS({
         to: user.phone,
         message: smsText.slice(0, 160),
         type: 'booking_update',
       });
     } else if (touchNumber === 4 && user.email) {
+      const subject = 'Is everything okay with your LervIT account?';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [moverId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const body =
         `Hi ${firstName},\n\n` +
         `It's been two weeks since you were approved and I want to make sure everything is okay with your account.\n\n` +
@@ -298,11 +324,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
         `LervIT movers in Calgary are currently earning $500–$2,000/week. We'd love to have you active.\n\n` +
         ctaHtml('Get Started →', `${APP_BASE_URL}/mover-dashboard`) +
         `Riley Morgan\nLervIT Onboarding\n${RILEY_EMAIL}`;
-      emailSent = await sendRileyEmail(
-        user.email,
-        'Is everything okay with your LervIT account?',
-        body,
-      );
+      emailSent = await sendRileyEmail(user.email, subject, body);
     } else {
       return { skipped: true, reason: 'no reachable channel for this touch', touchNumber };
     }
@@ -371,7 +393,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
     return { success: true, track: 'customer', nudgesScheduled: scheduled };
   }
 
-  private async sendCustomerNudge({ userId, touchNumber }: CustomerNudgeInput) {
+  private async sendCustomerNudge({ userId, touchNumber }: CustomerNudgeInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 3) {
       throw new Error(`Riley.sendCustomerNudge: invalid touchNumber ${touchNumber}`);
     }
@@ -384,6 +406,16 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
       return { skipped: true, reason: 'customer booked', touchNumber };
     }
 
+    // Dedupe: at most one Riley customer nudge per 7 days.
+    const dedupe = await wasContactedWithinDays({
+      entityId: userId,
+      eventTypes: ['riley.customer_nudge'],
+      days: 7,
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_nudged_within_7d', lastEvent: dedupe.lastEvent, daysAgo: dedupe.daysAgo };
+    }
+
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return { skipped: true, reason: 'user not found' };
 
@@ -392,6 +424,10 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
     let smsSent = false;
 
     if (touchNumber === 1 && user.email) {
+      const subject = 'Your first move quote takes 30 seconds';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const body =
         `Hi ${firstName},\n\n` +
         `Getting a moving quote with LervIT takes just 30 seconds:\n\n` +
@@ -403,15 +439,22 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
         `And as a new customer, use code <strong>LERVIT10</strong> for 10% off your first move.\n\n` +
         ctaHtml('Get My Instant Quote →', `${APP_BASE_URL}/request-move`) +
         `Riley Morgan\nLervIT Team`;
-      emailSent = await sendRileyEmail(user.email, 'Your first move quote takes 30 seconds', body);
+      emailSent = await sendRileyEmail(user.email, subject, body);
     } else if (touchNumber === 2 && user.phone) {
       const smsText = `Hi ${firstName}, Riley from LervIT! Your 10% discount code LERVIT10 is waiting. Book your first move in 30 sec: ${APP_BASE_URL}/request-move`;
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.phone, channel: 'sms', body: smsText.slice(0, 160), touchNumber } };
+      }
       smsSent = await notificationService.sendSMS({
         to: user.phone,
         message: smsText.slice(0, 160),
         type: 'booking_update',
       });
     } else if (touchNumber === 3 && user.email) {
+      const subject = 'Last chance — your 10% discount expires soon';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const body =
         `Hi ${firstName},\n\n` +
         `This is your last reminder about your 10% welcome discount with LervIT.\n\n` +
@@ -419,11 +462,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
         `Calgary's fastest moving platform — instant AI quotes, verified movers, transparent pricing.\n\n` +
         ctaHtml('Book My Move →', `${APP_BASE_URL}/request-move`) +
         `Riley Morgan\nLervIT Team`;
-      emailSent = await sendRileyEmail(
-        user.email,
-        'Last chance — your 10% discount expires soon',
-        body,
-      );
+      emailSent = await sendRileyEmail(user.email, subject, body);
     } else {
       return { skipped: true, reason: 'no reachable channel for this touch', touchNumber };
     }

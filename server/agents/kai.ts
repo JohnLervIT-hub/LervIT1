@@ -23,13 +23,25 @@
 
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
-import { BaseAgent } from './base';
+import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { users, movers, bookings } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { wasContactedWithinDays } from './dedupe';
+
+const KAI_CUSTOMER_WINBACK_EVENTS = [
+  'kai.customer_winback_touch1',
+  'kai.customer_winback_touch2',
+  'kai.customer_winback_touch3',
+];
+const KAI_MOVER_REACTIVATION_EVENTS = [
+  'kai.mover_reactivation_touch1',
+  'kai.mover_reactivation_touch2',
+  'kai.mover_reactivation_touch3',
+];
 
 // ─── constants (tunable at deploy) ─────────────────────────
 
@@ -86,16 +98,20 @@ export class KaiAgent extends BaseAgent {
   code = 'retain';
   readonly model = KAI_MODEL;
 
-  protected async execute(action: string, input: Record<string, any>): Promise<any> {
+  protected async execute(
+    action: string,
+    input: Record<string, any>,
+    options: AgentRunOptions = {},
+  ): Promise<any> {
     switch (action) {
       case 'scan_dormant_customers':
-        return this.scanDormantCustomers();
+        return this.scanDormantCustomers(options);
       case 'scan_inactive_movers':
-        return this.scanInactiveMovers();
+        return this.scanInactiveMovers(options);
       case 'send_customer_winback':
-        return this.sendCustomerWinback(input as CustomerWinbackInput);
+        return this.sendCustomerWinback(input as CustomerWinbackInput, options);
       case 'send_mover_reactivation':
-        return this.sendMoverReactivation(input as MoverReactivationInput);
+        return this.sendMoverReactivation(input as MoverReactivationInput, options);
       default:
         throw new Error(`Kai: unknown action "${action}"`);
     }
@@ -103,7 +119,7 @@ export class KaiAgent extends BaseAgent {
 
   // ─── CUSTOMER TRACK ──────────────────────────────────────
 
-  private async scanDormantCustomers(): Promise<CustomerScanResult> {
+  private async scanDormantCustomers(options: AgentRunOptions = {}): Promise<CustomerScanResult | { dryRun: true; wouldContact: string[]; wouldSkip: { userId: string; reason: string }[] }> {
     const results: CustomerScanResult = {
       scanned: 0,
       day30: 0,
@@ -140,6 +156,31 @@ export class KaiAgent extends BaseAgent {
     }>;
     results.scanned = candidates.length;
 
+    if (options.dryRun) {
+      const wouldContact: string[] = [];
+      const wouldSkip: { userId: string; reason: string }[] = [];
+      let previewed = 0;
+      for (const c of candidates) {
+        if (previewed >= KAI_MAX_CONTACTS_PER_RUN) {
+          wouldSkip.push({ userId: c.customerId, reason: 'daily_cap' });
+          continue;
+        }
+        const dedupe = await wasContactedWithinDays({
+          entityId: c.customerId,
+          entityType: 'customer',
+          eventTypes: KAI_CUSTOMER_WINBACK_EVENTS,
+          days: 30,
+        });
+        if (dedupe.contacted) {
+          wouldSkip.push({ userId: c.customerId, reason: `contacted_${dedupe.daysAgo}d_ago` });
+          continue;
+        }
+        wouldContact.push(c.customerId);
+        previewed++;
+      }
+      return { dryRun: true, wouldContact, wouldSkip };
+    }
+
     const queue = createAgentQueue(QUEUE_NAMES.RETAIN);
     if (!queue) {
       logger.warn('Kai: RETAIN queue unavailable — customer scan cannot enqueue');
@@ -154,15 +195,13 @@ export class KaiAgent extends BaseAgent {
       }
 
       // Dedup: skip if any winback touch for this user in the last 30 days.
-      const recent = await db.execute(sql`
-        SELECT id FROM business_events
-        WHERE entity_type = 'customer'
-          AND entity_id = ${c.customerId}
-          AND event_type LIKE 'kai.customer_winback%'
-          AND created_at > NOW() - INTERVAL '30 days'
-        LIMIT 1
-      `);
-      if ((recent.rows ?? []).length > 0) {
+      const dedupe = await wasContactedWithinDays({
+        entityId: c.customerId,
+        entityType: 'customer',
+        eventTypes: KAI_CUSTOMER_WINBACK_EVENTS,
+        days: 30,
+      });
+      if (dedupe.contacted) {
         results.skipped++;
         continue;
       }
@@ -192,9 +231,21 @@ export class KaiAgent extends BaseAgent {
     return results;
   }
 
-  private async sendCustomerWinback({ userId, touchNumber }: CustomerWinbackInput) {
+  private async sendCustomerWinback({ userId, touchNumber }: CustomerWinbackInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 3) {
       throw new Error(`Kai.sendCustomerWinback: invalid touchNumber ${touchNumber}`);
+    }
+
+    // Defense-in-depth dedupe: also block at send time in case a manual + cron
+    // both enqueued the same customer within the 30-day cooldown.
+    const dedupe = await wasContactedWithinDays({
+      entityId: userId,
+      entityType: 'customer',
+      eventTypes: KAI_CUSTOMER_WINBACK_EVENTS,
+      days: 30,
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_contacted_within_30d', lastEvent: dedupe.lastEvent, daysAgo: dedupe.daysAgo };
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
@@ -219,26 +270,29 @@ export class KaiAgent extends BaseAgent {
     let smsSent = false;
 
     if (touchNumber === 1 && user.email) {
+      const subject = `${firstName}, we miss you! Here's 15% off your next move`;
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const html = customerWinbackTouch1Html(firstName);
-      emailSent = await sendKaiEmail(
-        user.email,
-        `${firstName}, we miss you! Here's 15% off your next move`,
-        html,
-      );
+      emailSent = await sendKaiEmail(user.email, subject, html);
     } else if (touchNumber === 2 && user.phone) {
       const smsText = `Hi ${firstName}, Kai from LervIT. Your 15% discount code ${KAI_PROMO_CODE} is still waiting — book your next move: ${APP_BASE_URL}/request-move`;
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.phone, channel: 'sms', body: smsText.slice(0, 160), touchNumber } };
+      }
       smsSent = await notificationService.sendSMS({
         to: user.phone,
         message: smsText.slice(0, 160),
         type: 'booking_update',
       });
     } else if (touchNumber === 3 && user.email) {
+      const subject = 'Last chance — your LervIT discount expires soon';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const html = customerWinbackTouch3Html(firstName);
-      emailSent = await sendKaiEmail(
-        user.email,
-        'Last chance — your LervIT discount expires soon',
-        html,
-      );
+      emailSent = await sendKaiEmail(user.email, subject, html);
     } else {
       return { skipped: true, reason: 'no reachable channel for this touch', touchNumber };
     }
@@ -256,7 +310,7 @@ export class KaiAgent extends BaseAgent {
 
   // ─── MOVER TRACK ─────────────────────────────────────────
 
-  private async scanInactiveMovers(): Promise<MoverScanResult> {
+  private async scanInactiveMovers(options: AgentRunOptions = {}): Promise<MoverScanResult | { dryRun: true; wouldContact: string[]; wouldSkip: { moverId: string; reason: string }[] }> {
     const results: MoverScanResult = {
       scanned: 0,
       day7: 0,
@@ -298,6 +352,31 @@ export class KaiAgent extends BaseAgent {
     }>;
     results.scanned = candidates.length;
 
+    if (options.dryRun) {
+      const wouldContact: string[] = [];
+      const wouldSkip: { moverId: string; reason: string }[] = [];
+      let previewed = 0;
+      for (const m of candidates) {
+        if (previewed >= KAI_MAX_CONTACTS_PER_RUN) {
+          wouldSkip.push({ moverId: m.moverId, reason: 'daily_cap' });
+          continue;
+        }
+        const dedupe = await wasContactedWithinDays({
+          entityId: m.moverId,
+          entityType: 'mover',
+          eventTypes: KAI_MOVER_REACTIVATION_EVENTS,
+          days: 14,
+        });
+        if (dedupe.contacted) {
+          wouldSkip.push({ moverId: m.moverId, reason: `contacted_${dedupe.daysAgo}d_ago` });
+          continue;
+        }
+        wouldContact.push(m.moverId);
+        previewed++;
+      }
+      return { dryRun: true, wouldContact, wouldSkip };
+    }
+
     const queue = createAgentQueue(QUEUE_NAMES.RETAIN);
     if (!queue) {
       logger.warn('Kai: RETAIN queue unavailable — mover scan cannot enqueue');
@@ -311,16 +390,14 @@ export class KaiAgent extends BaseAgent {
         continue;
       }
 
-      // Dedup: skip if any reactivation touch for this mover in the last 7d.
-      const recent = await db.execute(sql`
-        SELECT id FROM business_events
-        WHERE entity_type = 'mover'
-          AND entity_id = ${m.moverId}
-          AND event_type LIKE 'kai.mover_reactivation%'
-          AND created_at > NOW() - INTERVAL '7 days'
-        LIMIT 1
-      `);
-      if ((recent.rows ?? []).length > 0) {
+      // Dedup: skip if any reactivation touch for this mover in the last 14d.
+      const dedupe = await wasContactedWithinDays({
+        entityId: m.moverId,
+        entityType: 'mover',
+        eventTypes: KAI_MOVER_REACTIVATION_EVENTS,
+        days: 14,
+      });
+      if (dedupe.contacted) {
         results.skipped++;
         continue;
       }
@@ -352,9 +429,19 @@ export class KaiAgent extends BaseAgent {
     return results;
   }
 
-  private async sendMoverReactivation({ moverId, touchNumber }: MoverReactivationInput) {
+  private async sendMoverReactivation({ moverId, touchNumber }: MoverReactivationInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 3) {
       throw new Error(`Kai.sendMoverReactivation: invalid touchNumber ${touchNumber}`);
+    }
+
+    const dedupe = await wasContactedWithinDays({
+      entityId: moverId,
+      entityType: 'mover',
+      eventTypes: KAI_MOVER_REACTIVATION_EVENTS,
+      days: 14,
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_contacted_within_14d', lastEvent: dedupe.lastEvent, daysAgo: dedupe.daysAgo };
     }
 
     const [mover] = await db.select().from(movers).where(eq(movers.id, moverId)).limit(1);
@@ -369,25 +456,28 @@ export class KaiAgent extends BaseAgent {
 
     if (touchNumber === 1 && user.phone) {
       const smsText = `Hi ${firstName}, Kai from LervIT. Jobs are waiting in Calgary — open the app to start earning: ${APP_BASE_URL}/mover-dashboard`;
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [moverId], preview: { to: user.phone, channel: 'sms', body: smsText.slice(0, 160), touchNumber } };
+      }
       smsSent = await notificationService.sendSMS({
         to: user.phone,
         message: smsText.slice(0, 160),
         type: 'booking_update',
       });
     } else if (touchNumber === 2 && user.email) {
+      const subject = 'Are you still available for moves in Calgary?';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [moverId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const html = moverReactivationTouch2Html(firstName);
-      emailSent = await sendKaiEmail(
-        user.email,
-        'Are you still available for moves in Calgary?',
-        html,
-      );
+      emailSent = await sendKaiEmail(user.email, subject, html);
     } else if (touchNumber === 3 && user.email) {
+      const subject = 'We want to keep your LervIT account active';
+      if (options.dryRun) {
+        return { dryRun: true, wouldContact: [moverId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+      }
       const html = moverReactivationTouch3Html(firstName);
-      emailSent = await sendKaiEmail(
-        user.email,
-        'We want to keep your LervIT account active',
-        html,
-      );
+      emailSent = await sendKaiEmail(user.email, subject, html);
     } else {
       return { skipped: true, reason: 'no reachable channel for this touch', touchNumber };
     }

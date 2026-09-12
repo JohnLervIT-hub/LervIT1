@@ -12,15 +12,16 @@
  * "LervIT <support@lervit.com>"). SMS goes through notificationService.
  */
 
-import { and, eq, gte, lte, ne } from 'drizzle-orm';
+import { and, eq, lte, ne } from 'drizzle-orm';
 import { Resend } from 'resend';
-import { BaseAgent } from './base';
+import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { leads, bookings, users, businessEvents } from '@shared/schema';
+import { leads, bookings, users } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { wasContactedToday } from './dedupe';
 
 const ALEX_EMAIL_MODEL = 'claude-sonnet-4-6';
 const ALEX_SMS_MODEL = 'claude-haiku-4-5-20251001';
@@ -51,23 +52,27 @@ export class AlexAgent extends BaseAgent {
   name = 'Alex Morgan';
   code = 'closer-d';
 
-  protected async execute(action: string, input: Record<string, any>): Promise<any> {
+  protected async execute(
+    action: string,
+    input: Record<string, any>,
+    options: AgentRunOptions = {},
+  ): Promise<any> {
     switch (action) {
       case 'convert_lead':
-        return this.convertLead(input as ConvertLeadInput);
+        return this.convertLead(input as ConvertLeadInput, options);
       case 'send_touch':
-        return this.sendTouch(input as SendTouchInput);
+        return this.sendTouch(input as SendTouchInput, options);
       case 'recover_abandoned':
         if (!input?.bookingId) {
-          return this.recoverAbandonedBulk();
+          return this.recoverAbandonedBulk(options);
         }
-        return this.recoverAbandoned(input as RecoverAbandonedInput);
+        return this.recoverAbandoned(input as RecoverAbandonedInput, options);
       default:
         throw new Error(`Alex: unknown action "${action}"`);
     }
   }
 
-  private async recoverAbandonedBulk() {
+  private async recoverAbandonedBulk(options: AgentRunOptions = {}) {
     const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const rows = await db
       .select({ id: bookings.id })
@@ -81,6 +86,28 @@ export class AlexAgent extends BaseAgent {
     const count = rows.length;
     if (count === 0) {
       return { count: 0, queued: false, reason: 'no abandoned bookings' };
+    }
+
+    // Dry run: report which bookings would be recovered vs. already-sent-today,
+    // without enqueueing anything.
+    if (options.dryRun) {
+      const wouldContact: string[] = [];
+      const wouldSkip: { bookingId: string; reason: string }[] = [];
+      for (const b of rows) {
+        const { contacted } = await wasContactedToday({
+          entityId: b.id,
+          entityType: 'booking',
+          eventTypes: ['booking.recovery_sent'],
+        });
+        if (contacted) wouldSkip.push({ bookingId: b.id, reason: 'already_recovered_today' });
+        else wouldContact.push(b.id);
+      }
+      return {
+        dryRun: true,
+        totalCandidates: count,
+        wouldContact,
+        wouldSkip,
+      };
     }
 
     const queue = createAgentQueue(QUEUE_NAMES.CLOSER_D);
@@ -102,11 +129,22 @@ export class AlexAgent extends BaseAgent {
     return { count, queued: true, jobsEnqueued: queued };
   }
 
-  private async convertLead({ leadId }: ConvertLeadInput) {
+  private async convertLead({ leadId }: ConvertLeadInput, options: AgentRunOptions = {}) {
     const lead = await this.getLead(leadId);
     if (!lead) throw new Error(`Alex: lead ${leadId} not found`);
     if (lead.status === 'converted' || lead.status === 'cold') {
       return { skipped: true, reason: `lead is ${lead.status}` };
+    }
+
+    // Dedupe: one Alex touch per lead per day, regardless of touch number.
+    const dedupe = await wasContactedToday({
+      entityId: leadId,
+      entityType: 'lead',
+      eventTypes: ['lead.contacted', 'lead.touched'],
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId, lastEvent: dedupe.lastEvent }, 'Alex.convertLead: skipping — already contacted today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
     const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
@@ -164,6 +202,14 @@ Write a conversion email. Include:
     );
     const bodyWithLink = body.replace(/\[QUOTE_LINK\]/g, bookingLink);
 
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [leadId],
+        preview: { to: lead.contactEmail ?? null, subject, body: bodyWithLink },
+      };
+    }
+
     let emailSent = false;
     if (lead.contactEmail) {
       emailSent = await sendAlexEmail(lead.contactEmail, subject, bodyWithLink);
@@ -207,7 +253,7 @@ Write a conversion email. Include:
     return { success: true, touchNumber: 1, channel: 'email', emailSent };
   }
 
-  private async sendTouch({ leadId, touchNumber }: SendTouchInput) {
+  private async sendTouch({ leadId, touchNumber }: SendTouchInput, options: AgentRunOptions = {}) {
     if (touchNumber < 2 || touchNumber > 4) {
       throw new Error(`Alex.sendTouch: invalid touchNumber ${touchNumber}`);
     }
@@ -215,6 +261,17 @@ Write a conversion email. Include:
     if (!lead) return { skipped: true, reason: 'lead not found' };
     if (lead.status === 'converted' || lead.status === 'cold') {
       return { skipped: true, reason: `lead is ${lead.status}` };
+    }
+
+    // Dedupe: at most one Alex touch per lead per day, regardless of channel.
+    const dedupe = await wasContactedToday({
+      entityId: leadId,
+      entityType: 'lead',
+      eventTypes: ['lead.contacted', 'lead.touched'],
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId, touchNumber, lastEvent: dedupe.lastEvent }, 'Alex.sendTouch: skipping — already contacted today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
     const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
@@ -238,6 +295,13 @@ Link: ${bookingLink}`,
         ALEX_SMS_MODEL,
         120,
       );
+      if (options.dryRun) {
+        return {
+          dryRun: true,
+          wouldContact: [leadId],
+          preview: { to: lead.contactPhone, channel: 'sms', body: smsBody.trim().slice(0, 160) },
+        };
+      }
       delivered = await notificationService.sendSMS({
         to: lead.contactPhone,
         message: smsBody.trim().slice(0, 160),
@@ -260,6 +324,13 @@ ${lead.quoteId ? '(This link reopens their exact saved quote.)' : ''}`,
         500,
       );
       const { subject, body } = parseSubjectAndBody(raw, 'Still thinking about your Calgary move?');
+      if (options.dryRun) {
+        return {
+          dryRun: true,
+          wouldContact: [leadId],
+          preview: { to: lead.contactEmail, channel: 'email', subject, body },
+        };
+      }
       delivered = await sendAlexEmail(lead.contactEmail, subject, body);
     } else {
       return { skipped: true, reason: 'no reachable channel', touchNumber };
@@ -286,23 +357,15 @@ ${lead.quoteId ? '(This link reopens their exact saved quote.)' : ''}`,
     return { success: true, touchNumber, channel, delivered };
   }
 
-  private async recoverAbandoned({ bookingId }: RecoverAbandonedInput) {
-    // Skip if we already sent a recovery in the past 24h (dedup vs. cron re-runs
-    // and vs. the existing sendAbandonedBookingReminders job).
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const priorSends = await db
-      .select({ id: businessEvents.id })
-      .from(businessEvents)
-      .where(
-        and(
-          eq(businessEvents.eventType, 'booking.recovery_sent'),
-          eq(businessEvents.entityId, bookingId),
-          gte(businessEvents.createdAt, oneDayAgo),
-        ),
-      )
-      .limit(1);
-    if (priorSends.length > 0) {
-      return { skipped: true, reason: 'already recovered in last 24h' };
+  private async recoverAbandoned({ bookingId }: RecoverAbandonedInput, options: AgentRunOptions = {}) {
+    // Dedupe: one recovery per booking per day (guards cron + manual overlap).
+    const dedupe = await wasContactedToday({
+      entityId: bookingId,
+      entityType: 'booking',
+      eventTypes: ['booking.recovery_sent'],
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_recovered_today', lastEvent: dedupe.lastEvent };
     }
 
     const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
@@ -328,6 +391,13 @@ Complete link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/payment/$
       raw,
       'Your LervIT booking is saved — complete it here',
     );
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [bookingId],
+        preview: { to: customer.email, channel: 'email', subject, body },
+      };
+    }
     const delivered = await sendAlexEmail(customer.email, subject, body);
 
     await emitEvent('booking.recovery_sent', 'booking', bookingId, {

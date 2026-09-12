@@ -15,13 +15,14 @@
 
 import { eq } from 'drizzle-orm';
 import { Resend } from 'resend';
-import { BaseAgent } from './base';
+import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { leads } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { wasContactedToday } from './dedupe';
 
 const JORDAN_EMAIL_MODEL = 'claude-sonnet-4-6';
 const JORDAN_SMS_MODEL = 'claude-haiku-4-5-20251001';
@@ -49,18 +50,22 @@ export class JordanAgent extends BaseAgent {
   name = 'Jordan Hayes';
   code = 'vetter';
 
-  protected async execute(action: string, input: Record<string, any>): Promise<any> {
+  protected async execute(
+    action: string,
+    input: Record<string, any>,
+    options: AgentRunOptions = {},
+  ): Promise<any> {
     switch (action) {
       case 'onboard_candidate':
-        return this.onboardCandidate(input as OnboardCandidateInput);
+        return this.onboardCandidate(input as OnboardCandidateInput, options);
       case 'send_touch':
-        return this.sendTouch(input as SendTouchInput);
+        return this.sendTouch(input as SendTouchInput, options);
       default:
         throw new Error(`Jordan: unknown action "${action}"`);
     }
   }
 
-  private async onboardCandidate({ leadId }: OnboardCandidateInput) {
+  private async onboardCandidate({ leadId }: OnboardCandidateInput, options: AgentRunOptions = {}) {
     const lead = await this.getLead(leadId);
     if (!lead) throw new Error(`Jordan: lead ${leadId} not found`);
     if (lead.status === 'converted' || lead.status === 'cold') {
@@ -69,6 +74,17 @@ export class JordanAgent extends BaseAgent {
     if (!lead.contactEmail && !lead.contactPhone) {
       logger.info({ leadId }, 'Jordan: no contact details — skipping');
       return { skipped: true, reason: 'no_contact_details' };
+    }
+
+    // Dedupe: at most one Jordan touch per candidate per day.
+    const dedupe = await wasContactedToday({
+      entityId: leadId,
+      entityType: 'lead',
+      eventTypes: ['lead.mover_contacted', 'lead.mover_touched'],
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId, lastEvent: dedupe.lastEvent }, 'Jordan.onboardCandidate: skipping — already contacted today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
     const applyLink = 'https://app.lervit.com/signup';
@@ -108,6 +124,14 @@ Sign up link: ${applyLink}`,
       raw,
       'Earn money moving in Calgary — LervIT opportunity',
     );
+
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [leadId],
+        preview: { to: lead.contactEmail ?? null, subject, body },
+      };
+    }
 
     let emailSent = false;
     if (lead.contactEmail) {
@@ -152,7 +176,7 @@ Sign up link: ${applyLink}`,
     return { success: true, touchNumber: 1, channel: 'email', emailSent };
   }
 
-  private async sendTouch({ leadId, touchNumber }: SendTouchInput) {
+  private async sendTouch({ leadId, touchNumber }: SendTouchInput, options: AgentRunOptions = {}) {
     if (touchNumber < 2 || touchNumber > 4) {
       throw new Error(`Jordan.sendTouch: invalid touchNumber ${touchNumber}`);
     }
@@ -160,6 +184,16 @@ Sign up link: ${applyLink}`,
     if (!lead) return { skipped: true, reason: 'lead not found' };
     if (lead.status === 'converted' || lead.status === 'cold') {
       return { skipped: true, reason: `lead is ${lead.status}` };
+    }
+
+    const dedupe = await wasContactedToday({
+      entityId: leadId,
+      entityType: 'lead',
+      eventTypes: ['lead.mover_contacted', 'lead.mover_touched'],
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId, touchNumber, lastEvent: dedupe.lastEvent }, 'Jordan.sendTouch: skipping — already contacted today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
     const applyLink = 'https://app.lervit.com/signup';
@@ -182,6 +216,13 @@ Sign up link: ${applyLink}`,
         JORDAN_SMS_MODEL,
         120,
       );
+      if (options.dryRun) {
+        return {
+          dryRun: true,
+          wouldContact: [leadId],
+          preview: { to: lead.contactPhone, channel: 'sms', body: smsBody.trim().slice(0, 160) },
+        };
+      }
       delivered = await notificationService.sendSMS({
         to: lead.contactPhone,
         message: smsBody.trim().slice(0, 160),
@@ -206,6 +247,13 @@ Sign up link: ${applyLink}`,
         raw,
         isLast ? 'Last chance to earn with LervIT' : 'Still interested in earning with LervIT?',
       );
+      if (options.dryRun) {
+        return {
+          dryRun: true,
+          wouldContact: [leadId],
+          preview: { to: lead.contactEmail, channel: 'email', subject, body },
+        };
+      }
       delivered = await sendJordanEmail(lead.contactEmail, subject, body);
     } else {
       return { skipped: true, reason: 'no reachable channel', touchNumber };

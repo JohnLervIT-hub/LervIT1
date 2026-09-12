@@ -19,27 +19,40 @@ import { logger } from '../logger';
 
 export type AgentStatus = 'success' | 'failure' | 'skipped';
 
+export interface AgentRunOptions {
+  /** When true, agents run all checks and build the outreach payload but skip
+   *  actually sending email/SMS. Used by the admin Preview button. */
+  dryRun?: boolean;
+}
+
 export abstract class BaseAgent {
   abstract name: string; // e.g. "APEX"
   abstract code: string; // e.g. "apex"
 
   protected client = new Anthropic();
 
-  async run(action: string, input: Record<string, any> = {}): Promise<any> {
+  async run(
+    action: string,
+    input: Record<string, any> = {},
+    options: AgentRunOptions = {},
+  ): Promise<any> {
     const startTime = Date.now();
     let status: AgentStatus = 'success';
     let output: any = null;
     let thrown: Error | null = null;
 
     try {
-      output = await this.execute(action, input);
-      await emitEvent(
-        `agent.${this.code}.${action}`,
-        'agent',
-        this.name,
-        { input, output },
-        'agent',
-      );
+      output = await this.execute(action, input, options);
+      // Dry runs don't emit an event — they didn't do anything.
+      if (!options.dryRun) {
+        await emitEvent(
+          `agent.${this.code}.${action}`,
+          'agent',
+          this.name,
+          { input, output },
+          'agent',
+        );
+      }
       return output;
     } catch (err) {
       status = 'failure';
@@ -52,7 +65,7 @@ export abstract class BaseAgent {
         agentName: this.name,
         agentCode: this.code,
         action,
-        input,
+        input: options.dryRun ? { ...input, _dryRun: true } : input,
         output: status === 'success' ? output : { error: thrown?.message ?? null },
         status,
         durationMs,
@@ -68,6 +81,7 @@ export abstract class BaseAgent {
   protected abstract execute(
     action: string,
     input: Record<string, any>,
+    options?: AgentRunOptions,
   ): Promise<any>;
 
   protected async callClaude(

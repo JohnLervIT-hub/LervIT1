@@ -13419,11 +13419,19 @@ Respond with VALID JSON only:
       if (!RILEY_ACTIONS.has(action)) {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      if (dryRun) {
+        const { riley } = await import('./agents/riley');
+        const result = await riley.run(action, input, { dryRun: true });
+        return res.json({ ok: true, dryRun: true, action, result });
+      }
+
       const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
       if (!rileyQueue) {
         return res.status(503).json({ error: 'ONBOARD queue unavailable (REDIS_URL not configured)' });
       }
-      const input = (req.body?.input ?? {}) as Record<string, any>;
       const job = await rileyQueue.add(action, input);
       res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
     } catch (err) {
@@ -13478,11 +13486,20 @@ Respond with VALID JSON only:
       if (!KAI_ACTIONS.has(action)) {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      // Dry-run: skip the queue, run inline so the admin sees preview immediately.
+      if (dryRun) {
+        const { kai } = await import('./agents/kai');
+        const result = await kai.run(action, input, { dryRun: true });
+        return res.json({ ok: true, dryRun: true, action, result });
+      }
+
       const kaiQueue = createAgentQueue(QUEUE_NAMES.RETAIN);
       if (!kaiQueue) {
         return res.status(503).json({ error: 'RETAIN queue unavailable (REDIS_URL not configured)' });
       }
-      const input = (req.body?.input ?? {}) as Record<string, any>;
       const job = await kaiQueue.add(action, input);
       res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
     } catch (err) {
@@ -13546,11 +13563,19 @@ Respond with VALID JSON only:
       if (!SAM_ACTIONS.has(action)) {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
       }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      if (dryRun) {
+        const { sam } = await import('./agents/sam');
+        const result = await sam.run(action, input, { dryRun: true });
+        return res.json({ ok: true, dryRun: true, action, result });
+      }
+
       const samQueue = createAgentQueue(QUEUE_NAMES.SALES);
       if (!samQueue) {
         return res.status(503).json({ error: 'SALES queue unavailable (REDIS_URL not configured)' });
       }
-      const input = (req.body?.input ?? {}) as Record<string, any>;
       const job = await samQueue.add(action, input);
       res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
     } catch (err) {
@@ -14075,19 +14100,21 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       const { alex } = await import('./agents/alex');
       const action = (req.body?.action ?? 'convert_lead') as string;
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
       if (action === 'convert_lead' || action === 'send_touch') {
         if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
         const input = { leadId: String(req.body.leadId), touchNumber: Number(req.body.touchNumber ?? 2) };
-        const result = await alex.run(action, input);
-        return res.json({ ok: true, action, result });
+        const result = await alex.run(action, input, { dryRun });
+        return res.json({ ok: true, action, dryRun, result });
       }
       if (action === 'recover_abandoned') {
         const bookingId = req.body?.bookingId ?? req.body?.input?.bookingId;
         const result = await alex.run(
           'recover_abandoned',
           bookingId ? { bookingId: String(bookingId) } : {},
+          { dryRun },
         );
-        return res.json({ ok: true, action, result });
+        return res.json({ ok: true, action, dryRun, result });
       }
       return res.status(400).json({ error: `Unsupported action: ${action}` });
     } catch (err) {

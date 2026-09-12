@@ -233,6 +233,14 @@ function GrowthDashboard() {
   const { toast } = useToast();
   const [fulfilmentPeriod, setFulfilmentPeriod] = useState<string>('all');
   const [revenuePeriod, setRevenuePeriod] = useState<string>('all');
+  // Preview dialog for agent dry-runs: shows who would be contacted before
+  // firing the real outreach batch.
+  const [preview, setPreview] = useState<{
+    agent: string;
+    action: string;
+    result: any;
+    onConfirm: () => void;
+  } | null>(null);
 
   const metricsUrl = (() => {
     const params = new URLSearchParams();
@@ -269,14 +277,28 @@ function GrowthDashboard() {
   });
 
   const recoverAbandonedMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (dryRun: boolean = false) => {
       const res = await apiRequest("POST", "/api/admin/agent/alex/trigger", {
         action: "recover_abandoned",
         input: {},
+        dry_run: dryRun,
       });
-      return res.json();
+      const data = await res.json();
+      return { ...data, requestedDryRun: dryRun };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.requestedDryRun) {
+        setPreview({
+          agent: 'Alex Morgan',
+          action: 'recover_abandoned',
+          result: data.result,
+          onConfirm: () => {
+            setPreview(null);
+            recoverAbandonedMutation.mutate(false);
+          },
+        });
+        return;
+      }
       toast({ title: "Alex Morgan", description: "Recovery emails queued for abandoned bookings" });
       queryClient.invalidateQueries({
         predicate: q => typeof q.queryKey[0] === 'string' && (q.queryKey[0] as string).startsWith("/api/admin/growth-metrics"),
@@ -288,14 +310,28 @@ function GrowthDashboard() {
   });
 
   const winbackDormantMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (dryRun: boolean = false) => {
       const res = await apiRequest("POST", "/api/admin/agent/kai/trigger", {
         action: "scan_dormant_customers",
         input: {},
+        dry_run: dryRun,
       });
-      return res.json();
+      const data = await res.json();
+      return { ...data, requestedDryRun: dryRun };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.requestedDryRun) {
+        setPreview({
+          agent: 'Kai Bennett',
+          action: 'scan_dormant_customers',
+          result: data.result,
+          onConfirm: () => {
+            setPreview(null);
+            winbackDormantMutation.mutate(false);
+          },
+        });
+        return;
+      }
       toast({ title: "Kai Bennett", description: "Winback scan queued — KAI15 emails sending" });
     },
     onError: (err: any) => {
@@ -460,12 +496,22 @@ function GrowthDashboard() {
                 <Badge variant="outline">{metrics.users.verifiedMovers}</Badge>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t">
+            <div className="mt-3 pt-3 border-t flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => winbackDormantMutation.mutate(true)}
+                disabled={winbackDormantMutation.isPending}
+                data-testid="button-kai-winback-dormant-preview"
+              >
+                <Eye className="w-3.5 h-3.5 mr-1.5" />
+                Preview
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="w-full"
-                onClick={() => winbackDormantMutation.mutate()}
+                className="flex-1"
+                onClick={() => winbackDormantMutation.mutate(false)}
                 disabled={winbackDormantMutation.isPending}
                 data-testid="button-kai-winback-dormant"
               >
@@ -703,11 +749,21 @@ function GrowthDashboard() {
               <p className="text-xs text-muted-foreground">Recovery Rate</p>
             </div>
           </div>
-          <div className="flex justify-center mt-4 pt-4 border-t">
+          <div className="flex justify-center gap-2 mt-4 pt-4 border-t">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => recoverAbandonedMutation.mutate(true)}
+              disabled={recoverAbandonedMutation.isPending || metrics.abandoned.pending === 0}
+              data-testid="button-alex-recover-abandoned-preview"
+            >
+              <Eye className="w-3.5 h-3.5 mr-1.5" />
+              Preview
+            </Button>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => recoverAbandonedMutation.mutate()}
+              onClick={() => recoverAbandonedMutation.mutate(false)}
               disabled={recoverAbandonedMutation.isPending || metrics.abandoned.pending === 0}
               data-testid="button-alex-recover-abandoned"
             >
@@ -723,6 +779,60 @@ function GrowthDashboard() {
       <p className="text-xs text-muted-foreground text-right">
         Last updated: {format(new Date(metrics.generatedAt), "MMM d, h:mm a")}
       </p>
+
+      <Dialog open={!!preview} onOpenChange={(open) => { if (!open) setPreview(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-primary" />
+              {preview?.agent} — preview
+            </DialogTitle>
+            <DialogDescription>
+              Dry run for <code className="text-xs bg-muted px-1 py-0.5 rounded">{preview?.action}</code>. Nothing has been sent yet.
+            </DialogDescription>
+          </DialogHeader>
+          {preview && (
+            <div className="space-y-3 pt-1">
+              <div className="flex gap-4 text-sm">
+                <div className="flex-1 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {Array.isArray(preview.result?.wouldContact) ? preview.result.wouldContact.length : 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Would contact</div>
+                </div>
+                <div className="flex-1 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    {Array.isArray(preview.result?.wouldSkip) ? preview.result.wouldSkip.length : 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Would skip (already contacted)</div>
+                </div>
+              </div>
+              {Array.isArray(preview.result?.wouldSkip) && preview.result.wouldSkip.length > 0 && (
+                <div className="max-h-40 overflow-y-auto border rounded-md p-2 text-xs space-y-1">
+                  {preview.result.wouldSkip.slice(0, 20).map((s: any, i: number) => (
+                    <div key={i} className="flex justify-between text-muted-foreground">
+                      <span className="truncate">{s.userId ?? s.moverId ?? s.bookingId ?? '(id)'}</span>
+                      <span className="ml-2 shrink-0">{s.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setPreview(null)} data-testid="button-preview-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={preview.onConfirm}
+                  disabled={!Array.isArray(preview.result?.wouldContact) || preview.result.wouldContact.length === 0}
+                  data-testid="button-preview-confirm"
+                >
+                  Send to {Array.isArray(preview.result?.wouldContact) ? preview.result.wouldContact.length : 0}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
