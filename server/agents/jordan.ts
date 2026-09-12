@@ -40,6 +40,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 interface OnboardCandidateInput {
   leadId: string;
+  channelOverride?: 'email' | 'sms';
 }
 interface SendTouchInput {
   leadId: string;
@@ -65,7 +66,7 @@ export class JordanAgent extends BaseAgent {
     }
   }
 
-  private async onboardCandidate({ leadId }: OnboardCandidateInput, options: AgentRunOptions = {}) {
+  private async onboardCandidate({ leadId, channelOverride }: OnboardCandidateInput, options: AgentRunOptions = {}) {
     const lead = await this.getLead(leadId);
     if (!lead) throw new Error(`Jordan: lead ${leadId} not found`);
     if (lead.status === 'converted' || lead.status === 'cold') {
@@ -74,6 +75,16 @@ export class JordanAgent extends BaseAgent {
     if (!lead.contactEmail && !lead.contactPhone) {
       logger.info({ leadId }, 'Jordan: no contact details — skipping');
       return { skipped: true, reason: 'no_contact_details' };
+    }
+
+    if (channelOverride === 'sms') {
+      if (!lead.contactPhone) {
+        return { skipped: true, reason: 'no_phone_for_sms_override' };
+      }
+      return this.sendManualSms(lead, options);
+    }
+    if (channelOverride === 'email' && !lead.contactEmail) {
+      return { skipped: true, reason: 'no_email_for_email_override' };
     }
 
     // Dedupe: at most one Jordan touch per candidate per day.
@@ -278,6 +289,69 @@ Sign up link: ${applyLink}`,
     });
 
     return { success: true, touchNumber, channel, delivered };
+  }
+
+  private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
+    if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
+
+    const dedupe = await wasContactedToday({
+      entityId: lead.id,
+      entityType: 'lead',
+      eventTypes: ['lead.mover_contacted', 'lead.mover_touched'],
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId: lead.id, lastEvent: dedupe.lastEvent }, 'Jordan.sendManualSms: skipping — already contacted today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
+    }
+
+    const applyLink = 'https://app.lervit.com/signup';
+    const raw = await this.callClaude(
+      `You are Jordan from LervIT, Calgary's moving platform.
+Write a brief, friendly SMS to someone who might want to earn money moving.
+Start with: 'Hi, Jordan from LervIT here! '
+Personalize from the candidate context. Include the sign up link.
+Not pushy. Total under 160 characters.
+Return only the SMS text, nothing else.`,
+      `Candidate context: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 100)}
+Sign up link: ${applyLink}`,
+      JORDAN_SMS_MODEL,
+      120,
+    );
+    const message = raw.trim().slice(0, 160);
+
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [lead.id],
+        preview: { to: lead.contactPhone, channel: 'sms', body: message },
+      };
+    }
+
+    const delivered = await notificationService.sendSMS({
+      to: lead.contactPhone,
+      message,
+      type: 'job_alert',
+    });
+
+    await db
+      .update(leads)
+      .set({
+        status: 'contacted',
+        touchpoints: (lead.touchpoints ?? 0) + 1,
+        lastTouchedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(leads.id, lead.id));
+
+    await emitEvent('lead.mover_touched', 'lead', lead.id, {
+      touchNumber: (lead.touchpoints ?? 0) + 1,
+      channel: 'sms',
+      delivered,
+      agentName: this.name,
+      manual: true,
+    });
+
+    return { success: true, channel: 'sms', delivered };
   }
 
   private async getLead(leadId: string) {

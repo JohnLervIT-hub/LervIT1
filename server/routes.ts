@@ -13957,10 +13957,11 @@ Respond with VALID JSON only:
       if (!requireAdmin(req, res)) return;
       const body = req.body ?? {};
       const contactName = typeof body.contactName === 'string' ? body.contactName.trim() : '';
-      if (!contactName) return res.status(400).json({ error: 'contactName is required' });
-
       const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim() || null : null;
       const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() || null : null;
+      if (!contactEmail && !contactPhone) {
+        return res.status(400).json({ error: 'At least one of contactEmail or contactPhone is required' });
+      }
       const sourceChannel = typeof body.sourceChannel === 'string' && body.sourceChannel.trim()
         ? body.sourceChannel.trim()
         : 'personal';
@@ -13972,7 +13973,7 @@ Respond with VALID JSON only:
         : 'admin-manual';
 
       const [row] = await db.insert(leads).values({
-        contactName,
+        contactName: contactName || null,
         contactEmail,
         contactPhone,
         sourceChannel,
@@ -14040,6 +14041,66 @@ Respond with VALID JSON only:
       res.json({ lead: updated });
     } catch (err) {
       logger.error({ err }, '[Admin] lead contact patch failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // General lead update — used by the mover candidate card edit view.
+  // Accepts any subset of contactName, contactEmail, contactPhone, notes, status.
+  // Unlike /contact this also updates notes + status (e.g. mark converted).
+  app.patch("/api/admin/agent/leads/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const body = req.body ?? {};
+      const patch: Record<string, unknown> = {};
+
+      if (body.contactName !== undefined) {
+        patch.contactName = typeof body.contactName === 'string' && body.contactName.trim()
+          ? body.contactName.trim()
+          : null;
+      }
+      if (body.contactEmail !== undefined) {
+        patch.contactEmail = typeof body.contactEmail === 'string' && body.contactEmail.trim()
+          ? body.contactEmail.trim()
+          : null;
+      }
+      if (body.contactPhone !== undefined) {
+        patch.contactPhone = typeof body.contactPhone === 'string' && body.contactPhone.trim()
+          ? body.contactPhone.trim()
+          : null;
+      }
+      if (body.notes !== undefined) {
+        patch.notes = typeof body.notes === 'string' && body.notes.trim()
+          ? body.notes.trim()
+          : null;
+      }
+      if (body.status !== undefined) {
+        const allowed = new Set(['new', 'contacted', 'converted', 'cold']);
+        const status = typeof body.status === 'string' ? body.status.trim() : '';
+        if (!allowed.has(status)) {
+          return res.status(400).json({ error: `Invalid status: ${status}` });
+        }
+        patch.status = status;
+      }
+
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: 'No updatable fields provided' });
+      }
+
+      patch.updatedAt = new Date();
+
+      const [existing] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: 'Lead not found' });
+
+      const [updated] = await db
+        .update(leads)
+        .set(patch)
+        .where(eq(leads.id, req.params.id))
+        .returning();
+
+      res.json({ lead: updated });
+    } catch (err) {
+      logger.error({ err }, '[Admin] lead patch failed');
       res.status(500).json({ error: (err as Error).message });
     }
   });
@@ -14258,10 +14319,14 @@ Respond with VALID JSON only:
       const action = (req.body?.action ?? 'onboard_candidate') as string;
       if (action === 'onboard_candidate' || action === 'send_touch') {
         if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
-        const input = {
+        const channelOverride = req.body?.channelOverride;
+        const input: Record<string, unknown> = {
           leadId: String(req.body.leadId),
           touchNumber: Number(req.body.touchNumber ?? 2),
         };
+        if (channelOverride === 'email' || channelOverride === 'sms') {
+          input.channelOverride = channelOverride;
+        }
         const result = await jordan.run(action, input);
         return res.json({ ok: true, action, result });
       }

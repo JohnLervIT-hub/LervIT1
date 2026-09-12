@@ -38,8 +38,11 @@ import {
   Phone,
   Clock,
   AlertCircle,
+  Truck,
 } from "lucide-react";
 import { format } from "date-fns";
+import { MoverCandidateCard, type MoverLead } from "@/components/MoverCandidateCard";
+import { AddMoverCandidateCard } from "@/components/AddMoverCandidateCard";
 
 interface Lead {
   id: string;
@@ -184,7 +187,11 @@ export default function AdminLeadsPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAddMoverCard, setShowAddMoverCard] = useState(false);
   const pageSize = 20;
+
+  const refreshLeads = () =>
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/agent/leads"] });
 
   const openAddContact = (lead: Lead) => {
     setSelectedLead(lead);
@@ -507,12 +514,55 @@ export default function AdminLeadsPage() {
             </div>
           )}
           {error && <div className="text-sm text-destructive">Failed to load leads.</div>}
-          {!isLoading && !error && leads.length === 0 && (
+          {!isLoading && !error && leads.length === 0 && audience !== "movers" && (
             <div className="text-sm text-muted-foreground py-8 text-center">
               No leads yet. Add one above, or trigger Scout from the APEX tab.
             </div>
           )}
-          {leads.length > 0 && (
+          {!isLoading && !error && audience === "movers" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {leads.length} candidate{leads.length === 1 ? "" : "s"}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowAddMoverCard(true)}
+                  disabled={showAddMoverCard}
+                  data-testid="button-inline-add-candidate"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />
+                  Add candidate
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {showAddMoverCard && (
+                  <AddMoverCandidateCard
+                    onClose={() => setShowAddMoverCard(false)}
+                    onRefresh={refreshLeads}
+                  />
+                )}
+                {leads.map(lead => (
+                  <MoverCandidateCard
+                    key={lead.id}
+                    lead={lead as MoverLead}
+                    onRefresh={refreshLeads}
+                  />
+                ))}
+                {leads.length === 0 && !showAddMoverCard && (
+                  <div className="col-span-full text-center py-12 text-muted-foreground">
+                    <Truck className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No mover candidates yet</p>
+                    <p className="text-xs mt-1">
+                      Ryan and Scout will find candidates automatically
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {leads.length > 0 && audience !== "movers" && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted-foreground uppercase tracking-wide">
