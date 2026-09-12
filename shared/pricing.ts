@@ -22,7 +22,7 @@ export interface PriceBreakdown {
   rawVolume: number;
   numberOfMovers: number;
   forcedTwoMovers: boolean;
-  itemPremiums: { name: string; fee: number }[];
+  itemPremiums: { name: string; key: string | null; fee: number }[];
   // Display helpers retained for existing UI callers
   distanceKm: number;
   perKmRate: number;
@@ -69,8 +69,19 @@ export const PRICING_CONFIG = {
   // 2-mover addition (30% of subtotal)
   twoMoverAddition: 0.30,
 
-  // Force 2 movers above this adjusted volume (Class E territory)
-  forceTwoMoversVolumeThreshold: 350,
+  // Force 2 movers when raw volume exceeds this (full apartment territory)
+  // OR when any HEAVY_PREMIUM_KEYS item is present. See calculatePrice.
+  forceTwoMoversRawVolumeThreshold: 200,
+
+  // Premium keys that always require 2 movers regardless of load size —
+  // pianos, safes, hot tubs, and pool tables are unsafe for a solo mover.
+  forceTwoMoversHeavyKeys: [
+    'piano_upright',
+    'piano_grand',
+    'safe',
+    'hot_tub',
+    'pool_table',
+  ] as string[],
 
   // Access fees
   accessFees: {
@@ -283,13 +294,13 @@ export function getAllVehicleClasses(): VehicleClassConfig[] {
  *
  * Steps:
  *  1. Raw volume — AI-detected `volumeCuft` if present, else map `loadSize` → volume.
- *  2. Adjusted volume — raw × packingFactor (for vehicle matching + force-2-movers).
+ *  2. Adjusted volume — raw × packingFactor (for vehicle matching only).
  *  3. Vehicle class — from raw volume via getVehicleClassFromVolume.
- *  4. Force 2 movers when adjustedVolume > forceTwoMoversVolumeThreshold.
+ *  4a. Item premiums — sum from detectedItems[].premiumKey, or legacy heavyItem fallback.
+ *  4b. Force 2 movers when rawVolume > threshold OR any always-heavy premium key present.
  *  5–7. Base + distance + load fees.
- *  8. Item premiums — sum from detectedItems[].premiumKey, or legacy heavyItem fallback.
- *  9. Access fees — sum of pickup + dropoff difficulty.
- *  10–12. Subtotal → 2-mover addition (30%) → total.
+ *  8. Access fees — sum of pickup + dropoff difficulty.
+ *  9–11. Subtotal → 2-mover addition (30%) → total.
  */
 export function calculatePrice({
   volumeCuft,
@@ -328,8 +339,33 @@ export function calculatePrice({
   // STEP 3 — Vehicle class
   const vehicleClass = getVehicleClassFromVolume(rawVolume);
 
-  // STEP 4 — Force 2 movers
-  const forcedTwoMovers = adjustedVolume > cfg.forceTwoMoversVolumeThreshold;
+  // STEP 4a — Item premiums (needed before force-2-movers so heavy items count).
+  const itemPremiumsList: { name: string; key: string | null; fee: number }[] = [];
+  if (detectedItems?.length) {
+    for (const item of detectedItems) {
+      const key = item.premiumKey;
+      if (key && cfg.itemPremiums[key] != null) {
+        itemPremiumsList.push({
+          name: item.itemName,
+          key,
+          fee: cfg.itemPremiums[key],
+        });
+      }
+    }
+  }
+  // Legacy heavy-item fallback fires only when no detectedItems produced premiums.
+  const premiumFee = itemPremiumsList.length > 0
+    ? itemPremiumsList.reduce((sum, i) => sum + i.fee, 0)
+    : (heavyItemFeeOverride ?? (heavyItem ? 75 : 0));
+
+  // STEP 4b — Force 2 movers. Fires when the raw load crosses the
+  // apartment-move threshold OR when any always-heavy premium item is
+  // present (pianos, safes, hot tubs, pool tables — unsafe solo).
+  const volumeForcesTwoMovers = rawVolume > cfg.forceTwoMoversRawVolumeThreshold;
+  const heavyForcesTwoMovers = itemPremiumsList.some(
+    i => i.key !== null && cfg.forceTwoMoversHeavyKeys.includes(i.key),
+  );
+  const forcedTwoMovers = volumeForcesTwoMovers || heavyForcesTwoMovers;
   const effectiveMovers = forcedTwoMovers ? 2 : numberOfMovers;
 
   // STEP 5 — Base fee
@@ -342,22 +378,7 @@ export function calculatePrice({
   // STEP 7 — Load fee (raw volume × $0.40)
   const loadFee = rawVolume * cfg.volumeRate;
 
-  // STEP 8 — Item premiums
-  const itemPremiumsList: { name: string; fee: number }[] = [];
-  if (detectedItems?.length) {
-    for (const item of detectedItems) {
-      const key = item.premiumKey;
-      if (key && cfg.itemPremiums[key] != null) {
-        itemPremiumsList.push({ name: item.itemName, fee: cfg.itemPremiums[key] });
-      }
-    }
-  }
-  // Legacy heavy-item fallback fires only when no detectedItems produced premiums.
-  const premiumFee = itemPremiumsList.length > 0
-    ? itemPremiumsList.reduce((sum, i) => sum + i.fee, 0)
-    : (heavyItemFeeOverride ?? (heavyItem ? 75 : 0));
-
-  // STEP 9 — Access fees
+  // STEP 8 — Access fees
   const pickupDifficultyFee = pickupDifficulty && pickupDifficulty in cfg.accessFees
     ? cfg.accessFees[pickupDifficulty as keyof typeof cfg.accessFees]
     : 0;
@@ -366,13 +387,13 @@ export function calculatePrice({
     : 0;
   const accessFee = pickupDifficultyFee + dropoffDifficultyFee;
 
-  // STEP 10 — Subtotal
+  // STEP 9 — Subtotal
   const subtotal = baseFee + distanceFee + loadFee + premiumFee + accessFee;
 
-  // STEP 11 — 2-mover addition
+  // STEP 10 — 2-mover addition
   const moverAddition = effectiveMovers > 1 ? subtotal * cfg.twoMoverAddition : 0;
 
-  // STEP 12 — Total (no minimums for any class)
+  // STEP 11 — Total (no minimums for any class)
   const total = subtotal + moverAddition;
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -393,7 +414,7 @@ export function calculatePrice({
     rawVolume: round2(rawVolume),
     numberOfMovers: effectiveMovers,
     forcedTwoMovers,
-    itemPremiums: itemPremiumsList.map(i => ({ name: i.name, fee: round2(i.fee) })),
+    itemPremiums: itemPremiumsList.map(i => ({ name: i.name, key: i.key, fee: round2(i.fee) })),
     distanceKm: Math.round(distanceKm * 10) / 10,
     perKmRate,
   };
@@ -537,7 +558,8 @@ export function getPricingConfig() {
     volumeRate: PRICING_CONFIG.volumeRate,
     packingFactor: PRICING_CONFIG.packingFactor,
     twoMoverAddition: PRICING_CONFIG.twoMoverAddition,
-    forceTwoMoversVolumeThreshold: PRICING_CONFIG.forceTwoMoversVolumeThreshold,
+    forceTwoMoversRawVolumeThreshold: PRICING_CONFIG.forceTwoMoversRawVolumeThreshold,
+    forceTwoMoversHeavyKeys: PRICING_CONFIG.forceTwoMoversHeavyKeys,
     accessFees: PRICING_CONFIG.accessFees,
     itemPremiums: PRICING_CONFIG.itemPremiums,
     loadSizeVolumes: PRICING_CONFIG.loadSizeVolumes,

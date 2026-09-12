@@ -2703,13 +2703,22 @@ export default function RequestMove() {
                             <Users className="w-5 h-5" />
                             Number of Movers
                           </Label>
-                          {forcedTwoMovers && (
-                            <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-                              <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
-                                <strong>This move requires 2 movers due to volume.</strong> Your adjusted load exceeds the safe single-mover threshold, so 2 movers has been locked in.
-                              </AlertDescription>
-                            </Alert>
-                          )}
+                          {forcedTwoMovers && (() => {
+                            const HEAVY_KEYS = ['piano_upright','piano_grand','safe','hot_tub','pool_table'];
+                            const heavyTriggered = (priceBreakdown?.itemPremiums ?? [])
+                              .some(p => p.key !== null && HEAVY_KEYS.includes(p.key));
+                            return (
+                              <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                                <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
+                                  {heavyTriggered ? (
+                                    <><strong>Heavy item detected — 2 movers required for safe handling.</strong> Items like pianos, safes, and hot tubs are unsafe to move alone, so 2 movers has been locked in.</>
+                                  ) : (
+                                    <><strong>Large move — 2 movers required.</strong> Loads over 200 ft³ (roughly a full-apartment move) exceed the safe single-mover threshold, so 2 movers has been locked in.</>
+                                  )}
+                                </AlertDescription>
+                              </Alert>
+                            );
+                          })()}
                           <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <button
                               type="button"
