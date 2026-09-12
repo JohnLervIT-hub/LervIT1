@@ -33,9 +33,11 @@ function generateSessionToken(): string {
 
 /** Strip Canadian postal codes and trailing ", Canada" so the displayed
  *  address reads "45 Setonstone Manor SE, Calgary, AB" instead of the
- *  fully-qualified Google form. Called on every path that surfaces text
- *  to the user (selection, fallback, catch). */
-function cleanAddress(addr: string): string {
+ *  fully-qualified Google form. Exported so restore paths in RequestMove
+ *  can sanitize addresses coming from URL params, quotes, drafts, and
+ *  reverse-geocode lookups — all of which bypass this component's
+ *  selection-time cleaning. */
+export function cleanAddress(addr: string): string {
   return addr
     .replace(/,?\s*[A-Z]\d[A-Z]\s*\d[A-Z]\d/g, '')
     .replace(/,?\s*Canada\s*$/i, '')
@@ -70,7 +72,10 @@ export function CustomAddressInput({
   }, [loadMaps]);
 
   useEffect(() => {
-    setInputValue(value);
+    // Safety net: any address arriving via prop (restore paths, external
+    // state writes) is sanitized before it hits the display, so postal
+    // codes and ", Canada" never leak into the visible field.
+    setInputValue(value ? cleanAddress(value) : '');
   }, [value]);
 
   useEffect(() => {

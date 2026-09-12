@@ -17,7 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
-import { CustomAddressInput } from "@/components/CustomAddressInput";
+import { CustomAddressInput, cleanAddress } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
@@ -507,7 +507,7 @@ export default function RequestMove() {
       .then(r => r.json())
       .then(data => {
         if (data.address && !pickupAddress) {
-          setPickupAddress(data.address);
+          setPickupAddress(cleanAddress(data.address));
           setPickupCoords({ lat, lng });
         }
       })
@@ -580,8 +580,8 @@ export default function RequestMove() {
         .then(async r => (r.ok ? r.json() : null))
         .then(quote => {
           if (!quote?.id) return;
-          if (quote.pickupAddress) setPickupAddress(quote.pickupAddress);
-          if (quote.dropoffAddress) setDropoffAddress(quote.dropoffAddress);
+          if (quote.pickupAddress) setPickupAddress(cleanAddress(quote.pickupAddress));
+          if (quote.dropoffAddress) setDropoffAddress(cleanAddress(quote.dropoffAddress));
           const restoredPickup = parseCoords(
             quote.pickupLat != null ? String(quote.pickupLat) : null,
             quote.pickupLng != null ? String(quote.pickupLng) : null,
@@ -617,8 +617,8 @@ export default function RequestMove() {
         .then(res => res.json())
         .then(data => {
           if (data && !data.error) {
-            if (data.pickupAddress) setPickupAddress(data.pickupAddress);
-            if (data.dropoffAddress) setDropoffAddress(data.dropoffAddress);
+            if (data.pickupAddress) setPickupAddress(cleanAddress(data.pickupAddress));
+            if (data.dropoffAddress) setDropoffAddress(cleanAddress(data.dropoffAddress));
             if (data.loadSize) setLoadSize(data.loadSize);
             if (data.selectedMoverId) setPreSelectedMoverId(data.selectedMoverId);
             
@@ -648,8 +648,8 @@ export default function RequestMove() {
     if (isReturningFromLogin) {
       hasRestoredRef.current = true;
       
-      setPickupAddress(pickup);
-      setDropoffAddress(dropoff);
+      setPickupAddress(cleanAddress(pickup));
+      setDropoffAddress(cleanAddress(dropoff));
       if (pickupAccess) setPickupDifficulty(pickupAccess);
       if (dropoffAccess) setDropoffDifficulty(dropoffAccess);
       if (urlLoadSize) setLoadSize(urlLoadSize);
@@ -671,15 +671,18 @@ export default function RequestMove() {
       return;
     }
 
-    // PRIORITY 2: Check sessionStorage draft using bookingDraft module
-    const draft = loadDraft(moverId);
+    // PRIORITY 2: sessionStorage draft. Only fires when the URL has no
+    // fresh routing params — otherwise a leftover draft would silently
+    // override an explicit hero navigation.
+    const hasFreshParams = !!(pickup || dropoff || pickupLatParam || dropoffLatParam);
+    const draft = hasFreshParams ? null : loadDraft(moverId);
     if (draft) {
       hasRestoredRef.current = true;
       isRestoringRef.current = true;
-      
+
       const data = draft.formData;
-      setPickupAddress(data.pickupAddress || "");
-      setDropoffAddress(data.dropoffAddress || "");
+      setPickupAddress(cleanAddress(data.pickupAddress || ""));
+      setDropoffAddress(cleanAddress(data.dropoffAddress || ""));
       setPickupDifficulty(data.pickupDifficulty || "");
       setDropoffDifficulty(data.dropoffDifficulty || "");
       setLoadSize(data.loadSize || "medium");
@@ -688,24 +691,24 @@ export default function RequestMove() {
       setDescription(data.description || "");
       setImages(data.images || []);
       setDate(data.date || "");
-      
+
       if (draft.moverId) {
         setPreSelectedMoverId(draft.moverId);
       }
-      
+
       // Resume at step 2 if they had entered data but no photos
       const resumeStep = data.images && data.images.length > 0 && data.date ? 3 : 2;
       setStep(resumeStep);
-      
+
       // Clear the draft after restoration
       clearDraft(draft.moverId);
-      
+
       setTimeout(() => {
         hasPendingBooking.current = false;
         isRestoringRef.current = false;
         window.scrollTo({ top: 0, behavior: "smooth" });
       }, 100);
-      
+
       toast({
         title: "Welcome Back!",
         description: "Your booking details have been restored. You can now complete your request.",
@@ -715,10 +718,10 @@ export default function RequestMove() {
 
     // Simple pre-fill from hero or Browse Movers (no resumeStep param)
     if (pickup) {
-      setPickupAddress(pickup);
+      setPickupAddress(cleanAddress(pickup));
     }
     if (dropoff) {
-      setDropoffAddress(dropoff);
+      setDropoffAddress(cleanAddress(dropoff));
     }
     const inboundPickup = parseCoords(pickupLatParam, pickupLngParam);
     const inboundDropoff = parseCoords(dropoffLatParam, dropoffLngParam);
