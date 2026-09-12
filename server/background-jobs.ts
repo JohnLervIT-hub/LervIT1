@@ -799,8 +799,9 @@ async function autoCompletePastPaidBookings() {
     
     const completedBookings = await db
       .update(bookings)
-      .set({ 
+      .set({
         status: 'completed',
+        completedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(

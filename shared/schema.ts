@@ -225,6 +225,10 @@ export const bookings = pgTable("bookings", {
   expectedCompletionAt: timestamp("expected_completion_at"),
   slaDeadlineAt: timestamp("sla_deadline_at"),
 
+  // Actual completion timestamp — authoritative for RETAIN dormancy scans and
+  // any analytics that need "when did the move end" rather than "when was the
+  // row last touched" (updatedAt bumps on review-related mutations).
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

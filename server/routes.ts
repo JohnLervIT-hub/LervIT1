@@ -9344,7 +9344,7 @@ Respond with VALID JSON only:
       }
       
       // Update booking status to completed
-      await storage.updateBooking(bookingId, { status: 'completed' });
+      await storage.updateBooking(bookingId, { status: 'completed', completedAt: new Date() });
 
       // Get updated booking with commission data for earnings record
       const updatedBooking = await storage.getBooking(bookingId);

@@ -21,7 +21,7 @@
  * background-jobs.ts::sendPostCompletionReviewRequest — that flow is separate.
  */
 
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
@@ -68,6 +68,10 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 interface CustomerWinbackInput {
   userId: string;
   touchNumber: number;
+  // Days since the customer's last completed move at scan time. sendCustomerWinback
+  // uses this to size the "already rebooked" guard window so a 45-day-old booking
+  // doesn't slip past a fixed 30-day check for a 60d-track touch.
+  dormancyDays?: number;
 }
 interface MoverReactivationInput {
   moverId: string;
@@ -132,20 +136,21 @@ export class KaiAgent extends BaseAgent {
     const now = Date.now();
     const day30ago = new Date(now - KAI_CUSTOMER_DORMANT_DAYS_1 * DAY_MS);
 
-    // Dormant = last completed booking >30d ago (using updatedAt as completion
-    // proxy since bookings has no completed_at column).
+    // Dormant = last completed booking >30d ago. Uses completed_at (added in
+    // migration 0011); COALESCE to updated_at for any pre-backfill / edge rows
+    // that slipped through, so we don't miss legitimately dormant customers.
     const rows = await db.execute(sql`
       SELECT
         b.customer_id AS "customerId",
-        MAX(b.updated_at) AS "lastCompletedAt",
+        MAX(COALESCE(b.completed_at, b.updated_at)) AS "lastCompletedAt",
         COUNT(*)::int AS "totalMoves"
       FROM bookings b
       JOIN users u ON u.id = b.customer_id
       WHERE b.status = 'completed'
         AND u.email IS NOT NULL
       GROUP BY b.customer_id
-      HAVING MAX(b.updated_at) < ${day30ago}
-      ORDER BY MAX(b.updated_at) ASC
+      HAVING MAX(COALESCE(b.completed_at, b.updated_at)) < ${day30ago}
+      ORDER BY MAX(COALESCE(b.completed_at, b.updated_at)) ASC
       LIMIT 20
     `);
 
@@ -215,7 +220,7 @@ export class KaiAgent extends BaseAgent {
             : 1;
 
       try {
-        await queue.add('send_customer_winback', { userId: c.customerId, touchNumber });
+        await queue.add('send_customer_winback', { userId: c.customerId, touchNumber, dormancyDays: daysDormant });
         results.queued++;
         contacted++;
         if (touchNumber === 1) results.day30++;
@@ -231,7 +236,7 @@ export class KaiAgent extends BaseAgent {
     return results;
   }
 
-  private async sendCustomerWinback({ userId, touchNumber }: CustomerWinbackInput, options: AgentRunOptions = {}) {
+  private async sendCustomerWinback({ userId, touchNumber, dormancyDays }: CustomerWinbackInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 3) {
       throw new Error(`Kai.sendCustomerWinback: invalid touchNumber ${touchNumber}`);
     }
@@ -251,18 +256,20 @@ export class KaiAgent extends BaseAgent {
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return { skipped: true, reason: 'user not found' };
 
-    // Skip if the customer booked since scan queued the job.
+    // Skip if the customer booked since their dormancy point. Window scales
+    // with dormancyDays so a 45d-old rebook still blocks a 60d-track touch.
+    const guardDays = Math.max(30, dormancyDays ?? 30);
     const [rebooked] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(bookings)
       .where(
         and(
           eq(bookings.customerId, userId),
-          gte(bookings.createdAt, new Date(Date.now() - 30 * DAY_MS)),
+          gte(bookings.createdAt, new Date(Date.now() - guardDays * DAY_MS)),
         ),
       );
     if ((rebooked?.n ?? 0) > 0) {
-      return { skipped: true, reason: 'recently booked', touchNumber };
+      return { skipped: true, reason: 'recently booked', touchNumber, guardDays };
     }
 
     const firstName = user.name?.split(' ')[0] || 'there';
@@ -270,11 +277,53 @@ export class KaiAgent extends BaseAgent {
     let smsSent = false;
 
     if (touchNumber === 1 && user.email) {
-      const subject = `${firstName}, come back to LervIT`;
+      const fallbackSubject = `${firstName}, come back to LervIT`;
       if (options.dryRun) {
-        return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
+        return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject: fallbackSubject, touchNumber } };
       }
-      const html = customerWinbackTouch1Html(firstName);
+      // Personalize using the customer's last completed move. LLM is optional
+      // — any failure falls back to the static template so a bad Claude call
+      // never blocks the winback.
+      const [lastMove] = await db
+        .select({
+          pickupAddress: bookings.pickupAddress,
+          dropoffAddress: bookings.dropoffAddress,
+          loadSize: bookings.loadSize,
+        })
+        .from(bookings)
+        .where(and(eq(bookings.customerId, userId), eq(bookings.status, 'completed')))
+        .orderBy(desc(bookings.completedAt), desc(bookings.updatedAt))
+        .limit(1);
+
+      let subject = fallbackSubject;
+      let html = customerWinbackTouch1Html(firstName);
+      try {
+        const raw = await this.callClaude(
+          `You are Kai Bennett, retention specialist at LervIT Moving in Calgary.
+Write a warm winback email to a customer who hasn't booked a move with LervIT in 30+ days.
+Tone: friendly, personal, short.
+Length: under 150 words.
+Include the promo code ${KAI_PROMO_CODE} for 15% off their next move.
+Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.
+IMPORTANT: never invent addresses, dates, load sizes, or any facts not provided in the user message. If a field is missing, omit it rather than guessing.`,
+          `Customer first name: ${firstName}
+Last completed move: ${lastMove
+            ? `${lastMove.pickupAddress ?? '(unknown)'} → ${lastMove.dropoffAddress ?? '(unknown)'}`
+            : '(no prior move on record)'}
+Load size (if known): ${lastMove?.loadSize ?? '(unknown)'}
+Promo code: ${KAI_PROMO_CODE} (15% off next move, one-time use, 30 days)
+CTA link: ${APP_BASE_URL}/request-move`,
+          KAI_MODEL,
+          500,
+        );
+        const parsed = parseSubjectAndBody(raw, fallbackSubject);
+        if (parsed.body) {
+          subject = parsed.subject;
+          html = wrapAsParagraphs(parsed.body);
+        }
+      } catch (err) {
+        logger.error({ err, userId }, 'Kai: T1 LLM draft failed, using static template');
+      }
       emailSent = await sendKaiEmail(user.email, subject, html);
     } else if (touchNumber === 2 && user.phone) {
       const smsText = `Hi ${firstName}, Kai from LervIT. Your 15% discount code ${KAI_PROMO_CODE} is still waiting — book your next move: ${APP_BASE_URL}/request-move`;
@@ -323,24 +372,55 @@ export class KaiAgent extends BaseAgent {
     const now = Date.now();
     const day7ago = new Date(now - KAI_MOVER_INACTIVE_DAYS_1 * DAY_MS);
 
-    // Verified, not-suspended movers with no earnings row in 7+ days
-    // (or none ever). mover_earnings is the source of truth for "did work".
-    // Also exclude movers whose profile is <30 days old — Riley owns the
-    // day-3/7/14 nudge sequence for newly verified movers; Kai only picks
-    // them up once that window has passed to prevent double-SMS.
+    // Verified, not-suspended movers Kai should nudge. Two entry criteria:
+    //   1. No earnings row in 7+ days (or ever) — the classic "not working" signal.
+    //   2. Decline rate > 50% over the last 30 rollup days with ≥5 total decisions —
+    //      the "receiving jobs but refusing them" signal from mover_activity_log.
+    //
+    // `verified_at` doesn't exist as a column, so we derive it from Riley's
+    // `riley.mover_verified` business_event (falls back to m.created_at for
+    // pre-Riley movers). This is the Riley/Kai handoff boundary — Riley owns
+    // the first 30 days after verification; Kai picks up once past.
+    //
+    // Rollup jsonb metadata layout (from background-jobs.ts::moverActivityRollup):
+    //   { jobsCompletedToday, jobsDeclinedToday, lastLocationAgeMinutes,
+    //     isAvailable, rating, completedTripsLifetime }
     const rows = await db.execute(sql`
       SELECT
         m.id AS "moverId",
         m.user_id AS "userId",
-        MAX(me.created_at) AS "lastJobAt"
+        MAX(me.created_at) AS "lastJobAt",
+        COALESCE(MAX(rv.verified_at), m.created_at) AS "verifiedAt",
+        COALESCE(MAX(mal.completed_30d), 0)::int    AS "completed30d",
+        COALESCE(MAX(mal.declined_30d), 0)::int     AS "declined30d"
       FROM movers m
       LEFT JOIN mover_earnings me ON me.mover_id = m.id
+      LEFT JOIN LATERAL (
+        SELECT MAX(created_at) AS verified_at
+        FROM business_events
+        WHERE entity_id = m.id
+          AND event_type = 'riley.mover_verified'
+      ) rv ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM((metadata->>'jobsCompletedToday')::int), 0) AS completed_30d,
+          COALESCE(SUM((metadata->>'jobsDeclinedToday')::int), 0)  AS declined_30d
+        FROM mover_activity_log
+        WHERE mover_id = m.id
+          AND activity_type = 'rollup'
+          AND created_at > NOW() - INTERVAL '30 days'
+      ) mal ON true
       WHERE m.is_verified = true
         AND (m.pilot_status IS NULL OR m.pilot_status <> 'suspended')
-        AND m.created_at < NOW() - INTERVAL '30 days'
-      GROUP BY m.id, m.user_id
-      HAVING MAX(me.created_at) < ${day7ago}
-         OR MAX(me.created_at) IS NULL
+        AND COALESCE(rv.verified_at, m.created_at) < NOW() - INTERVAL '30 days'
+      GROUP BY m.id, m.user_id, m.created_at
+      HAVING
+        (MAX(me.created_at) < ${day7ago} OR MAX(me.created_at) IS NULL)
+        OR (
+          MAX(mal.completed_30d + mal.declined_30d) >= 5
+          AND MAX(mal.declined_30d)::float
+              / NULLIF(MAX(mal.completed_30d + mal.declined_30d), 0) > 0.5
+        )
       ORDER BY MAX(me.created_at) ASC NULLS FIRST
       LIMIT 20
     `);
@@ -349,6 +429,9 @@ export class KaiAgent extends BaseAgent {
       moverId: string;
       userId: string;
       lastJobAt: string | null;
+      verifiedAt: string | null;
+      completed30d: number;
+      declined30d: number;
     }>;
     results.scanned = candidates.length;
 
@@ -454,16 +537,31 @@ export class KaiAgent extends BaseAgent {
     let emailSent = false;
     let smsSent = false;
 
-    if (touchNumber === 1 && user.phone) {
-      const smsText = `Hi ${firstName}, Kai from LervIT. Jobs are waiting in Calgary — open the app to start earning: ${APP_BASE_URL}/mover-dashboard`;
-      if (options.dryRun) {
-        return { dryRun: true, wouldContact: [moverId], preview: { to: user.phone, channel: 'sms', body: smsText.slice(0, 160), touchNumber } };
+    if (touchNumber === 1) {
+      // Prefer SMS for the tap-and-open call to action; fall back to email
+      // when the mover has no phone on file so no-phone movers still get
+      // touched at least once.
+      if (user.phone) {
+        const smsText = `Hi ${firstName}, Kai from LervIT. Jobs are waiting in Calgary — open the app to start earning: ${APP_BASE_URL}/mover-dashboard`;
+        if (options.dryRun) {
+          return { dryRun: true, wouldContact: [moverId], preview: { to: user.phone, channel: 'sms', body: smsText.slice(0, 160), touchNumber } };
+        }
+        smsSent = await notificationService.sendSMS({
+          to: user.phone,
+          message: smsText.slice(0, 160),
+          type: 'booking_update',
+        });
+      } else if (user.email) {
+        const subject = 'Jobs are waiting for you on LervIT';
+        if (options.dryRun) {
+          return { dryRun: true, wouldContact: [moverId], preview: { to: user.email, channel: 'email', subject, touchNumber, fallback: 'no_phone' } };
+        }
+        const html = moverReactivationTouch1FallbackHtml(firstName);
+        emailSent = await sendKaiEmail(user.email, subject, html);
+      } else {
+        logger.warn({ moverId }, 'Kai: no phone or email for T1 reactivation');
+        return { skipped: true, reason: 'no_contact', touchNumber };
       }
-      smsSent = await notificationService.sendSMS({
-        to: user.phone,
-        message: smsText.slice(0, 160),
-        type: 'booking_update',
-      });
     } else if (touchNumber === 2 && user.email) {
       const subject = 'Are you still available for moves in Calgary?';
       if (options.dryRun) {
@@ -518,6 +616,13 @@ function customerWinbackTouch3Html(firstName: string): string {
     <p>Kai Bennett<br/>LervIT Calgary</p>`;
 }
 
+function moverReactivationTouch1FallbackHtml(firstName: string): string {
+  return `<p>Hi ${firstName},</p>
+    <p>There are moving jobs available in Calgary right now — open the app to see what's near you and start earning.</p>
+    <p><a href="${APP_BASE_URL}/mover-dashboard" style="background:#2563eb;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:bold;">View available jobs →</a></p>
+    <p>Kai Bennett<br/>LervIT Team</p>`;
+}
+
 function moverReactivationTouch2Html(firstName: string): string {
   return `<p>Hi ${firstName},</p>
     <p>We noticed you haven't accepted a job recently and wanted to check in.</p>
@@ -535,6 +640,33 @@ function moverReactivationTouch3Html(firstName: string): string {
     <p>If something isn't working or you have concerns, please reply to this email — I read every response.</p>
     <p><a href="${APP_BASE_URL}/mover-dashboard" style="background:#2563eb;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:bold;">Accept a Job Today →</a></p>
     <p>Kai Bennett<br/>LervIT Team</p>`;
+}
+
+// ─── LLM output helpers ────────────────────────────────────
+
+// Riley uses the same shape — parse "SUBJECT: <line>\n\n<body>". Falls back
+// to a static subject and the whole raw string as body if the model doesn't
+// follow the format.
+function parseSubjectAndBody(raw: string, fallbackSubject: string): { subject: string; body: string } {
+  const lines = raw.split(/\r?\n/);
+  const subjectIdx = lines.findIndex(l => l.trim().toUpperCase().startsWith('SUBJECT:'));
+  if (subjectIdx === -1) {
+    return { subject: fallbackSubject, body: raw.trim() };
+  }
+  const subject = lines[subjectIdx].replace(/^\s*SUBJECT:\s*/i, '').trim() || fallbackSubject;
+  const body = lines.slice(subjectIdx + 1).join('\n').trim();
+  return { subject, body: body || raw.trim() };
+}
+
+// Convert double-newline-separated paragraphs to <p> tags. Leaves pre-tagged
+// HTML (starts with '<') untouched so the LLM can emit CTA buttons directly.
+function wrapAsParagraphs(body: string): string {
+  return body
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => (p.startsWith('<') ? p : `<p>${p.replace(/\n/g, '<br/>')}</p>`))
+    .join('');
 }
 
 // ─── email helper ──────────────────────────────────────────
