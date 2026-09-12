@@ -18,6 +18,7 @@ import { mark } from './agents/mark';
 import { kai } from './agents/kai';
 import { sam } from './agents/sam';
 import { riley } from './agents/riley';
+import { aegis } from './agents/aegis';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -240,6 +241,22 @@ export function initBackgroundJobs() {
         logger.info({ event: 'kai_scan_movers', result }, 'Kai mover scan complete');
       } catch (err) {
         logger.error({ err, event: 'kai_scan_movers' }, 'Kai mover scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 08:00 Calgary — Aegis Ford (COMPLIANCE) sweeps expiring verification
+  // documents (30d / 14d / 7d warnings, auto-suspend on expiry) and validates
+  // that no unverified mover is left available in the dispatch pool. Runs
+  // before the other daily agent scans so any suspensions land before touches.
+  cron.schedule('0 8 * * *', async () => {
+    await withJobLock('aegis_daily_scan', async () => {
+      try {
+        const expiry = await aegis.run('scan_expiring_documents', {});
+        const eligibility = await aegis.run('scan_dispatch_eligibility', {});
+        logger.info({ event: 'aegis_daily_scan', expiry, eligibility }, 'Aegis daily scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'aegis_daily_scan' }, 'Aegis daily scan failed');
       }
     });
   }, TZ);

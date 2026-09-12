@@ -48,7 +48,7 @@
 
 import { db } from './db';
 import { jobNotifications, users, movers as moversTable } from '@shared/schema';
-import { eq, and, isNotNull, ne } from 'drizzle-orm';
+import { eq, and, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { moverWebSocket } from './websocket';
 import { notificationService } from './notifications';
 import { logEvent, logger } from './logger';
@@ -110,10 +110,19 @@ export interface DispatchResult {
  * Optionally excludes one mover by profile ID (e.g. the mover who just declined).
  */
 async function loadOperationalMovers(excludeMoverId?: string): Promise<MoverData[]> {
-  const conditions: ReturnType<typeof eq>[] = [
+  // Aegis (COMPLIANCE) gate: never dispatch to unverified movers, and never
+  // dispatch to anyone on suspended pilot status. `pilotStatus` defaults to
+  // 'none' for legacy movers, so we accept NULL or anything not 'suspended'.
+  const conditions = [
     eq(moversTable.isAvailable, true),
     isNotNull(moversTable.latitude),
     isNotNull(moversTable.longitude),
+    eq(moversTable.isVerified, true),
+    eq(moversTable.documentsVerified, true),
+    or(
+      isNull(moversTable.pilotStatus),
+      ne(moversTable.pilotStatus, 'suspended'),
+    ),
   ];
   if (excludeMoverId) {
     conditions.push(ne(moversTable.id, excludeMoverId));

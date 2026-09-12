@@ -13760,6 +13760,98 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== AEGIS FORD (COMPLIANCE) =====
+
+  const AEGIS_ACTIONS = new Set([
+    'scan_expiring_documents',
+    'scan_dispatch_eligibility',
+    'suspend_mover',
+    'reactivate_mover',
+  ]);
+
+  // Manually enqueue an Aegis action. Dry-runs bypass the queue and run inline
+  // so the admin sees the preview immediately (matches Riley/Kai/Sam pattern).
+  app.post("/api/admin/agent/aegis/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!AEGIS_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      if (dryRun) {
+        const { aegis } = await import('./agents/aegis');
+        const result = await aegis.run(action, input, { dryRun: true });
+        return res.json({ ok: true, dryRun: true, action, result });
+      }
+
+      const aegisQueue = createAgentQueue(QUEUE_NAMES.COMPLIANCE);
+      if (!aegisQueue) {
+        return res.status(503).json({ error: 'COMPLIANCE queue unavailable (REDIS_URL not configured)' });
+      }
+      const job = await aegisQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] aegis/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // Aegis compliance snapshot for the APEX AegisCard.
+  app.get("/api/admin/agent/aegis/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const now = new Date();
+      const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const moverCounts = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE pilot_status = 'suspended')                            ::int AS suspended_count,
+          COUNT(*) FILTER (
+            WHERE is_verified = true
+              AND documents_verified = true
+              AND (pilot_status IS NULL OR pilot_status <> 'suspended')
+          )                                                                             ::int AS compliant_count,
+          COUNT(*) FILTER (
+            WHERE is_available = true
+              AND (is_verified = false OR documents_verified = false)
+          )                                                                             ::int AS unverified_in_pool
+        FROM movers
+      `);
+      const m = (moverCounts as any).rows?.[0] ?? {};
+
+      const expiringRows = await db.execute(sql`
+        SELECT COUNT(*)::int AS expiring_count
+        FROM verification_items
+        WHERE status = 'approved'
+          AND expiry_date IS NOT NULL
+          AND expiry_date <= ${in30Days}
+          AND type IN ('DRIVERS_LICENSE', 'INSURANCE', 'VEHICLE_REGISTRATION', 'BACKGROUND_CHECK')
+      `);
+      const expiringCount = (expiringRows as any).rows?.[0]?.expiring_count ?? 0;
+
+      const recentEvents = await db
+        .select()
+        .from(businessEvents)
+        .where(sql`event_type LIKE 'aegis.%'`)
+        .orderBy(desc(businessEvents.createdAt))
+        .limit(10);
+
+      res.json({
+        suspendedCount: m.suspended_count ?? 0,
+        compliantCount: m.compliant_count ?? 0,
+        unverifiedInPool: m.unverified_in_pool ?? 0,
+        expiringCount,
+        recentEvents,
+      });
+    } catch (err) {
+      logger.error({ err }, '[Admin] aegis/stats failed');
+      res.status(500).json({ error: 'Failed to load Aegis stats' });
+    }
+  });
+
   // ===== SCOUT REID (HUNTER-D) + ALEX MORGAN (CLOSER-D) =====
 
   // List leads with filters + pagination.

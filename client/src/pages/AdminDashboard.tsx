@@ -10,6 +10,7 @@ import { MarkShawCard } from "@/components/MarkShawCard";
 import { RileyMorganCard } from "@/components/RileyMorganCard";
 import { KaiBennettCard } from "@/components/KaiBennettCard";
 import { SamCarterCard } from "@/components/SamCarterCard";
+import { AegisCard } from "@/components/AegisCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1447,6 +1448,9 @@ export default function AdminDashboard() {
 
             {/* Sales — full width */}
             <SamCarterCard />
+
+            {/* Compliance — full width */}
+            <AegisCard />
           </TabsContent>
 
         </Tabs>

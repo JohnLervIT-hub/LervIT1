@@ -406,6 +406,11 @@ export const verificationItems = pgTable("verification_items", {
   fileUrls: text("file_urls").array(),
   rejectionReason: text("rejection_reason"),
   expiryDate: timestamp("expiry_date"),
+  // Aegis Ford (COMPLIANCE) reminder tracking — one-shot flags per warning window.
+  // Flipped true once Aegis sends the email/SMS so we don't spam the mover.
+  reminded30d: boolean("reminded_30d").default(false).notNull(),
+  reminded14d: boolean("reminded_14d").default(false).notNull(),
+  reminded7d: boolean("reminded_7d").default(false).notNull(),
   submittedAt: timestamp("submitted_at"),
   reviewedAt: timestamp("reviewed_at"),
   reviewedBy: varchar("reviewed_by").references(() => users.id),

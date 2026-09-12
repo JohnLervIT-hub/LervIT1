@@ -128,9 +128,9 @@ export const AGENT_PROFILES: Record<string, {
     name: 'Aegis Ford',
     code: 'COMPLIANCE',
     role: 'Compliance Monitor',
-    email: 'aegis@lervit.com',
+    email: 'aegis.ford@lervit.com',
     avatar: '/avatars/aegis-ford.png',
-    color: '#475569',
+    color: '#dc2626',
     gender: 'male',
   },
 };
