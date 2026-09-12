@@ -20,7 +20,7 @@
  * notificationService.
  */
 
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
@@ -110,7 +110,15 @@ export class RileyAgent extends BaseAgent {
         AND m.created_at >= ${thirtyDaysAgo}
         AND NOT EXISTS (
           SELECT 1 FROM bookings b
-          WHERE b.mover_id = m.id AND b.status <> 'cancelled'
+          WHERE b.mover_id = m.id
+            AND b.status IN (
+              'confirmed',
+              'en_route_to_pickup',
+              'loading',
+              'en_route_to_dropoff',
+              'unloading',
+              'completed'
+            )
         )
         AND NOT EXISTS (
           SELECT 1 FROM business_events be
@@ -151,6 +159,18 @@ export class RileyAgent extends BaseAgent {
   // ─── MOVER TRACK ────────────────────────────────────────────
 
   private async onMoverVerified({ moverId, userId }: MoverVerifiedInput) {
+    // Dedupe: retried webhooks / duplicate approval writes must not resend
+    // the congrats email or re-schedule the day 3/7/14 nudge sequence.
+    const dedupe = await wasContactedWithinDays({
+      entityId: moverId,
+      eventTypes: ['riley.mover_verified'],
+      days: 7,
+    });
+    if (dedupe.contacted) {
+      logger.info({ moverId }, '[Riley] Skipping mover_verified — already sent within 7 days');
+      return { skipped: true, reason: 'dedupe' };
+    }
+
     const [mover] = await db.select().from(movers).where(eq(movers.id, moverId)).limit(1);
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!mover || !user) {
@@ -232,26 +252,71 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
   }
 
   private async onStripeConnected({ moverId }: StripeConnectedInput) {
+    // Dedupe: Stripe webhook retries and double account.updated events must
+    // not resend the payouts-live notification.
+    const dedupe = await wasContactedWithinDays({
+      entityId: moverId,
+      eventTypes: ['riley.stripe_connected'],
+      days: 7,
+    });
+    if (dedupe.contacted) {
+      logger.info({ moverId }, '[Riley] Skipping stripe_connected — already sent within 7 days');
+      return { skipped: true, reason: 'dedupe' };
+    }
+
     const [mover] = await db.select().from(movers).where(eq(movers.id, moverId)).limit(1);
     if (!mover) return { skipped: true, reason: 'mover not found' };
 
     const [user] = await db.select().from(users).where(eq(users.id, mover.userId)).limit(1);
-    if (!user?.phone) return { skipped: true, reason: 'no phone on file' };
+    if (!user) return { skipped: true, reason: 'user not found' };
 
     const firstName = user.name?.split(' ')[0] || 'there';
-    const smsText = `Hi ${firstName}! Riley from LervIT. Your Stripe account is connected — same-day payouts after each job. Start accepting jobs: ${APP_BASE_URL}/mover-dashboard`;
-    const smsSent = await notificationService.sendSMS({
-      to: user.phone,
-      message: smsText.slice(0, 160),
-      type: 'booking_update',
-    });
+    let smsSent = false;
+    let emailSent = false;
+
+    if (user.phone) {
+      const smsText = `Hi ${firstName}! Riley from LervIT. Your Stripe account is connected — same-day payouts after each job. Start accepting jobs: ${APP_BASE_URL}/mover-dashboard`;
+      smsSent = await notificationService.sendSMS({
+        to: user.phone,
+        message: smsText.slice(0, 160),
+        type: 'booking_update',
+      });
+    } else if (user.email) {
+      // Fallback: no phone on file → transactional email so the mover still
+      // learns payouts are live.
+      try {
+        await sendResendEmail({
+          from: EMAIL_SENDERS.TRANSACTIONAL,
+          to: user.email,
+          subject: 'Your LervIT payouts are ready',
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
+            <p>Hi ${firstName},</p>
+            <p>Great news — your Stripe account is fully connected and your payouts are now active.</p>
+            <p>You'll receive payment within 2 business days after each completed move.</p>
+            <p>The LervIT team</p>
+            <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
+            <p style="font-size:12px;color:#999;">
+              LervIT Technologies · Calgary, AB ·
+              <a href="${APP_BASE_URL}/unsubscribe">Unsubscribe</a>
+            </p>
+          </div>`,
+          listUnsubscribeUrl: `${APP_BASE_URL}/unsubscribe`,
+        });
+        emailSent = true;
+      } catch (err) {
+        logger.error({ err, moverId }, 'Riley: stripe_connected email fallback failed');
+      }
+    } else {
+      return { skipped: true, reason: 'no_contact' };
+    }
 
     await emitEvent('riley.stripe_connected', 'agent', moverId, {
       agentName: this.name,
       sms: smsSent,
+      email: emailSent,
     });
 
-    return { success: true, track: 'mover', event: 'stripe_connected', sms: smsSent };
+    return { success: true, track: 'mover', event: 'stripe_connected', sms: smsSent, email: emailSent };
   }
 
   private async sendMoverNudge({ moverId, userId, touchNumber }: MoverNudgeInput, options: AgentRunOptions = {}) {
@@ -259,11 +324,23 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
       throw new Error(`Riley.sendMoverNudge: invalid touchNumber ${touchNumber}`);
     }
 
-    // Skip if the mover has accepted any non-cancelled job.
+    // Skip if the mover has any accepted / in-progress / completed job.
+    // `ne(status, 'cancelled')` would also count pending_payment / pending
+    // shells and treat cancelled-only movers as active — both bugs.
     const [jobs] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(bookings)
-      .where(and(eq(bookings.moverId, moverId), ne(bookings.status, 'cancelled')));
+      .where(and(
+        eq(bookings.moverId, moverId),
+        inArray(bookings.status, [
+          'confirmed',
+          'en_route_to_pickup',
+          'loading',
+          'en_route_to_dropoff',
+          'unloading',
+          'completed',
+        ]),
+      ));
     if ((jobs?.n ?? 0) > 0) {
       return { skipped: true, reason: 'mover active', touchNumber };
     }
@@ -342,17 +419,62 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
   // ─── CUSTOMER TRACK ──────────────────────────────────────────
 
   private async onCustomerVerified({ userId }: CustomerVerifiedInput) {
+    // Dedupe: verification link double-clicks and manual re-triggers must not
+    // resend a welcome or re-schedule the nudge sequence.
+    const dedupe = await wasContactedWithinDays({
+      entityId: userId,
+      eventTypes: ['riley.customer_verified'],
+      days: 7,
+    });
+    if (dedupe.contacted) {
+      logger.info({ userId }, '[Riley] Skipping customer_verified — already sent within 7 days');
+      return { skipped: true, reason: 'dedupe' };
+    }
+
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return { skipped: true, reason: 'user not found' };
 
-    // Skip if the customer has already booked. This can happen if the verify
-    // event fires after the booking flow completes.
+    // If the customer already booked, the discount-nudge sequence is off-brand
+    // (they already converted). Send a booking-context welcome instead so
+    // they still hear from us, then anchor the dedupe and exit.
     const [count] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(bookings)
       .where(eq(bookings.customerId, userId));
     if ((count?.n ?? 0) > 0) {
-      return { skipped: true, reason: 'customer already booked' };
+      const firstName = user.name?.split(' ')[0] || 'there';
+      let emailSent = false;
+      if (user.email) {
+        try {
+          await sendResendEmail({
+            from: EMAIL_SENDERS.TRANSACTIONAL,
+            to: user.email,
+            subject: 'Welcome to LervIT — your account is verified',
+            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
+              <p>Hi ${firstName},</p>
+              <p>Your LervIT account is now verified. You can track your booking, manage preferences, and book future moves all from your dashboard.</p>
+              <p>Use <strong>LERVIT10</strong> for 10% off your next move.</p>
+              ${ctaHtml('Go to my dashboard →', `${APP_BASE_URL}/dashboard`)}
+              <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
+              <p style="font-size:12px;color:#999;">
+                LervIT Technologies · Calgary, AB ·
+                <a href="${APP_BASE_URL}/unsubscribe">Unsubscribe</a>
+              </p>
+            </div>`,
+            listUnsubscribeUrl: `${APP_BASE_URL}/unsubscribe`,
+          });
+          emailSent = true;
+        } catch (err) {
+          logger.error({ err, userId }, 'Riley: post-booking welcome email failed');
+        }
+      }
+      await emitEvent('riley.customer_verified', 'agent', userId, {
+        agentName: this.name,
+        nudgesScheduled: 0,
+        reason: 'post_booking',
+        email: emailSent,
+      });
+      return { success: true, track: 'customer', reason: 'post_booking', email: emailSent };
     }
 
     const queue = createAgentQueue(QUEUE_NAMES.ONBOARD);

@@ -17,6 +17,7 @@ import { victor } from './agents/victor';
 import { mark } from './agents/mark';
 import { kai } from './agents/kai';
 import { sam } from './agents/sam';
+import { riley } from './agents/riley';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -239,6 +240,20 @@ export function initBackgroundJobs() {
         logger.info({ event: 'kai_scan_movers', result }, 'Kai mover scan complete');
       } catch (err) {
         logger.error({ err, event: 'kai_scan_movers' }, 'Kai mover scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 10:30 Calgary — Riley Morgan (ONBOARD) sweeps newly-verified movers
+  // (verified <30d, no accepted jobs) and enqueues day-2/3/4 nudges. Riley
+  // owns the newly-verified window; Kai owns 30d+ so the two don't overlap.
+  cron.schedule('30 10 * * *', async () => {
+    await withJobLock('riley_scan_inactive_movers', async () => {
+      try {
+        const result = await riley.run('scan_inactive_movers', {});
+        logger.info({ event: 'riley_scan_inactive_movers', result }, 'Riley mover scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'riley_scan_inactive_movers' }, 'Riley mover scan failed');
       }
     });
   }, TZ);
