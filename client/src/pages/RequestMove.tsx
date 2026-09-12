@@ -17,7 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
-import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
@@ -332,6 +332,10 @@ export default function RequestMove() {
       body: JSON.stringify({
         pickupAddress,
         dropoffAddress,
+        pickupLat: pickupCoords?.lat ?? null,
+        pickupLng: pickupCoords?.lng ?? null,
+        dropoffLat: dropoffCoords?.lat ?? null,
+        dropoffLng: dropoffCoords?.lng ?? null,
         distanceKm: priceBreakdown.distanceKm || estimateDistance,
         loadSize,
         itemsJson: identifiedItems.length > 0 ? identifiedItems : null,
@@ -555,6 +559,18 @@ export default function RequestMove() {
     const resumeStepParam = wouterParams.get('resumeStep') || windowParams.get('resumeStep');
     const abandonedId = wouterParams.get('abandonedId') || windowParams.get('abandonedId');
     const quoteIdParam = wouterParams.get('quote') || windowParams.get('quote');
+    const pickupLatParam = wouterParams.get('pickupLat') || windowParams.get('pickupLat');
+    const pickupLngParam = wouterParams.get('pickupLng') || windowParams.get('pickupLng');
+    const dropoffLatParam = wouterParams.get('dropoffLat') || windowParams.get('dropoffLat');
+    const dropoffLngParam = wouterParams.get('dropoffLng') || windowParams.get('dropoffLng');
+
+    const parseCoords = (lat: string | null, lng: string | null) => {
+      if (!lat || !lng) return null;
+      const latNum = Number(lat);
+      const lngNum = Number(lng);
+      if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
+      return { lat: latNum, lng: lngNum };
+    };
 
     // PRIORITY -1: Restore anonymous quote by id (e.g. /request-move?quote=q_...).
     // Takes precedence over abandoned/pickup restore paths.
@@ -566,6 +582,16 @@ export default function RequestMove() {
           if (!quote?.id) return;
           if (quote.pickupAddress) setPickupAddress(quote.pickupAddress);
           if (quote.dropoffAddress) setDropoffAddress(quote.dropoffAddress);
+          const restoredPickup = parseCoords(
+            quote.pickupLat != null ? String(quote.pickupLat) : null,
+            quote.pickupLng != null ? String(quote.pickupLng) : null,
+          );
+          const restoredDropoff = parseCoords(
+            quote.dropoffLat != null ? String(quote.dropoffLat) : null,
+            quote.dropoffLng != null ? String(quote.dropoffLng) : null,
+          );
+          if (restoredPickup) setPickupCoords(restoredPickup);
+          if (restoredDropoff) setDropoffCoords(restoredDropoff);
           if (quote.loadSize) setLoadSize(quote.loadSize);
           if (Array.isArray(quote.itemsJson)) setIdentifiedItems(quote.itemsJson);
           if (typeof quote.numberOfMovers === 'number') setNumberOfMovers(quote.numberOfMovers);
@@ -694,6 +720,10 @@ export default function RequestMove() {
     if (dropoff) {
       setDropoffAddress(dropoff);
     }
+    const inboundPickup = parseCoords(pickupLatParam, pickupLngParam);
+    const inboundDropoff = parseCoords(dropoffLatParam, dropoffLngParam);
+    if (inboundPickup) setPickupCoords(inboundPickup);
+    if (inboundDropoff) setDropoffCoords(inboundDropoff);
     if (preferredDate) {
       setDate(preferredDate);
     }
@@ -2343,7 +2373,7 @@ export default function RequestMove() {
                           <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-green-500/20 flex-shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pickup</span>
                         </div>
-                        <AddressAutocomplete
+                        <CustomAddressInput
                           id="pickup"
                           placeholder="Enter pickup address in Calgary"
                           value={pickupAddress}
@@ -2354,6 +2384,8 @@ export default function RequestMove() {
                                 lat: place.geometry.location.lat(),
                                 lng: place.geometry.location.lng(),
                               });
+                            } else {
+                              setPickupCoords(null);
                             }
                           }}
                           data-testid="input-pickup-address"
@@ -2391,7 +2423,7 @@ export default function RequestMove() {
                           <div className="w-2.5 h-2.5 rounded-sm bg-primary flex-shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dropoff</span>
                         </div>
-                        <AddressAutocomplete
+                        <CustomAddressInput
                           id="dropoff"
                           placeholder="Enter dropoff address in Calgary"
                           value={dropoffAddress}
@@ -2402,6 +2434,8 @@ export default function RequestMove() {
                                 lat: place.geometry.location.lat(),
                                 lng: place.geometry.location.lng(),
                               });
+                            } else {
+                              setDropoffCoords(null);
                             }
                           }}
                           data-testid="input-dropoff-address"

@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CustomAddressInput } from "@/components/CustomAddressInput";
+import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
 import {
   Sheet,
   SheetContent,
@@ -51,7 +53,36 @@ import heroImage from "@assets/generated_images/calgary_mover_loading_furniture.
 export default function LandingPage() {
   const [activeStep, setActiveStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [heroPickup, setHeroPickup] = useState("");
+  const [heroDropoff, setHeroDropoff] = useState("");
+  const [heroPickupCoords, setHeroPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [heroDropoffCoords, setHeroDropoffCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [heroDate, setHeroDate] = useState("");
+  const [, navigate] = useLocation();
+  const { loadMaps } = useGoogleMaps();
   useAnalytics("landing_page");
+
+  // Warm up Google Maps so the hero address fields work on first paint.
+  useEffect(() => {
+    loadMaps();
+  }, [loadMaps]);
+
+  const handleGetPrice = () => {
+    const params = new URLSearchParams();
+    if (heroPickup) params.set("pickup", heroPickup);
+    if (heroDropoff) params.set("dropoff", heroDropoff);
+    if (heroDate) params.set("date", heroDate);
+    if (heroPickupCoords) {
+      params.set("pickupLat", String(heroPickupCoords.lat));
+      params.set("pickupLng", String(heroPickupCoords.lng));
+    }
+    if (heroDropoffCoords) {
+      params.set("dropoffLat", String(heroDropoffCoords.lat));
+      params.set("dropoffLng", String(heroDropoffCoords.lng));
+    }
+    const qs = params.toString();
+    navigate(qs ? `/request-move?${qs}` : "/request-move");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -257,43 +288,70 @@ export default function LandingPage() {
                     <Label htmlFor="pickup" className="text-sm font-medium flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-primary" /> Pickup Location
                     </Label>
-                    <Input 
+                    <CustomAddressInput
                       id="pickup"
                       placeholder="Enter pickup address in Calgary"
-                      className="h-12"
+                      value={heroPickup}
+                      onChange={(address, place) => {
+                        setHeroPickup(address);
+                        if (place?.geometry?.location) {
+                          setHeroPickupCoords({
+                            lat: place.geometry.location.lat(),
+                            lng: place.geometry.location.lng(),
+                          });
+                        } else {
+                          setHeroPickupCoords(null);
+                        }
+                      }}
                       data-testid="input-hero-pickup"
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="dropoff" className="text-sm font-medium flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-destructive" /> Dropoff Location
                     </Label>
-                    <Input 
+                    <CustomAddressInput
                       id="dropoff"
                       placeholder="Enter dropoff address"
-                      className="h-12"
+                      value={heroDropoff}
+                      onChange={(address, place) => {
+                        setHeroDropoff(address);
+                        if (place?.geometry?.location) {
+                          setHeroDropoffCoords({
+                            lat: place.geometry.location.lat(),
+                            lng: place.geometry.location.lng(),
+                          });
+                        } else {
+                          setHeroDropoffCoords(null);
+                        }
+                      }}
                       data-testid="input-hero-dropoff"
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="date" className="text-sm font-medium flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-muted-foreground" /> Moving Date
                     </Label>
-                    <Input 
+                    <Input
                       id="date"
                       type="date"
                       className="h-12"
+                      value={heroDate}
+                      onChange={(e) => setHeroDate(e.target.value)}
                       data-testid="input-hero-date"
                     />
                   </div>
-                  
-                  <Link href="/request-move">
-                    <Button size="lg" className="w-full gap-2 mt-2" data-testid="button-hero-get-price">
-                      Get Price <ArrowRight className="w-5 h-5" />
-                    </Button>
-                  </Link>
+
+                  <Button
+                    size="lg"
+                    className="w-full gap-2 mt-2"
+                    onClick={handleGetPrice}
+                    data-testid="button-hero-get-price"
+                  >
+                    Get Price <ArrowRight className="w-5 h-5" />
+                  </Button>
                 </div>
                 
                 {/* AI Feature Highlight */}

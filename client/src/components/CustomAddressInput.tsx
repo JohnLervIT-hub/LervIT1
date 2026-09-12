@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { MapPin, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGoogleMaps } from "@/contexts/GoogleMapsContext";
+import { useToast } from "@/hooks/use-toast";
 
 interface Prediction {
   place_id: string;
@@ -57,6 +58,7 @@ export function CustomAddressInput({
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { isLoaded: mapsLoaded, loadMaps } = useGoogleMaps();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadMaps();
@@ -123,7 +125,7 @@ export function CustomAddressInput({
   };
 
   const handleSelectPrediction = async (prediction: Prediction) => {
-    setInputValue(abbrevAddr(prediction.description));
+    const typedValue = inputValue;
     setIsOpen(false);
     setPredictions([]);
 
@@ -132,33 +134,61 @@ export function CustomAddressInput({
         ? (window.google.maps.places as any).Place
         : null;
 
-      if (PlaceClass) {
-        const place = new PlaceClass({ id: prediction.place_id });
-        await place.fetchFields({
-          fields: ['formattedAddress', 'location', 'addressComponents', 'id'],
-        });
-
-        const placeResult: google.maps.places.PlaceResult = {
-          formatted_address: place.formattedAddress || prediction.description,
-          place_id: place.id || prediction.place_id,
-          geometry: place.location
-            ? ({ location: place.location } as google.maps.places.PlaceGeometry)
-            : undefined,
-          address_components: place.addressComponents?.map((c: any) => ({
-            long_name: c.longText || '',
-            short_name: c.shortText || '',
-            types: c.types || [],
-          })),
-        };
-
-        onChange(prediction.description, placeResult);
-      } else {
+      if (!PlaceClass) {
+        // Maps script not ready — return address string only, no coords.
+        setInputValue(abbrevAddr(prediction.description));
         onChange(prediction.description);
+        sessionTokenRef.current = generateSessionToken();
+        return;
+      }
+
+      const place = new PlaceClass({ id: prediction.place_id });
+      await place.fetchFields({
+        fields: ['formattedAddress', 'location', 'addressComponents', 'id'],
+      });
+
+      const resolvedAddress = place.formattedAddress || prediction.description;
+
+      // Guard 1: refuse selections without geometry — parent needs coords to proceed.
+      if (!place.location) {
+        setInputValue(abbrevAddr(resolvedAddress));
+        onChange(resolvedAddress, undefined);
+        sessionTokenRef.current = generateSessionToken();
+        return;
+      }
+
+      // Guard 2: warn if Google resolved to a different street number than typed.
+      const typedNumber = typedValue.match(/^\d+/)?.[0];
+      const returnedNumber = resolvedAddress.match(/^\d+/)?.[0];
+      const numberMismatch =
+        typedNumber && returnedNumber && typedNumber !== returnedNumber;
+
+      const placeResult: google.maps.places.PlaceResult = {
+        formatted_address: resolvedAddress,
+        place_id: place.id || prediction.place_id,
+        geometry: { location: place.location } as google.maps.places.PlaceGeometry,
+        address_components: place.addressComponents?.map((c: any) => ({
+          long_name: c.longText || '',
+          short_name: c.shortText || '',
+          types: c.types || [],
+        })),
+      };
+
+      setInputValue(abbrevAddr(resolvedAddress));
+      onChange(resolvedAddress, placeResult);
+
+      if (numberMismatch) {
+        toast({
+          title: "Address adjusted",
+          description: `Google returned "${resolvedAddress}" — please confirm this is correct.`,
+          variant: "destructive",
+        });
       }
 
       sessionTokenRef.current = generateSessionToken();
     } catch (error) {
       console.error('Error fetching place details:', error);
+      setInputValue(abbrevAddr(prediction.description));
       onChange(prediction.description);
     }
   };

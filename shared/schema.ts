@@ -1937,6 +1937,12 @@ export const quotes = pgTable("quotes", {
   // Route
   pickupAddress: text("pickup_address").notNull(),
   dropoffAddress: text("dropoff_address"),
+  // Geocoded coordinates. Persisted so /quote/:id links restore full precision
+  // (address strings alone can't re-populate autocomplete geometry).
+  pickupLat: decimal("pickup_lat", { precision: 10, scale: 7 }),
+  pickupLng: decimal("pickup_lng", { precision: 10, scale: 7 }),
+  dropoffLat: decimal("dropoff_lat", { precision: 10, scale: 7 }),
+  dropoffLng: decimal("dropoff_lng", { precision: 10, scale: 7 }),
   distanceKm: decimal("distance_km", { precision: 8, scale: 2 }),
   // Load details
   loadSize: text("load_size"),

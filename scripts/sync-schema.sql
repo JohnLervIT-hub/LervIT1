@@ -1574,6 +1574,10 @@ CREATE TABLE IF NOT EXISTS "quotes" (
   "id" varchar PRIMARY KEY DEFAULT ('q_' || gen_random_uuid()::text),
   "pickup_address" text NOT NULL,
   "dropoff_address" text,
+  "pickup_lat" decimal(10, 7),
+  "pickup_lng" decimal(10, 7),
+  "dropoff_lat" decimal(10, 7),
+  "dropoff_lng" decimal(10, 7),
   "distance_km" decimal(8, 2),
   "load_size" text,
   "items_json" jsonb,
@@ -1590,6 +1594,12 @@ CREATE TABLE IF NOT EXISTS "quotes" (
   "created_at" timestamp NOT NULL DEFAULT NOW(),
   "updated_at" timestamp NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE "quotes"
+  ADD COLUMN IF NOT EXISTS "pickup_lat"  decimal(10, 7),
+  ADD COLUMN IF NOT EXISTS "pickup_lng"  decimal(10, 7),
+  ADD COLUMN IF NOT EXISTS "dropoff_lat" decimal(10, 7),
+  ADD COLUMN IF NOT EXISTS "dropoff_lng" decimal(10, 7);
 
 CREATE INDEX IF NOT EXISTS "quotes_status_idx"      ON "quotes" ("status");
 CREATE INDEX IF NOT EXISTS "quotes_lead_id_idx"     ON "quotes" ("lead_id");

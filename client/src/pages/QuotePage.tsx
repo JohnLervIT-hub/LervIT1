@@ -32,6 +32,14 @@ export default function QuotePage() {
           pickup: quote.pickupAddress ?? "",
           dropoff: quote.dropoffAddress ?? "",
         });
+        if (quote.pickupLat != null && quote.pickupLng != null) {
+          params.set("pickupLat", String(quote.pickupLat));
+          params.set("pickupLng", String(quote.pickupLng));
+        }
+        if (quote.dropoffLat != null && quote.dropoffLng != null) {
+          params.set("dropoffLat", String(quote.dropoffLat));
+          params.set("dropoffLng", String(quote.dropoffLng));
+        }
         navigate(`/request-move?${params.toString()}`);
       })
       .catch(() => setStatus("error"));

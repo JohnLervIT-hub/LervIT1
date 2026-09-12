@@ -37,6 +37,7 @@
 
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import type { Socket } from "net";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
@@ -13690,6 +13691,10 @@ Respond with VALID JSON only:
       const [quote] = await db.insert(quotes).values({
         pickupAddress,
         dropoffAddress: typeof b.dropoffAddress === 'string' ? b.dropoffAddress : null,
+        pickupLat: toDec(b.pickupLat),
+        pickupLng: toDec(b.pickupLng),
+        dropoffLat: toDec(b.dropoffLat),
+        dropoffLng: toDec(b.dropoffLng),
         distanceKm: toDec(b.distanceKm),
         loadSize: typeof b.loadSize === 'string' ? b.loadSize : null,
         itemsJson: b.itemsJson ?? null,
@@ -14552,7 +14557,7 @@ Respond with VALID JSON only:
   // "connection opened" log doesn't, ws is dropping the socket between
   // handshake and connection event.
   httpServer.on('upgrade', (req, socket) => {
-    console.log('[http] upgrade request:', req.url, 'from', socket.remoteAddress);
+    console.log('[http] upgrade request:', req.url, 'from', (socket as Socket).remoteAddress);
   });
 
   // Each WebSocket init is wrapped independently — a failure in one
