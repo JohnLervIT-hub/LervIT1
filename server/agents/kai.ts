@@ -27,7 +27,7 @@ import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { users, movers, bookings } from '@shared/schema';
 import { emitEvent } from '../events';
-import { notificationService } from '../notifications';
+import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedWithinDays } from './dedupe';
@@ -270,7 +270,7 @@ export class KaiAgent extends BaseAgent {
     let smsSent = false;
 
     if (touchNumber === 1 && user.email) {
-      const subject = `${firstName}, we miss you! Here's 15% off your next move`;
+      const subject = `${firstName}, come back to LervIT`;
       if (options.dryRun) {
         return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
       }
@@ -287,7 +287,7 @@ export class KaiAgent extends BaseAgent {
         type: 'booking_update',
       });
     } else if (touchNumber === 3 && user.email) {
-      const subject = 'Last chance — your LervIT discount expires soon';
+      const subject = 'Following up on your LervIT account';
       if (options.dryRun) {
         return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
       }
@@ -569,18 +569,15 @@ async function sendKaiEmail(to: string, subject: string, innerHtml: string): Pro
     </p>
   </div>`;
   try {
-    const { data, error } = await resend.emails.send({
-      from: KAI_FROM,
+    await sendResendEmail({
+      from: EMAIL_SENDERS.OUTREACH,
       to,
       replyTo: KAI_REPLY_TO,
       subject,
       html,
+      listUnsubscribeUrl: `${APP_BASE_URL}/unsubscribe`,
     });
-    if (error) {
-      logger.error({ err: error }, 'Kai: Resend error');
-      return false;
-    }
-    logger.info({ id: data?.id, to, subject }, 'Kai: email sent');
+    logger.info({ to, subject }, 'Kai: email sent');
     return true;
   } catch (err) {
     logger.error({ err }, 'Kai: Resend threw');

@@ -48,7 +48,7 @@ import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { leads, partners, partnerInvites, users, businessEvents } from '@shared/schema';
 import { emitEvent } from '../events';
-import { notificationService } from '../notifications';
+import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { searchPlacesText, getPlaceContactDetails } from './places-crawl';
@@ -1222,6 +1222,20 @@ function partnerFollowupEmail(partnerName: string, opsName: string | null, touch
           <p>If anything is blocking you, reply here and I'll help personally.</p>
           <p>Sam Carter<br/>LervIT Partnerships</p>`,
       };
+    case 2:
+      return {
+        subject: `Following up — LervIT fleet partnership for ${partnerName}`,
+        html: `<p>Hi ${first},</p>
+          <p>Circling back on the LervIT partner onboarding for ${partnerName}. I wanted to share a couple of things that seem to help other Calgary fleets get to their first live booking faster:</p>
+          <ul>
+            <li>Coverage areas can start narrow — you can widen them after your first week of routing.</li>
+            <li>Compliance docs (insurance, WCB) upload directly in the portal; our team reviews within one business day.</li>
+            <li>Dispatch config supports both auto-accept and manual review, so you can pick the workflow that matches how your ops team currently handles jobs.</li>
+          </ul>
+          <p><a href="${PARTNERS_PORTAL_URL}" style="background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;">Continue Onboarding →</a></p>
+          <p>Happy to jump on a 15-minute call if it would help — just reply with a time that works.</p>
+          <p>Sam Carter<br/>LervIT Partnerships</p>`,
+      };
     case 3:
     default:
       return {
@@ -1267,18 +1281,15 @@ async function sendSamEmail(to: string, subject: string, innerHtml: string): Pro
     </p>
   </div>`;
   try {
-    const { data, error } = await resend.emails.send({
-      from: SAM_FROM,
+    await sendResendEmail({
+      from: EMAIL_SENDERS.OUTREACH,
       to,
       replyTo: SAM_REPLY_TO,
       subject,
       html,
+      listUnsubscribeUrl: `${APP_BASE_URL}/unsubscribe`,
     });
-    if (error) {
-      logger.error({ err: error }, 'Sam: Resend error');
-      return false;
-    }
-    logger.info({ id: data?.id, to, subject }, 'Sam: email sent');
+    logger.info({ to, subject }, 'Sam: email sent');
     return true;
   } catch (err) {
     logger.error({ err }, 'Sam: Resend threw');

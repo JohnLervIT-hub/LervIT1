@@ -53,7 +53,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Stripe from "stripe";
-import { notificationService, formatCalgaryDate } from "./notifications";
+import { notificationService, formatCalgaryDate, sendResendEmail, EMAIL_SENDERS } from "./notifications";
 import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
@@ -3348,7 +3348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 <p>Your LervIT account email address was updated by an administrator to:</p>
                 <p style="font-size:16px;font-weight:bold;color:#2563eb;">${email}</p>
                 <p>A verification link has been sent to your new address. You'll need to verify it before you can log back in.</p>
-                <p style="color:#dc2626;">If you did not request this change, contact support immediately at <a href="mailto:support@lervit.ca">support@lervit.ca</a>.</p>
+                <p style="color:#dc2626;">If you did not request this change, contact support immediately at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p>
               </div>`,
           });
 
@@ -8176,11 +8176,8 @@ Respond with VALID JSON only:
             .limit(1);
 
             if (customer[0]?.email) {
-              const { Resend } = await import('resend');
-              const resend = new Resend(process.env.RESEND_API_KEY);
-
-              await resend.emails.send({
-                from: 'LervIT Support <support@lervit.com>',
+              await sendResendEmail({
+                from: EMAIL_SENDERS.SUPPORT,
                 replyTo: 'support@lervit.com',
                 to: customer[0].email,
                 subject: `Re: ${ticket[0].subject}`,
@@ -8213,7 +8210,7 @@ Respond with VALID JSON only:
                     <a href="https://app.lervit.com/support"
                        style="color:#2563eb;">support portal</a>
                   </p>
-                </div>`
+                </div>`,
               });
 
               logger.info({

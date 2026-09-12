@@ -1034,11 +1034,11 @@ async function sendAbandonedBookingReminders() {
           const reminderNumber = abandoned.reminderCount + 1;
           let urgencyMessage = '';
           if (reminderNumber === 1) {
-            urgencyMessage = "We saved your booking progress!";
+            urgencyMessage = "We saved your booking progress.";
           } else if (reminderNumber === 2) {
-            urgencyMessage = "Don't forget - your booking is still waiting!";
+            urgencyMessage = "Your booking is still waiting whenever you're ready.";
           } else {
-            urgencyMessage = "Last chance to complete your saved booking!";
+            urgencyMessage = "One more reminder — your saved booking is still available.";
           }
           
           const body = `
@@ -1115,7 +1115,7 @@ async function sendAbandonedBookingReminders() {
           
           await notificationService.sendEmail({
             to: abandoned.email,
-            subject: reminderNumber === 3 ? 'Last Chance: Complete Your Moving Booking - LervIT' : 'Complete Your Moving Booking - LervIT',
+            subject: reminderNumber === 3 ? 'Your LervIT booking is still waiting' : 'Your LervIT booking is waiting',
             body,
             type: 'status_update',
           });
@@ -1314,10 +1314,10 @@ async function sendStripeOnboardingReminders() {
         urgency = 'Just a quick reminder';
       } else if (reminderNumber === 2) {
         subject = 'Your Payouts Are Almost Ready - LervIT';
-        urgency = 'Don\'t miss out on earnings';
+        urgency = 'A gentle nudge';
       } else {
-        subject = 'Final Reminder: Complete Your Payout Setup - LervIT';
-        urgency = 'This is your final reminder';
+        subject = 'Complete Your Payout Setup - LervIT';
+        urgency = 'One more reminder';
       }
       
       // Send email reminder
@@ -1509,12 +1509,12 @@ async function sendProfileCompletionReminders() {
         urgency = 'Quick reminder';
         benefit = 'Complete profiles get 3x more job offers';
       } else if (reminderNumber === 2) {
-        subject = 'Movers Are Getting Jobs - Are You? - LervIT';
-        urgency = 'Don\'t miss out';
+        subject = 'Finish your LervIT mover profile';
+        urgency = 'A gentle nudge';
         benefit = 'Movers with photos and bios earn 40% more';
       } else {
-        subject = 'Final Reminder: Complete Your Profile - LervIT';
-        urgency = 'Last chance reminder';
+        subject = 'Complete Your Mover Profile - LervIT';
+        urgency = 'One more reminder';
         benefit = 'Incomplete profiles are hidden from customers';
       }
       

@@ -18,7 +18,7 @@ import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { leads, bookings, users } from '@shared/schema';
 import { emitEvent } from '../events';
-import { notificationService } from '../notifications';
+import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedToday } from './dedupe';
@@ -187,10 +187,10 @@ QUOTE DETAILS (reference these specifically):
   ${movers ? `Movers needed: ${movers}` : ''}
 
 IMPORTANT:
-  - Mention the exact price in subject line
   - Reference specific items being moved
   - Make customer feel you reviewed their order
-  - Subject format: "Your [item] move — [price]"
+  - Subject format: "Re: your move from [pickup area]" or "Your [item] move is ready"
+  - Never include dollar amounts in the subject line
   - Keep email under 120 words
   - Sound personal not automated
 ` : `
@@ -539,18 +539,15 @@ async function sendAlexEmail(to: string, subject: string, body: string): Promise
     </p>
   </div>`;
   try {
-    const { data, error } = await resend.emails.send({
-      from: ALEX_FROM,
+    await sendResendEmail({
+      from: EMAIL_SENDERS.OUTREACH,
       to,
       replyTo: ALEX_REPLY_TO,
       subject,
       html,
+      listUnsubscribeUrl: `${appBase}/unsubscribe`,
     });
-    if (error) {
-      logger.error({ err: error }, 'Alex: Resend error');
-      return false;
-    }
-    logger.info({ id: data?.id, to, subject }, 'Alex: email sent');
+    logger.info({ to, subject }, 'Alex: email sent');
     return true;
   } catch (err) {
     logger.error({ err }, 'Alex: Resend threw');

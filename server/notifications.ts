@@ -87,6 +87,7 @@ export interface EmailNotification {
   type: 'booking_confirmation' | 'job_assignment' | 'payment_receipt' | 'status_update' | 'pilot_status';
   from?: string;
   headers?: Record<string, string>;
+  listUnsubscribeUrl?: string;
 }
 
 // SMS notification interface
@@ -144,20 +145,113 @@ function normalizeToE164(phone: string | null | undefined): string | null {
   return null;
 }
 
-// Strip HTML tags for the text/plain multipart alternative. Modern spam
-// filters (Gmail, Outlook, SpamAssassin) penalize HTML-only emails.
+// Strip HTML tags + entities for the text/plain multipart alternative.
+// Modern spam filters penalize HTML-only emails.
 function stripHtml(html: string): string {
   return html
     .replace(/<[^>]+>/g, ' ')
+    .replace(/&[^;]+;/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Insert a hidden preheader (Gmail preview snippet) right after <body>.
+// If the html already has display:none somewhere, assume caller added it.
+function addPreheader(html: string, preheaderText: string): string {
+  const preheader = `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:transparent;">${preheaderText}</div>`;
+  return /<body[^>]*>/i.test(html)
+    ? html.replace(/<body[^>]*>/i, (match) => `${match}${preheader}`)
+    : `${preheader}${html}`;
+}
+
+// Wrap naked HTML fragments (no <!DOCTYPE>) so filters don't penalize them.
+function wrapHtml(html: string): string {
+  if (/<!DOCTYPE/i.test(html)) return html;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+${html}
+</body>
+</html>`;
+}
+
+// Sender segmentation. All aliases currently point to support@lervit.com
+// until dedicated senders are verified in the Resend dashboard.
+export const EMAIL_SENDERS = {
+  // OTP, receipts, booking confirmations, account/security
+  TRANSACTIONAL: 'LervIT <support@lervit.com>',
+  // Mover job alerts
+  // TODO: change to jobs@lervit.com once verified in Resend dashboard
+  DISPATCH: 'LervIT Jobs <support@lervit.com>',
+  // Agent outreach (Alex, Jordan, Kai, Riley, Sam)
+  // TODO: change to hello@lervit.com once verified in Resend dashboard
+  OUTREACH: 'LervIT <support@lervit.com>',
+  // Support ticket replies
+  SUPPORT: 'LervIT Support <support@lervit.com>',
+} as const;
+
+// Shared Resend send wrapper. Every outbound email should route through this
+// so deliverability guardrails (plain-text alternative, preheader, DOCTYPE
+// wrap, List-Unsubscribe headers) are enforced in one place.
+export async function sendResendEmail(opts: {
+  from: string;
+  to: string | string[];
+  subject: string;
+  html: string;
+  replyTo?: string;
+  headers?: Record<string, string>;
+  tags?: { name: string; value: string }[];
+  listUnsubscribeUrl?: string;
+  attachments?: Array<{ filename: string; content: string }>;
+}): Promise<void> {
+  if (!resend) {
+    console.log('[EMAIL] Resend not configured - email logged only');
+    return;
+  }
+
+  const { from, to, subject, html, replyTo, headers = {}, tags, listUnsubscribeUrl, attachments } = opts;
+
+  const extraHeaders: Record<string, string> = { ...headers };
+  if (listUnsubscribeUrl) {
+    extraHeaders['List-Unsubscribe'] = `<${listUnsubscribeUrl}>`;
+    extraHeaders['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+  }
+
+  const htmlWithPreheader = html.includes('display:none')
+    ? html
+    : addPreheader(html, subject);
+
+  const fullHtml = wrapHtml(htmlWithPreheader);
+  const text = stripHtml(htmlWithPreheader);
+
+  const { data, error } = await emailRateLimiter.enqueue(() => resend!.emails.send({
+    from,
+    to,
+    subject,
+    html: fullHtml,
+    text,
+    replyTo,
+    headers: Object.keys(extraHeaders).length > 0 ? extraHeaders : undefined,
+    tags,
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
+  }));
+
+  if (error) {
+    console.error('[EMAIL] Resend error:', error);
+    throw new Error(`Resend send failed: ${(error as any).message ?? (error as any).name ?? 'unknown'}`);
+  }
+  console.log('[EMAIL] Sent successfully! ID:', data?.id);
 }
 
 class NotificationService {
   // TODO: once jobs@lervit.com (or dispatch@lervit.com) is verified in Resend,
   // route job-alert sends through a dedicated sender so support-inbox activity
   // doesn't contaminate job-alert deliverability reputation.
-  private fromEmail = 'LervIT <support@lervit.com>';
+  private fromEmail = EMAIL_SENDERS.TRANSACTIONAL;
   
   // Send phone verification code via SMS
   async sendPhoneVerificationCode(phone: string, code: string): Promise<boolean> {
@@ -224,21 +318,13 @@ class NotificationService {
 </body>
 </html>
         `;
-      const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
-        from: this.fromEmail,
+      await sendResendEmail({
+        from: EMAIL_SENDERS.TRANSACTIONAL,
         to: email,
         replyTo: 'support@lervit.com',
         subject: 'Your LervIT Verification Code',
         html,
-        text: stripHtml(html),
-      }));
-      
-      if (error) {
-        console.error('[EMAIL OTP] Resend error:', error);
-        return false;
-      }
-      
-      console.log('[EMAIL OTP] Sent successfully! ID:', data?.id);
+      });
       console.log('---\n');
       return true;
     } catch (error: any) {
@@ -343,30 +429,18 @@ class NotificationService {
       return;
     }
     
-    // Send real email via Resend with rate limiting
-    if (resend) {
-      try {
-        const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
-          from: notification.from ?? this.fromEmail,
-          to: notification.to,
-          replyTo: 'support@lervit.com',
-          subject: notification.subject,
-          html: notification.body,
-          text: stripHtml(notification.body),
-          ...(notification.headers ? { headers: notification.headers } : {}),
-        }));
-        
-        if (error) {
-          console.error('Resend error:', error);
-        } else {
-          console.log('[EMAIL] Sent successfully! ID:', data?.id);
-        }
-      } catch (error) {
-        console.error('Failed to send email:', error);
-      }
-    } else {
-      console.log('[EMAIL] Resend not configured - email logged only');
-      console.log('Body:', notification.body);
+    try {
+      await sendResendEmail({
+        from: notification.from ?? this.fromEmail,
+        to: notification.to,
+        replyTo: 'support@lervit.com',
+        subject: notification.subject,
+        html: notification.body,
+        headers: notification.headers,
+        listUnsubscribeUrl: notification.listUnsubscribeUrl,
+      });
+    } catch (error) {
+      console.error('Failed to send email:', error);
     }
     console.log('---\n');
   }
@@ -532,9 +606,9 @@ class NotificationService {
       subject,
       body,
       type: 'job_assignment',
+      from: EMAIL_SENDERS.DISPATCH,
+      listUnsubscribeUrl: preferencesUrl,
       headers: {
-        'List-Unsubscribe': `<${preferencesUrl}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         'X-Entity-Ref-ID': `job-alert-${booking.id ?? 'unknown'}`,
       },
     });
@@ -617,7 +691,7 @@ class NotificationService {
 
   // Payment reminder email/SMS to customer (15 minutes before expiry)
   async sendPaymentReminder(customer: User, booking: Partial<Booking>): Promise<void> {
-    const subject = `Complete Payment - Your booking expires in 15 minutes!`;
+    const subject = `Your LervIT booking is waiting`;
     const paymentUrl = `${getBaseUrl()}/payment/${booking.id}`;
     const firstName = getFirstName(customer.name);
     
@@ -1416,40 +1490,27 @@ class NotificationService {
     console.log('Type:', campaignType);
     console.log('File attachments:', fileAttachments?.length || 0);
     
-    if (resend) {
-      try {
-        // Build attachments array for Resend
-        const resendAttachments = fileAttachments?.map(file => ({
-          filename: file.filename,
-          content: file.content, // base64 encoded content
-        })) || [];
-        
-        const emailPayload: any = {
-          from: this.fromEmail,
-          to: recipientEmail,
-          replyTo: 'support@lervit.com',
-          subject,
-          html: body,
-        };
-        
-        if (resendAttachments.length > 0) {
-          emailPayload.attachments = resendAttachments;
-        }
-        
-        const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send(emailPayload));
-        
-        if (error) {
-          console.error('[CAMPAIGN EMAIL] Resend error:', error);
-          return false;
-        }
-        console.log('[CAMPAIGN EMAIL] Sent successfully! ID:', data?.id);
-        return true;
-      } catch (error) {
-        console.error('[CAMPAIGN EMAIL] Failed:', error);
-        return false;
-      }
-    } else {
+    if (!resend) {
       console.log('[CAMPAIGN EMAIL] Resend not configured - logged only');
+      return false;
+    }
+    try {
+      const resendAttachments = fileAttachments?.map(file => ({
+        filename: file.filename,
+        content: file.content,
+      })) || [];
+      await sendResendEmail({
+        from: this.fromEmail,
+        to: recipientEmail,
+        replyTo: 'support@lervit.com',
+        subject,
+        html: body,
+        listUnsubscribeUrl: 'https://app.lervit.com/preferences',
+        attachments: resendAttachments.length > 0 ? resendAttachments : undefined,
+      });
+      return true;
+    } catch (error) {
+      console.error('[CAMPAIGN EMAIL] Failed:', error);
       return false;
     }
   }

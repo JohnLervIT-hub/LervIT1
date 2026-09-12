@@ -26,7 +26,7 @@ import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { users, movers, bookings } from '@shared/schema';
 import { emitEvent } from '../events';
-import { notificationService } from '../notifications';
+import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedWithinDays } from './dedupe';
@@ -182,7 +182,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
       );
       const { subject, body } = parseSubjectAndBody(
         raw,
-        "You're approved! Start earning with LervIT today",
+        "Your LervIT mover account is approved",
       );
       emailSent = await sendRileyEmail(user.email, subject, body);
     }
@@ -451,7 +451,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
         type: 'booking_update',
       });
     } else if (touchNumber === 3 && user.email) {
-      const subject = 'Last chance — your 10% discount expires soon';
+      const subject = 'Your LervIT first-move quote is ready';
       if (options.dryRun) {
         return { dryRun: true, wouldContact: [userId], preview: { to: user.email, channel: 'email', subject, touchNumber } };
       }
@@ -531,18 +531,15 @@ async function sendRileyEmail(to: string, subject: string, body: string): Promis
     </p>
   </div>`;
   try {
-    const { data, error } = await resend.emails.send({
-      from: RILEY_FROM,
+    await sendResendEmail({
+      from: EMAIL_SENDERS.OUTREACH,
       to,
       replyTo: RILEY_REPLY_TO,
       subject,
       html,
+      listUnsubscribeUrl: `${APP_BASE_URL}/unsubscribe`,
     });
-    if (error) {
-      logger.error({ err: error }, 'Riley: Resend error');
-      return false;
-    }
-    logger.info({ id: data?.id, to, subject }, 'Riley: email sent');
+    logger.info({ to, subject }, 'Riley: email sent');
     return true;
   } catch (err) {
     logger.error({ err }, 'Riley: Resend threw');

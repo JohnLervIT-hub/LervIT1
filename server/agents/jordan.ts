@@ -19,7 +19,7 @@ import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { leads } from '@shared/schema';
 import { emitEvent } from '../events';
-import { notificationService } from '../notifications';
+import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedToday } from './dedupe';
@@ -133,7 +133,7 @@ Sign up link: ${applyLink}`,
 
     const { subject, body } = parseSubjectAndBody(
       raw,
-      'Earn money moving in Calgary — LervIT opportunity',
+      'Moving driver opportunities in Calgary',
     );
 
     if (options.dryRun) {
@@ -256,7 +256,7 @@ Sign up link: ${applyLink}`,
       );
       const { subject, body } = parseSubjectAndBody(
         raw,
-        isLast ? 'Last chance to earn with LervIT' : 'Still interested in earning with LervIT?',
+        isLast ? 'Following up on the LervIT driver opportunity' : 'Still interested in driving with LervIT?',
       );
       if (options.dryRun) {
         return {
@@ -408,18 +408,15 @@ async function sendJordanEmail(to: string, subject: string, body: string): Promi
     </p>
   </div>`;
   try {
-    const { data, error } = await resend.emails.send({
-      from: JORDAN_FROM,
+    await sendResendEmail({
+      from: EMAIL_SENDERS.OUTREACH,
       to,
       replyTo: JORDAN_REPLY_TO,
       subject,
       html,
+      listUnsubscribeUrl: `${appBase}/unsubscribe`,
     });
-    if (error) {
-      logger.error({ err: error }, 'Jordan: Resend error');
-      return false;
-    }
-    logger.info({ id: data?.id, to, subject }, 'Jordan: email sent');
+    logger.info({ to, subject }, 'Jordan: email sent');
     return true;
   } catch (err) {
     logger.error({ err }, 'Jordan: Resend threw');
