@@ -85,6 +85,8 @@ export interface EmailNotification {
   subject: string;
   body: string;
   type: 'booking_confirmation' | 'job_assignment' | 'payment_receipt' | 'status_update' | 'pilot_status';
+  from?: string;
+  headers?: Record<string, string>;
 }
 
 // SMS notification interface
@@ -142,7 +144,19 @@ function normalizeToE164(phone: string | null | undefined): string | null {
   return null;
 }
 
+// Strip HTML tags for the text/plain multipart alternative. Modern spam
+// filters (Gmail, Outlook, SpamAssassin) penalize HTML-only emails.
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 class NotificationService {
+  // TODO: once jobs@lervit.com (or dispatch@lervit.com) is verified in Resend,
+  // route job-alert sends through a dedicated sender so support-inbox activity
+  // doesn't contaminate job-alert deliverability reputation.
   private fromEmail = 'LervIT <support@lervit.com>';
   
   // Send phone verification code via SMS
@@ -168,12 +182,7 @@ class NotificationService {
     }
     
     try {
-      const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
-        from: this.fromEmail,
-        to: email,
-        replyTo: 'support@lervit.com',
-        subject: 'Your LervIT Verification Code',
-        html: `
+      const html = `
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
@@ -214,7 +223,14 @@ class NotificationService {
   </table>
 </body>
 </html>
-        `,
+        `;
+      const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
+        from: this.fromEmail,
+        to: email,
+        replyTo: 'support@lervit.com',
+        subject: 'Your LervIT Verification Code',
+        html,
+        text: stripHtml(html),
       }));
       
       if (error) {
@@ -331,11 +347,13 @@ class NotificationService {
     if (resend) {
       try {
         const { data, error } = await emailRateLimiter.enqueue(() => resend.emails.send({
-          from: this.fromEmail,
+          from: notification.from ?? this.fromEmail,
           to: notification.to,
           replyTo: 'support@lervit.com',
           subject: notification.subject,
           html: notification.body,
+          text: stripHtml(notification.body),
+          ...(notification.headers ? { headers: notification.headers } : {}),
         }));
         
         if (error) {
@@ -420,27 +438,30 @@ class NotificationService {
 
     const formattedDate = formatCalgaryDate(booking.preferredDate, 'ASAP');
     
-    const subject = `[URGENT] NEW JOB - Earn $${estimatedEarnings} CAD (Expires in 10 min)`;
+    const preferencesUrl = `${baseUrl}/mover/preferences`;
+    const subject = `New job available · $${estimatedEarnings} CAD · respond within 10 min`;
     const body = `
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;">
+    New moving job near you — $${estimatedEarnings} CAD estimated earnings
+  </div>
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 20px;">
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
-          <!-- Header with urgency -->
+          <!-- Header -->
           <tr>
-            <td style="background-color:#EA580C;padding:30px;text-align:center;">
-              <h1 style="color:#ffffff;margin:0;font-size:24px;">New Job Available!</h1>
-              <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">TIME SENSITIVE - This opportunity expires in 10 minutes</p>
+            <td style="background-color:#1e3a5f;padding:30px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;">New Job Available</h1>
+              <p style="color:#ffffff;margin:10px 0 0 0;font-size:14px;">A customer needs a mover — respond within 10 minutes to accept</p>
             </td>
           </tr>
-          <!-- Earnings highlight -->
+          <!-- Earnings -->
           <tr>
-            <td style="background-color:#FFF7ED;padding:20px;text-align:center;border-bottom:1px solid #EA580C;">
-              <p style="color:#9A3412;margin:0;font-size:14px;">Your Estimated Earnings</p>
-              <p style="color:#EA580C;margin:5px 0 0 0;font-size:36px;font-weight:bold;">$${estimatedEarnings} CAD</p>
+            <td style="background-color:#f8fafc;padding:20px;text-align:center;border-bottom:1px solid #e2e8f0;">
+              <p style="color:#334155;margin:0;font-size:16px;">Estimated earnings: $${estimatedEarnings} CAD</p>
             </td>
           </tr>
           <!-- Content -->
@@ -448,7 +469,7 @@ class NotificationService {
             <td style="padding:30px;">
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">Hi ${getFirstName(mover.name)},</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 25px 0;">A customer near you needs help moving. Here are the details:</p>
-              
+
               <h3 style="color:#333333;font-size:16px;margin:0 0 15px 0;border-bottom:1px solid #eee;padding-bottom:10px;">Job Details</h3>
               <table width="100%" style="margin-bottom:25px;">
                 <tr>
@@ -472,26 +493,30 @@ class NotificationService {
                   <td style="padding:8px 0;color:#333333;font-size:14px;">${distanceToPickup} km</td>
                 </tr>` : ''}
               </table>
-              
+
               <!-- CTA Button -->
               <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 25px 0;">
                 <tr>
                   <td align="center">
-                    <a href="${dashboardUrl}" style="display:inline-block;background-color:#EA580C;color:#ffffff;font-size:18px;font-weight:bold;text-decoration:none;padding:15px 40px;border-radius:6px;">Accept This Job</a>
+                    <a href="${dashboardUrl}" style="display:inline-block;background-color:#1e3a5f;color:#ffffff;font-size:16px;text-decoration:none;padding:14px 36px;border-radius:6px;">Accept Job &rarr;</a>
                   </td>
                 </tr>
               </table>
-              
-              <p style="color:#888888;font-size:13px;line-height:20px;margin:0;text-align:center;">
-                IMPORTANT: First mover to accept gets the job. Don't miss out!
+
+              <p style="color:#64748b;font-size:13px;line-height:20px;margin:0;text-align:center;">
+                This offer is available for 10 minutes. Jobs are assigned to the first mover who accepts.
               </p>
             </td>
           </tr>
           <!-- Footer -->
           <tr>
-            <td style="background-color:#f8f8f8;padding:20px 30px;text-align:center;border-top:1px solid #eeeeee;">
-              <p style="color:#888888;font-size:12px;margin:0;">&copy; ${new Date().getFullYear()} LervIT. All rights reserved.</p>
-              <p style="color:#888888;font-size:11px;margin:5px 0 0 0;">Calgary's Smart Moving Platform</p>
+            <td style="background-color:#f8fafc;padding:20px 30px;text-align:center;border-top:1px solid #e2e8f0;">
+              <p style="font-size:12px;color:#64748b;text-align:center;margin:0;">
+                LervIT &middot; Calgary, AB<br/>
+                <a href="${preferencesUrl}" style="color:#64748b;">Manage job alert preferences</a>
+                &middot;
+                <a href="${preferencesUrl}" style="color:#64748b;">Unsubscribe</a>
+              </p>
             </td>
           </tr>
         </table>
@@ -507,6 +532,11 @@ class NotificationService {
       subject,
       body,
       type: 'job_assignment',
+      headers: {
+        'List-Unsubscribe': `<${preferencesUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        'X-Entity-Ref-ID': `job-alert-${booking.id ?? 'unknown'}`,
+      },
     });
     
     // Also send SMS if mover has a phone number
