@@ -412,19 +412,27 @@ async function redispatchIfAllExpired(bookingIds: string[]) {
         continue;
       }
 
-      // Fire the next wave
+      // Fire the next wave via Victor so `dispatch.dispatched` fires and the
+      // stats/observability path is consistent with initial dispatch.
       const wave = Math.floor(allNotifs.length / 5) + 1;
-      const result = await dispatchJobToMovers(booking);
+      await victor.run('dispatch', { bookingId });
+
+      // Diff jobNotifications rows to detect whether the wave actually reached
+      // any new movers (Victor doesn't return the count directly).
+      const afterNotifs = await db
+        .select({ id: jobNotifications.id })
+        .from(jobNotifications)
+        .where(eq(jobNotifications.bookingId, bookingId));
+      const dispatched = Math.max(0, afterNotifs.length - allNotifs.length);
 
       logEvent.notification('auto_redispatch', {
         bookingId,
         wave,
-        dispatched: result.dispatched,
-        requiredVehicle: result.requiredVehicle,
+        dispatched,
         previousNotifCount: allNotifs.length,
       });
 
-      if (result.dispatched === 0) {
+      if (dispatched === 0) {
         logger.warn(
           { event: 'auto_redispatch_no_movers', bookingId, wave },
           'Auto re-dispatch wave found no available movers'

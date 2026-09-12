@@ -75,8 +75,26 @@ export class VictorAgent extends BaseAgent {
 
     const queue = createAgentQueue(QUEUE_NAMES.DISPATCH);
     if (!queue) {
-      logger.warn('Victor.dispatchAllPending: DISPATCH queue unavailable — REDIS_URL not set');
-      return { pendingCount, queued: false, reason: 'queue unavailable' };
+      logger.warn('[Victor] Queue unavailable — running dispatch_pending synchronously');
+
+      let dispatched = 0;
+      for (const b of pending) {
+        try {
+          await this.dispatch({ bookingId: b.id });
+          dispatched++;
+        } catch (err) {
+          logger.error({ err, bookingId: b.id }, '[Victor] Sync dispatch failed');
+        }
+      }
+
+      await emitEvent('dispatch.bulk_triggered', 'agent', this.code, {
+        agentName: this.name,
+        pendingCount,
+        dispatched,
+        mode: 'sync',
+      });
+
+      return { pendingCount, queued: false, ran: true, dispatched };
     }
 
     let queued = 0;

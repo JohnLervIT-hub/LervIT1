@@ -13,6 +13,7 @@ import { AgentAvatar } from "@/components/AgentAvatar";
 interface VictorStats {
   dispatchedToday: number;
   escalationsToday: number;
+  totalDispatchedAllTime: number;
   avgDispatchMinutes: number | null;
 }
 
@@ -60,13 +61,18 @@ export function VictorNashCard() {
           </div>
         )}
         {stats && (
-          <div className="grid grid-cols-2 gap-2">
-            <StatBox label="Jobs Dispatched Today" value={stats.dispatchedToday} />
-            <StatBox
-              label="Escalations Today"
-              value={stats.escalationsToday}
-              tone={stats.escalationsToday > 0 ? "warn" : undefined}
-            />
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <StatBox label="Jobs Dispatched Today" value={stats.dispatchedToday} />
+              <StatBox
+                label="Escalations Today"
+                value={stats.escalationsToday}
+                tone={stats.escalationsToday > 0 ? "warn" : undefined}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground pl-1">
+              Total dispatched: <span className="font-medium text-foreground tabular-nums">{stats.totalDispatchedAllTime}</span>
+            </div>
           </div>
         )}
       </CardContent>

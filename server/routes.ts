@@ -62,6 +62,7 @@ import { buildIntelligenceSummary } from "./intelligence";
 import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover } from "./dispatch";
+import { victor } from "./agents/victor";
 import { registerPartnerRoutes } from "./partnerRoutes";
 import { circuitBreakers } from "./circuit-breaker";
 import {
@@ -5831,13 +5832,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Dispatch to movers using the shared pipeline (AC-1 through AC-10)
-      try {
-        await dispatchBooking(booking);
-      } catch (moverErr) {
-        console.error("[Payment] Failed to notify movers:", moverErr);
-      }
-      
+      // Route through Victor for tracking + events (fire-and-forget — response
+      // returns before dispatch resolves so a mover-side hiccup can't block
+      // payment confirmation).
+      victor.run('dispatch', { bookingId: booking.id }).catch(err =>
+        logger.error({ err, bookingId: booking.id }, '[Victor] dispatch failed'),
+      );
+
       res.json({ success: true, message: "Payment confirmed" });
     } catch (error: any) {
       console.error("Error confirming payment:", error);
@@ -6173,12 +6174,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Dispatch to movers using the shared pipeline (AC-1 through AC-10)
-        try {
-          await dispatchBooking(updatedBooking || booking);
-        } catch (moverErr) {
-          console.error("[Payment] Failed to notify movers:", moverErr);
-        }
+        // Route through Victor for tracking + events (fire-and-forget).
+        const dispatchTarget = updatedBooking || booking;
+        victor.run('dispatch', { bookingId: dispatchTarget.id }).catch(err =>
+          logger.error({ err, bookingId: dispatchTarget.id }, '[Victor] dispatch failed'),
+        );
 
         res.json({ success: true, status: 'succeeded' });
       } else if (paymentIntent.status === 'requires_action') {
@@ -6455,16 +6455,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               logEvent.error('webhook_customer_emails', emailErr, { bookingId: booking.id });
             }
             
-            // Dispatch to movers using the shared pipeline (AC-1 through AC-10)
-            try {
-              await dispatchBooking(booking);
-              logEvent.payment('movers_notified', {
-                bookingId: booking.id,
-                websocketConnected: moverWebSocket.getConnectedMoversCount(),
-              });
-            } catch (moverNotifyErr) {
-              logEvent.error('webhook_mover_notifications', moverNotifyErr, { bookingId: booking.id });
-            }
+            // Route through Victor for tracking + events (fire-and-forget so a
+            // dispatch hiccup can't stall Stripe's webhook 200 window).
+            victor.run('dispatch', { bookingId: booking.id })
+              .then(() => {
+                logEvent.payment('movers_notified', {
+                  bookingId: booking.id,
+                  websocketConnected: moverWebSocket.getConnectedMoversCount(),
+                });
+              })
+              .catch(err =>
+                logEvent.error('webhook_mover_notifications', err, { bookingId: booking.id }),
+              );
           } else {
             // CRITICAL: No booking found for this payment intent - this is the lost booking scenario!
             // This should never happen if the payment flow is working correctly.
@@ -13319,7 +13321,6 @@ Respond with VALID JSON only:
   app.post("/api/admin/agent/victor/trigger", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const { victor } = await import('./agents/victor');
       const action = (req.body?.action ?? 'dispatch') as string;
       if (action !== 'dispatch' && action !== 'escalate_no_movers' && action !== 'dispatch_pending') {
         return res.status(400).json({ error: `Unsupported action: ${action}` });
@@ -13332,23 +13333,34 @@ Respond with VALID JSON only:
     }
   });
 
-  // Victor dispatch stats — today's dispatched + escalated counts.
+  // Victor dispatch stats — today's dispatched + escalated counts, plus
+  // all-time total so the card reflects lifetime throughput.
   app.get("/api/admin/agent/victor/stats", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const rows = await db.execute(sql`
-        SELECT
-          COUNT(*) FILTER (WHERE event_type = 'dispatch.dispatched')            ::int AS dispatched_today,
-          COUNT(*) FILTER (WHERE event_type = 'dispatch.escalated_no_movers')   ::int AS escalations_today
-        FROM business_events
-        WHERE created_at >= date_trunc('day', now())
-          AND event_type IN ('dispatch.dispatched', 'dispatch.escalated_no_movers')
-      `);
-      const r = (rows as any).rows?.[0] ?? { dispatched_today: 0, escalations_today: 0 };
+      const [todayRows, totalRows] = await Promise.all([
+        db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE event_type = 'dispatch.dispatched')            ::int AS dispatched_today,
+            COUNT(*) FILTER (WHERE event_type = 'dispatch.escalated_no_movers')   ::int AS escalations_today
+          FROM business_events
+          WHERE created_at >= date_trunc('day', now())
+            AND event_type IN ('dispatch.dispatched', 'dispatch.escalated_no_movers')
+        `),
+        db.execute(sql`
+          SELECT COUNT(*)::int AS total_dispatched
+          FROM business_events
+          WHERE event_type = 'dispatch.dispatched'
+        `),
+      ]);
+      const t = (todayRows as any).rows?.[0] ?? { dispatched_today: 0, escalations_today: 0 };
+      const total = (totalRows as any).rows?.[0] ?? { total_dispatched: 0 };
       res.json({
-        dispatchedToday: r.dispatched_today ?? 0,
-        escalationsToday: r.escalations_today ?? 0,
+        dispatchedToday: t.dispatched_today ?? 0,
+        escalationsToday: t.escalations_today ?? 0,
+        totalDispatchedAllTime: total.total_dispatched ?? 0,
         avgDispatchMinutes: null,
+        period: 'today',
       });
     } catch (err) {
       logger.error({ err }, '[Admin] victor/stats failed');
