@@ -63,7 +63,12 @@ import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stri
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover } from "./dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
 import { circuitBreakers } from "./circuit-breaker";
-import { calculatePartnerNet } from "@shared/pricing";
+import {
+  calculatePartnerNet,
+  vehicleClassFromVehicleType,
+  vehicleTypeFromClass,
+  VEHICLE_CAPACITY_RANGES,
+} from "@shared/pricing";
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -3003,15 +3008,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const movers = await storage.getMoversByPilotStatus(status);
       
-      // Enrich with user data
+      // Enrich with user data + derived vehicle class
       const enrichedMovers = await Promise.all(movers.map(async (mover) => {
         const user = await storage.getUser(mover.userId);
+        const vehicleClass = vehicleClassFromVehicleType(mover.vehicleType);
         return {
           ...mover,
+          vehicleClass,
+          vehicleCapacityRange: VEHICLE_CAPACITY_RANGES[vehicleClass],
           user: user ? { id: user.id, name: user.name, email: user.email, phone: user.phone } : null
         };
       }));
-      
+
       res.json(enrichedMovers);
     } catch (error) {
       console.error('Admin get pilot movers error:', error);
@@ -9481,7 +9489,7 @@ Respond with VALID JSON only:
       // Create movers (Calgary GPS coordinates)
       const mover1 = await storage.createMover({
         userId: moverUser1.id,
-        vehicleType: "Large Truck (26ft)",
+        vehicleType: "truck",
         vehicleCapacity: "3000 lbs",
         isVerified: true,
         location: "Calgary, AB",
@@ -9493,7 +9501,7 @@ Respond with VALID JSON only:
 
       const mover2 = await storage.createMover({
         userId: moverUser2.id,
-        vehicleType: "Cargo Van",
+        vehicleType: "van",
         vehicleCapacity: "1500 lbs",
         isVerified: true,
         location: "Calgary, AB",
@@ -9895,19 +9903,22 @@ Respond with VALID JSON only:
       const moversWithDetails = await Promise.all(
         availableMovers.map(async (mover) => {
           const moverUser = await storage.getUser(mover.userId);
+          const vehicleClass = vehicleClassFromVehicleType(mover.vehicleType);
           return {
             id: mover.id,
             userId: mover.userId,
             name: moverUser?.name || 'Unknown',
             phone: moverUser?.phone || '',
             vehicleType: mover.vehicleType,
+            vehicleClass,
+            vehicleCapacityRange: VEHICLE_CAPACITY_RANGES[vehicleClass],
             rating: mover.rating,
             totalMoves: mover.totalMoves,
             isVerified: mover.isVerified,
           };
         })
       );
-      
+
       res.json(moversWithDetails);
     } catch (error) {
       logEvent.error('admin_get_available_movers', error);
@@ -13824,7 +13835,13 @@ Respond with VALID JSON only:
       const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
       const email = typeof body.email === 'string' ? body.email.trim() : '';
       const neighbourhood = typeof body.neighbourhood === 'string' ? body.neighbourhood.trim() : '';
-      const vehicleType = typeof body.vehicleType === 'string' ? body.vehicleType.trim() : '';
+      const vehicleTypeRaw = typeof body.vehicleType === 'string' ? body.vehicleType.trim() : '';
+      // Coerce the applicant's free-form vehicle string to a canonical value so
+      // downstream reviewers and Ryan/Jordan pipelines see 'car'|'pickup'|'van'|'truck'
+      // rather than "F150" / "cargo van 2500" / etc.
+      const vehicleType = vehicleTypeRaw
+        ? vehicleTypeFromClass(vehicleClassFromVehicleType(vehicleTypeRaw))
+        : '';
       const vehicleYear = typeof body.vehicleYear === 'string' ? body.vehicleYear.trim() : '';
       const vehicleMake = typeof body.vehicleMake === 'string' ? body.vehicleMake.trim() : '';
       const canMoveFurniture = body.canMoveFurniture === true || body.canMoveFurniture === 'true';
@@ -13839,7 +13856,7 @@ Respond with VALID JSON only:
 
       const notes = [
         'Mover Application',
-        `Vehicle: ${[vehicleType, vehicleYear, vehicleMake].filter(Boolean).join(' ') || 'Not specified'}`,
+        `Vehicle: ${[vehicleTypeRaw || vehicleType, vehicleYear, vehicleMake].filter(Boolean).join(' ') || 'Not specified'}${vehicleType && vehicleTypeRaw && vehicleType !== vehicleTypeRaw.toLowerCase() ? ` (class → ${vehicleType})` : ''}`,
         `Can move furniture: ${canMoveFurniture ? 'Yes' : 'No'}`,
         `Neighbourhood: ${neighbourhood || 'Not specified'}`,
         `Availability: ${availability.length ? availability.join(', ') : 'Not specified'}`,

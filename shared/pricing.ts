@@ -201,6 +201,71 @@ export function getVehicleClassFromLoadSize(loadSize: string): VehicleClass {
   return getVehicleClassFromVolume(rawVolume);
 }
 
+/**
+ * Map a mover's free-form `vehicleType` string → VehicleClass. Tolerates the
+ * legacy label variety in the movers table ("Cargo Van", "Large Truck (26ft)",
+ * "F-150", etc.). Defaults to Class A when unknown/empty so callers never crash.
+ */
+export function vehicleClassFromVehicleType(
+  vehicleType: string | null | undefined,
+): VehicleClass {
+  if (!vehicleType) return 'A';
+
+  const normalized = vehicleType.toLowerCase().trim();
+
+  // Class E — Moving Truck
+  if (
+    normalized.includes('truck') ||
+    normalized.includes('moving') ||
+    normalized.includes('cube') ||
+    normalized.includes('flatbed') ||
+    normalized.includes('26ft') ||
+    normalized.includes('16ft')
+  ) return 'E';
+
+  // Class C — Cargo Van
+  if (
+    normalized === 'van' ||
+    normalized.includes('cargo') ||
+    normalized.includes('transit') ||
+    normalized.includes('sprinter') ||
+    normalized.includes('promaster')
+  ) return 'C';
+
+  // Class B — Pickup Truck
+  if (
+    normalized === 'pickup' ||
+    normalized.includes('pickup') ||
+    normalized.includes('f-150') ||
+    normalized.includes('f150') ||
+    normalized.includes('silverado') ||
+    normalized.includes('ram 1500') ||
+    normalized.includes('tacoma')
+  ) return 'B';
+
+  // Class A — SUV / small vehicle (default)
+  return 'A';
+}
+
+/** Reverse map: VehicleClass → canonical vehicleType string. */
+export function vehicleTypeFromClass(vehicleClass: VehicleClass): string {
+  const map: Record<VehicleClass, string> = {
+    A: 'car',
+    B: 'pickup',
+    C: 'van',
+    E: 'truck',
+  };
+  return map[vehicleClass];
+}
+
+/** Capacity ranges per class (raw ft³). */
+export const VEHICLE_CAPACITY_RANGES = {
+  A: { min: 0,   max: 50,  typical: 30  },
+  B: { min: 51,  max: 120, typical: 80  },
+  C: { min: 121, max: 250, typical: 180 },
+  E: { min: 251, max: 800, typical: 500 },
+} as const;
+
 export function getVehicleClassConfig(vehicleClass: VehicleClass): VehicleClassConfig {
   return VEHICLE_CLASSES[vehicleClass];
 }

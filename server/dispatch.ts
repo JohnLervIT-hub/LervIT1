@@ -52,7 +52,17 @@ import { eq, and, isNotNull, ne } from 'drizzle-orm';
 import { moverWebSocket } from './websocket';
 import { notificationService } from './notifications';
 import { logEvent, logger } from './logger';
-import { findNearestMovers, calculateExpiryTime, resolveVehicleForBooking } from '@shared/matching';
+import {
+  findNearestMovers,
+  calculateExpiryTime,
+  resolveVehicleForBooking,
+  getVehicleClassRank,
+} from '@shared/matching';
+import {
+  vehicleClassFromVehicleType,
+  getVehicleClassFromVolume,
+  PRICING_CONFIG,
+} from '@shared/pricing';
 import { toDecimalString } from '@shared/utils';
 import { storage } from './storage';
 import { calculatePlatformFee } from './config/stripe';
@@ -78,6 +88,8 @@ interface DispatchableBooking {
   id: string;
   loadSize: string | null;
   aiRecommendedVehicle: string | null;
+  /** Optional: AI-detected raw volume in ft³. When absent, loadSize is used. */
+  aiDetectedVolumeCuft?: number | null;
   pickupLatitude: string | number | null;
   pickupLongitude: string | number | null;
   dropoffLatitude: string | number | null;
@@ -246,17 +258,43 @@ export async function dispatchJobToMovers(
   const requiredVehicle = resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize);
   const moversWithData = await loadOperationalMovers(options.excludeMoverId);
 
+  // Resolve raw volume for the class-based capacity filter. Prefer AI-detected
+  // volume; fall back to the load-size estimate so class filtering still works
+  // for legacy bookings that never went through the vision pipeline.
+  const rawVolumeCuft: number = (typeof booking.aiDetectedVolumeCuft === 'number' && booking.aiDetectedVolumeCuft > 0)
+    ? booking.aiDetectedVolumeCuft
+    : (booking.loadSize ? PRICING_CONFIG.loadSizeVolumes[booking.loadSize] ?? 40 : 40);
+  const requiredClass = getVehicleClassFromVolume(rawVolumeCuft);
+  const requiredRank = getVehicleClassRank(requiredClass);
+
   const nearestMovers = findNearestMovers(
     pickupCoords,
     dropoffCoords,
     (booking.loadSize ?? 'medium') as 'boxes' | 'medium' | 'large' | 'apartment',
     moversWithData,
     {},
-    requiredVehicle
+    requiredVehicle,
+    rawVolumeCuft,
   );
 
-  if (nearestMovers.length === 0) {
-    logger.info({ event: 'dispatch', bookingId: booking.id, requiredVehicle }, 'No matching movers found for dispatch');
+  // Belt-and-suspenders: the matching layer already filters by class, but log
+  // + drop any mover here whose vehicle class is below the required class.
+  // Expected count of dropped movers is zero; a non-zero here signals a bug in
+  // the matching filter or a data anomaly in movers.vehicleType.
+  const eligibleMovers = nearestMovers.filter(mover => {
+    const moverClass = vehicleClassFromVehicleType(mover.vehicleType);
+    if (getVehicleClassRank(moverClass) < requiredRank) {
+      logger.warn(
+        { bookingId: booking.id, moverId: mover.moverId, moverClass, requiredClass },
+        'dispatch: skipping mover — vehicle class below required',
+      );
+      return false;
+    }
+    return true;
+  });
+
+  if (eligibleMovers.length === 0) {
+    logger.info({ event: 'dispatch', bookingId: booking.id, requiredVehicle, requiredClass }, 'No matching movers found for dispatch');
     return { dispatched: 0, requiredVehicle };
   }
 
@@ -268,7 +306,7 @@ export async function dispatchJobToMovers(
   const feeBreakdown = calculatePlatformFee(bookingPrice);
   const moverNetAmount = feeBreakdown.moverPayoutCents / 100;
 
-  const moversWithActualEarnings = nearestMovers.map((mover) => ({
+  const moversWithActualEarnings = eligibleMovers.map((mover) => ({
     ...mover,
     estimatedEarnings: moverNetAmount,
   }));
@@ -295,10 +333,10 @@ export async function dispatchJobToMovers(
   logEvent.notification('dispatch_proximity_complete', {
     bookingId: booking.id,
     requiredVehicle,
-    dispatched: nearestMovers.length,
+    dispatched: eligibleMovers.length,
   });
 
-  return { dispatched: nearestMovers.length, requiredVehicle };
+  return { dispatched: eligibleMovers.length, requiredVehicle };
 }
 
 /**

@@ -1,7 +1,64 @@
 // Proximity matching algorithm for Uber-style mover assignment
 
 import { calculateDistance, type Coordinates } from './geocoding';
-import { calculatePrice, type PriceBreakdown } from './pricing';
+import {
+  calculatePrice,
+  getVehicleClassFromVolume,
+  vehicleClassFromVehicleType,
+  VEHICLE_CAPACITY_RANGES,
+  PRICING_CONFIG,
+  type PriceBreakdown,
+  type VehicleClass,
+} from './pricing';
+
+const CLASS_HIERARCHY: Record<VehicleClass, number> = { A: 1, B: 2, C: 3, E: 4 };
+
+/**
+ * True when the mover's vehicle class ≥ the class required for the booking's
+ * volume. A bigger vehicle can always carry a smaller load. When rawVolumeCuft
+ * is null/undefined, no restriction is applied (caller-driven default).
+ */
+export function moverCanHandleBooking(
+  moverVehicleType: string | null | undefined,
+  bookingRawVolumeCuft: number | null | undefined,
+): boolean {
+  if (bookingRawVolumeCuft == null || !Number.isFinite(bookingRawVolumeCuft)) return true;
+  const moverClass = vehicleClassFromVehicleType(moverVehicleType);
+  const requiredClass = getVehicleClassFromVolume(bookingRawVolumeCuft);
+  return CLASS_HIERARCHY[moverClass] >= CLASS_HIERARCHY[requiredClass];
+}
+
+/** Convenience: mover → its VehicleClass. */
+export function getMoverVehicleClass(
+  moverVehicleType: string | null | undefined,
+): VehicleClass {
+  return vehicleClassFromVehicleType(moverVehicleType);
+}
+
+/** Convenience: expose the class-hierarchy rank for callers that need it. */
+export function getVehicleClassRank(cls: VehicleClass): number {
+  return CLASS_HIERARCHY[cls];
+}
+
+/**
+ * Resolve the raw volume to use for capacity filtering. AI-detected volume
+ * wins; otherwise fall back to the load-size volume estimate.
+ */
+function resolveRawVolumeForFilter(
+  bookingRawVolumeCuft: number | null | undefined,
+  loadSize: string | null | undefined,
+): number | null {
+  if (typeof bookingRawVolumeCuft === 'number' && bookingRawVolumeCuft > 0) {
+    return bookingRawVolumeCuft;
+  }
+  if (loadSize && PRICING_CONFIG.loadSizeVolumes[loadSize] != null) {
+    return PRICING_CONFIG.loadSizeVolumes[loadSize];
+  }
+  return null;
+}
+
+// Re-export so callers importing from '@shared/matching' can get the range table.
+export { VEHICLE_CAPACITY_RANGES };
 
 export interface MoverWithDistance {
   moverId: string;
@@ -100,19 +157,24 @@ export function findNearestMovers(
     longitude: number | null;
   }>,
   config: Partial<MatchingConfig> = {},
-  recommendedVehicle?: string | null
+  recommendedVehicle?: string | null,
+  bookingRawVolumeCuft?: number | null,
 ): MoverWithDistance[] {
   const matchingConfig = { ...DEFAULT_CONFIG, ...config };
-  
+
   // Calculate pickup to dropoff distance
   const jobDistance = calculateDistance(pickupCoords, dropoffCoords);
-  
+
   // Get compatible vehicle types if recommendation provided
   // Normalize to lowercase for case-insensitive matching
-  const compatibleVehicles = recommendedVehicle 
+  const compatibleVehicles = recommendedVehicle
     ? (VEHICLE_TYPE_COMPATIBILITY[recommendedVehicle] || [recommendedVehicle.toLowerCase()])
     : null;
-  
+
+  // Class-hierarchy floor: mover must have ≥ the required class for this
+  // booking's volume. AI-detected volume wins; otherwise infer from loadSize.
+  const rawVolumeForCapacity = resolveRawVolumeForFilter(bookingRawVolumeCuft, loadSize);
+
   // Calculate distance for each mover and enrich with earnings
   const moversWithDistance: MoverWithDistance[] = availableMovers
     .filter(m => {
@@ -120,15 +182,25 @@ export function findNearestMovers(
       if (!m.isAvailable || m.latitude === null || m.longitude === null) {
         return false;
       }
-      
+
       // Filter by compatible vehicle types if recommendation exists.
       // Normalize both sides so "Moving Truck", "Large Truck (26ft)" etc. all
       // resolve to the canonical 'truck' tier before comparison.
       if (compatibleVehicles && m.vehicleType) {
         const moverNormalized = normalizeVehicleType(m.vehicleType);
-        return compatibleVehicles.some(cv => normalizeVehicleType(cv) === moverNormalized);
+        if (!compatibleVehicles.some(cv => normalizeVehicleType(cv) === moverNormalized)) {
+          return false;
+        }
       }
-      
+
+      // Class-based capacity check: a mover's vehicle class must be ≥ the
+      // required class for this booking's volume. Prevents e.g. a Class B
+      // pickup accepting a Class E full-apartment job even if the string
+      // tier compatibility would have allowed it.
+      if (!moverCanHandleBooking(m.vehicleType, rawVolumeForCapacity)) {
+        return false;
+      }
+
       return true;
     })
     .map(mover => {
@@ -300,33 +372,40 @@ export function findMoversWithAvailabilityCheck(
     longitude: number | null;
   }>,
   recommendedVehicle: string,
-  config: Partial<MatchingConfig> = {}
+  config: Partial<MatchingConfig> = {},
+  bookingRawVolumeCuft?: number | null,
 ): VehicleMatchingResult {
   // Normalize the recommended vehicle type
   const normalizedRecommended = normalizeVehicleType(recommendedVehicle);
-  
+
   // Get single-tier compatible types
   const compatibleTypes = getSingleTierCompatibility(normalizedRecommended);
-  
+
+  // Class-based capacity gate applied before per-tier iteration — prunes
+  // movers whose class is below the required class regardless of tier upgrade.
+  const rawVolumeForCapacity = resolveRawVolumeForFilter(bookingRawVolumeCuft, loadSize);
+
   // Normalize all mover vehicle types for comparison
-  const normalizedMovers = availableMovers.map(m => ({
-    ...m,
-    normalizedVehicleType: normalizeVehicleType(m.vehicleType),
-  }));
-  
+  const normalizedMovers = availableMovers
+    .filter(m => moverCanHandleBooking(m.vehicleType, rawVolumeForCapacity))
+    .map(m => ({
+      ...m,
+      normalizedVehicleType: normalizeVehicleType(m.vehicleType),
+    }));
+
   // Try to find movers for each compatible type (in priority order: exact match first, then upgrade)
   for (const vehicleType of compatibleTypes) {
-    const matchingMovers = normalizedMovers.filter(m => 
+    const matchingMovers = normalizedMovers.filter(m =>
       m.normalizedVehicleType === vehicleType && m.isAvailable
     );
-    
+
     if (matchingMovers.length > 0) {
       // Overwrite vehicleType with normalized value for findNearestMovers compatibility check
       const moversWithNormalizedType = matchingMovers.map(m => ({
         ...m,
         vehicleType: m.normalizedVehicleType, // Use normalized type for matching
       }));
-      
+
       // Use existing findNearestMovers with normalized list
       const movers = findNearestMovers(
         pickupCoords,
@@ -334,7 +413,8 @@ export function findMoversWithAvailabilityCheck(
         loadSize,
         moversWithNormalizedType,
         config,
-        vehicleType
+        vehicleType,
+        bookingRawVolumeCuft,
       );
       
       if (movers.length > 0) {
