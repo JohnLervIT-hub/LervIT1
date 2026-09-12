@@ -74,6 +74,7 @@ import {
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
+import { riley } from "./agents/riley";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -286,6 +287,27 @@ async function insertMoverEarningWithRetry(
       'DB insert failed 3x after transfer — reconcile may need to create row',
     );
     throw err;
+  }
+}
+
+// Single choke-point for flipping a mover to verified. Guarantees Riley's
+// welcome sequence fires — either via the ONBOARD queue or inline if Redis is
+// unavailable. Callers must funnel every verification through this helper.
+async function setMoverVerified(moverId: string, userId: string): Promise<void> {
+  await db.update(moversTable)
+    .set({
+      isVerified: true,
+      documentsVerified: true,
+    })
+    .where(eq(moversTable.id, moverId));
+
+  const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
+  if (rileyQueue) {
+    await rileyQueue.add('mover_verified', { moverId, userId });
+    logger.info({ moverId }, '[Riley] mover_verified queued');
+  } else {
+    logger.warn({ moverId }, '[Riley] ONBOARD queue unavailable — running inline');
+    await riley.run('mover_verified', { moverId, userId });
   }
 }
 
@@ -2012,12 +2034,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You can only update your own profile" });
       }
       
+      // isVerified and documentsVerified are set ONLY via the verification
+      // item approval flow (PATCH /api/admin/verification/item/:id) so Riley's
+      // welcome sequence fires on every verification. Never set directly here.
+      if ('isVerified' in req.body || 'documentsVerified' in req.body) {
+        return res.status(403).json({
+          error: 'Verification status can only be changed via the verification approval flow',
+        });
+      }
+
       // Validate allowed update fields
       const updateSchema = insertMoverSchema.partial().pick({
         vehicleType: true,
         vehicleCapacity: true,
         licenseNumber: true,
-        isVerified: true,
         bio: true,
         location: true,
         latitude: true,
@@ -2888,39 +2918,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check if ALL 7 required verification items are now approved
         const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
         const allItems = await db.select().from(verificationItems).where(eq(verificationItems.moverId, item.moverId));
-        
+
         const allApproved = requiredTypes.every(type => {
           const typeItem = allItems.find(i => i.type === type);
           return typeItem && typeItem.status === 'Approved';
         });
-        
-        if (allApproved) {
-          // Update mover's documentsVerified to true
-          await storage.updateMover(item.moverId, {
-            documentsVerified: true,
-            isVerified: true
+
+        if (!allApproved) {
+          // Drift protection: if the requiredTypes list ever diverges from the
+          // actual verification-items catalog, this log tells us why Riley
+          // never fires even though the admin thinks they're done.
+          const missing = requiredTypes.filter(type => {
+            const typeItem = allItems.find(i => i.type === type);
+            return !(typeItem && typeItem.status === 'Approved');
           });
+          logger.info(
+            { moverId: item.moverId, missing },
+            `[Riley] Not all items approved yet — missing: ${missing.join(', ')}`,
+          );
+        } else {
           logger.info({ moverId: item.moverId }, '[Notification] All verification items approved. Mover is now fully verified.');
 
-          // Hand off to Riley (ONBOARD) for the congratulations + first-job
-          // nudge sequence. Non-blocking — a queue failure must not roll back
-          // the verification write.
+          // Funnel through setMoverVerified so the DB write and Riley handoff
+          // stay atomic (single choke-point, inline fallback if Redis is down).
           try {
             const rileyMover = await storage.getMover(item.moverId);
             if (rileyMover) {
-              const rileyQueue = createAgentQueue(QUEUE_NAMES.ONBOARD);
-              if (rileyQueue) {
-                await rileyQueue.add('mover_verified', {
-                  moverId: rileyMover.id,
-                  userId: rileyMover.userId,
-                });
-                logger.info({ moverId: rileyMover.id }, 'Riley: mover_verified queued');
-              } else {
-                logger.warn({ moverId: rileyMover.id }, 'Riley: ONBOARD queue unavailable');
-              }
+              await setMoverVerified(rileyMover.id, rileyMover.userId);
             }
           } catch (qErr) {
-            logger.warn({ err: qErr, moverId: item.moverId }, 'Riley: mover_verified enqueue failed');
+            logger.warn({ err: qErr, moverId: item.moverId }, 'setMoverVerified failed');
           }
         }
       } else if (status === 'Rejected') {
