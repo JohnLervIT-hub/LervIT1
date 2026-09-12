@@ -9,7 +9,7 @@ import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Ta
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { PriceBreakdown } from "@shared/pricing";
-import { VOLUME_LOAD_FEE_PER_CUFT } from "@shared/pricing";
+import { PRICING_CONFIG } from "@shared/pricing";
 import { useAuth } from "@/contexts/AuthContext";
 
 export interface CapturedContact {
@@ -119,80 +119,77 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     );
   }
 
-  const loadSizeLabel = breakdown.volumeCuft
-    ? `Load Fee (${breakdown.volumeCuft.toFixed(0)} ft³ × $${VOLUME_LOAD_FEE_PER_CUFT.toFixed(2)})`
-    : "Load Size";
+  const loadSizeLabel = breakdown.rawVolume > 0
+    ? `Load (${breakdown.rawVolume.toFixed(0)} ft³ × $${PRICING_CONFIG.volumeRate.toFixed(2)})`
+    : "Load";
 
-  const distanceLabel = breakdown.distanceKm 
+  const distanceLabel = breakdown.distanceKm
     ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
 
-  const feeItems = [
-    { 
-      label: "Base Fee", 
-      amount: breakdown.baseFee, 
+  const staticFees = [
+    {
+      label: `Base Fee (Class ${breakdown.vehicleClass})`,
+      amount: breakdown.baseFee,
       testId: "fee-base",
       icon: Zap,
-      show: true
+      show: true,
     },
-    { 
-      label: distanceLabel, 
-      amount: breakdown.distanceFee, 
+    {
+      label: distanceLabel,
+      amount: breakdown.distanceFee,
       testId: "fee-distance",
       icon: MapPin,
-      show: true
+      show: true,
     },
-    { 
-      label: loadSizeLabel, 
-      amount: breakdown.loadSizeFee, 
+    {
+      label: loadSizeLabel,
+      amount: breakdown.loadFee,
       testId: "fee-loadsize",
       icon: Package,
-      show: true
+      show: true,
     },
-    { 
-      label: "Apartment Move Premium", 
-      amount: breakdown.apartmentPremium, 
-      testId: "fee-apartment-premium",
-      icon: Package,
-      show: (breakdown.apartmentPremium || 0) > 0
-    },
-    { 
-      label: "Pickup Access", 
-      amount: breakdown.pickupDifficultyFee, 
+    {
+      label: "Pickup Access",
+      amount: breakdown.pickupDifficultyFee,
       testId: "fee-pickup",
       icon: TrendingUp,
-      show: breakdown.pickupDifficultyFee > 0
+      show: breakdown.pickupDifficultyFee > 0,
     },
-    { 
-      label: "Dropoff Access", 
-      amount: breakdown.dropoffDifficultyFee, 
+    {
+      label: "Dropoff Access",
+      amount: breakdown.dropoffDifficultyFee,
       testId: "fee-dropoff",
       icon: TrendingUp,
-      show: breakdown.dropoffDifficultyFee > 0
-    },
-    { 
-      label: "Mover Travel", 
-      amount: breakdown.moverTravelFee, 
-      testId: "fee-travel",
-      icon: Truck,
-      show: breakdown.moverTravelFee > 0
-    },
-    { 
-      label: "Item Premiums", 
-      amount: breakdown.heavyItemFee, 
-      testId: "fee-item-premiums",
-      icon: Package,
-      show: (breakdown.heavyItemFee || 0) > 0
+      show: breakdown.dropoffDifficultyFee > 0,
     },
   ];
 
-  const visibleFees = feeItems.filter(item => item.show);
-  const hasTwoMovers = breakdown.numberOfMoversMultiplier > 1;
+  const itemPremiumFees = breakdown.itemPremiums.length > 0
+    ? breakdown.itemPremiums.map((p, idx) => ({
+        label: `⚠ ${p.name}`,
+        amount: p.fee,
+        testId: `fee-item-premium-${idx}`,
+        icon: Package,
+        show: true,
+      }))
+    : breakdown.premiumFee > 0
+      ? [{
+          label: "Item Premium",
+          amount: breakdown.premiumFee,
+          testId: "fee-item-premiums",
+          icon: Package,
+          show: true,
+        }]
+      : [];
+
+  const visibleFees = [...staticFees, ...itemPremiumFees].filter(item => item.show);
+  const hasTwoMovers = breakdown.moverAddition > 0;
   const hasPromo = appliedPromo?.valid;
   const discountMultiplier = hasPromo ? (1 - appliedPromo.discountPercent / 100) : 1;
-  const discountedTotal = breakdown.totalCost * discountMultiplier;
+  const discountedTotal = breakdown.total * discountMultiplier;
 
-  const shouldGate = !contactCaptured && !isLoggedIn && breakdown.totalCost > 0 && !!onContactCapture;
+  const shouldGate = !contactCaptured && !isLoggedIn && breakdown.total > 0 && !!onContactCapture;
 
   return (
     <Card className={`${className} overflow-hidden`} data-testid="pricing-summary">
@@ -249,9 +246,9 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
               <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
                 <TrendingUp className="w-3 h-3 text-primary" />
               </div>
-              <span className="text-sm text-primary font-medium">2 Movers Premium</span>
+              <span className="text-sm text-primary font-medium">2 Movers (+30%)</span>
             </div>
-            <span className="text-sm font-semibold text-primary">+30%</span>
+            <span className="text-sm font-semibold text-primary tabular-nums">${breakdown.moverAddition.toFixed(2)}</span>
           </div>
         )}
 
@@ -329,7 +326,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
                 {hasPromo ? (
                   <>
                     <span className="text-lg line-through text-primary-foreground/50 mr-1">
-                      ${breakdown.totalCost.toFixed(2)}
+                      ${breakdown.total.toFixed(2)}
                     </span>
                     <span className="text-3xl font-bold tracking-tight">
                       ${discountedTotal.toFixed(2)}
@@ -337,7 +334,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
                   </>
                 ) : (
                   <span className="text-3xl font-bold tracking-tight">
-                    ${breakdown.totalCost.toFixed(2)}
+                    ${breakdown.total.toFixed(2)}
                   </span>
                 )}
                 <span className="text-sm font-medium text-primary-foreground/80">CAD</span>
@@ -351,7 +348,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
         </div>
         {shouldGate && onContactCapture && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <LeadCaptureOverlay onSubmit={onContactCapture} totalCost={breakdown.totalCost} />
+            <LeadCaptureOverlay onSubmit={onContactCapture} totalCost={breakdown.total} />
           </div>
         )}
         </div>
@@ -360,7 +357,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
           <div className="flex items-center gap-1.5 justify-center">
             <CheckCircle2 className="w-3 h-3 text-green-500" />
             <p className="text-[11px] text-green-600 dark:text-green-400 font-medium">
-              You save ${(breakdown.totalCost - discountedTotal).toFixed(2)} with promo code {appliedPromo.code}
+              You save ${(breakdown.total - discountedTotal).toFixed(2)} with promo code {appliedPromo.code}
             </p>
           </div>
         )}

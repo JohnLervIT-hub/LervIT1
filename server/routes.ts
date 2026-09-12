@@ -3841,22 +3841,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const aiDetectedVolumeCuft = typeof req.body.aiDetectedVolumeCuft === 'number' ? req.body.aiDetectedVolumeCuft : undefined;
       const heavyItemCount = typeof req.body.heavyItemCount === 'number' ? req.body.heavyItemCount : undefined;
       const heavyItemFeeOverride = typeof req.body.heavyItemFeeOverride === 'number' ? req.body.heavyItemFeeOverride : undefined;
-      const priceBreakdown = calculatePrice(
-        distance,
-        bookingData.loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
-        bookingData.pickupDifficulty as any,
-        bookingData.dropoffDifficulty as any,
-        bookingData.heavyItem || false,
-        bookingData.numberOfMovers as 1 | 2,
-        undefined,
-        aiDetectedVolumeCuft,
-        heavyItemCount,
-        heavyItemFeeOverride
-      );
+      const priceBreakdown = calculatePrice({
+        distanceKm: distance,
+        loadSize: bookingData.loadSize,
+        pickupDifficulty: bookingData.pickupDifficulty,
+        dropoffDifficulty: bookingData.dropoffDifficulty,
+        heavyItem: bookingData.heavyItem || false,
+        numberOfMovers: bookingData.numberOfMovers,
+        volumeCuft: aiDetectedVolumeCuft,
+        heavyItemFeeOverride,
+      });
+      // heavyItemCount is legacy — the tiered heavyItemFeeOverride from the client
+      // supersedes it; kept in scope for logging only.
+      void heavyItemCount;
       
       // Calculate promo code discount
       const latestUser = await storage.getUser(user.id);
-      let finalPrice = priceBreakdown.totalCost;
+      let finalPrice = priceBreakdown.total;
       let discountPercent = 0;
       let discountAmount = 0;
       let discountReason: string | null = null;
@@ -3869,8 +3870,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (submittedPromo === "LERVIT10" && latestUser && (latestUser.promoUsesCount || 0) < 1) {
         promoCode = "LERVIT10";
         discountPercent = 10;
-        discountAmount = Math.round(priceBreakdown.totalCost * 0.10 * 100) / 100;
-        finalPrice = priceBreakdown.totalCost - discountAmount;
+        discountAmount = Math.round(priceBreakdown.total * 0.10 * 100) / 100;
+        finalPrice = priceBreakdown.total - discountAmount;
         discountReason = `LERVIT10 promo - 10% off (first Move discount)`;
         // Platform absorbs discount: mover gets 85% of ORIGINAL price
         // Stripe auto-payout gives mover 85% of discounted price
@@ -3886,8 +3887,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if ((priorKai15?.n ?? 0) < 1) {
           promoCode = "KAI15";
           discountPercent = 15;
-          discountAmount = Math.round(priceBreakdown.totalCost * 0.15 * 100) / 100;
-          finalPrice = priceBreakdown.totalCost - discountAmount;
+          discountAmount = Math.round(priceBreakdown.total * 0.15 * 100) / 100;
+          finalPrice = priceBreakdown.total - discountAmount;
           discountReason = `KAI15 promo - 15% off (winback)`;
           moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
         }
@@ -3944,11 +3945,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         price: toDecimalString(finalPrice),
         baseFee: toDecimalString(priceBreakdown.baseFee),
         distanceFee: toDecimalString(priceBreakdown.distanceFee),
-        loadFee: toDecimalString(priceBreakdown.loadSizeFee),
-        moverTravelFee: toDecimalString(priceBreakdown.moverTravelFee),
+        loadFee: toDecimalString(priceBreakdown.loadFee),
+        moverTravelFee: "0.00",
         pickupDifficultyFee: toDecimalString(priceBreakdown.pickupDifficultyFee),
         dropoffDifficultyFee: toDecimalString(priceBreakdown.dropoffDifficultyFee),
-        heavyItemFee: toDecimalString(priceBreakdown.heavyItemFee),
+        heavyItemFee: toDecimalString(priceBreakdown.premiumFee),
         subtotal: toDecimalString(priceBreakdown.subtotal),
         promoCode: promoCode,
         discountPercent: toDecimalString(discountPercent),
@@ -3976,7 +3977,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId: user.id,
         loadSize: bookingData.loadSize,
         distanceKm: distance,
-        totalPrice: priceBreakdown.totalCost,
+        totalPrice: priceBreakdown.total,
         vehicleClass: priceBreakdown.vehicleClass,
         status: BOOKING_STATUSES.PENDING_PAYMENT,
       });
@@ -3987,7 +3988,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffAddress: booking.dropoffAddress,
         loadSize: bookingData.loadSize,
         distanceKm: distance,
-        price: priceBreakdown.totalCost,
+        price: priceBreakdown.total,
         vehicleClass: priceBreakdown.vehicleClass,
         sourceChannel: (booking as any).sourceChannel ?? null,
         utmSource: (booking as any).utmSource ?? null,
@@ -5403,33 +5404,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalHeavyItem = updates.heavyItem !== undefined ? updates.heavyItem : existingBooking.heavyItem;
       const finalNumberOfMovers = updates.numberOfMovers || existingBooking.numberOfMovers;
       
-      const priceBreakdown = calculatePrice(
-        distance,
-        finalLoadSize as 'boxes' | 'small' | 'medium' | 'large' | 'apartment',
-        finalPickupDifficulty as 'ground' | 'basement' | 'stairs' | 'elevator',
-        finalDropoffDifficulty as 'ground' | 'basement' | 'stairs' | 'elevator',
-        finalHeavyItem,
-        finalNumberOfMovers as 1 | 2
-      );
+      const priceBreakdown = calculatePrice({
+        distanceKm: distance,
+        loadSize: finalLoadSize,
+        pickupDifficulty: finalPickupDifficulty,
+        dropoffDifficulty: finalDropoffDifficulty,
+        heavyItem: finalHeavyItem,
+        numberOfMovers: finalNumberOfMovers,
+      });
       
       // Apply promo code discount if booking has one
       let discountPercent = 0;
       let discountAmount = 0;
       let discountReason = null;
-      let finalPrice = priceBreakdown.totalCost;
+      let finalPrice = priceBreakdown.total;
       let moverBalanceOwed = 0;
       
       if (existingBooking.promoCode === "LERVIT10") {
         discountPercent = 10;
-        discountAmount = priceBreakdown.totalCost * 0.10;
+        discountAmount = priceBreakdown.total * 0.10;
         discountReason = existingBooking.discountReason;
-        finalPrice = priceBreakdown.totalCost - discountAmount;
+        finalPrice = priceBreakdown.total - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       } else if (existingBooking.promoCode === "KAI15") {
         discountPercent = 15;
-        discountAmount = priceBreakdown.totalCost * 0.15;
+        discountAmount = priceBreakdown.total * 0.15;
         discountReason = existingBooking.discountReason;
-        finalPrice = priceBreakdown.totalCost - discountAmount;
+        finalPrice = priceBreakdown.total - discountAmount;
         moverBalanceOwed = Math.round(0.85 * discountAmount * 100) / 100;
       }
       
@@ -5439,10 +5440,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update all pricing-related fields
       updateData.baseFee = priceBreakdown.baseFee.toFixed(2);
       updateData.distanceFee = priceBreakdown.distanceFee.toFixed(2);
-      updateData.loadFee = priceBreakdown.loadSizeFee.toFixed(2);
+      updateData.loadFee = priceBreakdown.loadFee.toFixed(2);
       updateData.pickupDifficultyFee = priceBreakdown.pickupDifficultyFee.toFixed(2);
       updateData.dropoffDifficultyFee = priceBreakdown.dropoffDifficultyFee.toFixed(2);
-      updateData.heavyItemFee = priceBreakdown.heavyItemFee.toFixed(2);
+      updateData.heavyItemFee = priceBreakdown.premiumFee.toFixed(2);
       updateData.subtotal = priceBreakdown.subtotal.toFixed(2);
       updateData.price = finalPrice.toFixed(2);
       updateData.discountPercent = discountPercent.toFixed(2);

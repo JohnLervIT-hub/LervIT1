@@ -1,326 +1,344 @@
 // LervIT PrecisionMatch™ Dynamic Pricing Calculator
-// Vehicle class-based pricing system for moving services
+// Vehicle class-based pricing (2026) with volume-driven load fees and item premiums.
+
+export type VehicleClass = 'A' | 'B' | 'C' | 'E';
+export type PickupDifficultyType = 'ground' | 'stairs' | 'elevator' | 'basement';
+export type DropoffDifficultyType = PickupDifficultyType;
 
 export interface PriceBreakdown {
   baseFee: number;
   distanceFee: number;
-  distanceKm: number;  // Distance in kilometers for display
-  perKmRate: number;   // Price per km for the vehicle class
   loadFee: number;
-  loadSizeFee: number;  // New: Load Size Fee (Boxes: $0, Medium: $15, Large: $30, Apartment: $45)
-  apartmentPremium: number;  // $50 premium for 300+ ft³ apartment moves
-  moverTravelFee: number;
+  premiumFee: number;
+  accessFee: number;
+  // Access fee split (persisted to legacy DB columns; UI can use accessFee)
   pickupDifficultyFee: number;
   dropoffDifficultyFee: number;
-  heavyItemFee: number;  // Kept for backwards compatibility
+  moverAddition: number;
   subtotal: number;
-  numberOfMoversMultiplier: number;
-  totalCost: number;
-  vehicleClass?: VehicleClass;
-  loadSize?: string;  // Store the load size for display
-  volumeCuft?: number;  // AI-detected volume for volume-based pricing
+  total: number;
+  vehicleClass: VehicleClass;
+  adjustedVolume: number;
+  rawVolume: number;
+  numberOfMovers: number;
+  forcedTwoMovers: boolean;
+  itemPremiums: { name: string; fee: number }[];
+  // Display helpers retained for existing UI callers
+  distanceKm: number;
+  perKmRate: number;
 }
-
-// ===== GLOBAL VEHICLE CLASS CONFIGURATION =====
-// This is the single source of truth for all pricing across the platform
-
-export type VehicleClass = 'A' | 'B' | 'C' | 'D' | 'E';
 
 export interface VehicleClassConfig {
   class: VehicleClass;
   name: string;
   vehicleType: string;
-  volumeRangeMin: number;  // ft³
-  volumeRangeMax: number;  // ft³
-  baseFee: number;         // CAD
-  perKmRate: number;       // CAD per km
-  loadType: string;        // Description of typical loads
-  examples: string;        // Real-world examples
+  volumeRangeMin: number;
+  volumeRangeMax: number;
+  baseFee: number;
+  perKmRate: number;
+  loadType: string;
+  examples: string;
 }
 
-/**
- * ===== VEHICLE CLASS CONFIGURATION =====
- * 
- * IMPORTANT: These thresholds are synced with furniture-database.ts
- * Volume thresholds (2026):
- *   0-20 ft³    → Class A (SUV/Small Vehicle)
- *   21-165 ft³  → Class B (Pickup Truck)
- *   166-300 ft³ → Class C (Cargo Van)
- *   >300 ft³    → Class E (Large Moving Truck)
- * 
- * Note: Class D is deprecated. Kept in type for backward compatibility.
- */
+export const PRICING_CONFIG = {
+  // Vehicle base fees
+  vehicleBaseFees: {
+    A: 20.00,  // SUV
+    B: 30.00,  // Pickup Truck
+    C: 35.00,  // Cargo Van
+    E: 90.00,  // Moving Truck
+  } as Record<VehicleClass, number>,
+
+  // Per km rates
+  kmRates: {
+    A: 0.80,
+    B: 1.80,
+    C: 1.80,
+    E: 2.50,
+  } as Record<VehicleClass, number>,
+
+  // Volume rate (raw volume × rate)
+  volumeRate: 0.40,
+
+  // Packing factor — vehicle matching ONLY (not used in price calculation)
+  packingFactor: 1.35,
+
+  // 2-mover addition (30% of subtotal)
+  twoMoverAddition: 0.30,
+
+  // Force 2 movers above this adjusted volume
+  forceTwoMoversVolumeThreshold: 200,
+
+  // Access fees
+  accessFees: {
+    stairs:   12.00,
+    elevator: 10.00,
+    basement: 15.00,
+  },
+
+  // Item premium fees
+  itemPremiums: {
+    // Tier 1 — Heavy
+    piano_upright:     75.00,
+    piano_grand:      150.00,
+    safe:              75.00,
+    hot_tub:           75.00,
+    pool_table:        75.00,
+    industrial_equipment: 75.00,
+
+    // Tier 2 — Appliance
+    refrigerator:      20.00,
+    washing_machine:   20.00,
+    dryer:             20.00,
+    dishwasher:        20.00,
+    freezer:           20.00,
+    stove:             20.00,
+    oven:              20.00,
+    commercial_appliance: 50.00,
+
+    // Tier 3 — Fragile
+    tv_large:          20.00,  // 65"+
+    tv_xlarge:         40.00,  // 85"+
+    antique:           20.00,
+    glass_table:       20.00,
+    mirror_large:      20.00,
+    marble_furniture:  20.00,
+    artwork:           20.00,
+
+    // Tier 4 — Awkward
+    treadmill:         10.00,
+    exercise_bike:     10.00,
+    elliptical:        10.00,
+    sectional_sofa:    10.00,
+    king_mattress:     10.00,
+    kayak:             10.00,
+    canoe:             10.00,
+    motorcycle:        50.00,
+  } as Record<string, number>,
+
+  // Manual load size → estimated volume (ft³). Used when no AI detection available.
+  loadSizeVolumes: {
+    boxes:     15,
+    small:     40,
+    medium:    80,
+    large:     150,
+    apartment: 250,
+  } as Record<string, number>,
+
+  // Platform commission (15% for Uber-style payout)
+  platformFeePercent: 15.00,
+} as const;
+
+// ===== VEHICLE CLASS CATALOG (display metadata) =====
+// Volume ranges use *adjusted* ft³ (raw × packingFactor) to line up with
+// getVehicleClassFromVolume's thresholds. Fees mirror PRICING_CONFIG so UI
+// dropdowns and admin views stay in sync with the calculator.
 export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   A: {
     class: 'A',
     name: 'SUV / Small Vehicle',
     vehicleType: 'car',
     volumeRangeMin: 0,
-    volumeRangeMax: 20,
-    baseFee: 12.00,
-    perKmRate: 1.08,
+    volumeRangeMax: 40,
+    baseFee: PRICING_CONFIG.vehicleBaseFees.A,
+    perKmRate: PRICING_CONFIG.kmRates.A,
     loadType: 'Small items, single chairs',
-    examples: '1-4 boxes, single chair, small items',
+    examples: 'Boxes, small items',
   },
   B: {
     class: 'B',
     name: 'Pickup Truck',
     vehicleType: 'pickup',
-    volumeRangeMin: 21,
-    volumeRangeMax: 165,
-    baseFee: 20.00,
-    perKmRate: 1.80,
+    volumeRangeMin: 41,
+    volumeRangeMax: 100,
+    baseFee: PRICING_CONFIG.vehicleBaseFees.B,
+    perKmRate: PRICING_CONFIG.kmRates.B,
     loadType: 'Medium furniture, moderate loads',
-    examples: 'Sofa, mattress, bedroom furniture, multiple boxes',
+    examples: 'Sofa, mattress, bedroom furniture',
   },
   C: {
     class: 'C',
     name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 166,
-    volumeRangeMax: 300,
-    baseFee: 20.00,
-    perKmRate: 1.80,
-    loadType: 'Large furniture loads, multiple rooms',
-    examples: 'Full bedroom + living room, sectional sofas, large sets',
-  },
-  D: {
-    class: 'D',
-    name: 'Cargo Van (Legacy)',
-    vehicleType: 'van',
-    volumeRangeMin: 181,
-    volumeRangeMax: 300,
-    baseFee: 50.00,
-    perKmRate: 1.50,
-    loadType: 'Deprecated - use Class C',
-    examples: 'Deprecated - merged into Class C',
+    volumeRangeMin: 101,
+    volumeRangeMax: 200,
+    baseFee: PRICING_CONFIG.vehicleBaseFees.C,
+    perKmRate: PRICING_CONFIG.kmRates.C,
+    loadType: 'Large furniture, multiple rooms',
+    examples: 'Full bedroom + living room, sectional sofas',
   },
   E: {
     class: 'E',
     name: 'Moving Truck (Large)',
     vehicleType: 'truck',
-    volumeRangeMin: 301,
-    volumeRangeMax: 600,
-    baseFee: 50.00,
-    perKmRate: 2.40,
+    volumeRangeMin: 201,
+    volumeRangeMax: 1000,
+    baseFee: PRICING_CONFIG.vehicleBaseFees.E,
+    perKmRate: PRICING_CONFIG.kmRates.E,
     loadType: 'Full apartment / home moves',
     examples: 'Full apartment, appliances, heavy loads',
   },
 };
 
-// Map loadSize values to vehicle classes (synced with furniture-database.ts)
-export const LOAD_SIZE_TO_CLASS: Record<string, VehicleClass> = {
-  'boxes': 'A',        // 0-20 ft³ → Class A (SUV) - boxes, small items
-  'small': 'A',        // Alias for boxes
-  'medium': 'B',       // 21-180 ft³ → Class B (Pickup Truck)
-  'large': 'C',        // 181-300 ft³ → Class C (Cargo Van)
-  'apartment': 'E',    // >300 ft³ → Class E (Large Moving Truck)
-};
-
 /**
- * Determine vehicle class from total volume
- * Synced with furniture-database.ts VEHICLE_VOLUME_THRESHOLDS:
- *   0-20 ft³    → A (SUV)
- *   21-165 ft³  → B (Pickup Truck)
- *   166-300 ft³ → C (Cargo Van)
- *   >300 ft³    → E (Large Moving Truck)
+ * Determine vehicle class from raw volume. Applies packing factor internally.
+ *   adjusted ≤ 40  → A
+ *   adjusted ≤ 100 → B
+ *   adjusted ≤ 200 → C
+ *   adjusted > 200 → E
  */
-export function getVehicleClassFromVolume(volumeCuft: number): VehicleClass {
-  if (volumeCuft <= 20) return 'A';
-  if (volumeCuft <= 165) return 'B';
-  if (volumeCuft <= 300) return 'C';
-  return 'E';
+export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
+  const adjusted = rawVolumeCuft * PRICING_CONFIG.packingFactor;
+  if (adjusted > 200) return 'E';
+  if (adjusted > 100) return 'C';
+  if (adjusted > 40)  return 'B';
+  return 'A';
 }
 
-// Get vehicle class from load size
+/** Map manual load size → vehicle class via the volume estimate. */
 export function getVehicleClassFromLoadSize(loadSize: string): VehicleClass {
-  return LOAD_SIZE_TO_CLASS[loadSize] || 'C';
+  const rawVolume = PRICING_CONFIG.loadSizeVolumes[loadSize] ?? 40;
+  return getVehicleClassFromVolume(rawVolume);
 }
 
-// Get vehicle class config
 export function getVehicleClassConfig(vehicleClass: VehicleClass): VehicleClassConfig {
   return VEHICLE_CLASSES[vehicleClass];
 }
 
-// Get all vehicle classes as array (for UI dropdowns)
 export function getAllVehicleClasses(): VehicleClassConfig[] {
   return Object.values(VEHICLE_CLASSES);
 }
 
-// ===== ADDITIONAL PRICING CONFIGURATION =====
-
-const PRICING_CONFIG = {
-  MOVER_TRAVEL_RATE_PER_KM: 0.90,
-  MOVER_TRAVEL_FREE_RADIUS_KM: 5,
-  
-  PICKUP_DIFFICULTY_FEES: {
-    ground: 0.00,
-    basement: 12.00,
-    stairs: 6.00,
-    elevator: 9.60,
-  },
-  DROPOFF_DIFFICULTY_FEES: {
-    ground: 0.00,
-    basement: 12.00,
-    stairs: 6.00,
-    elevator: 9.60,
-  },
-  // Load Size Fees (flat tier fees - used when no AI volume data)
-  // Aligned to $0.19/ft³ at representative midpoints for each tier
-  LOAD_SIZE_FEES: {
-    boxes: 6.00,      // Class A (SUV) - minimum load fee for 0-20 ft³
-    small: 6.00,      // Alias for boxes - minimum load fee
-    medium: 23.00,    // Pickup Truck loads — ~93 ft³ midpoint × $0.25
-    large: 58.00,     // Cargo Van loads — ~233 ft³ midpoint × $0.25
-    apartment: 75.00, // Moving Truck loads — 300 ft³ minimum × $0.25
-  } as Record<string, number>,
-  // Volume-based load fee rate (used when AI provides exact volume)
-  // $0.20/ft³: 100ft³=$20, 200ft³=$40, 300ft³=$60, 400ft³=$80
-  VOLUME_LOAD_FEE_PER_CUFT: 0.20,
-  VOLUME_LOAD_FEE_MINIMUM: 6.00,  // Minimum load fee regardless of volume
-  APARTMENT_MOVE_PREMIUM: 60.00, // $60 premium for 300+ ft³ loads (apartment moves)
-  HEAVY_ITEM_FEE: 15.00, // Kept for backwards compatibility
-  HEAVY_ITEM_PREMIUM_PER_ITEM: 10.00, // Kept for backwards compatibility (flat rate)
-  // Tiered handling premiums by complexity (2025)
-  // high: large appliances, massage chairs, gym equipment — specialist care needed
-  // very_high: pianos, hot tubs, pool tables, safes, motorcycles — rigging/specialist required
-  HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY: { high: 15, very_high: 30 } as Record<string, number>,
-  HEAVY_ITEM_PREMIUM_CAP: 150, // total heavy-item fee never exceeds $150 per booking
-  TWO_MOVERS_MULTIPLIER: 1.30,
-  
-  // Platform commission (15% for Uber-style payout)
-  PLATFORM_FEE_PERCENT: 15.00,
-};
-
-export const VOLUME_LOAD_FEE_PER_CUFT = PRICING_CONFIG.VOLUME_LOAD_FEE_PER_CUFT;
-export const VOLUME_LOAD_FEE_MINIMUM = PRICING_CONFIG.VOLUME_LOAD_FEE_MINIMUM;
-
-export type PickupDifficultyType = keyof typeof PRICING_CONFIG.PICKUP_DIFFICULTY_FEES;
-export type DropoffDifficultyType = keyof typeof PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES;
-
 /**
- * Calculate the total price using vehicle class-based pricing
- * New formula: total = baseFee + distanceFee + loadSizeFee + accessFees
- * Load Size Fees: Boxes: $6 (Class A), Medium: $18, Large: $36, Apartment: $54
- * Class A Distance Rate: $1.08/km
+ * Calculate the total price using vehicle-class + volume-based pricing.
+ *
+ * Steps:
+ *  1. Raw volume — AI-detected `volumeCuft` if present, else map `loadSize` → volume.
+ *  2. Adjusted volume — raw × packingFactor (for vehicle matching + force-2-movers).
+ *  3. Vehicle class — from raw volume via getVehicleClassFromVolume.
+ *  4. Force 2 movers when adjustedVolume > forceTwoMoversVolumeThreshold.
+ *  5–7. Base + distance + load fees.
+ *  8. Item premiums — sum from detectedItems[].premiumKey, or legacy heavyItem fallback.
+ *  9. Access fees — sum of pickup + dropoff difficulty.
+ *  10–12. Subtotal → 2-mover addition (30%) → total.
  */
-export const HEAVY_ITEM_PREMIUM_PER_ITEM = PRICING_CONFIG.HEAVY_ITEM_PREMIUM_PER_ITEM;
-export const HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY = PRICING_CONFIG.HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY;
-export const HEAVY_ITEM_PREMIUM_CAP = PRICING_CONFIG.HEAVY_ITEM_PREMIUM_CAP;
+export function calculatePrice({
+  volumeCuft,
+  loadSize,
+  distanceKm,
+  numberOfMovers = 1,
+  pickupDifficulty,
+  dropoffDifficulty,
+  heavyItem,
+  heavyItemFeeOverride,
+  detectedItems,
+}: {
+  volumeCuft?: number | null;
+  loadSize?: string | null;
+  distanceKm: number;
+  numberOfMovers?: number;
+  pickupDifficulty?: string | null;
+  dropoffDifficulty?: string | null;
+  heavyItem?: boolean;
+  heavyItemFeeOverride?: number;
+  detectedItems?: {
+    itemName: string;
+    premiumKey?: string | null;
+  }[];
+}): PriceBreakdown {
+  const cfg = PRICING_CONFIG;
 
-export function calculatePrice(
-  pickupToDropoffDistance: number,
-  loadSize: 'boxes' | 'small' | 'medium' | 'large' | 'apartment',
-  pickupDifficulty: PickupDifficultyType,
-  dropoffDifficulty: DropoffDifficultyType,
-  heavyItem: boolean,
-  numberOfMovers: 1 | 2,
-  moverToPickupDistance?: number,
-  volumeCuft?: number,  // Optional: use volume directly for more accurate class determination
-  heavyItemCount?: number,  // Number of heavy items detected by AI (flat-rate fallback)
-  heavyItemFeeOverride?: number  // Tiered pre-computed fee — takes priority over heavyItemCount
-): PriceBreakdown {
-  // Determine vehicle class: take the higher of volume-based and loadSize-based.
-  // This ensures weight-bumped tiers (e.g. 110 kg sofa forces 'large'/van even if
-  // the physical volume alone would only imply a pickup) get the right vehicle class.
-  const VEHICLE_CLASS_RANK: Record<string, number> = { A: 1, B: 2, C: 3, D: 3, E: 4 };
-  const classFromLoadSize = getVehicleClassFromLoadSize(loadSize);
-  const classFromVolume = volumeCuft ? getVehicleClassFromVolume(volumeCuft) : null;
-  const vehicleClass = classFromVolume && VEHICLE_CLASS_RANK[classFromVolume] >= VEHICLE_CLASS_RANK[classFromLoadSize]
-    ? classFromVolume
-    : classFromLoadSize;
-  
-  const classConfig = VEHICLE_CLASSES[vehicleClass];
-  
-  // Base fee from vehicle class
-  const baseFee = classConfig.baseFee;
-  
-  // Distance fee based on vehicle class per-km rate
-  const distanceFee = pickupToDropoffDistance * classConfig.perKmRate;
-  
-  // Load fee is now included in base fee (class-based pricing)
-  // Keeping loadFee = 0 for backwards compatibility in breakdown display
-  const loadFee = 0;
-  
-  // Load Size Fee: Use volume-based scaling when AI provides exact volume,
-  // otherwise fall back to flat tier fee
-  let loadSizeFee: number;
-  if (volumeCuft && volumeCuft > 0) {
-    loadSizeFee = Math.max(
-      volumeCuft * PRICING_CONFIG.VOLUME_LOAD_FEE_PER_CUFT,
-      PRICING_CONFIG.VOLUME_LOAD_FEE_MINIMUM
-    );
-  } else {
-    loadSizeFee = PRICING_CONFIG.LOAD_SIZE_FEES[loadSize] || 0;
-  }
-  
-  // Pickup difficulty fee
-  const pickupDifficultyFee = PRICING_CONFIG.PICKUP_DIFFICULTY_FEES[pickupDifficulty] || 0;
-  
-  // Dropoff difficulty fee
-  const dropoffDifficultyFee = PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES[dropoffDifficulty] || 0;
-  
-  // Apartment move premium: $50 for loads 300+ ft³
-  const isApartmentMove = volumeCuft ? volumeCuft >= 300 : loadSize === 'apartment';
-  const apartmentPremium = isApartmentMove ? PRICING_CONFIG.APARTMENT_MOVE_PREMIUM : 0;
+  // STEP 1 — Raw volume
+  const rawVolume = (typeof volumeCuft === 'number' && volumeCuft > 0)
+    ? volumeCuft
+    : (loadSize != null ? cfg.loadSizeVolumes[loadSize] : undefined) ?? 40;
 
-  // Heavy item fee: use tiered override when provided (frontend sends pre-computed tiered fee),
-  // otherwise fall back to flat $10 × count, then to the boolean flag.
-  let heavyItemFee: number;
-  if (heavyItemFeeOverride !== undefined) {
-    heavyItemFee = heavyItemFeeOverride;
-  } else {
-    const effectiveHeavyCount = heavyItemCount ?? (heavyItem ? 1 : 0);
-    heavyItemFee = effectiveHeavyCount * PRICING_CONFIG.HEAVY_ITEM_PREMIUM_PER_ITEM;
+  // STEP 2 — Adjusted volume (packing factor)
+  const adjustedVolume = rawVolume * cfg.packingFactor;
+
+  // STEP 3 — Vehicle class
+  const vehicleClass = getVehicleClassFromVolume(rawVolume);
+
+  // STEP 4 — Force 2 movers
+  const forcedTwoMovers = adjustedVolume > cfg.forceTwoMoversVolumeThreshold;
+  const effectiveMovers = forcedTwoMovers ? 2 : numberOfMovers;
+
+  // STEP 5 — Base fee
+  const baseFee = cfg.vehicleBaseFees[vehicleClass];
+
+  // STEP 6 — Distance fee
+  const perKmRate = cfg.kmRates[vehicleClass];
+  const distanceFee = distanceKm * perKmRate;
+
+  // STEP 7 — Load fee (raw volume × $0.40)
+  const loadFee = rawVolume * cfg.volumeRate;
+
+  // STEP 8 — Item premiums
+  const itemPremiumsList: { name: string; fee: number }[] = [];
+  if (detectedItems?.length) {
+    for (const item of detectedItems) {
+      const key = item.premiumKey;
+      if (key && cfg.itemPremiums[key] != null) {
+        itemPremiumsList.push({ name: item.itemName, fee: cfg.itemPremiums[key] });
+      }
+    }
   }
-  
-  // Mover travel fee (only if mover travels more than free radius)
-  let moverTravelFee = 0;
-  if (moverToPickupDistance && moverToPickupDistance > PRICING_CONFIG.MOVER_TRAVEL_FREE_RADIUS_KM) {
-    const chargeableDistance = moverToPickupDistance - PRICING_CONFIG.MOVER_TRAVEL_FREE_RADIUS_KM;
-    moverTravelFee = chargeableDistance * PRICING_CONFIG.MOVER_TRAVEL_RATE_PER_KM;
-  }
-  
-  // Calculate subtotal: baseFee + distanceFee + loadSizeFee + apartmentPremium + accessFees + heavyItemFee
-  const subtotal = baseFee + distanceFee + loadSizeFee + apartmentPremium + pickupDifficultyFee + 
-                   dropoffDifficultyFee + moverTravelFee + heavyItemFee;
-  
-  // Apply number of movers multiplier
-  const numberOfMoversMultiplier = numberOfMovers === 2 ? PRICING_CONFIG.TWO_MOVERS_MULTIPLIER : 1;
-  const totalCost = subtotal * numberOfMoversMultiplier;
-  
+  // Legacy heavy-item fallback fires only when no detectedItems produced premiums.
+  const premiumFee = itemPremiumsList.length > 0
+    ? itemPremiumsList.reduce((sum, i) => sum + i.fee, 0)
+    : (heavyItemFeeOverride ?? (heavyItem ? 75 : 0));
+
+  // STEP 9 — Access fees
+  const pickupDifficultyFee = pickupDifficulty && pickupDifficulty in cfg.accessFees
+    ? cfg.accessFees[pickupDifficulty as keyof typeof cfg.accessFees]
+    : 0;
+  const dropoffDifficultyFee = dropoffDifficulty && dropoffDifficulty in cfg.accessFees
+    ? cfg.accessFees[dropoffDifficulty as keyof typeof cfg.accessFees]
+    : 0;
+  const accessFee = pickupDifficultyFee + dropoffDifficultyFee;
+
+  // STEP 10 — Subtotal
+  const subtotal = baseFee + distanceFee + loadFee + premiumFee + accessFee;
+
+  // STEP 11 — 2-mover addition
+  const moverAddition = effectiveMovers > 1 ? subtotal * cfg.twoMoverAddition : 0;
+
+  // STEP 12 — Total (no minimums for any class)
+  const total = subtotal + moverAddition;
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
   return {
-    baseFee: Math.round(baseFee * 100) / 100,
-    distanceFee: Math.round(distanceFee * 100) / 100,
-    distanceKm: Math.round(pickupToDropoffDistance * 10) / 10,  // Round to 1 decimal
-    perKmRate: classConfig.perKmRate,
-    loadFee: Math.round(loadFee * 100) / 100,
-    loadSizeFee: Math.round(loadSizeFee * 100) / 100,
-    apartmentPremium: Math.round(apartmentPremium * 100) / 100,
-    pickupDifficultyFee: Math.round(pickupDifficultyFee * 100) / 100,
-    dropoffDifficultyFee: Math.round(dropoffDifficultyFee * 100) / 100,
-    heavyItemFee: Math.round(heavyItemFee * 100) / 100,
-    moverTravelFee: Math.round(moverTravelFee * 100) / 100,
-    subtotal: Math.round(subtotal * 100) / 100,
-    numberOfMoversMultiplier,
-    totalCost: Math.round(totalCost * 100) / 100,
+    baseFee: round2(baseFee),
+    distanceFee: round2(distanceFee),
+    loadFee: round2(loadFee),
+    premiumFee: round2(premiumFee),
+    accessFee: round2(accessFee),
+    pickupDifficultyFee: round2(pickupDifficultyFee),
+    dropoffDifficultyFee: round2(dropoffDifficultyFee),
+    moverAddition: round2(moverAddition),
+    subtotal: round2(subtotal),
+    total: round2(total),
     vehicleClass,
-    loadSize,
-    volumeCuft: volumeCuft || undefined,
+    adjustedVolume: round2(adjustedVolume),
+    rawVolume: round2(rawVolume),
+    numberOfMovers: effectiveMovers,
+    forcedTwoMovers,
+    itemPremiums: itemPremiumsList.map(i => ({ name: i.name, fee: round2(i.fee) })),
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    perKmRate,
   };
 }
 
-/**
- * Calculate mover earnings after platform commission
- */
+/** Calculate mover earnings after platform commission. */
 export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): {
   gross: number;
   platformFee: number;
   net: number;
   platformFeePercent: number;
 } {
-  const gross = priceBreakdown.totalCost;
-  const platformFeePercent = PRICING_CONFIG.PLATFORM_FEE_PERCENT;
+  const gross = priceBreakdown.total;
+  const platformFeePercent = PRICING_CONFIG.platformFeePercent;
   const platformFee = gross * (platformFeePercent / 100);
   const net = gross - platformFee;
 
@@ -336,14 +354,10 @@ export function calculateMoverEarnings(priceBreakdown: PriceBreakdown): {
  * Calculate an enterprise partner's net earnings on a booking after platform commission.
  *
  * Fee resolution order (higher precedence first):
- *   1. `partnerFeeOverride` — a per-partner negotiated rate (e.g. partners.platformFeePercent)
+ *   1. `partnerFeeOverride` — per-partner negotiated rate (e.g. partners.platformFeePercent)
  *   2. `platformFeeAmount`  — absolute fee already computed on the booking row (only when > 0)
  *   3. `platformFeePercent` — percentage on the booking row
- *   4. Default PRICING_CONFIG.PLATFORM_FEE_PERCENT (15%)
- *
- * The absolute-amount case exists because bookings persist both `platformFeeAmount`
- * and `platformFeePercent`; when an admin has overridden the absolute amount, that
- * wins over the derived percent value. Result never goes below zero.
+ *   4. Default PRICING_CONFIG.platformFeePercent (15%)
  */
 export function calculatePartnerNet(
   grossAmount: number,
@@ -361,12 +375,12 @@ export function calculatePartnerNet(
     feeAmount = gross * (feePercent / 100);
   } else if (platformFeeAmount != null && Number.isFinite(platformFeeAmount) && platformFeeAmount > 0) {
     feeAmount = platformFeeAmount;
-    feePercent = gross > 0 ? (feeAmount / gross) * 100 : PRICING_CONFIG.PLATFORM_FEE_PERCENT;
+    feePercent = gross > 0 ? (feeAmount / gross) * 100 : PRICING_CONFIG.platformFeePercent;
   } else if (platformFeePercent != null && Number.isFinite(platformFeePercent)) {
     feePercent = platformFeePercent;
     feeAmount = gross * (feePercent / 100);
   } else {
-    feePercent = PRICING_CONFIG.PLATFORM_FEE_PERCENT;
+    feePercent = PRICING_CONFIG.platformFeePercent;
     feeAmount = gross * (feePercent / 100);
   }
 
@@ -380,46 +394,47 @@ export function calculatePartnerNet(
   };
 }
 
-/**
- * Format price breakdown for display (includes vehicle class)
- */
+/** Format price breakdown for display (text). */
 export function formatPriceBreakdown(breakdown: PriceBreakdown): string {
-  const classConfig = breakdown.vehicleClass ? VEHICLE_CLASSES[breakdown.vehicleClass] : null;
-  const lines = [
-    classConfig ? `Vehicle Class ${breakdown.vehicleClass}: ${classConfig.name}` : null,
+  const classConfig = VEHICLE_CLASSES[breakdown.vehicleClass];
+  const lines: (string | null)[] = [
+    `Vehicle Class ${breakdown.vehicleClass}: ${classConfig.name}`,
     `Base Fee: $${breakdown.baseFee.toFixed(2)}`,
-    `Distance Fee (${classConfig ? `$${classConfig.perKmRate.toFixed(2)}/km` : 'per km'}): $${breakdown.distanceFee.toFixed(2)}`,
-    breakdown.apartmentPremium > 0 ? `Apartment Move Premium: $${breakdown.apartmentPremium.toFixed(2)}` : null,
-    breakdown.pickupDifficultyFee > 0 ? `Pickup Difficulty: $${breakdown.pickupDifficultyFee.toFixed(2)}` : null,
-    breakdown.dropoffDifficultyFee > 0 ? `Dropoff Difficulty: $${breakdown.dropoffDifficultyFee.toFixed(2)}` : null,
-    breakdown.heavyItemFee > 0 ? `Heavy Item: $${breakdown.heavyItemFee.toFixed(2)}` : null,
-    breakdown.moverTravelFee > 0 ? `Mover Travel: $${breakdown.moverTravelFee.toFixed(2)}` : null,
-    breakdown.numberOfMoversMultiplier > 1 ? `2-Movers Fee (×${breakdown.numberOfMoversMultiplier}): +30%` : null,
-    `Total: $${breakdown.totalCost.toFixed(2)} CAD`,
+    `Distance ($${breakdown.perKmRate.toFixed(2)}/km × ${breakdown.distanceKm}km): $${breakdown.distanceFee.toFixed(2)}`,
+    `Load (${breakdown.rawVolume.toFixed(0)} ft³): $${breakdown.loadFee.toFixed(2)}`,
   ];
-  
+  if (breakdown.itemPremiums.length > 0) {
+    for (const p of breakdown.itemPremiums) {
+      lines.push(`⚠ ${p.name}: $${p.fee.toFixed(2)}`);
+    }
+  } else if (breakdown.premiumFee > 0) {
+    lines.push(`Item Premium: $${breakdown.premiumFee.toFixed(2)}`);
+  }
+  if (breakdown.pickupDifficultyFee > 0) lines.push(`Pickup Access: $${breakdown.pickupDifficultyFee.toFixed(2)}`);
+  if (breakdown.dropoffDifficultyFee > 0) lines.push(`Dropoff Access: $${breakdown.dropoffDifficultyFee.toFixed(2)}`);
+  if (breakdown.moverAddition > 0) lines.push(`2 Movers (+30%): $${breakdown.moverAddition.toFixed(2)}`);
+  lines.push(`Total: $${breakdown.total.toFixed(2)} CAD`);
   return lines.filter(Boolean).join('\n');
 }
 
-/**
- * Get price estimate preview (for quick quotes)
- */
+/** Quick price estimate preview for a given class + distance. */
 export function getQuickPriceEstimate(
-  distanceKm: number, 
+  distanceKm: number,
   vehicleClass: VehicleClass
 ): { min: number; max: number; baseFee: number; perKmRate: number } {
-  const config = VEHICLE_CLASSES[vehicleClass];
-  const basePrice = config.baseFee + (distanceKm * config.perKmRate);
-  
+  const baseFee = PRICING_CONFIG.vehicleBaseFees[vehicleClass];
+  const perKmRate = PRICING_CONFIG.kmRates[vehicleClass];
+  const basePrice = baseFee + (distanceKm * perKmRate);
+
   return {
-    min: Math.round(basePrice * 0.9 * 100) / 100,  // -10% for simple moves
-    max: Math.round(basePrice * 1.3 * 100) / 100,  // +30% for complex moves
-    baseFee: config.baseFee,
-    perKmRate: config.perKmRate,
+    min: Math.round(basePrice * 0.9 * 100) / 100,
+    max: Math.round(basePrice * 1.3 * 100) / 100,
+    baseFee,
+    perKmRate,
   };
 }
 
-// Helper functions for labels
+// Label helpers
 export function getPickupDifficultyLabel(difficulty: PickupDifficultyType): string {
   const labels: Record<PickupDifficultyType, string> = {
     ground: 'Ground Floor',
@@ -431,13 +446,7 @@ export function getPickupDifficultyLabel(difficulty: PickupDifficultyType): stri
 }
 
 export function getDropoffDifficultyLabel(difficulty: DropoffDifficultyType): string {
-  const labels: Record<DropoffDifficultyType, string> = {
-    ground: 'Ground Floor',
-    basement: 'Basement',
-    stairs: 'Stairs',
-    elevator: 'Elevator',
-  };
-  return labels[difficulty] || difficulty;
+  return getPickupDifficultyLabel(difficulty);
 }
 
 export function getVehicleClassLabel(vehicleClass: VehicleClass): string {
@@ -450,18 +459,19 @@ export function getVehicleClassDescription(vehicleClass: VehicleClass): string {
   return `${config.volumeRangeMin}-${config.volumeRangeMax} ft³ • $${config.baseFee} base + $${config.perKmRate.toFixed(2)}/km`;
 }
 
-// Export pricing config for admin/debug purposes
+/** Export pricing config for admin/debug views. */
 export function getPricingConfig() {
   return {
     vehicleClasses: VEHICLE_CLASSES,
-    additionalFees: {
-      moverTravelRatePerKm: PRICING_CONFIG.MOVER_TRAVEL_RATE_PER_KM,
-      moverTravelFreeRadiusKm: PRICING_CONFIG.MOVER_TRAVEL_FREE_RADIUS_KM,
-      pickupDifficultyFees: PRICING_CONFIG.PICKUP_DIFFICULTY_FEES,
-      dropoffDifficultyFees: PRICING_CONFIG.DROPOFF_DIFFICULTY_FEES,
-      heavyItemFee: PRICING_CONFIG.HEAVY_ITEM_FEE,
-      twoMoversMultiplier: PRICING_CONFIG.TWO_MOVERS_MULTIPLIER,
-    },
-    platformFeePercent: PRICING_CONFIG.PLATFORM_FEE_PERCENT,
+    vehicleBaseFees: PRICING_CONFIG.vehicleBaseFees,
+    kmRates: PRICING_CONFIG.kmRates,
+    volumeRate: PRICING_CONFIG.volumeRate,
+    packingFactor: PRICING_CONFIG.packingFactor,
+    twoMoverAddition: PRICING_CONFIG.twoMoverAddition,
+    forceTwoMoversVolumeThreshold: PRICING_CONFIG.forceTwoMoversVolumeThreshold,
+    accessFees: PRICING_CONFIG.accessFees,
+    itemPremiums: PRICING_CONFIG.itemPremiums,
+    loadSizeVolumes: PRICING_CONFIG.loadSizeVolumes,
+    platformFeePercent: PRICING_CONFIG.platformFeePercent,
   };
 }

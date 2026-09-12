@@ -166,11 +166,6 @@ function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Helper function to check if items require 2 movers
-function requiresTwoMovers(loadSize: string, heavyItem: boolean): boolean {
-  return loadSize === 'large' || loadSize === 'apartment' || heavyItem;
-}
-
 export default function RequestMove() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -282,22 +277,27 @@ export default function RequestMove() {
   const [routeError, setRouteError] = useState<string | null>(null);
 
   // Live Pricing state
-  const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>({
+  const emptyBreakdown = (): PriceBreakdown => ({
     baseFee: 0,
     distanceFee: 0,
-    distanceKm: 0,
-    perKmRate: 0,
     loadFee: 0,
-    loadSizeFee: 0,
-    apartmentPremium: 0,
-    moverTravelFee: 0,
+    premiumFee: 0,
+    accessFee: 0,
     pickupDifficultyFee: 0,
     dropoffDifficultyFee: 0,
-    heavyItemFee: 0,
+    moverAddition: 0,
     subtotal: 0,
-    numberOfMoversMultiplier: 1,
-    totalCost: 0,
+    total: 0,
+    vehicleClass: 'A',
+    adjustedVolume: 0,
+    rawVolume: 0,
+    numberOfMovers: 1,
+    forcedTwoMovers: false,
+    itemPremiums: [],
+    distanceKm: 0,
+    perKmRate: 0,
   });
+  const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(emptyBreakdown());
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
 
@@ -309,7 +309,7 @@ export default function RequestMove() {
       quoteId ||
       quoteSaveInFlight.current ||
       !priceBreakdown ||
-      priceBreakdown.totalCost <= 0 ||
+      priceBreakdown.total <= 0 ||
       !pickupAddress ||
       step < 2
     ) {
@@ -336,10 +336,10 @@ export default function RequestMove() {
         itemsJson: identifiedItems.length > 0 ? identifiedItems : null,
         vehicleType,
         numberOfMovers,
-        totalPrice: priceBreakdown.totalCost,
+        totalPrice: priceBreakdown.total,
         baseFee: priceBreakdown.baseFee,
         distanceFee: priceBreakdown.distanceFee,
-        loadFee: priceBreakdown.loadSizeFee,
+        loadFee: priceBreakdown.loadFee,
       }),
     })
       .then(r => (r.ok ? r.json() : null))
@@ -352,11 +352,11 @@ export default function RequestMove() {
         }
       })
       .catch(() => { quoteSaveInFlight.current = false; });
-  }, [priceBreakdown?.totalCost, quoteId, pickupAddress, step]);
+  }, [priceBreakdown?.total, quoteId, pickupAddress, step]);
 
-  // Single mover warning state
-  const [showSingleMoverWarning, setShowSingleMoverWarning] = useState(false);
-  const [hasSingleMoverAcknowledgment, setHasSingleMoverAcknowledgment] = useState(false);
+  // When adjusted volume exceeds the force-2-movers threshold, the pricing
+  // engine locks the count to 2 automatically. UI reflects that lock via banner.
+  const forcedTwoMovers = priceBreakdown?.forcedTwoMovers ?? false;
   
   // AI Product Identifier state
   const [isIdentifyingItems, setIsIdentifyingItems] = useState(false);
@@ -387,8 +387,8 @@ export default function RequestMove() {
       const distanceKm = priceBreakdown?.distanceKm || estimateDistance;
 
       const quoteContext = {
-        totalPrice: priceBreakdown?.totalCost
-          ? `$${parseFloat(String(priceBreakdown.totalCost)).toFixed(2)} CAD`
+        totalPrice: priceBreakdown?.total
+          ? `$${parseFloat(String(priceBreakdown.total)).toFixed(2)} CAD`
           : null,
         items: identifiedItems.length > 0
           ? identifiedItems
@@ -1144,35 +1144,21 @@ export default function RequestMove() {
   useEffect(() => {
     if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
       try {
-        const breakdown = calculatePrice(
-          estimateDistance,
-          loadSize as 'boxes' | 'medium' | 'large' | 'apartment',
-          pickupDifficulty as PickupDifficultyType,
-          dropoffDifficulty as DropoffDifficultyType,
+        const breakdown = calculatePrice({
+          distanceKm: estimateDistance,
+          loadSize,
+          pickupDifficulty,
+          dropoffDifficulty,
           heavyItem,
-          numberOfMovers as 1 | 2,
-          undefined,
-          aiDetectedVolume,
-          countHeavyItems(identifiedItems),
-          getItemTypePremium(identifiedItems)
-        );
+          numberOfMovers,
+          volumeCuft: aiDetectedVolume,
+          heavyItemFeeOverride: getItemTypePremium(identifiedItems),
+        });
+        // countHeavyItems retained for legacy telemetry only.
+        void countHeavyItems(identifiedItems);
         if (step === 1) {
-          const step1Preview: PriceBreakdown = {
-            baseFee: 0,
-            distanceFee: 0,
-            distanceKm: breakdown.distanceKm,
-            perKmRate: 0,
-            loadFee: 0,
-            loadSizeFee: 0,
-            apartmentPremium: 0,
-            moverTravelFee: 0,
-            pickupDifficultyFee: 0,
-            dropoffDifficultyFee: 0,
-            heavyItemFee: 0,
-            subtotal: 0,
-            numberOfMoversMultiplier: 1,
-            totalCost: 0,
-          };
+          const step1Preview = emptyBreakdown();
+          step1Preview.distanceKm = breakdown.distanceKm;
           setPriceBreakdown(step1Preview);
         } else {
           setPriceBreakdown(breakdown);
@@ -1183,39 +1169,16 @@ export default function RequestMove() {
         setPricingError("Error calculating price");
       }
     } else {
-      setPriceBreakdown({
-        baseFee: 0,
-        distanceFee: 0,
-        distanceKm: 0,
-        perKmRate: 0,
-        loadFee: 0,
-        loadSizeFee: 0,
-        apartmentPremium: 0,
-        moverTravelFee: 0,
-        pickupDifficultyFee: 0,
-        dropoffDifficultyFee: 0,
-        heavyItemFee: 0,
-        subtotal: 0,
-        numberOfMoversMultiplier: 1,
-        totalCost: 0,
-      });
+      setPriceBreakdown(emptyBreakdown());
     }
   }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, identifiedItems]);
 
-  // Show warning when user selects 1 mover for items that require 2 movers
+  // Hard lock: whenever the calculator forces 2 movers, sync local selection.
   useEffect(() => {
-    const needsTwoMovers = requiresTwoMovers(loadSize, heavyItem);
-    
-    // Reset acknowledgment if customer switches to 2 movers or conditions change
-    if (numberOfMovers === 2 || !needsTwoMovers) {
-      setHasSingleMoverAcknowledgment(false);
+    if (forcedTwoMovers && numberOfMovers !== 2) {
+      setNumberOfMovers(2);
     }
-    
-    // Show warning when selecting 1 mover for heavy loads without prior acknowledgment
-    if (numberOfMovers === 1 && needsTwoMovers && !hasSingleMoverAcknowledgment) {
-      setShowSingleMoverWarning(true);
-    }
-  }, [numberOfMovers, loadSize, heavyItem, hasSingleMoverAcknowledgment]);
+  }, [forcedTwoMovers, numberOfMovers]);
 
   // AI Feature 2: Generate price explanation when booking is created
   useEffect(() => {
@@ -1866,20 +1829,6 @@ export default function RequestMove() {
         return;
       }
 
-      // Check if acknowledgment is required for current booking state
-      const needsAcknowledgment = numberOfMovers === 1 && requiresTwoMovers(loadSize, heavyItem);
-      
-      // Block submission if acknowledgment is required but not provided
-      if (needsAcknowledgment && !hasSingleMoverAcknowledgment) {
-        toast({
-          variant: "destructive",
-          title: "Acknowledgment Required",
-          description: "Please acknowledge the single mover policy for heavy items before proceeding."
-        });
-        // Warning dialog should already be visible via useEffect
-        return;
-      }
-      
       // Create the booking - backend will calculate distance and price
       const bookingData = {
         customerId: user.id,
@@ -1890,7 +1839,7 @@ export default function RequestMove() {
         loadSize,
         heavyItem,
         numberOfMovers,
-        acknowledgedSingleMoverPolicy: needsAcknowledgment && hasSingleMoverAcknowledgment,
+        acknowledgedSingleMoverPolicy: false,
         description: description || null,
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
@@ -2630,17 +2579,19 @@ export default function RequestMove() {
                             <Users className="w-5 h-5" />
                             Number of Movers
                           </Label>
-                          {requiresTwoMovers(loadSize, heavyItem) && (
+                          {forcedTwoMovers && (
                             <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
                               <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
-                                <strong>Recommended: 2 Movers</strong> - Your load size or heavy items typically require assistance from 2 movers for safe handling.
+                                <strong>This move requires 2 movers due to volume.</strong> Your adjusted load exceeds the safe single-mover threshold, so 2 movers has been locked in.
                               </AlertDescription>
                             </Alert>
                           )}
                           <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <button
                               type="button"
-                              onClick={() => setNumberOfMovers(1)}
+                              disabled={forcedTwoMovers}
+                              aria-disabled={forcedTwoMovers}
+                              onClick={() => { if (!forcedTwoMovers) setNumberOfMovers(1); }}
                               className={`relative flex flex-col rounded-xl border-2 transition-all hover-elevate active-elevate-2 ${
                                 numberOfMovers === 1
                                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
@@ -2706,9 +2657,9 @@ export default function RequestMove() {
                                     Selected
                                   </div>
                                 )}
-                                {requiresTwoMovers(loadSize, heavyItem) && numberOfMovers !== 2 && (
+                                {forcedTwoMovers && numberOfMovers !== 2 && (
                                   <div className="absolute top-2 left-2 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                                    Recommended
+                                    Required
                                   </div>
                                 )}
                               </div>
@@ -3033,60 +2984,6 @@ export default function RequestMove() {
       </div>
     </div>
 
-    {/* Single Mover Warning Dialog - Cannot be dismissed without action */}
-    <AlertDialog open={showSingleMoverWarning}>
-      <AlertDialogContent data-testid="dialog-single-mover-warning">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-amber-500" />
-            Important: Single Mover Selection
-          </AlertDialogTitle>
-          <AlertDialogDescription className="text-base space-y-3">
-            <p>
-              Based on your items ({loadSize === 'large' ? 'large furniture' : loadSize === 'apartment' ? 'apartment-sized load' : 'heavy items'}), 
-              we recommend <strong>2 movers</strong> for safe and efficient moving.
-            </p>
-            
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-2">
-              <p className="font-semibold text-amber-900 dark:text-amber-100">
-                By choosing 1 mover, you acknowledge:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm text-amber-900 dark:text-amber-100">
-                <li>You may need to help the mover with loading and unloading</li>
-                <li>The mover can request your assistance for heavy items</li>
-                <li>If you refuse to help and the mover cancels the job, you will forfeit 50% of the payment</li>
-              </ul>
-            </div>
-
-            <p className="text-sm font-medium">
-              This policy protects movers from unsafe working conditions and ensures fair compensation.
-            </p>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-          <AlertDialogCancel
-            onClick={() => {
-              setNumberOfMovers(2);
-              setShowSingleMoverWarning(false);
-            }}
-            data-testid="button-choose-two-movers"
-            className="sm:flex-1"
-          >
-            Change to 2 Movers (Recommended)
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              setHasSingleMoverAcknowledgment(true);
-              setShowSingleMoverWarning(false);
-            }}
-            data-testid="button-accept-single-mover"
-            className="sm:flex-1 bg-amber-600 hover:bg-amber-700"
-          >
-            I Understand - Continue with 1 Mover
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
     </>
   );
 }

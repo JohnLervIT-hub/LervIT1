@@ -139,24 +139,25 @@ export function findNearestMovers(
       
       const distanceToPickup = calculateDistance(moverCoords, pickupCoords);
       
-      // Calculate price breakdown including mover travel fee
-      // Use default values for difficulty and heavy item since they're booking-specific
-      const priceBreakdown = calculatePrice(
-        jobDistance,
+      // Calculate price breakdown for mover-facing earnings estimate.
+      // Difficulty / heavy-item / mover count are booking-specific and default.
+      // Mover-to-pickup travel fee is no longer part of the pricing model.
+      void distanceToPickup;
+      const priceBreakdown = calculatePrice({
+        distanceKm: jobDistance,
         loadSize,
-        'ground', // default pickup difficulty
-        'ground', // default dropoff difficulty
-        false,    // default heavy item
-        1,        // default number of movers
-        distanceToPickup // mover to pickup distance
-      );
-      
+        pickupDifficulty: 'ground',
+        dropoffDifficulty: 'ground',
+        heavyItem: false,
+        numberOfMovers: 1,
+      });
+
       return {
         ...mover,
         latitude: mover.latitude!,
         longitude: mover.longitude!,
         distanceToPickup,
-        estimatedEarnings: priceBreakdown.totalCost,
+        estimatedEarnings: priceBreakdown.total,
         priceBreakdown,
       };
     })
