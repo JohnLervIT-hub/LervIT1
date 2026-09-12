@@ -20,7 +20,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1744,16 +1744,20 @@ export default function RequestMove() {
       // Require geometry-resolved coords (proves Google actually matched the address)
       if (!pickupCoords) {
         toast({
-          title: "Invalid pickup address",
-          description: "Please select a valid address from the suggestions.",
+          title: "Select a pickup address",
+          description: pickupAddress.trim()
+            ? "Please reselect your pickup address from the dropdown suggestions"
+            : "Please enter and select a pickup address",
           variant: "destructive",
         });
         return;
       }
       if (!dropoffCoords) {
         toast({
-          title: "Invalid dropoff address",
-          description: "Please select a valid address from the suggestions.",
+          title: "Select a dropoff address",
+          description: dropoffAddress.trim()
+            ? "Please reselect your dropoff address from the dropdown suggestions"
+            : "Please enter and select a dropoff address",
           variant: "destructive",
         });
         return;
@@ -2390,6 +2394,15 @@ export default function RequestMove() {
                           }}
                           data-testid="input-pickup-address"
                         />
+                        {pickupAddress && !pickupCoords && (
+                          <p
+                            className="text-xs text-amber-500 mt-1 flex items-center gap-1"
+                            data-testid="pickup-reselect-warning"
+                          >
+                            <AlertCircle className="w-3 h-3" />
+                            Reselect from dropdown to confirm address
+                          </p>
+                        )}
                         <Select value={pickupDifficulty} onValueChange={(val) => { setPickupDifficulty(val); setPickupAccessError(false); }}>
                           <SelectTrigger
                             id="pickup-difficulty"
@@ -2440,6 +2453,15 @@ export default function RequestMove() {
                           }}
                           data-testid="input-dropoff-address"
                         />
+                        {dropoffAddress && !dropoffCoords && (
+                          <p
+                            className="text-xs text-amber-500 mt-1 flex items-center gap-1"
+                            data-testid="dropoff-reselect-warning"
+                          >
+                            <AlertCircle className="w-3 h-3" />
+                            Reselect from dropdown to confirm address
+                          </p>
+                        )}
                         <Select value={dropoffDifficulty} onValueChange={(val) => { setDropoffDifficulty(val); setDropoffAccessError(false); }}>
                           <SelectTrigger
                             id="dropoff-difficulty"

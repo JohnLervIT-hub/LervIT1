@@ -23,16 +23,6 @@ interface CustomAddressInputProps {
   "data-testid"?: string;
 }
 
-/** Show only the street portion with compass directions abbreviated.
- *  e.g. "45 Setonstone Manor Southeast, Calgary, AB, Canada" → "45 Setonstone Manor SE" */
-function abbrevAddr(full: string): string {
-  return full.split(",")[0].trim()
-    .replace(/\bSoutheast\b/g, "SE")
-    .replace(/\bNortheast\b/g, "NE")
-    .replace(/\bNorthwest\b/g, "NW")
-    .replace(/\bSouthwest\b/g, "SW");
-}
-
 function generateSessionToken(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
@@ -57,6 +47,9 @@ export function CustomAddressInput({
   const sessionTokenRef = useRef<string>(generateSessionToken());
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // Monotonic counter that invalidates in-flight selections when the user
+  // types more characters or picks a different suggestion mid-fetch.
+  const selectionIdRef = useRef(0);
   const { isLoaded: mapsLoaded, loadMaps } = useGoogleMaps();
   const { toast } = useToast();
 
@@ -65,9 +58,7 @@ export function CustomAddressInput({
   }, [loadMaps]);
 
   useEffect(() => {
-    // Show abbreviated form for confirmed addresses (contain a comma);
-    // leave partial user-typed text untouched.
-    setInputValue(value.includes(",") ? abbrevAddr(value) : value);
+    setInputValue(value);
   }, [value]);
 
   useEffect(() => {
@@ -116,6 +107,8 @@ export function CustomAddressInput({
     const newValue = e.target.value;
     setInputValue(newValue);
     setSelectedIndex(-1);
+    // Invalidate any in-flight selection so its stale onChange is discarded.
+    selectionIdRef.current++;
     onChange(newValue);
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -125,9 +118,15 @@ export function CustomAddressInput({
   };
 
   const handleSelectPrediction = async (prediction: Prediction) => {
+    // Claim a selection id up-front; keystrokes and later selections bump the
+    // ref, so we can detect and discard our own result if it lands stale.
+    const thisSelectionId = ++selectionIdRef.current;
     const typedValue = inputValue;
     setIsOpen(false);
     setPredictions([]);
+    setIsLoading(true);
+
+    const isStale = () => thisSelectionId !== selectionIdRef.current;
 
     try {
       const PlaceClass = mapsLoaded && window.google?.maps?.places
@@ -136,7 +135,8 @@ export function CustomAddressInput({
 
       if (!PlaceClass) {
         // Maps script not ready — return address string only, no coords.
-        setInputValue(abbrevAddr(prediction.description));
+        if (isStale()) return;
+        setInputValue(prediction.description);
         onChange(prediction.description);
         sessionTokenRef.current = generateSessionToken();
         return;
@@ -147,11 +147,14 @@ export function CustomAddressInput({
         fields: ['formattedAddress', 'location', 'addressComponents', 'id'],
       });
 
+      // Race guard: user typed / picked something else while fetchFields ran.
+      if (isStale()) return;
+
       const resolvedAddress = place.formattedAddress || prediction.description;
 
       // Guard 1: refuse selections without geometry — parent needs coords to proceed.
       if (!place.location) {
-        setInputValue(abbrevAddr(resolvedAddress));
+        setInputValue(resolvedAddress);
         onChange(resolvedAddress, undefined);
         sessionTokenRef.current = generateSessionToken();
         return;
@@ -174,7 +177,7 @@ export function CustomAddressInput({
         })),
       };
 
-      setInputValue(abbrevAddr(resolvedAddress));
+      setInputValue(resolvedAddress);
       onChange(resolvedAddress, placeResult);
 
       if (numberMismatch) {
@@ -188,8 +191,13 @@ export function CustomAddressInput({
       sessionTokenRef.current = generateSessionToken();
     } catch (error) {
       console.error('Error fetching place details:', error);
-      setInputValue(abbrevAddr(prediction.description));
+      if (isStale()) return;
+      setInputValue(prediction.description);
       onChange(prediction.description);
+    } finally {
+      if (thisSelectionId === selectionIdRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
