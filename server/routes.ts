@@ -14163,8 +14163,14 @@ Respond with VALID JSON only:
       const action = (req.body?.action ?? 'convert_lead') as string;
       const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
       if (action === 'convert_lead' || action === 'send_touch') {
-        if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
-        const input = { leadId: String(req.body.leadId), touchNumber: Number(req.body.touchNumber ?? 2) };
+        const leadId = req.body?.leadId ?? req.body?.input?.leadId;
+        if (!leadId) return res.status(400).json({ error: 'leadId required' });
+        const touchNumber = Number(req.body?.touchNumber ?? req.body?.input?.touchNumber ?? 2);
+        const channelOverride = req.body?.channelOverride ?? req.body?.input?.channelOverride;
+        const input: Record<string, unknown> = { leadId: String(leadId), touchNumber };
+        if (channelOverride === 'email' || channelOverride === 'sms') {
+          input.channelOverride = channelOverride;
+        }
         const result = await alex.run(action, input, { dryRun });
         return res.json({ ok: true, action, dryRun, result });
       }

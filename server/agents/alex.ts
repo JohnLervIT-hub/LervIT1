@@ -39,6 +39,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 interface ConvertLeadInput {
   leadId: string;
+  channelOverride?: 'email' | 'sms';
 }
 interface SendTouchInput {
   leadId: string;
@@ -129,11 +130,21 @@ export class AlexAgent extends BaseAgent {
     return { count, queued: true, jobsEnqueued: queued };
   }
 
-  private async convertLead({ leadId }: ConvertLeadInput, options: AgentRunOptions = {}) {
+  private async convertLead({ leadId, channelOverride }: ConvertLeadInput, options: AgentRunOptions = {}) {
     const lead = await this.getLead(leadId);
     if (!lead) throw new Error(`Alex: lead ${leadId} not found`);
     if (lead.status === 'converted' || lead.status === 'cold') {
       return { skipped: true, reason: `lead is ${lead.status}` };
+    }
+
+    if (channelOverride === 'sms') {
+      if (!lead.contactPhone) {
+        return { skipped: true, reason: 'no_phone_for_sms_override' };
+      }
+      return this.sendManualSms(lead, options);
+    }
+    if (channelOverride === 'email' && !lead.contactEmail) {
+      return { skipped: true, reason: 'no_email_for_email_override' };
     }
 
     // Dedupe: one Alex touch per lead per day, regardless of touch number.
@@ -406,6 +417,72 @@ Complete link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/payment/$
     });
 
     return { success: true, delivered };
+  }
+
+  private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
+    if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
+
+    const dedupe = await wasContactedToday({
+      entityId: lead.id,
+      entityType: 'lead',
+      eventTypes: ['lead.contacted', 'lead.touched'],
+    });
+    if (dedupe.contacted) {
+      logger.info({ leadId: lead.id, lastEvent: dedupe.lastEvent }, 'Alex.sendManualSms: skipping — already contacted today');
+      return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
+    }
+
+    const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+    const bookingLink = lead.quoteId ? `${baseUrl}/quote/${lead.quoteId}` : `${baseUrl}/request-move`;
+    const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
+
+    const raw = await this.callClaude(
+      `Write SMS under 160 chars.
+Start: 'Hi, Alex from LervIT here! '
+${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
+Include quote link or booking link.
+Mention LERVIT10 for 10% off.
+Return only the SMS text, nothing else.`,
+      `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
+Link: ${bookingLink}`,
+      ALEX_SMS_MODEL,
+      120,
+    );
+    const message = raw.trim().slice(0, 160);
+
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [lead.id],
+        preview: { to: lead.contactPhone, channel: 'sms', body: message },
+      };
+    }
+
+    const delivered = await notificationService.sendSMS({
+      to: lead.contactPhone,
+      message,
+      type: 'booking_update',
+    });
+
+    await db
+      .update(leads)
+      .set({
+        status: 'contacted',
+        touchpoints: (lead.touchpoints ?? 0) + 1,
+        lastTouchedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(leads.id, lead.id));
+
+    await emitEvent('lead.touched', 'lead', lead.id, {
+      touchNumber: (lead.touchpoints ?? 0) + 1,
+      channel: 'sms',
+      delivered,
+      agentName: this.name,
+      manual: true,
+    });
+
+    return { success: true, channel: 'sms', delivered };
   }
 
   private async getLead(leadId: string) {

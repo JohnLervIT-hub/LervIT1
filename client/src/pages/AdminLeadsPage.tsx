@@ -39,10 +39,13 @@ import {
   Clock,
   AlertCircle,
   Truck,
+  UserSearch,
 } from "lucide-react";
 import { format } from "date-fns";
 import { MoverCandidateCard, type MoverLead } from "@/components/MoverCandidateCard";
 import { AddMoverCandidateCard } from "@/components/AddMoverCandidateCard";
+import { CustomerLeadCard, type CustomerLead } from "@/components/CustomerLeadCard";
+import { AddCustomerLeadCard } from "@/components/AddCustomerLeadCard";
 
 interface Lead {
   id: string;
@@ -58,6 +61,7 @@ interface Lead {
   touchpoints: number | null;
   lastTouchedAt: string | null;
   notes: string | null;
+  quoteId: string | null;
   createdAt: string;
 }
 
@@ -188,6 +192,7 @@ export default function AdminLeadsPage() {
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddMoverCard, setShowAddMoverCard] = useState(false);
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
   const pageSize = 20;
 
   const refreshLeads = () =>
@@ -514,9 +519,52 @@ export default function AdminLeadsPage() {
             </div>
           )}
           {error && <div className="text-sm text-destructive">Failed to load leads.</div>}
-          {!isLoading && !error && leads.length === 0 && audience !== "movers" && (
+          {!isLoading && !error && leads.length === 0 && audience === "all" && (
             <div className="text-sm text-muted-foreground py-8 text-center">
               No leads yet. Add one above, or trigger Scout from the APEX tab.
+            </div>
+          )}
+          {!isLoading && !error && audience === "customers" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {leads.length} lead{leads.length === 1 ? "" : "s"}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowAddCustomer(true)}
+                  disabled={showAddCustomer}
+                  data-testid="button-inline-add-lead"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />
+                  Add lead
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {showAddCustomer && (
+                  <AddCustomerLeadCard
+                    onClose={() => setShowAddCustomer(false)}
+                    onRefresh={refreshLeads}
+                  />
+                )}
+                {leads.map(lead => (
+                  <CustomerLeadCard
+                    key={lead.id}
+                    lead={lead as CustomerLead}
+                    onRefresh={refreshLeads}
+                  />
+                ))}
+                {leads.length === 0 && !showAddCustomer && (
+                  <div className="col-span-full text-center py-12 text-muted-foreground">
+                    <UserSearch className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No customer leads yet</p>
+                    <p className="text-xs mt-1">
+                      Scout and Alex will find customers automatically
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {!isLoading && !error && audience === "movers" && (
@@ -562,7 +610,7 @@ export default function AdminLeadsPage() {
               </div>
             </div>
           )}
-          {leads.length > 0 && audience !== "movers" && (
+          {leads.length > 0 && audience === "all" && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted-foreground uppercase tracking-wide">
