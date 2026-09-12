@@ -45,6 +45,7 @@ async function processVisionJob(
     dimensionsHcm: result.dimensions.height_cm.toString(),
     volumeCuft: result.volume_ft3.toString(),
     handlingComplexity: result.handling_complexity,
+    premiumKey: result.premiumKey ?? null,
     vehicleType: result.vehicle,
     recommendedMovers: result.movers_required,
     insuranceLevel: result.insurance_level,

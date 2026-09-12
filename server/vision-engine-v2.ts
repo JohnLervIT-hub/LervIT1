@@ -233,6 +233,65 @@ export interface VisionEngineResult {
   matchedItem?: string;  // Database item ID if matched
   corrections?: string[];  // Any corrections applied
   processingTime: number;
+  // Keyed bucket for PRICING_CONFIG.itemPremiums — populated when the item
+  // qualifies for a special-handling surcharge (piano, refrigerator, hot tub…).
+  // Null for standard household items.
+  premiumKey?: string | null;
+}
+
+/**
+ * Server-side classifier that maps a detected item to a PRICING_CONFIG.itemPremiums
+ * key using pattern matching on itemName + category + subcategory. Kept close to the
+ * pricing table so premium coverage stays in sync when new keys are added.
+ * Returns null when the item is standard (no premium surcharge).
+ */
+export function derivePremiumKey(
+  itemName: string,
+  category: string,
+  subcategory?: string,
+): string | null {
+  const n = (itemName || '').toLowerCase();
+  const c = (category || '').toLowerCase();
+  const s = (subcategory || '').toLowerCase();
+
+  // Tier 1 — Heavy
+  if (/\bgrand piano\b|\bbaby grand\b/.test(n)) return 'piano_grand';
+  if (/\bpiano\b/.test(n)) return 'piano_upright';
+  if (/\bhot tub\b|\bjacuzzi\b|\bspa\b/.test(n)) return 'hot_tub';
+  if (/\bpool table\b|\bbilliard\b|\bsnooker\b/.test(n)) return 'pool_table';
+  if (/\bsafe\b|\bvault\b|\bgun safe\b/.test(n) && !/\bunsafe\b/.test(n)) return 'safe';
+  if (/\bindustrial\b|\bcnc\b|\bforge\b|\blathe\b/.test(n)) return 'industrial_equipment';
+
+  // Tier 2 — Appliance
+  if (/\bcommercial\b.*(?:fridge|freezer|oven|range|dishwasher|washer|dryer)/.test(n)) return 'commercial_appliance';
+  if (/\brefrigerator\b|\bfridge\b/.test(n)) return 'refrigerator';
+  if (/\bwashing machine\b|\bwasher\b/.test(n) && !/\bdisher/.test(n)) return 'washing_machine';
+  if (/\bdryer\b/.test(n)) return 'dryer';
+  if (/\bdishwasher\b/.test(n)) return 'dishwasher';
+  if (/\bfreezer\b|\bchest freezer\b/.test(n)) return 'freezer';
+  if (/\bstove\b|\brange\b|\bcooktop\b/.test(n)) return 'stove';
+  if (/\boven\b/.test(n) && !/\bmicrowave\b/.test(n)) return 'oven';
+
+  // Tier 3 — Fragile
+  if (/\b(?:85|86|87|88|89|9\d|1\d\d)["\-\s]?(?:inch|in|")\b/.test(n) && /\btv\b|\btelevision\b/.test(n)) return 'tv_xlarge';
+  if (/\btv\b|\btelevision\b/.test(n) && /\b(?:65|66|67|68|69|7\d|8[0-4])["\-\s]?(?:inch|in|")\b/.test(n)) return 'tv_large';
+  if (/\bantique\b|\bheirloom\b/.test(n) || s.includes('antique')) return 'antique';
+  if (/\bglass\b.*\btable\b/.test(n)) return 'glass_table';
+  if (/\bmirror\b/.test(n) && /\b(?:large|full length|floor)\b/.test(n)) return 'mirror_large';
+  if (/\bmarble\b/.test(n)) return 'marble_furniture';
+  if (/\bpainting\b|\bartwork\b|\bsculpture\b|\bcanvas\b/.test(n)) return 'artwork';
+
+  // Tier 4 — Awkward
+  if (/\btreadmill\b/.test(n)) return 'treadmill';
+  if (/\bexercise bike\b|\bstationary bike\b|\bpeloton\b/.test(n)) return 'exercise_bike';
+  if (/\belliptical\b/.test(n)) return 'elliptical';
+  if (/\bsectional\b/.test(n) || (c === 'sofa' && s.includes('sectional'))) return 'sectional_sofa';
+  if (/\bking\b.*\bmattress\b|\bking mattress\b/.test(n)) return 'king_mattress';
+  if (/\bkayak\b/.test(n)) return 'kayak';
+  if (/\bcanoe\b/.test(n)) return 'canoe';
+  if (/\bmotorcycle\b|\bmotorbike\b|\bscooter\b/.test(n)) return 'motorcycle';
+
+  return null;
 }
 
 /**
@@ -896,6 +955,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         source: 'database_match',
         matchedItem: item.item_id,
         processingTime: Date.now() - startTime,
+        premiumKey: derivePremiumKey(visionResult.itemName, item.category, item.subcategory),
       };
       
       logEvent.vision('database_match', {
@@ -1009,6 +1069,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         source: 'vision_estimate',
         corrections: corrected.corrections.length > 0 ? corrected.corrections : undefined,
         processingTime: Date.now() - startTime,
+        premiumKey: derivePremiumKey(visionResult.itemName, visionResult.category, visionResult.subcategory),
       };
       
       logEvent.vision('estimate_with_corrections', {
@@ -1078,6 +1139,7 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
   volumeCuft: number;
   estimatedPrice: number;
   handlingComplexity: 'low' | 'medium' | 'high' | 'very_high';
+  premiumKey: string | null;
   vehicleType: 'car' | 'van' | 'pickup' | 'truck';
   recommendedMovers: 1 | 2;
   insuranceLevel: 'standard' | 'medium' | 'high' | 'premium';
@@ -1119,6 +1181,7 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
     volumeCuft: v2Result.volume_ft3,
     estimatedPrice: Math.round(v2Result.volume_ft3 * PRICE_PER_CUFT * 100) / 100,
     handlingComplexity: v2Result.handling_complexity,
+    premiumKey: v2Result.premiumKey ?? null,
     vehicleType: v2Result.vehicle,
     recommendedMovers: v2Result.movers_required,
     insuranceLevel: v2Result.insurance_level,

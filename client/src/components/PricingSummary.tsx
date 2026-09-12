@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, CheckCircle, Lock, User, Phone, Mail, Shield, Star, ArrowRight } from "lucide-react";
+import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, CheckCircle, Lock, User, Phone, Mail, Shield, Star, ArrowRight, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { PriceBreakdown } from "@shared/pricing";
@@ -127,7 +127,16 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     ? `Distance (${breakdown.distanceKm} km)`
     : "Distance";
 
-  const staticFees = [
+  type FeeRow = {
+    label: string;
+    amount: number;
+    testId: string;
+    icon: typeof Zap;
+    show: boolean;
+    premium?: boolean;
+  };
+
+  const staticFees: FeeRow[] = [
     {
       label: `Base Fee (Class ${breakdown.vehicleClass})`,
       amount: breakdown.baseFee,
@@ -165,21 +174,23 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     },
   ];
 
-  const itemPremiumFees = breakdown.itemPremiums.length > 0
+  const itemPremiumFees: FeeRow[] = breakdown.itemPremiums.length > 0
     ? breakdown.itemPremiums.map((p, idx) => ({
-        label: `⚠ ${p.name}`,
+        label: `${p.name} (special item)`,
         amount: p.fee,
         testId: `fee-item-premium-${idx}`,
-        icon: Package,
+        icon: AlertCircle,
         show: true,
+        premium: true,
       }))
     : breakdown.premiumFee > 0
       ? [{
           label: "Item Premium",
           amount: breakdown.premiumFee,
           testId: "fee-item-premiums",
-          icon: Package,
+          icon: AlertCircle,
           show: true,
+          premium: true,
         }]
       : [];
 
@@ -215,19 +226,35 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
         )}>
         <div className="space-y-2">
           {visibleFees.map((item) => (
-            <div 
-              key={item.testId} 
+            <div
+              key={item.testId}
               className="flex items-center justify-between py-1.5 group"
               data-testid={item.testId}
             >
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-muted/50 flex items-center justify-center group-hover:bg-muted transition-colors">
-                  <item.icon className="w-3 h-3 text-muted-foreground" />
+                <div className={cn(
+                  "w-6 h-6 rounded-md flex items-center justify-center transition-colors",
+                  item.premium
+                    ? "bg-amber-500/10"
+                    : "bg-muted/50 group-hover:bg-muted",
+                )}>
+                  <item.icon className={cn(
+                    "w-3 h-3",
+                    item.premium ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+                  )} />
                 </div>
-                <span className="text-sm text-muted-foreground">{item.label}</span>
+                <span className={cn(
+                  "text-sm",
+                  item.premium ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+                )}>
+                  {item.label}
+                </span>
               </div>
-              <span className="text-sm font-medium tabular-nums">
-                ${item.amount.toFixed(2)}
+              <span className={cn(
+                "text-sm font-medium tabular-nums",
+                item.premium && "text-amber-600 dark:text-amber-400",
+              )}>
+                {item.premium ? "+" : ""}${item.amount.toFixed(2)}
               </span>
             </div>
           ))}

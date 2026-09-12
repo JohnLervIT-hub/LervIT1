@@ -3850,6 +3850,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const aiDetectedVolumeCuft = typeof req.body.aiDetectedVolumeCuft === 'number' ? req.body.aiDetectedVolumeCuft : undefined;
       const heavyItemCount = typeof req.body.heavyItemCount === 'number' ? req.body.heavyItemCount : undefined;
       const heavyItemFeeOverride = typeof req.body.heavyItemFeeOverride === 'number' ? req.body.heavyItemFeeOverride : undefined;
+      // Preferred premium input: keyed itemPremiums from Vision Engine 2.0.
+      const rawDetectedItems = Array.isArray(req.body.detectedItems) ? req.body.detectedItems : [];
+      const detectedItems = rawDetectedItems
+        .filter((it: any) => it && typeof it.itemName === 'string')
+        .map((it: any) => ({
+          itemName: it.itemName as string,
+          premiumKey: typeof it.premiumKey === 'string' ? it.premiumKey : null,
+        }));
+      const hasKeyedPremiums = detectedItems.some((d: { premiumKey: string | null }) => !!d.premiumKey);
       const priceBreakdown = calculatePrice({
         distanceKm: distance,
         loadSize: bookingData.loadSize,
@@ -3858,7 +3867,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         heavyItem: bookingData.heavyItem || false,
         numberOfMovers: bookingData.numberOfMovers,
         volumeCuft: aiDetectedVolumeCuft,
-        heavyItemFeeOverride,
+        detectedItems,
+        // Legacy fallback only when the vision engine emitted no keyed premiums.
+        heavyItemFeeOverride: hasKeyedPremiums ? undefined : heavyItemFeeOverride,
       });
       // heavyItemCount is legacy — the tiered heavyItemFeeOverride from the client
       // supersedes it; kept in scope for logging only.
@@ -5412,7 +5423,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalDropoffDifficulty = updates.dropoffDifficulty || existingBooking.dropoffDifficulty;
       const finalHeavyItem = updates.heavyItem !== undefined ? updates.heavyItem : existingBooking.heavyItem;
       const finalNumberOfMovers = updates.numberOfMovers || existingBooking.numberOfMovers;
-      
+
+      // Re-derive detectedItems from persisted identifiedItems so edits after the
+      // initial booking still surface item premiums (e.g. admin edits pickup access).
+      const persistedItems = await storage.getIdentifiedItemsByBooking(existingBooking.id);
+      const detectedItemsForUpdate = persistedItems
+        .filter(i => i.processingStatus === 'completed' && i.itemName)
+        .map(i => ({
+          itemName: i.itemName as string,
+          premiumKey: (i as { premiumKey?: string | null }).premiumKey ?? null,
+        }));
+
       const priceBreakdown = calculatePrice({
         distanceKm: distance,
         loadSize: finalLoadSize,
@@ -5420,6 +5441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffDifficulty: finalDropoffDifficulty,
         heavyItem: finalHeavyItem,
         numberOfMovers: finalNumberOfMovers,
+        detectedItems: detectedItemsForUpdate,
       });
       
       // Apply promo code discount if booking has one
@@ -10154,6 +10176,7 @@ Respond with VALID JSON only:
               dimensionsHcm: result.dimensionsHcm.toString() as any,
               volumeCuft: result.volumeCuft.toString() as any,
               handlingComplexity: result.handlingComplexity,
+              premiumKey: result.premiumKey ?? null,
               vehicleType: result.vehicleType,
               recommendedMovers: result.recommendedMovers,
               insuranceLevel: result.insuranceLevel,
@@ -10175,6 +10198,7 @@ Respond with VALID JSON only:
               volumeCuft: result.volumeCuft.toString(),
               estimatedPrice: result.estimatedPrice.toString(),
               handlingComplexity: result.handlingComplexity,
+              premiumKey: result.premiumKey ?? null,
               vehicleType: result.vehicleType,
               recommendedMovers: result.recommendedMovers,
               insuranceLevel: result.insuranceLevel,
@@ -10291,6 +10315,7 @@ Respond with VALID JSON only:
           dimensionsHcm: item.dimensionsHcm != null ? String(item.dimensionsHcm) : null,
           volumeCuft: item.volumeCuft != null ? String(item.volumeCuft) : null,
           handlingComplexity: typeof item.handlingComplexity === 'string' ? item.handlingComplexity : null,
+          premiumKey: typeof item.premiumKey === 'string' ? item.premiumKey : null,
           vehicleType: typeof item.vehicleType === 'string' ? item.vehicleType : null,
           recommendedMovers: typeof item.recommendedMovers === 'number' ? item.recommendedMovers : 1,
           insuranceLevel: typeof item.insuranceLevel === 'string' ? item.insuranceLevel : null,

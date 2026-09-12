@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
-import { calculatePrice, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { calculatePrice, PRICING_CONFIG, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
@@ -1183,6 +1183,13 @@ export default function RequestMove() {
   useEffect(() => {
     if (estimateDistance > 0 && pickupAddress && dropoffAddress) {
       try {
+        const detectedItems = identifiedItems
+          .filter(i => i.processingStatus === 'completed')
+          .map(i => ({
+            itemName: i.itemName ?? 'Item',
+            premiumKey: (i as { premiumKey?: string | null }).premiumKey ?? null,
+          }));
+        const hasKeyedPremiums = detectedItems.some(d => !!d.premiumKey);
         const breakdown = calculatePrice({
           distanceKm: estimateDistance,
           loadSize,
@@ -1191,7 +1198,10 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers,
           volumeCuft: aiDetectedVolume,
-          heavyItemFeeOverride: getItemTypePremium(identifiedItems),
+          detectedItems,
+          // Legacy fallback only fires when the vision engine emitted no keyed premiums
+          // (e.g. older items detected before premiumKey wiring, or non-premium items).
+          heavyItemFeeOverride: hasKeyedPremiums ? undefined : getItemTypePremium(identifiedItems),
         });
         // countHeavyItems retained for legacy telemetry only.
         void countHeavyItems(identifiedItems);
@@ -1909,6 +1919,15 @@ export default function RequestMove() {
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
         heavyItemCount: countHeavyItems(identifiedItems),
+        // Preferred: keyed premiums from Vision Engine 2.0 (server sums via
+        // PRICING_CONFIG.itemPremiums). Legacy heavyItemFeeOverride is only
+        // honored when no keyed premiums are present, so we send both.
+        detectedItems: identifiedItems
+          .filter(i => i.processingStatus === 'completed')
+          .map(i => ({
+            itemName: i.itemName ?? 'Item',
+            premiumKey: (i as { premiumKey?: string | null }).premiumKey ?? null,
+          })),
         heavyItemFeeOverride: getItemTypePremium(identifiedItems),
         promoCode: appliedPromo?.code || undefined,
         quoteId: quoteId ?? (() => {
@@ -2416,9 +2435,9 @@ export default function RequestMove() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-2 text-xs">Free</span></SelectItem>
-                            <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+$12</span></SelectItem>
-                            <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+$6</span></SelectItem>
-                            <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+$9.60</span></SelectItem>
+                            <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+${PRICING_CONFIG.accessFees.stairs.toFixed(2)}</span></SelectItem>
+                            <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+${PRICING_CONFIG.accessFees.elevator.toFixed(2)}</span></SelectItem>
+                            <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+${PRICING_CONFIG.accessFees.basement.toFixed(2)}</span></SelectItem>
                           </SelectContent>
                         </Select>
                         {pickupAccessError && (
@@ -2475,9 +2494,9 @@ export default function RequestMove() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="ground">Ground Floor <span className="text-green-600 ml-2 text-xs">Free</span></SelectItem>
-                            <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+$12</span></SelectItem>
-                            <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+$6</span></SelectItem>
-                            <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+$9.60</span></SelectItem>
+                            <SelectItem value="stairs">Stairs <span className="text-muted-foreground ml-2 text-xs">+${PRICING_CONFIG.accessFees.stairs.toFixed(2)}</span></SelectItem>
+                            <SelectItem value="elevator">Elevator Available <span className="text-muted-foreground ml-2 text-xs">+${PRICING_CONFIG.accessFees.elevator.toFixed(2)}</span></SelectItem>
+                            <SelectItem value="basement">Basement <span className="text-muted-foreground ml-2 text-xs">+${PRICING_CONFIG.accessFees.basement.toFixed(2)}</span></SelectItem>
                           </SelectContent>
                         </Select>
                         {dropoffAccessError && (

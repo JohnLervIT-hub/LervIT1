@@ -437,6 +437,10 @@ export const identifiedItems = pgTable("identified_items", {
   dimensionsHcm: decimal("dimensions_h_cm", { precision: 8, scale: 2 }),
   volumeCuft: decimal("volume_cuft", { precision: 8, scale: 2 }),
   handlingComplexity: text("handling_complexity"),
+  // Keyed premium bucket from PRICING_CONFIG.itemPremiums (e.g. "piano_upright",
+  // "refrigerator"). Populated by the vision engine; feeds the itemized
+  // breakdown line in the price summary. Null for standard household items.
+  premiumKey: text("premium_key"),
   vehicleType: text("vehicle_type"),
   recommendedMovers: integer("recommended_movers"),
   insuranceLevel: text("insurance_level"),
@@ -476,6 +480,7 @@ export const insertIdentifiedItemSchema = createInsertSchema(identifiedItems).om
 }).extend({
   category: z.enum(['Furniture', 'Appliance', 'Fragile', 'Oversized', 'Bulky', 'Electronics', 'Other']).optional(),
   handlingComplexity: z.enum(['low', 'medium', 'slight', 'moderate', 'high', 'very_high']).optional(),
+  premiumKey: z.string().nullable().optional(),
   vehicleType: z.enum(['car', 'van', 'pickup', 'truck']).optional(),
   insuranceLevel: z.enum(['standard', 'medium', 'high', 'premium']).optional(),
   processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
