@@ -2168,7 +2168,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         location: locationText,
         lastLocationUpdate: new Date(),
       });
-      
+
+      // Mirror the GPS timestamp onto the mover's active booking so Mark Shaw
+      // (PULSE) sees fresh location pings regardless of which client endpoint
+      // the mover uses. Without this, Mark false-positives gps_silent when the
+      // mover only pings /movers/me/location.
+      try {
+        const [activeBooking] = await db
+          .select({ id: bookings.id })
+          .from(bookings)
+          .where(
+            and(
+              eq(bookings.moverId, mover.id),
+              inArray(bookings.status, [
+                'en_route_to_pickup',
+                'loading',
+                'en_route_to_dropoff',
+                'unloading',
+                'confirmed',
+              ]),
+            ),
+          )
+          .limit(1);
+
+        if (activeBooking) {
+          await db
+            .update(bookings)
+            .set({ locationUpdatedAt: new Date(), updatedAt: new Date() })
+            .where(eq(bookings.id, activeBooking.id));
+        }
+      } catch (bookingSyncErr) {
+        logger.error({ err: bookingSyncErr, moverId: mover.id }, '[Location] Booking GPS mirror failed');
+      }
+
       console.log(`[Location] Updated mover ${mover.id} GPS: ${latitude}, ${longitude} -> ${locationText}`);
 
       // LATE DISPATCH: Check for paid bookings with no active job notifications and notify this mover
@@ -13371,10 +13403,34 @@ Respond with VALID JSON only:
   // ===== MARK SHAW (PULSE) =====
 
   // Recent PULSE alerts from business_events (all pulse.* types, newest first).
+  // Supports ?severity=high|medium|all (default all).
+  const MARK_HIGH_SEVERITY_EVENTS = ['pulse.gps_silent', 'pulse.no_start'];
+  const MARK_MEDIUM_SEVERITY_EVENTS = [
+    'pulse.overtime',
+    'pulse.customer_uninformed',
+    'pulse.customer_notify_failed',
+  ];
   app.get("/api/admin/agent/mark/alerts", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 25)));
+      const severityRaw = String(req.query.severity ?? 'all');
+      const severity: 'high' | 'medium' | 'all' =
+        severityRaw === 'high' || severityRaw === 'medium' ? severityRaw : 'all';
+
+      const whereClause =
+        severity === 'high'
+          ? and(
+              sql`${businessEvents.eventType} LIKE 'pulse.%'`,
+              inArray(businessEvents.eventType, MARK_HIGH_SEVERITY_EVENTS),
+            )
+          : severity === 'medium'
+          ? and(
+              sql`${businessEvents.eventType} LIKE 'pulse.%'`,
+              inArray(businessEvents.eventType, MARK_MEDIUM_SEVERITY_EVENTS),
+            )
+          : sql`${businessEvents.eventType} LIKE 'pulse.%'`;
+
       const rows = await db
         .select({
           id: businessEvents.id,
@@ -13384,10 +13440,10 @@ Respond with VALID JSON only:
           createdAt: businessEvents.createdAt,
         })
         .from(businessEvents)
-        .where(sql`${businessEvents.eventType} LIKE 'pulse.%'`)
+        .where(whereClause)
         .orderBy(desc(businessEvents.createdAt))
         .limit(limit);
-      res.json({ alerts: rows });
+      res.json({ alerts: rows, severity });
     } catch (err) {
       logger.error({ err }, '[Admin] mark/alerts: failed');
       res.status(500).json({ error: 'Failed to load Mark alerts' });

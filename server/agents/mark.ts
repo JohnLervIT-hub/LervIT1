@@ -11,8 +11,9 @@
  *                           Xavier SMS to John.
  *   - overtime            : now > preferredDate + estimatedDurationMinutes + 30min.
  *                           Medium severity — dashboard flag only.
- *   - no_start            : status is 'confirmed'/'accepted' and now > preferredDate
- *                           + 15min. High severity — Xavier SMS to John.
+ *   - no_start            : status is 'confirmed' or 'en_route_to_pickup' and
+ *                           now > preferredDate + 15min. High severity —
+ *                           Xavier SMS to John.
  *   - customer_uninformed : overtime or no_start fired AND we haven't texted the
  *                           customer about a delay in the past 60min. Mark sends
  *                           the customer SMS himself and emits an event so a
@@ -42,9 +43,16 @@ const IN_PROGRESS_STATUSES = [
   BOOKING_STATUSES.UNLOADING,
 ] as const;
 
-const SHOULD_HAVE_STARTED_STATUSES = [BOOKING_STATUSES.CONFIRMED, 'accepted'] as const;
+// `en_route_to_pickup` is also in IN_PROGRESS_STATUSES; keeping it here lets
+// no_start fire when the mover flipped the status but never actually left.
+const SHOULD_HAVE_STARTED_STATUSES = [
+  BOOKING_STATUSES.CONFIRMED,
+  BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+] as const;
 
-const SCAN_STATUSES: string[] = [...IN_PROGRESS_STATUSES, ...SHOULD_HAVE_STARTED_STATUSES];
+const SCAN_STATUSES: string[] = Array.from(
+  new Set<string>([...IN_PROGRESS_STATUSES, ...SHOULD_HAVE_STARTED_STATUSES]),
+);
 
 const GPS_STALE_MS = 10 * 60 * 1000;
 const NO_START_GRACE_MS = 15 * 60 * 1000;
@@ -53,6 +61,19 @@ const DEDUP_WINDOW_MS = 60 * 60 * 1000;
 
 const CUSTOMER_DELAY_SMS =
   'Hi! Your mover is running a bit late. We apologize for the delay and will keep you updated. — LervIT Team';
+
+// Fallback duration when booking_metrics.estimated_duration_minutes hasn't
+// been populated. Values are rough proxies keyed off booking.loadSize.
+function estimateDurationFromLoadSize(loadSize: string | null): number {
+  const estimates: Record<string, number> = {
+    boxes: 45,
+    small: 60,
+    medium: 90,
+    large: 150,
+    apartment: 180,
+  };
+  return estimates[loadSize ?? 'medium'] ?? 90;
+}
 
 type CheckType = 'gps_silent' | 'overtime' | 'no_start' | 'customer_uninformed';
 
@@ -148,20 +169,24 @@ export class MarkAgent extends BaseAgent {
       }
     }
 
-    // 2. Overtime — needs an estimatedDurationMinutes from booking_metrics.
+    // 2. Overtime — prefer bookingMetrics.estimatedDurationMinutes, fall back
+    //    to a load-size proxy so we still fire when metrics are missing.
     if (inProgress && scheduled !== null) {
       const [metrics] = await db
         .select({ estimatedDurationMinutes: bookingMetrics.estimatedDurationMinutes })
         .from(bookingMetrics)
         .where(eq(bookingMetrics.bookingId, booking.id))
         .limit(1);
-      const estMinutes = metrics?.estimatedDurationMinutes ?? null;
-      if (estMinutes && now > scheduled + estMinutes * 60000 + OVERTIME_GRACE_MS) {
+      const estMinutes =
+        metrics?.estimatedDurationMinutes ?? estimateDurationFromLoadSize(booking.loadSize);
+      const durationSource = metrics?.estimatedDurationMinutes ? 'booking_metrics' : 'load_size_fallback';
+      if (now > scheduled + estMinutes * 60000 + OVERTIME_GRACE_MS) {
         if (await this.shouldFire(booking.id, 'overtime')) {
           const overMinutes = Math.round((now - scheduled - estMinutes * 60000) / 60000);
           overtime = true;
           await this.fireMediumSeverity(booking, 'overtime', {
             estimatedDurationMinutes: estMinutes,
+            durationSource,
             overMinutes,
             preferredDate: booking.preferredDate,
           });
@@ -169,7 +194,7 @@ export class MarkAgent extends BaseAgent {
       }
     }
 
-    // 3. No start — confirmed/accepted booking is >15min past scheduled pickup.
+    // 3. No start — confirmed or en_route_to_pickup booking is >15min past scheduled pickup.
     if (shouldHaveStarted && scheduled !== null && now > scheduled + NO_START_GRACE_MS) {
       if (await this.shouldFire(booking.id, 'no_start')) {
         const lateMinutes = Math.round((now - scheduled) / 60000);
@@ -269,12 +294,15 @@ export class MarkAgent extends BaseAgent {
       .limit(1);
 
     if (!customer?.phone) {
-      await emitEvent('pulse.customer_uninformed', 'booking', booking.id, {
+      // No phone → emit failure event, not customer_uninformed, so dedup
+      // doesn't block a future retry once a phone is on file.
+      await emitEvent('pulse.customer_notify_failed', 'booking', booking.id, {
         agentName: this.name,
         severity: 'medium',
         smsSent: false,
         reason: 'no customer phone on file',
       });
+      logger.warn({ bookingId: booking.id }, '[Mark] Customer SMS skipped — no phone on file');
       return false;
     }
 
@@ -289,12 +317,25 @@ export class MarkAgent extends BaseAgent {
       logger.error({ err, bookingId: booking.id }, 'Mark: customer delay SMS failed');
     }
 
-    await emitEvent('pulse.customer_uninformed', 'booking', booking.id, {
-      agentName: this.name,
-      severity: 'medium',
-      smsSent,
-      customerPhone: customer.phone,
-    });
+    if (smsSent) {
+      await emitEvent('pulse.customer_uninformed', 'booking', booking.id, {
+        agentName: this.name,
+        severity: 'medium',
+        smsSent: true,
+        customerPhone: customer.phone,
+      });
+    } else {
+      // Emit a distinct event type so shouldFire('customer_uninformed') stays
+      // false on the next scan and we retry the SMS.
+      await emitEvent('pulse.customer_notify_failed', 'booking', booking.id, {
+        agentName: this.name,
+        severity: 'medium',
+        smsSent: false,
+        customerPhone: customer.phone,
+        reason: 'sms_send_failed',
+      });
+      logger.warn({ bookingId: booking.id }, '[Mark] Customer SMS failed — will retry next scan');
+    }
 
     return smsSent;
   }
