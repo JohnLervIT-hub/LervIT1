@@ -31,6 +31,18 @@ function generateSessionToken(): string {
   });
 }
 
+/** Strip Canadian postal codes and trailing ", Canada" so the displayed
+ *  address reads "45 Setonstone Manor SE, Calgary, AB" instead of the
+ *  fully-qualified Google form. Called on every path that surfaces text
+ *  to the user (selection, fallback, catch). */
+function cleanAddress(addr: string): string {
+  return addr
+    .replace(/,?\s*[A-Z]\d[A-Z]\s*\d[A-Z]\d/g, '')
+    .replace(/,?\s*Canada\s*$/i, '')
+    .replace(/,\s*$/, '')
+    .trim();
+}
+
 export function CustomAddressInput({
   value,
   onChange,
@@ -134,10 +146,11 @@ export function CustomAddressInput({
         : null;
 
       if (!PlaceClass) {
-        // Maps script not ready — return address string only, no coords.
+        // Maps script not ready — return cleaned address string only, no coords.
         if (isStale()) return;
-        setInputValue(prediction.description);
-        onChange(prediction.description);
+        const fallbackAddress = cleanAddress(prediction.description);
+        setInputValue(fallbackAddress);
+        onChange(fallbackAddress);
         sessionTokenRef.current = generateSessionToken();
         return;
       }
@@ -150,7 +163,7 @@ export function CustomAddressInput({
       // Race guard: user typed / picked something else while fetchFields ran.
       if (isStale()) return;
 
-      const resolvedAddress = place.formattedAddress || prediction.description;
+      const resolvedAddress = cleanAddress(place.formattedAddress || prediction.description);
 
       // Guard 1: refuse selections without geometry — parent needs coords to proceed.
       if (!place.location) {
@@ -159,12 +172,6 @@ export function CustomAddressInput({
         sessionTokenRef.current = generateSessionToken();
         return;
       }
-
-      // Guard 2: warn if Google resolved to a different street number than typed.
-      const typedNumber = typedValue.match(/^\d+/)?.[0];
-      const returnedNumber = resolvedAddress.match(/^\d+/)?.[0];
-      const numberMismatch =
-        typedNumber && returnedNumber && typedNumber !== returnedNumber;
 
       const placeResult: google.maps.places.PlaceResult = {
         formatted_address: resolvedAddress,
@@ -177,14 +184,22 @@ export function CustomAddressInput({
         })),
       };
 
+      // Guard 2: warn only when Google's structured street_number differs from
+      // what the user typed. Uses address_components (reliable) rather than a
+      // regex on the formatted string (misses formatting-only differences).
+      const returnedStreetNumber = placeResult.address_components
+        ?.find(c => c.types.includes('street_number'))?.long_name ?? null;
+      const typedNumber = typedValue.trim().match(/^\d+/)?.[0];
+      const numberMismatch =
+        !!typedNumber && !!returnedStreetNumber && typedNumber !== returnedStreetNumber;
+
       setInputValue(resolvedAddress);
       onChange(resolvedAddress, placeResult);
 
       if (numberMismatch) {
         toast({
-          title: "Address adjusted",
-          description: `Google returned "${resolvedAddress}" — please confirm this is correct.`,
-          variant: "destructive",
+          title: "Confirm your address",
+          description: `Selected: "${resolvedAddress}" — tap confirm if correct, or retype to search again.`,
         });
       }
 
@@ -192,8 +207,9 @@ export function CustomAddressInput({
     } catch (error) {
       console.error('Error fetching place details:', error);
       if (isStale()) return;
-      setInputValue(prediction.description);
-      onChange(prediction.description);
+      const fallbackAddress = cleanAddress(prediction.description);
+      setInputValue(fallbackAddress);
+      onChange(fallbackAddress);
     } finally {
       if (thisSelectionId === selectionIdRef.current) {
         setIsLoading(false);
