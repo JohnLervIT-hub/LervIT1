@@ -298,6 +298,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // req.user is populated when the res.finish handler fires.
   app.use("/api/admin", adminAuditMiddleware);
 
+  // TEMPORARY: GMB OAuth callback for one-time refresh-token capture. Remove after use.
+  app.get('/auth/google/gmb/callback', async (req: Request, res: Response) => {
+    const code = req.query.code as string;
+
+    if (!code) {
+      return res.status(400).send('No code received');
+    }
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_GMB_CLIENT_ID ?? '',
+          client_secret: process.env.GOOGLE_GMB_CLIENT_SECRET ?? '',
+          redirect_uri: process.env.GOOGLE_GMB_REDIRECT_URI ?? 'https://app.lervit.com/auth/google/gmb/callback',
+          grant_type: 'authorization_code',
+        }).toString(),
+      });
+
+      const tokens = await tokenRes.json() as {
+        refresh_token?: string;
+        access_token?: string;
+        [key: string]: unknown;
+      };
+
+      return res.send(`
+        <h2>GMB Tokens</h2>
+        <p><strong>Refresh Token:</strong></p>
+        <textarea rows="3" cols="80">${tokens.refresh_token ?? 'No refresh token — try again with prompt=consent'}</textarea>
+        <p><strong>Access Token:</strong></p>
+        <textarea rows="3" cols="80">${tokens.access_token ?? ''}</textarea>
+        <p><strong>Full response:</strong></p>
+        <pre>${JSON.stringify(tokens, null, 2)}</pre>
+      `);
+    } catch (err) {
+      return res.status(500).send('Token exchange failed: ' + err);
+    }
+  });
+
   // ===== DOCUMENT DOWNLOADS =====
   // Admin-only: internal strategic documents must not be publicly accessible
   app.get("/api/downloads/roadmap", (req: Request, res: Response) => {
