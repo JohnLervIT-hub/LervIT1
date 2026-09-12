@@ -17,7 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
-import { CustomAddressInput } from "@/components/CustomAddressInput";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { PricingSummary } from "@/components/PricingSummary";
 import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
 import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
@@ -272,6 +272,7 @@ export default function RequestMove() {
   const step1MoverMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const step1MoverInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [dropoffCoords, setDropoffCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [visibleMoverCount, setVisibleMoverCount] = useState(0);
   const [pillExpanded, setPillExpanded] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -503,6 +504,7 @@ export default function RequestMove() {
       .then(data => {
         if (data.address && !pickupAddress) {
           setPickupAddress(data.address);
+          setPickupCoords({ lat, lng });
         }
       })
       .catch(() => {});
@@ -970,6 +972,10 @@ export default function RequestMove() {
             setPickupCoords({
               lat: leg.start_location.lat(),
               lng: leg.start_location.lng(),
+            });
+            setDropoffCoords({
+              lat: leg.end_location.lat(),
+              lng: leg.end_location.lng(),
             });
           }
         }
@@ -1705,11 +1711,31 @@ export default function RequestMove() {
         });
         return;
       }
-      // Both addresses must be different
-      if (pickupAddress.trim().toLowerCase() === dropoffAddress.trim().toLowerCase()) {
+      // Require geometry-resolved coords (proves Google actually matched the address)
+      if (!pickupCoords) {
         toast({
-          title: "Invalid addresses",
-          description: "Pickup and dropoff addresses must be different.",
+          title: "Invalid pickup address",
+          description: "Please select a valid address from the suggestions.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!dropoffCoords) {
+        toast({
+          title: "Invalid dropoff address",
+          description: "Please select a valid address from the suggestions.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Compare by coords when we have them, fall back to string compare
+      const sameAddress =
+        Math.abs(pickupCoords.lat - dropoffCoords.lat) < 0.0001 &&
+        Math.abs(pickupCoords.lng - dropoffCoords.lng) < 0.0001;
+      if (sameAddress) {
+        toast({
+          title: "Same address",
+          description: "Pickup and dropoff cannot be the same location.",
           variant: "destructive",
         });
         return;
@@ -2317,11 +2343,19 @@ export default function RequestMove() {
                           <div className="w-2.5 h-2.5 rounded-full bg-green-500 ring-2 ring-green-500/20 flex-shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pickup</span>
                         </div>
-                        <CustomAddressInput
+                        <AddressAutocomplete
                           id="pickup"
                           placeholder="Enter pickup address in Calgary"
                           value={pickupAddress}
-                          onChange={(address) => setPickupAddress(address)}
+                          onChange={(address, place) => {
+                            setPickupAddress(address);
+                            if (place?.geometry?.location) {
+                              setPickupCoords({
+                                lat: place.geometry.location.lat(),
+                                lng: place.geometry.location.lng(),
+                              });
+                            }
+                          }}
                           data-testid="input-pickup-address"
                         />
                         <Select value={pickupDifficulty} onValueChange={(val) => { setPickupDifficulty(val); setPickupAccessError(false); }}>
@@ -2357,11 +2391,19 @@ export default function RequestMove() {
                           <div className="w-2.5 h-2.5 rounded-sm bg-primary flex-shrink-0" />
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dropoff</span>
                         </div>
-                        <CustomAddressInput
+                        <AddressAutocomplete
                           id="dropoff"
                           placeholder="Enter dropoff address in Calgary"
                           value={dropoffAddress}
-                          onChange={(address) => setDropoffAddress(address)}
+                          onChange={(address, place) => {
+                            setDropoffAddress(address);
+                            if (place?.geometry?.location) {
+                              setDropoffCoords({
+                                lat: place.geometry.location.lat(),
+                                lng: place.geometry.location.lng(),
+                              });
+                            }
+                          }}
                           data-testid="input-dropoff-address"
                         />
                         <Select value={dropoffDifficulty} onValueChange={(val) => { setDropoffDifficulty(val); setDropoffAccessError(false); }}>
