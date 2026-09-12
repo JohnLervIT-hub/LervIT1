@@ -44,8 +44,8 @@ export const PRICING_CONFIG = {
   // Vehicle base fees
   vehicleBaseFees: {
     A: 20.00,  // SUV
-    B: 40.00,  // Pickup Truck
-    C: 45.00,  // Cargo Van
+    B: 30.00,  // Pickup Truck
+    C: 35.00,  // Cargo Van
     E: 90.00,  // Moving Truck
   } as Record<VehicleClass, number>,
 
@@ -58,7 +58,7 @@ export const PRICING_CONFIG = {
   } as Record<VehicleClass, number>,
 
   // Volume rate (raw volume × rate)
-  volumeRate: 0.40,
+  volumeRate: 0.35,
 
   // Packing factor — vehicle matching ONLY (not used in price calculation).
   // Item-level volumes in the furniture DB already include bounding-box air
