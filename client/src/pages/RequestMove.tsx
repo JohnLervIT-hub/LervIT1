@@ -1205,7 +1205,11 @@ export default function RequestMove() {
         });
         // countHeavyItems retained for legacy telemetry only.
         void countHeavyItems(identifiedItems);
-        if (step === 1) {
+        // Blank the breakdown on step 1 only until the vision engine has
+        // detected a real volume. Once the AI hands us an aiDetectedVolume,
+        // let the full breakdown through so the vehicle class + base fee
+        // reflect the actual load instead of defaulting to Class A.
+        if (step === 1 && !aiDetectedVolume) {
           const step1Preview = emptyBreakdown();
           step1Preview.distanceKm = breakdown.distanceKm;
           setPriceBreakdown(step1Preview);

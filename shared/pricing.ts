@@ -44,8 +44,8 @@ export const PRICING_CONFIG = {
   // Vehicle base fees
   vehicleBaseFees: {
     A: 20.00,  // SUV
-    B: 30.00,  // Pickup Truck
-    C: 35.00,  // Cargo Van
+    B: 40.00,  // Pickup Truck
+    C: 45.00,  // Cargo Van
     E: 90.00,  // Moving Truck
   } as Record<VehicleClass, number>,
 
@@ -60,14 +60,17 @@ export const PRICING_CONFIG = {
   // Volume rate (raw volume × rate)
   volumeRate: 0.40,
 
-  // Packing factor — vehicle matching ONLY (not used in price calculation)
-  packingFactor: 1.35,
+  // Packing factor — vehicle matching ONLY (not used in price calculation).
+  // Item-level volumes in the furniture DB already include bounding-box air
+  // around irregular shapes, so this only adds the ~10% headroom needed for
+  // load gaps when items are stacked.
+  packingFactor: 1.10,
 
   // 2-mover addition (30% of subtotal)
   twoMoverAddition: 0.30,
 
-  // Force 2 movers above this adjusted volume
-  forceTwoMoversVolumeThreshold: 200,
+  // Force 2 movers above this adjusted volume (Class E territory)
+  forceTwoMoversVolumeThreshold: 350,
 
   // Access fees
   accessFees: {
@@ -139,7 +142,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     name: 'SUV / Small Vehicle',
     vehicleType: 'car',
     volumeRangeMin: 0,
-    volumeRangeMax: 40,
+    volumeRangeMax: 60,
     baseFee: PRICING_CONFIG.vehicleBaseFees.A,
     perKmRate: PRICING_CONFIG.kmRates.A,
     loadType: 'Small items, single chairs',
@@ -149,8 +152,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     class: 'B',
     name: 'Pickup Truck',
     vehicleType: 'pickup',
-    volumeRangeMin: 41,
-    volumeRangeMax: 100,
+    volumeRangeMin: 61,
+    volumeRangeMax: 150,
     baseFee: PRICING_CONFIG.vehicleBaseFees.B,
     perKmRate: PRICING_CONFIG.kmRates.B,
     loadType: 'Medium furniture, moderate loads',
@@ -160,8 +163,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     class: 'C',
     name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 101,
-    volumeRangeMax: 200,
+    volumeRangeMin: 151,
+    volumeRangeMax: 350,
     baseFee: PRICING_CONFIG.vehicleBaseFees.C,
     perKmRate: PRICING_CONFIG.kmRates.C,
     loadType: 'Large furniture, multiple rooms',
@@ -171,7 +174,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     class: 'E',
     name: 'Moving Truck (Large)',
     vehicleType: 'truck',
-    volumeRangeMin: 201,
+    volumeRangeMin: 351,
     volumeRangeMax: 1000,
     baseFee: PRICING_CONFIG.vehicleBaseFees.E,
     perKmRate: PRICING_CONFIG.kmRates.E,
@@ -181,17 +184,18 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
 };
 
 /**
- * Determine vehicle class from raw volume. Applies packing factor internally.
- *   adjusted ≤ 40  → A
- *   adjusted ≤ 100 → B
- *   adjusted ≤ 200 → C
- *   adjusted > 200 → E
+ * Determine vehicle class from raw volume. Applies packing factor (1.10)
+ * internally, so callers pass the raw sum of item volumes.
+ *   adjusted ≤ 60   (raw ≤ ~54)   → A  (SUV)
+ *   adjusted ≤ 150  (raw ≤ ~136)  → B  (Pickup Truck)
+ *   adjusted ≤ 350  (raw ≤ ~318)  → C  (Cargo Van)
+ *   adjusted > 350  (raw > ~318)  → E  (Moving Truck)
  */
 export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
   const adjusted = rawVolumeCuft * PRICING_CONFIG.packingFactor;
-  if (adjusted > 200) return 'E';
-  if (adjusted > 100) return 'C';
-  if (adjusted > 40)  return 'B';
+  if (adjusted > 350) return 'E';
+  if (adjusted > 150) return 'C';
+  if (adjusted > 60)  return 'B';
   return 'A';
 }
 

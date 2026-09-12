@@ -2072,16 +2072,18 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
  * Single source of truth for volume-to-vehicle mapping
  * 
  * Updated thresholds (2026):
- *   0-20 ft³    → SUV / Small Vehicle (car)   - Single chair, few boxes
- *   21-165 ft³  → Pickup Truck (pickup)       - Medium furniture, moderate loads
- *   166-300 ft³ → Cargo Van (van)             - Large furniture, bedroom sets, multiple rooms
- *   >300 ft³    → Moving Truck (truck)        - Apartment move, large loads
+ * Raw ft³ boundaries aligned with getVehicleClassFromVolume in shared/pricing.ts
+ * (adjusted-volume thresholds of 60/150/350 divided by packingFactor 1.10):
+ *   ≤54 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
+ *   ≤136 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
+ *   ≤318 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
+ *   >318 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
-  CAR_MAX: 20,       // 0-20 ft³ → SUV/Small Vehicle
-  PICKUP_MAX: 165,   // 21-165 ft³ → Pickup Truck
-  VAN_MAX: 300,      // 166-300 ft³ → Cargo Van
-  // Above 300 ft³ → Large Moving Truck
+  CAR_MAX: 54,       // raw ≤ 54 ft³   → Class A (SUV)
+  PICKUP_MAX: 136,   // raw ≤ 136 ft³  → Class B (Pickup Truck)
+  VAN_MAX: 318,      // raw ≤ 318 ft³  → Class C (Cargo Van)
+  // Above 318 ft³ → Class E (Moving Truck)
 };
 
 /**
@@ -2089,10 +2091,10 @@ export const VEHICLE_VOLUME_THRESHOLDS = {
  * Note: This uses TOTAL volume including quantity
  */
 export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // 0-20 ft³ → SUV
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // 21-165 ft³ → Pickup Truck
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // 166-300 ft³ → Cargo Van
-  return 'apartment';  // >300 ft³ → Large Moving Truck
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // ≤54 ft³ → Class A
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // ≤136 ft³ → Class B
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // ≤318 ft³ → Class C
+  return 'apartment';  // >318 ft³ → Class E
 }
 
 /**
@@ -2100,10 +2102,10 @@ export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
  * This is the preferred method - uses volume directly without load size
  */
 export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // 0-20 ft³ → SUV
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // 21-165 ft³ → Pickup Truck
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // 166-300 ft³ → Cargo Van
-  return 'truck';  // >300 ft³ → Moving Truck
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // ≤54 ft³ → Class A
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // ≤136 ft³ → Class B
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // ≤318 ft³ → Class C
+  return 'truck';  // >318 ft³ → Class E
 }
 
 /**
