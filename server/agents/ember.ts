@@ -1184,30 +1184,28 @@ Platform: ${item.platform ?? 'N/A'}`;
   }
 
   private parseJson(raw: string): any {
+    // Strip ALL backtick fences anywhere (not just at line start).
     let clean = raw
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```$/i, '')
-      .replace(/```json/gi, '')
-      .replace(/```/gi, '')
+      .replace(/`{3}json\s*/gi, '')
+      .replace(/`{3}\s*/gi, '')
       .trim();
 
-    const start = clean.indexOf('{');
-    const startArr = clean.indexOf('[');
+    const objStart = clean.indexOf('{');
+    const arrStart = clean.indexOf('[');
 
     let jsonStr: string;
 
-    if (startArr !== -1 &&
-        (start === -1 || startArr < start)) {
+    if (arrStart !== -1 &&
+        (objStart === -1 || arrStart < objStart)) {
       const end = clean.lastIndexOf(']');
       jsonStr = end !== -1
-        ? clean.slice(startArr, end + 1)
-        : clean.slice(startArr);
-    } else if (start !== -1) {
+        ? clean.slice(arrStart, end + 1)
+        : clean.slice(arrStart);
+    } else if (objStart !== -1) {
       const end = clean.lastIndexOf('}');
       jsonStr = end !== -1
-        ? clean.slice(start, end + 1)
-        : clean.slice(start);
+        ? clean.slice(objStart, end + 1)
+        : clean.slice(objStart);
     } else {
       throw new Error('No JSON found in response');
     }
@@ -1218,31 +1216,17 @@ Platform: ${item.platform ?? 'N/A'}`;
       try {
         const sanitized = jsonStr
           .replace(/[‘’]/g, "'")
-          .replace(/[“”]/g, '"')
-          .replace(
-            /:\s*"([\s\S]*?)"/g,
-            (_match, p1) => {
-              const escaped = p1
-                .replace(/\n/g, '\\n')
-                .replace(/\r/g, '\\r')
-                .replace(/\t/g, '\\t');
-              return `: "${escaped}"`;
-            },
-          );
+          .replace(/[“”]/g, '"');
         return JSON.parse(sanitized);
-      } catch (e2) {
-        const itemsMatch = jsonStr.match(
-          /"items"\s*:\s*(\[[\s\S]*?\])\s*[,}]/,
-        );
-        if (itemsMatch) {
+      } catch {
+        // Last resort — extract items array.
+        const m = jsonStr.match(/"items"\s*:\s*(\[[\s\S]*?\])/);
+        if (m) {
           try {
-            const items = JSON.parse(itemsMatch[1]);
-            return { items };
+            return { items: JSON.parse(m[1]) };
           } catch {}
         }
-        throw new Error(
-          `Parse failed: ${(e1 as Error).message}`,
-        );
+        throw new Error(`Parse failed: ${(e1 as Error).message}`);
       }
     }
   }
