@@ -12,6 +12,7 @@ import { KaiBennettCard } from "@/components/KaiBennettCard";
 import { SamCarterCard } from "@/components/SamCarterCard";
 import { AegisCard } from "@/components/AegisCard";
 import { NovaCard } from "@/components/NovaCard";
+import { EmberCard } from "@/components/EmberCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1455,6 +1456,9 @@ export default function AdminDashboard() {
 
             {/* Voice — full width */}
             <NovaCard />
+
+            {/* Content & Marketing — full width */}
+            <EmberCard />
           </TabsContent>
 
         </Tabs>

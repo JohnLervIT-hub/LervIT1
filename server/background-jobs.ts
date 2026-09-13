@@ -19,6 +19,7 @@ import { kai } from './agents/kai';
 import { sam } from './agents/sam';
 import { riley } from './agents/riley';
 import { aegis } from './agents/aegis';
+import { ember } from './agents/ember';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -329,6 +330,58 @@ export function initBackgroundJobs() {
         logger.info({ event: 'sam_check_onboarding_progress', result }, 'Sam onboarding scan complete');
       } catch (err) {
         logger.error({ err, event: 'sam_check_onboarding_progress' }, 'Sam onboarding scan failed');
+      }
+    });
+  }, TZ);
+
+  // ─── Ember Lane (MAGNET) content cadence — all 07:00 MT ───
+
+  // Monday — weekly blog post draft
+  cron.schedule('0 7 * * 1', async () => {
+    await withJobLock('ember_blog_post', async () => {
+      try {
+        const result = await ember.run('generate_blog_post', {});
+        logger.info({ event: 'ember_blog_post', result }, 'Ember blog post drafted');
+      } catch (err) {
+        logger.error({ err, event: 'ember_blog_post' }, 'Ember blog post failed');
+      }
+    });
+  }, TZ);
+
+  // Wednesday — weekly Google Business post draft
+  cron.schedule('0 7 * * 3', async () => {
+    await withJobLock('ember_gmb_post', async () => {
+      try {
+        const result = await ember.run('generate_gmb_post', {});
+        logger.info({ event: 'ember_gmb_post', result }, 'Ember GMB post drafted');
+      } catch (err) {
+        logger.error({ err, event: 'ember_gmb_post' }, 'Ember GMB post failed');
+      }
+    });
+  }, TZ);
+
+  // Friday — social drafts for all 4 platforms
+  cron.schedule('0 7 * * 5', async () => {
+    await withJobLock('ember_social_content', async () => {
+      for (const platform of ['facebook', 'instagram', 'tiktok', 'linkedin'] as const) {
+        try {
+          await ember.run('generate_social_content', { platform });
+        } catch (err) {
+          logger.error({ err, event: 'ember_social_content', platform }, 'Ember social draft failed');
+        }
+      }
+      logger.info({ event: 'ember_social_content' }, 'Ember social sweep complete');
+    });
+  }, TZ);
+
+  // 1st of month — monthly newsletter draft
+  cron.schedule('0 7 1 * *', async () => {
+    await withJobLock('ember_newsletter', async () => {
+      try {
+        const result = await ember.run('generate_newsletter', {});
+        logger.info({ event: 'ember_newsletter', subject: (result as any)?.subject }, 'Ember newsletter drafted');
+      } catch (err) {
+        logger.error({ err, event: 'ember_newsletter' }, 'Ember newsletter failed');
       }
     });
   }, TZ);

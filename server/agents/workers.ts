@@ -24,6 +24,7 @@ import { kai } from './kai';
 import { sam } from './sam';
 import { aegis } from './aegis';
 import { nova } from './nova';
+import { ember } from './ember';
 import type { BaseAgent } from './base';
 
 let workersStarted = false;
@@ -56,9 +57,10 @@ export function startAgentWorkers(): void {
   spawnWorker(QUEUE_NAMES.SALES, sam, 3);
   spawnWorker(QUEUE_NAMES.COMPLIANCE, aegis, 2);
   spawnWorker(QUEUE_NAMES.VOICE_AGENT, nova, 5);
+  spawnWorker(QUEUE_NAMES.MAGNET, ember, 2);
 
   logger.info(
-    'Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d), Ryan Brooks (hunter-s), Jordan Hayes (vetter), Victor Nash (dispatch), Mark Shaw (pulse), Riley Morgan (onboard), Kai Bennett (retain), Sam Carter (sales), Aegis Ford (compliance), Nova Clarke (voice)',
+    'Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d), Ryan Brooks (hunter-s), Jordan Hayes (vetter), Victor Nash (dispatch), Mark Shaw (pulse), Riley Morgan (onboard), Kai Bennett (retain), Sam Carter (sales), Aegis Ford (compliance), Nova Clarke (voice), Ember Lane (magnet)',
   );
 }
 

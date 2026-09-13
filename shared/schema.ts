@@ -2073,3 +2073,62 @@ export type MoverActivityLog = typeof moverActivityLog.$inferSelect;
 export type InsertMoverActivityLog = z.infer<typeof insertMoverActivityLogSchema>;
 export type ZoneDemandLog = typeof zoneDemandLog.$inferSelect;
 export type InsertZoneDemandLog = z.infer<typeof insertZoneDemandLogSchema>;
+
+// ============================================================
+// EMBER LANE (MAGNET) — content & marketing
+// Migration: 0013_ember_content.sql
+// ============================================================
+
+export const blogPosts = pgTable("blog_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  excerpt: text("excerpt"),
+  content: text("content").notNull(),
+  category: text("category"),
+  tags: text("tags").array(),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  status: text("status").notNull().default("draft"),
+  publishedAt: timestamp("published_at"),
+  generatedBy: text("generated_by").default("ember"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("blog_posts_status_idx").on(table.status),
+  slugIdx: index("blog_posts_slug_idx").on(table.slug),
+}));
+
+export const gmbPosts = pgTable("gmb_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  content: text("content").notNull(),
+  postType: text("post_type").default("STANDARD"),
+  status: text("status").default("pending"),
+  gmbPostId: text("gmb_post_id"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(), // facebook | instagram | tiktok | linkedin
+  content: text("content").notNull(),
+  hashtags: text("hashtags").array(),
+  status: text("status").default("draft"), // draft | approved | posted
+  approvedBy: text("approved_by"),
+  postedAt: timestamp("posted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  platformIdx: index("social_posts_platform_idx").on(table.platform),
+}));
+
+export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertGmbPostSchema = createInsertSchema(gmbPosts).omit({ id: true, createdAt: true });
+export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({ id: true, createdAt: true });
+
+export type BlogPost = typeof blogPosts.$inferSelect;
+export type InsertBlogPost = z.infer<typeof insertBlogPostSchema>;
+export type GmbPost = typeof gmbPosts.$inferSelect;
+export type InsertGmbPost = z.infer<typeof insertGmbPostSchema>;
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;

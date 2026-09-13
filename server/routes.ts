@@ -42,7 +42,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -76,6 +76,7 @@ import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
 import { riley } from "./agents/riley";
 import { nova } from "./agents/nova";
+import { ember } from "./agents/ember";
 import { novaWebhookRouter } from "./nova-webhook-routes";
 
 // Middleware to parse JSON
@@ -14121,6 +14122,244 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] nova/stats failed');
       res.status(500).json({ error: 'Failed to load Nova stats' });
+    }
+  });
+
+  // ===== EMBER LANE (MAGNET) =====
+
+  const EMBER_ACTIONS = new Set([
+    'generate_blog_post',
+    'generate_gmb_post',
+    'respond_to_review',
+    'generate_social_content',
+    'generate_newsletter',
+    'publish_blog_post',
+  ]);
+
+  app.post("/api/admin/agent/ember/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!EMBER_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      // Publish is a cheap DB flip — always inline so admin sees the result.
+      if (dryRun || action === 'publish_blog_post') {
+        const result = await ember.run(action, input, { dryRun });
+        return res.json({ ok: true, dryRun, action, result });
+      }
+
+      const emberQueue = createAgentQueue(QUEUE_NAMES.MAGNET);
+      if (!emberQueue) {
+        return res.status(503).json({ error: 'MAGNET queue unavailable (REDIS_URL not configured)' });
+      }
+      const job = await emberQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] ember/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/admin/agent/ember/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+
+      const [
+        totalPostsRows,
+        publishedPostsRows,
+        draftPostsRows,
+        gmbTotalRows,
+        socialByPlatformRows,
+        recentEvents,
+      ] = await Promise.all([
+        db.select({ count: sql<number>`count(*)::int` }).from(blogPosts),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(blogPosts)
+          .where(eq(blogPosts.status, 'published')),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(blogPosts)
+          .where(eq(blogPosts.status, 'draft')),
+        db.select({ count: sql<number>`count(*)::int` }).from(gmbPosts),
+        db
+          .select({
+            platform: socialPosts.platform,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(socialPosts)
+          .where(eq(socialPosts.status, 'draft'))
+          .groupBy(socialPosts.platform),
+        db
+          .select()
+          .from(businessEvents)
+          .where(sql`event_type LIKE 'agent.ember.%'`)
+          .orderBy(desc(businessEvents.createdAt))
+          .limit(10),
+      ]);
+
+      const socialDraftsByPlatform: Record<string, number> = {
+        facebook: 0,
+        instagram: 0,
+        tiktok: 0,
+        linkedin: 0,
+      };
+      for (const row of socialByPlatformRows) {
+        if (row.platform) socialDraftsByPlatform[row.platform] = row.count ?? 0;
+      }
+
+      res.json({
+        totalPosts: totalPostsRows[0]?.count ?? 0,
+        publishedPosts: publishedPostsRows[0]?.count ?? 0,
+        draftPosts: draftPostsRows[0]?.count ?? 0,
+        gmbPostsTotal: gmbTotalRows[0]?.count ?? 0,
+        socialDraftsByPlatform,
+        recentEvents,
+      });
+    } catch (err) {
+      logger.error({ err }, '[Admin] ember/stats failed');
+      res.status(500).json({ error: 'Failed to load Ember stats' });
+    }
+  });
+
+  // Public blog reads (lervit.com/blog consumes these).
+  app.get("/api/blog", async (_req: Request, res: Response) => {
+    try {
+      const rows = await db
+        .select({
+          id: blogPosts.id,
+          title: blogPosts.title,
+          slug: blogPosts.slug,
+          excerpt: blogPosts.excerpt,
+          category: blogPosts.category,
+          tags: blogPosts.tags,
+          publishedAt: blogPosts.publishedAt,
+        })
+        .from(blogPosts)
+        .where(eq(blogPosts.status, 'published'))
+        .orderBy(desc(blogPosts.publishedAt))
+        .limit(100);
+      res.json({ posts: rows });
+    } catch (err) {
+      logger.error({ err }, '[Blog] listing failed');
+      res.status(500).json({ error: 'Failed to load blog posts' });
+    }
+  });
+
+  app.get("/api/blog/:slug", async (req: Request, res: Response) => {
+    try {
+      const slug = req.params.slug;
+      const [row] = await db
+        .select()
+        .from(blogPosts)
+        .where(and(eq(blogPosts.slug, slug), eq(blogPosts.status, 'published')))
+        .limit(1);
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      res.json(row);
+    } catch (err) {
+      logger.error({ err }, '[Blog] slug lookup failed');
+      res.status(500).json({ error: 'Failed to load blog post' });
+    }
+  });
+
+  // Admin content review UIs.
+  app.get("/api/admin/blog/posts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const rows = await db
+        .select()
+        .from(blogPosts)
+        .orderBy(desc(blogPosts.createdAt))
+        .limit(200);
+      res.json({ posts: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] blog list failed');
+      res.status(500).json({ error: 'Failed to load blog posts' });
+    }
+  });
+
+  app.patch("/api/admin/blog/posts/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const id = req.params.id;
+      const patch: Record<string, any> = {};
+      if (typeof req.body?.status === 'string') patch.status = req.body.status;
+      if (typeof req.body?.title === 'string') patch.title = req.body.title;
+      if (typeof req.body?.slug === 'string') patch.slug = req.body.slug;
+      if (typeof req.body?.excerpt === 'string') patch.excerpt = req.body.excerpt;
+      if (typeof req.body?.content === 'string') patch.content = req.body.content;
+      if (typeof req.body?.category === 'string') patch.category = req.body.category;
+      if (Array.isArray(req.body?.tags)) patch.tags = req.body.tags;
+      if (typeof req.body?.seoTitle === 'string') patch.seoTitle = req.body.seoTitle;
+      if (typeof req.body?.seoDescription === 'string') patch.seoDescription = req.body.seoDescription;
+
+      if (patch.status === 'published') patch.publishedAt = new Date();
+      patch.updatedAt = new Date();
+
+      const [row] = await db.update(blogPosts).set(patch).where(eq(blogPosts.id, id)).returning();
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      res.json(row);
+    } catch (err) {
+      logger.error({ err }, '[Admin] blog patch failed');
+      res.status(500).json({ error: 'Failed to update blog post' });
+    }
+  });
+
+  app.get("/api/admin/ember/social-posts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const rows = await db
+        .select()
+        .from(socialPosts)
+        .orderBy(desc(socialPosts.createdAt))
+        .limit(200);
+      const grouped: Record<string, typeof rows> = { facebook: [], instagram: [], tiktok: [], linkedin: [] };
+      for (const r of rows) {
+        if (r.platform && grouped[r.platform]) grouped[r.platform].push(r);
+      }
+      res.json({ posts: rows, byPlatform: grouped });
+    } catch (err) {
+      logger.error({ err }, '[Admin] social list failed');
+      res.status(500).json({ error: 'Failed to load social posts' });
+    }
+  });
+
+  app.patch("/api/admin/ember/social-posts/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const id = req.params.id;
+      const patch: Record<string, any> = {};
+      if (typeof req.body?.status === 'string') patch.status = req.body.status;
+      if (typeof req.body?.content === 'string') patch.content = req.body.content;
+      if (Array.isArray(req.body?.hashtags)) patch.hashtags = req.body.hashtags;
+      if (typeof req.body?.approvedBy === 'string') patch.approvedBy = req.body.approvedBy;
+      if (patch.status === 'posted') patch.postedAt = new Date();
+
+      const [row] = await db.update(socialPosts).set(patch).where(eq(socialPosts.id, id)).returning();
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      res.json(row);
+    } catch (err) {
+      logger.error({ err }, '[Admin] social patch failed');
+      res.status(500).json({ error: 'Failed to update social post' });
+    }
+  });
+
+  app.get("/api/admin/ember/gmb-posts", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const rows = await db
+        .select()
+        .from(gmbPosts)
+        .orderBy(desc(gmbPosts.createdAt))
+        .limit(200);
+      res.json({ posts: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] gmb list failed');
+      res.status(500).json({ error: 'Failed to load GMB posts' });
     }
   });
 
