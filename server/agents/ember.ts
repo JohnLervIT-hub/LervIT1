@@ -2,17 +2,19 @@
  * Ember Lane (MAGNET) — content & marketing agent.
  *
  * Actions:
- *   - `generate_blog_post`       : draft a Calgary-focused blog post → blog_posts (status='draft')
+ *   - `generate_blog_post`       : draft a Calgary-focused blog post → blog_posts (status='pending_review')
  *   - `generate_gmb_post`        : draft a Google Business post → gmb_posts (status='pending')
  *                                   Case: 8-3924000041848 (GMB API pending approval)
  *   - `respond_to_review`        : warm response for 4-5 star; escalate to Xavier for <=3
  *   - `generate_social_content`  : per-platform social copy → social_posts (status='draft')
  *   - `generate_newsletter`      : monthly newsletter draft (subject/preheader/HTML)
- *   - `publish_blog_post`        : flip a draft blog post to 'published' (public /blog picks up)
+ *   - `publish_blog_post`        : flip a pending_review blog post to 'published' (public /blog picks up)
  *
- * All generated copy is draft-by-default. John reviews via the APEX EmberCard
+ * All generated copy is pending-review-by-default. John reviews via the APEX EmberCard
  * before anything goes live. Blog is live at lervit.com/blog and reads
- * `blog_posts` where status = 'published'.
+ * `blog_posts` where status = 'published' via the public HTTP API — the marketing
+ * site (JohnLervIT-hub/website-standalonezip) fetches /api/blog and renders the
+ * structured shape (sections/faq/CTAs). Schema: shared/schema.ts blogPosts.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -185,28 +187,68 @@ Output STRICT JSON only — no prose, no markdown fence:
   "title": string (60-70 chars, includes "Calgary" when natural),
   "slug": string (kebab-case, no stopwords, <= 60 chars),
   "excerpt": string (140-160 chars, hooks the reader),
-  "content": string (900-1400 words, plain HTML: <h2>, <h3>, <p>, <ul>, <li>, <strong>. NO <html>/<head>/<body>),
   "category": string,
   "tags": string[] (5-8 items, lowercase),
-  "seoTitle": string (<= 60 chars),
-  "seoDescription": string (<= 160 chars)
-}`;
+  "seoTitle": string (<= 60 chars, SEO meta title),
+  "seoDescription": string (<= 160 chars, SEO meta description),
+  "readTime": string (e.g. "4 min read", estimate from word count),
+  "sections": [
+    { "h2": string (section heading), "paragraphs": string[] (2-5 paragraphs, ~60-100 words each) }
+  ] (3-5 sections, structured body — do NOT return HTML),
+  "faq": [
+    { "q": string (natural question), "a": string (1-2 sentence answer) }
+  ] (3-5 items covering the top objections/questions readers have)
+}
+
+Rules:
+- Total body across sections should run 900-1400 words.
+- No markdown, no HTML tags anywhere. Plain sentences only.
+- Each section must have a distinct angle; do not repeat information across sections.
+- FAQs must answer real questions, not restate section content.
+- Bake in Calgary neighbourhood references and at least one mention of lervit.com or the LERVIT10 promo.`;
 
     const userMessage = `Draft a blog post on: "${topic}".
-Category: ${category}.
-Bake in Calgary neighbourhood references and at least one mention of lervit.com or the LERVIT10 promo.`;
+Category: ${category}.`;
 
     if (options?.dryRun) {
       return { dryRun: true, would: 'generate_blog_post', topic, category };
     }
 
-    const raw = await this.callAnthropic(systemPrompt, userMessage, 4000);
+    const raw = await this.callAnthropic(systemPrompt, userMessage, 6000);
     const parsed = this.parseJson(raw, 'generate_blog_post');
 
     const title: string = String(parsed.title ?? topic).slice(0, 200);
     const slug: string = String(parsed.slug ?? slugify(title)) || slugify(title);
-    const content: string = String(parsed.content ?? '');
-    if (!content) throw new Error('Ember: blog post content was empty');
+    const sections = Array.isArray(parsed.sections)
+      ? parsed.sections
+          .filter((s: any) => s && typeof s.h2 === 'string' && Array.isArray(s.paragraphs))
+          .map((s: any) => ({
+            h2: String(s.h2),
+            paragraphs: s.paragraphs.map((p: any) => String(p)).filter(Boolean),
+          }))
+      : [];
+    if (sections.length === 0) throw new Error('Ember: blog post had no sections');
+
+    const faq = Array.isArray(parsed.faq)
+      ? parsed.faq
+          .filter((f: any) => f && typeof f.q === 'string' && typeof f.a === 'string')
+          .map((f: any) => ({ q: String(f.q), a: String(f.a) }))
+      : [];
+
+    // Marketing renders `sections` directly; `content` is a plaintext fallback for search/preview.
+    const content = sections
+      .map((s: { h2: string; paragraphs: string[] }) => `## ${s.h2}\n\n${s.paragraphs.join('\n\n')}`)
+      .join('\n\n');
+
+    const wordCount = content.split(/\s+/).filter(Boolean).length;
+    const readTime = String(parsed.readTime ?? `${Math.max(1, Math.round(wordCount / 200))} min read`);
+
+    const topCta = { text: 'Get Your Free Quote', href: 'https://app.lervit.com' };
+    const bottomCta = {
+      text: 'Ready to move in Calgary?',
+      sub: 'Get a photo-based quote in under 2 minutes — no phone calls needed.',
+      href: 'https://app.lervit.com',
+    };
 
     const [row] = await db
       .insert(blogPosts)
@@ -219,12 +261,20 @@ Bake in Calgary neighbourhood references and at least one mention of lervit.com 
         tags: Array.isArray(parsed.tags) ? parsed.tags.map((t: any) => String(t)) : null,
         seoTitle: parsed.seoTitle ?? null,
         seoDescription: parsed.seoDescription ?? null,
-        status: 'draft',
+        status: 'pending_review',
         generatedBy: 'ember',
+        sections,
+        faq,
+        topCta,
+        bottomCta,
+        related: [],
+        // Placeholder — admin swaps for a real image during review.
+        image: '/assets/stock_images/person_packing_boxes_8b2535c7.jpg',
+        readTime,
       })
       .returning();
 
-    logger.info({ postId: row.id, title }, '[Ember] blog post drafted');
+    logger.info({ postId: row.id, title, sections: sections.length, faq: faq.length }, '[Ember] blog post drafted (pending_review)');
     return { postId: row.id, title, slug: row.slug, status: row.status };
   }
 

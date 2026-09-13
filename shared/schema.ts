@@ -2092,6 +2092,15 @@ export const blogPosts = pgTable("blog_posts", {
   status: text("status").notNull().default("draft"),
   publishedAt: timestamp("published_at"),
   generatedBy: text("generated_by").default("ember"),
+  // Structured fields consumed by lervit.com/blog (BlogPage.tsx). See migration 0014.
+  sections: jsonb("sections").$type<{ h2: string; paragraphs: string[] }[]>(),
+  faq: jsonb("faq").$type<{ q: string; a: string }[]>(),
+  topCta: jsonb("top_cta").$type<{ text: string; href: string }>(),
+  bottomCta: jsonb("bottom_cta").$type<{ text: string; sub: string; href: string }>(),
+  related: text("related").array(),
+  image: text("image"),
+  readTime: text("read_time"),
+  oldPath: text("old_path"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

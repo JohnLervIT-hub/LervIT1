@@ -14237,6 +14237,9 @@ Respond with VALID JSON only:
           excerpt: blogPosts.excerpt,
           category: blogPosts.category,
           tags: blogPosts.tags,
+          image: blogPosts.image,
+          readTime: blogPosts.readTime,
+          oldPath: blogPosts.oldPath,
           publishedAt: blogPosts.publishedAt,
         })
         .from(blogPosts)
