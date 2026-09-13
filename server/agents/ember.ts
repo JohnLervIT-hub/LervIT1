@@ -607,40 +607,58 @@ CONTENT TYPES AVAILABLE:
   gmb              — Google My Business post
   newsletter       — email
 
-CRITICAL: Respond with ONLY raw JSON.
-No markdown. No code fences.
-No backticks. No explanation.
-Start your response with { directly.
-
-IMPORTANT: Keep ALL string values under 150 characters.
-Do not use newlines inside string values.
-concept field: max 100 characters.
-strategy field: max 300 characters.
+CRITICAL: Your response must be ONLY
+this exact JSON structure with no
+other fields:
 
 {
-  "strategy": "one-paragraph overall approach",
-  "contentPillars": ["pillar 1", "pillar 2", "pillar 3"],
+  "strategy": "One sentence max",
+  "contentPillars": [
+    "Pillar 1",
+    "Pillar 2",
+    "Pillar 3"
+  ],
   "items": [
     {
       "type": "higgsfield_video",
       "objective": "awareness",
       "platform": "instagram",
-      "concept": "Brief concept (max 100 chars)",
+      "concept": "Max 80 chars",
       "week": 1,
       "aspectRatio": "9:16",
       "generator": "higgsfield"
+    },
+    {
+      "type": "heygen_video",
+      "objective": "education",
+      "platform": "facebook",
+      "concept": "Max 80 chars",
+      "week": 2,
+      "aspectRatio": "16:9",
+      "generator": "heygen"
     }
   ]
-}`;
+}
 
-    const userMessage = `Campaign: ${input.name}
+The "items" array MUST have 8-12 items.
+Do NOT include campaign name, objective,
+audience, or offer in the response.
+Only strategy, contentPillars, items.
+No newlines inside string values.
+All strings under 100 characters.`;
+
+    const userMessage = `Create a content plan for this campaign.
+Return ONLY the JSON with strategy,
+contentPillars, and items fields.
+
+Campaign details (do not repeat these
+in your response):
+Name: ${input.name}
 Objective: ${input.objective}
 Audience: ${input.audience}
 Offer: ${input.offer ?? 'LERVIT10'}
 Platforms: ${platformsList.join(', ')}
-Duration: ${input.durationDays ?? 30} days
-
-Create a complete content plan with 6–12 items across the requested platforms.`;
+Duration: ${input.durationDays ?? 30} days`;
 
     const raw = await this.callAnthropic(systemPrompt, userMessage, 2000);
 
