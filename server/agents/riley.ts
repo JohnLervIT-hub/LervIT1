@@ -20,7 +20,7 @@
  * notificationService.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
@@ -89,6 +89,8 @@ export class RileyAgent extends BaseAgent {
         return this.sendCustomerNudge(input as CustomerNudgeInput, options);
       case 'scan_inactive_movers':
         return this.scanInactiveMovers();
+      case 'scan_unverified_movers':
+        return this.scanUnverifiedMovers(options);
       default:
         throw new Error(`Riley: unknown action "${action}"`);
     }
@@ -154,6 +156,206 @@ export class RileyAgent extends BaseAgent {
     });
 
     return { scanned: candidates.length, queued };
+  }
+
+  // ─── PRE-VERIFICATION NUDGE SCAN ────────────────────────────
+  //
+  // Movers who signed up but haven't cleared verification yet. Escalating
+  // cadence: day 0-1 welcome, 2-7 soft reminder, 8-14 stronger nudge,
+  // 15-30 final warning. After 30 days Kai (RETAIN) takes over the account.
+  // Suspended pilots are excluded so Aegis-blocked accounts aren't re-nudged.
+
+  private async scanUnverifiedMovers(options: AgentRunOptions = {}) {
+    const cutoff30d = new Date(Date.now() - 30 * DAY_MS);
+
+    const unverifiedMovers = await db
+      .select({
+        id: movers.id,
+        userId: movers.userId,
+        createdAt: movers.createdAt,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+      })
+      .from(movers)
+      .innerJoin(users, eq(users.id, movers.userId))
+      .where(and(
+        eq(movers.isVerified, false),
+        gte(movers.createdAt, cutoff30d),
+        or(
+          isNull(movers.pilotStatus),
+          ne(movers.pilotStatus, 'suspended'),
+        ),
+      ));
+
+    let nudged = 0;
+    let skipped = 0;
+
+    for (const mover of unverifiedMovers) {
+      const daysSinceSignup = Math.floor(
+        (Date.now() - mover.createdAt.getTime()) / DAY_MS,
+      );
+
+      const { contacted } = await wasContactedWithinDays({
+        entityId: mover.id,
+        entityType: 'mover',
+        eventTypes: ['riley.verification_nudge'],
+        days: 7,
+      });
+      if (contacted) {
+        skipped++;
+        continue;
+      }
+
+      if (options.dryRun) {
+        logger.info(
+          { moverId: mover.id, daysSinceSignup },
+          '[Riley DRY RUN] Would nudge unverified mover',
+        );
+        continue;
+      }
+
+      await this.sendVerificationNudge(mover, daysSinceSignup);
+      nudged++;
+    }
+
+    await emitEvent('riley.scan_unverified_complete', 'agent', 'onboard', {
+      agentName: this.name,
+      nudged,
+      skipped,
+      total: unverifiedMovers.length,
+    });
+
+    return { nudged, skipped, total: unverifiedMovers.length };
+  }
+
+  private async sendVerificationNudge(
+    mover: { id: string; name: string; email: string; phone: string | null },
+    daysSinceSignup: number,
+  ) {
+    const verificationUrl = `${APP_BASE_URL}/mover-verification`;
+    const ctaColor = daysSinceSignup > 14 ? '#dc2626' : '#1e3a5f';
+    const ctaLabel = daysSinceSignup > 14 ? 'Complete verification now →' : 'Complete verification →';
+
+    let subject: string;
+    let bodyInner: string;
+
+    if (daysSinceSignup <= 1) {
+      subject = 'Complete your LervIT verification to start earning';
+      bodyInner = `
+        <p>Hi ${mover.name},</p>
+        <p>Welcome to LervIT! You're almost ready to start earning.</p>
+        <p>Just one more step — upload your verification documents to get approved and start receiving job requests:</p>
+        <p><a href="${verificationUrl}" style="background:${ctaColor};color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0;">${ctaLabel}</a></p>
+        <p>Documents needed:</p>
+        <ul>
+          <li>Government ID</li>
+          <li>Driver's License</li>
+          <li>Vehicle Registration</li>
+          <li>Vehicle Photos</li>
+          <li>Insurance</li>
+          <li>Background Check</li>
+          <li>Stripe Payout Setup</li>
+        </ul>
+        <p>Takes about 10 minutes. Jobs are waiting!</p>
+        <p>Riley Morgan<br/>LervIT Onboarding</p>`;
+    } else if (daysSinceSignup <= 7) {
+      subject = 'Jobs are waiting — finish your verification';
+      bodyInner = `
+        <p>Hi ${mover.name},</p>
+        <p>You signed up for LervIT ${daysSinceSignup} days ago but haven't completed your verification yet.</p>
+        <p>Calgary movers on LervIT earned an average of $340 last weekend. Don't miss out!</p>
+        <p><a href="${verificationUrl}" style="background:${ctaColor};color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0;">${ctaLabel}</a></p>
+        <p>Takes about 10 minutes.</p>
+        <p>Riley Morgan<br/>LervIT Onboarding</p>`;
+    } else if (daysSinceSignup <= 14) {
+      subject = 'Still waiting for you — LervIT verification';
+      bodyInner = `
+        <p>Hi ${mover.name},</p>
+        <p>We noticed you haven't completed your verification yet. Is everything okay?</p>
+        <p>If you're having trouble with any documents, reply to this email and we'll help you out.</p>
+        <p><a href="${verificationUrl}" style="background:${ctaColor};color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0;">${ctaLabel}</a></p>
+        <p>Riley Morgan<br/>LervIT Onboarding<br/>${RILEY_EMAIL}</p>`;
+    } else {
+      subject = 'Last reminder — complete your LervIT account';
+      bodyInner = `
+        <p>Hi ${mover.name},</p>
+        <p>This is our final reminder to complete your LervIT verification.</p>
+        <p>After 30 days incomplete accounts are archived. Don't lose your spot!</p>
+        <p><a href="${verificationUrl}" style="background:${ctaColor};color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0;">${ctaLabel}</a></p>
+        <p>Riley Morgan<br/>LervIT Onboarding</p>`;
+    }
+
+    let emailSent = false;
+    if (mover.email) {
+      if (process.env.NODE_ENV === 'development') {
+        logger.info(
+          { to: mover.email, subject, daysSinceSignup },
+          'Riley: dev mode — verification nudge email not sent',
+        );
+      } else if (!resend) {
+        logger.warn('Riley: RESEND_API_KEY not set — verification nudge email skipped');
+      } else {
+        const header = `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">
+          <tr>
+            <td width="52" valign="middle">
+              <img src="${APP_BASE_URL}/avatars/riley-morgan.png" width="44" height="44" style="border-radius:50%;object-fit:cover;display:block;" alt="Riley Morgan" />
+            </td>
+            <td valign="middle" style="padding-left:12px;">
+              <div style="font-weight:600;font-size:15px;color:#1a1a1a;line-height:1.2;">Riley Morgan</div>
+              <div style="font-size:12px;color:#64748b;margin-top:2px;">Onboarding Specialist · LervIT Calgary</div>
+            </td>
+          </tr>
+        </table>`;
+        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
+          ${header}
+          ${bodyInner}
+          <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
+          <p style="font-size:12px;color:#999;">
+            LervIT Technologies · Calgary, AB ·
+            <a href="${APP_BASE_URL}/unsubscribe">Unsubscribe</a>
+          </p>
+        </div>`;
+        try {
+          await sendResendEmail({
+            from: EMAIL_SENDERS.OUTREACH,
+            to: mover.email,
+            replyTo: RILEY_REPLY_TO,
+            subject,
+            html,
+            listUnsubscribeUrl: `${APP_BASE_URL}/unsubscribe`,
+          });
+          emailSent = true;
+        } catch (err) {
+          logger.error({ err, moverId: mover.id }, 'Riley: verification nudge email failed');
+        }
+      }
+    }
+
+    // SMS mid-window nudge (day 7) — one text on top of the email when we know
+    // the mover has a phone. Strict-equal to 7 so the daily cron only sends
+    // this once per mover (the scan lands on day 7 exactly once per account).
+    let smsSent = false;
+    if (daysSinceSignup === 7 && mover.phone) {
+      smsSent = await notificationService.sendSMS({
+        to: mover.phone,
+        message:
+          `Hi ${mover.name}, Riley from LervIT. Complete your verification to start earning: ${verificationUrl} Reply STOP to opt out`,
+        type: 'pilot_status',
+      });
+    }
+
+    await emitEvent('riley.verification_nudge', 'mover', mover.id, {
+      agentName: this.name,
+      daysSinceSignup,
+      email: emailSent,
+      sms: smsSent,
+    });
+
+    logger.info(
+      { moverId: mover.id, daysSinceSignup, emailSent, smsSent },
+      '[Riley] Verification nudge sent',
+    );
   }
 
   // ─── MOVER TRACK ────────────────────────────────────────────

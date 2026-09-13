@@ -6257,20 +6257,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   /**
    * =========================================================================
+   * RESEND WEBHOOK ENDPOINT (RESEND-ONLY - NO USER SESSION)
+   * =========================================================================
+   *
+   * Signed via svix. Signature is computed over the exact bytes Resend sent,
+   * so we verify against req.rawBody (captured by the global express.json
+   * `verify` hook in server/index.ts) — re-serializing req.body would change
+   * key order / whitespace and break verification.
+   * =========================================================================
+   */
+  app.post("/api/webhooks/resend", async (req: Request, res: Response) => {
+    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    const svixId = req.headers['svix-id'] as string | undefined;
+    const svixTimestamp = req.headers['svix-timestamp'] as string | undefined;
+    const svixSignature = req.headers['svix-signature'] as string | undefined;
+
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('[Resend Webhook] RESEND_WEBHOOK_SECRET not configured');
+        return res.status(500).json({ error: 'Webhook not configured' });
+      }
+      logger.warn('[Resend Webhook] RESEND_WEBHOOK_SECRET not set - dev mode, skipping verification');
+    }
+
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return res.status(400).json({ error: 'Missing svix headers' });
+    }
+
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+    if (!rawBody) {
+      logger.error('[Resend Webhook] Raw body not available for signature verification');
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+
+    let payload: any;
+    if (secret) {
+      try {
+        const { Webhook } = await import('svix');
+        const wh = new Webhook(secret);
+        payload = wh.verify(rawBody, {
+          'svix-id': svixId,
+          'svix-timestamp': svixTimestamp,
+          'svix-signature': svixSignature,
+        });
+      } catch (err) {
+        logger.warn({ err }, '[Resend Webhook] Invalid signature');
+        return res.status(400).json({ error: 'Invalid signature' });
+      }
+    } else {
+      payload = req.body;
+    }
+
+    const { type, data } = payload ?? {};
+    const to: string[] = Array.isArray(data?.to)
+      ? data.to
+      : (typeof data?.to === 'string' ? [data.to] : []);
+    const entityId = to[0] ?? 'unknown';
+
+    logger.info({ type, emailId: data?.email_id }, '[Resend Webhook] Event received');
+
+    try {
+      switch (type) {
+        case 'email.bounced':
+          await emitEvent('email.bounced', 'customer', entityId, {
+            emailId: data?.email_id,
+            to,
+            subject: data?.subject,
+            bouncedAt: data?.created_at,
+          }, 'webhook');
+          logger.warn({ to, subject: data?.subject }, '[Email] Bounced');
+          break;
+
+        case 'email.complained':
+          await emitEvent('email.complained', 'customer', entityId, {
+            emailId: data?.email_id,
+            to,
+            subject: data?.subject,
+          }, 'webhook');
+          try {
+            const { xavier } = await import('./agents/xavier');
+            await xavier.run('escalate', {
+              issue: `Spam complaint from ${entityId}`,
+              severity: 'high',
+              agentName: 'Email System',
+              data: { subject: data?.subject, emailId: data?.email_id },
+            });
+          } catch (escalateErr) {
+            logger.error({ err: escalateErr }, '[Resend Webhook] Xavier escalation failed');
+          }
+          logger.error({ to }, '[Email] Spam complaint received');
+          break;
+
+        case 'email.delivery_delayed':
+          logger.warn({ to, subject: data?.subject }, '[Email] Delivery delayed');
+          break;
+
+        case 'email.delivered':
+          logger.info({ to }, '[Email] Delivered');
+          break;
+
+        case 'email.sent':
+          logger.info({ to }, '[Email] Sent');
+          break;
+
+        case 'email.opened':
+          await emitEvent('email.opened', 'customer', entityId, {
+            emailId: data?.email_id,
+            to,
+            subject: data?.subject,
+            openedAt: data?.created_at,
+          }, 'webhook');
+          break;
+
+        case 'email.clicked':
+          await emitEvent('email.clicked', 'customer', entityId, {
+            emailId: data?.email_id,
+            to,
+            subject: data?.subject,
+            clickedAt: data?.created_at,
+          }, 'webhook');
+          break;
+
+        default:
+          logger.info({ type }, '[Resend Webhook] Unhandled event');
+      }
+
+      return res.json({ received: true });
+    } catch (err) {
+      logger.error({ err, type }, '[Resend Webhook] Handler error');
+      return res.status(500).json({ error: 'Handler failed' });
+    }
+  });
+
+  /**
+   * =========================================================================
    * STRIPE WEBHOOK ENDPOINT (STRIPE-ONLY - NO USER SESSION)
    * =========================================================================
-   * 
+   *
    * SECURITY NOTES:
    * - This endpoint is called ONLY by Stripe servers, not by users
    * - Signature verification is REQUIRED in production
    * - Uses raw request body (not JSON-parsed) for signature verification
    * - Returns 400 immediately if signature verification fails
    * - Never log sensitive data (card details, full webhook body)
-   * 
+   *
    * RATE LIMITING:
    * - Configured separately in middleware/security.ts (webhookLimiter)
    * - Allows Stripe retries while preventing abuse
-   * 
+   *
    * =========================================================================
    */
   app.post("/api/stripe-webhook", async (req: Request, res: Response) => {
@@ -13503,6 +13637,7 @@ Respond with VALID JSON only:
     'mover_nudge',
     'customer_nudge',
     'scan_inactive_movers',
+    'scan_unverified_movers',
   ]);
   app.post("/api/admin/agent/riley/trigger", async (req: Request, res: Response) => {
     try {

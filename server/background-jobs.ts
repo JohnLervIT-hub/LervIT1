@@ -275,6 +275,21 @@ export function initBackgroundJobs() {
     });
   }, TZ);
 
+  // Daily 11:15 Calgary — Riley Morgan (ONBOARD) nudges movers who signed up
+  // but haven't cleared verification yet. Escalating cadence (day 0-1, 2-7,
+  // 8-14, 15-30). Kai takes over accounts 30d+, so this cron caps at 30 days.
+  // Sits after Sam's 11:00 partner-progress scan to avoid the shared minute.
+  cron.schedule('15 11 * * *', async () => {
+    await withJobLock('riley_scan_unverified_movers', async () => {
+      try {
+        const result = await riley.run('scan_unverified_movers', {});
+        logger.info({ event: 'riley_scan_unverified_movers', result }, 'Riley unverified scan complete');
+      } catch (err) {
+        logger.error({ err, event: 'riley_scan_unverified_movers' }, 'Riley unverified scan failed');
+      }
+    });
+  }, TZ);
+
   // Daily 10:00 Calgary — Sam Carter (SALES) sweeps five Places queries for
   // B2B prospects and enqueues first touches. Cost is ~5 text-searches + up
   // to 5 details calls (negligible).
