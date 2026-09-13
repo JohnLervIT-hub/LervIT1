@@ -612,6 +612,11 @@ No markdown. No code fences.
 No backticks. No explanation.
 Start your response with { directly.
 
+IMPORTANT: Keep ALL string values under 150 characters.
+Do not use newlines inside string values.
+concept field: max 100 characters.
+strategy field: max 300 characters.
+
 {
   "strategy": "one-paragraph overall approach",
   "contentPillars": ["pillar 1", "pillar 2", "pillar 3"],
@@ -620,11 +625,10 @@ Start your response with { directly.
       "type": "higgsfield_video",
       "objective": "awareness",
       "platform": "instagram",
-      "concept": "specific creative concept, one sentence",
+      "concept": "Brief concept (max 100 chars)",
       "week": 1,
       "aspectRatio": "9:16",
-      "generator": "higgsfield",
-      "cta": "Book now — LERVIT10"
+      "generator": "higgsfield"
     }
   ]
 }`;
@@ -1173,26 +1177,56 @@ Platform: ${item.platform ?? 'N/A'}`;
     const start = clean.indexOf('{');
     const startArr = clean.indexOf('[');
 
+    let jsonStr: string;
+
     if (startArr !== -1 &&
         (start === -1 || startArr < start)) {
       const end = clean.lastIndexOf(']');
-      if (end !== -1) {
-        return JSON.parse(
-          clean.slice(startArr, end + 1)
-        );
-      }
-    }
-
-    if (start !== -1) {
+      jsonStr = end !== -1
+        ? clean.slice(startArr, end + 1)
+        : clean.slice(startArr);
+    } else if (start !== -1) {
       const end = clean.lastIndexOf('}');
-      if (end !== -1) {
-        return JSON.parse(
-          clean.slice(start, end + 1)
+      jsonStr = end !== -1
+        ? clean.slice(start, end + 1)
+        : clean.slice(start);
+    } else {
+      throw new Error('No JSON found in response');
+    }
+
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e1) {
+      try {
+        const sanitized = jsonStr
+          .replace(/[‘’]/g, "'")
+          .replace(/[“”]/g, '"')
+          .replace(
+            /:\s*"([\s\S]*?)"/g,
+            (_match, p1) => {
+              const escaped = p1
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r')
+                .replace(/\t/g, '\\t');
+              return `: "${escaped}"`;
+            },
+          );
+        return JSON.parse(sanitized);
+      } catch (e2) {
+        const itemsMatch = jsonStr.match(
+          /"items"\s*:\s*(\[[\s\S]*?\])\s*[,}]/,
+        );
+        if (itemsMatch) {
+          try {
+            const items = JSON.parse(itemsMatch[1]);
+            return { items };
+          } catch {}
+        }
+        throw new Error(
+          `Parse failed: ${(e1 as Error).message}`,
         );
       }
     }
-
-    throw new Error('No JSON found in response');
   }
 }
 
