@@ -6378,6 +6378,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }, 'webhook');
           break;
 
+        case 'email.failed':
+          await emitEvent(
+            'email.failed',
+            'email',
+            data.to?.[0] ?? 'unknown',
+            {
+              emailId: data.email_id,
+              to: data.to,
+              subject: data.subject,
+              failedAt: data.created_at,
+            },
+            'webhook'
+          );
+          logger.error({
+            to: data.to,
+            subject: data.subject,
+          }, '[Email] Send failed');
+          break;
+
+        case 'email.scheduled':
+          logger.info({
+            to: data.to
+          }, '[Email] Scheduled');
+          break;
+
+        case 'contact.created':
+        case 'contact.updated':
+        case 'contact.deleted':
+          logger.info({ type },
+            '[Resend] Contact event');
+          break;
+
+        case 'domain.created':
+        case 'domain.updated':
+        case 'domain.deleted':
+          logger.info({ type },
+            '[Resend] Domain event');
+          break;
+
         default:
           logger.info({ type }, '[Resend Webhook] Unhandled event');
       }
