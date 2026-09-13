@@ -622,9 +622,18 @@ Create a complete content plan with 6–12 items across the requested platforms.
 
     const raw = await this.callAnthropic(systemPrompt, userMessage, 2000);
 
+    logger.info(
+      {
+        rawLength: raw.length,
+        rawPreview: raw.slice(0, 200),
+      },
+      '[Ember] Campaign plan raw response',
+    );
+
     let plan: any;
     try {
-      plan = this.parseJson(raw);
+      const parsed = this.parseJson(raw);
+      plan = Array.isArray(parsed) ? { items: parsed, strategy: '' } : parsed;
 
       // Claude sometimes wraps the whole response in a second ```json fence
       // inside the strategy field. If items came back empty but strategy
@@ -632,8 +641,9 @@ Create a complete content plan with 6–12 items across the requested platforms.
       if ((!plan.items || plan.items.length === 0) && plan.strategy) {
         try {
           const inner = this.parseJson(String(plan.strategy));
-          if (inner.items?.length > 0) {
-            plan = inner;
+          const innerObj = Array.isArray(inner) ? { items: inner } : inner;
+          if (innerObj.items?.length > 0) {
+            plan = { ...plan, ...innerObj };
           }
         } catch {
           // Keep outer plan
@@ -642,6 +652,18 @@ Create a complete content plan with 6–12 items across the requested platforms.
     } catch {
       logger.error('[Ember] Failed to parse campaign plan JSON');
       plan = { items: [], strategy: raw };
+    }
+
+    // Fallback: regex-extract items array if parsing left us empty-handed.
+    if (!Array.isArray(plan.items) || plan.items.length === 0) {
+      const itemsMatch = raw.match(/"items"\s*:\s*(\[[\s\S]*?\])/);
+      if (itemsMatch) {
+        try {
+          plan.items = JSON.parse(itemsMatch[1]);
+        } catch {
+          // Leave plan.items as-is
+        }
+      }
     }
 
     const [campaign] = await db
@@ -1118,10 +1140,22 @@ Platform: ${item.platform ?? 'N/A'}`;
       .replace(/```\s*/gi, '')
       .trim();
 
-    const start = clean.indexOf('{');
-    const end = clean.lastIndexOf('}');
-    if (start !== -1 && end !== -1) {
-      clean = clean.slice(start, end + 1);
+    const firstBrace = clean.indexOf('{');
+    const firstBracket = clean.indexOf('[');
+    const useArray =
+      firstBracket !== -1 &&
+      (firstBrace === -1 || firstBracket < firstBrace);
+
+    if (useArray) {
+      const end = clean.lastIndexOf(']');
+      if (firstBracket !== -1 && end !== -1) {
+        clean = clean.slice(firstBracket, end + 1);
+      }
+    } else {
+      const end = clean.lastIndexOf('}');
+      if (firstBrace !== -1 && end !== -1) {
+        clean = clean.slice(firstBrace, end + 1);
+      }
     }
 
     return JSON.parse(clean);
