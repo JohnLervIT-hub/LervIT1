@@ -247,7 +247,11 @@ Voice: warm, expert, locally-grounded, never salesy.
 
 ${LERVIT_BRAND}
 
-Output STRICT JSON only — no prose, no markdown fence:
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
 {
   "title": string (60-70 chars, includes "Calgary" when natural),
   "slug": string (kebab-case, no stopwords, <= 60 chars),
@@ -373,7 +377,9 @@ Rules:
 - Include a soft CTA (call, quote, promo LERVIT10)
 - Reference Calgary specifically
 
-Return the post body ONLY. No preface, no JSON.`;
+CRITICAL: Return the post body ONLY.
+No markdown. No code fences.
+No backticks. No preface. No JSON.`;
 
     const userMessage = `Draft this week's LervIT Google Business post. Angle can be a moving tip, a
 neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior weeks.`;
@@ -489,7 +495,11 @@ ${SOCIAL_GUIDES[platform]}
 
 ${LERVIT_BRAND}
 
-Output STRICT JSON only:
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
 { "content": string, "hashtags": string[] }`;
 
       const userMessage = `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
@@ -543,7 +553,11 @@ Include:
 3. Company update (features, mover count, milestones — you can be tasteful/vague)
 4. LERVIT10 promo mention
 
-Output STRICT JSON only:
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
 {
   "subject": string (<= 60 chars, no emoji, curiosity-driven),
   "preheader": string (<= 100 chars),
@@ -593,7 +607,11 @@ CONTENT TYPES AVAILABLE:
   gmb              — Google My Business post
   newsletter       — email
 
-Output STRICT JSON only — no prose, no markdown fence:
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
 {
   "strategy": "one-paragraph overall approach",
   "contentPillars": ["pillar 1", "pillar 2", "pillar 3"],
@@ -758,7 +776,11 @@ RULES:
 - Paced for ~${durationSec} seconds (roughly ${Math.max(30, durationSec * 2.5)} words).
 - Audience: ${audience}.
 
-Output STRICT JSON only — no prose, no markdown fence:
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
 {
   "script": "full spoken script, one paragraph",
   "hook": "first line hook",
@@ -1033,7 +1055,11 @@ BRAND RULES:
 - "Snap. Book. Track." is the tagline.
 - lervit.com is the website.
 
-Output STRICT JSON only — no prose, no markdown fence:
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
 {
   "passed": true,
   "brandQA":   { "passed": true, "issues": [] },
@@ -1127,6 +1153,7 @@ Platform: ${item.platform ?? 'N/A'}`;
     const response = await this.anthropic.messages.create({
       model: EMBER_MODEL,
       max_tokens: maxTokens,
+      temperature: 0,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
@@ -1136,29 +1163,36 @@ Platform: ${item.platform ?? 'N/A'}`;
 
   private parseJson(raw: string): any {
     let clean = raw
-      .replace(/```json\s*/gi, '')
-      .replace(/```\s*/gi, '')
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```$/i, '')
+      .replace(/```json/gi, '')
+      .replace(/```/gi, '')
       .trim();
 
-    const firstBrace = clean.indexOf('{');
-    const firstBracket = clean.indexOf('[');
-    const useArray =
-      firstBracket !== -1 &&
-      (firstBrace === -1 || firstBracket < firstBrace);
+    const start = clean.indexOf('{');
+    const startArr = clean.indexOf('[');
 
-    if (useArray) {
+    if (startArr !== -1 &&
+        (start === -1 || startArr < start)) {
       const end = clean.lastIndexOf(']');
-      if (firstBracket !== -1 && end !== -1) {
-        clean = clean.slice(firstBracket, end + 1);
-      }
-    } else {
-      const end = clean.lastIndexOf('}');
-      if (firstBrace !== -1 && end !== -1) {
-        clean = clean.slice(firstBrace, end + 1);
+      if (end !== -1) {
+        return JSON.parse(
+          clean.slice(startArr, end + 1)
+        );
       }
     }
 
-    return JSON.parse(clean);
+    if (start !== -1) {
+      const end = clean.lastIndexOf('}');
+      if (end !== -1) {
+        return JSON.parse(
+          clean.slice(start, end + 1)
+        );
+      }
+    }
+
+    throw new Error('No JSON found in response');
   }
 }
 
