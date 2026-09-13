@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -96,6 +96,21 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
   const [editVehicle, setEditVehicle] = useState<VehicleKey>(detectVehicle(lead.notes));
   const [editNotes, setEditNotes] = useState(lead.notes ?? '');
 
+  const [savedEmail, setSavedEmail] = useState<string | null>(lead.contactEmail);
+  const [savedPhone, setSavedPhone] = useState<string | null>(lead.contactPhone);
+
+  useEffect(() => {
+    setSavedEmail(lead.contactEmail);
+    setSavedPhone(lead.contactPhone);
+  }, [lead.contactEmail, lead.contactPhone]);
+
+  useEffect(() => {
+    setEditName(lead.contactName ?? '');
+    setEditEmail(lead.contactEmail ?? '');
+    setEditPhone(lead.contactPhone ?? '');
+    setEditNotes(lead.notes ?? '');
+  }, [lead.contactName, lead.contactEmail, lead.contactPhone, lead.notes]);
+
   const vehicle = detectVehicle(lead.notes);
   const earnings = DRIVER_EARNINGS[vehicle];
   const listingUrl = parseListingUrl(lead.notes);
@@ -108,28 +123,32 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
   };
 
   const emailMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (channel: 'email' | 'sms' = 'email') => {
       const res = await apiRequest('POST', '/api/admin/agent/jordan/trigger', {
         action: 'onboard_candidate',
         leadId: lead.id,
-        channelOverride: 'email',
+        channelOverride: channel,
       });
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, channel) => {
       if (data?.result?.skipped) {
         toast({
           title: 'Skipped',
           description: data.result.reason === 'already_contacted_today'
             ? 'Already contacted today'
-            : data.result.reason ?? 'No email available',
+            : data.result.reason ?? (channel === 'sms' ? 'No phone available' : 'No email available'),
           variant: 'destructive',
         });
         return;
       }
+      const label = channel === 'sms' ? 'SMS' : 'Email';
+      const target = channel === 'sms'
+        ? (lead.contactPhone ?? 'candidate')
+        : (lead.contactName ?? lead.contactEmail ?? 'candidate');
       toast({
         title: 'Jordan Hayes',
-        description: 'Email queued for ' + (lead.contactName ?? lead.contactEmail ?? 'candidate'),
+        description: `${label} queued for ${target}`,
       });
       onRefresh();
     },
@@ -187,10 +206,30 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
       });
       return res.json();
     },
-    onSuccess: () => {
-      toast({ description: 'Candidate updated' });
+    onSuccess: async () => {
+      const hadNoContact = !lead.contactEmail && !lead.contactPhone;
+      const trimmedEmail = editEmail.trim();
+      const trimmedPhone = editPhone.trim();
+      const nowHasContact = !!(trimmedEmail || trimmedPhone);
+
+      setSavedEmail(trimmedEmail || null);
+      setSavedPhone(trimmedPhone || null);
       setEditing(false);
       onRefresh();
+
+      if (hadNoContact && nowHasContact) {
+        toast({
+          title: 'Contact added',
+          description: 'Sending outreach via Jordan...',
+        });
+
+        await new Promise(r => setTimeout(r, 500));
+
+        const channel: 'email' | 'sms' = trimmedEmail ? 'email' : 'sms';
+        emailMutation.mutate(channel);
+      } else {
+        toast({ description: 'Candidate updated' });
+      }
     },
     onError: (err: any) => {
       toast({ title: 'Save failed', description: err?.message, variant: 'destructive' });
@@ -486,14 +525,14 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
             className="w-full"
             size="sm"
             variant="outline"
-            onClick={() => emailMutation.mutate()}
-            disabled={!lead.contactEmail || emailMutation.isPending || isTerminal}
+            onClick={() => emailMutation.mutate('email')}
+            disabled={!savedEmail || emailMutation.isPending || isTerminal}
             data-testid={`button-jordan-email-${lead.id}`}
           >
             {emailMutation.isPending
               ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
               : <Mail className="w-3.5 h-3.5 mr-1.5" />}
-            {lead.contactEmail ? 'Send email via Jordan' : 'No email — cannot send'}
+            {savedEmail ? 'Send email via Jordan' : 'No email — cannot send'}
           </Button>
 
           <Button
@@ -501,13 +540,13 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
             size="sm"
             variant="outline"
             onClick={() => smsMutation.mutate()}
-            disabled={!lead.contactPhone || smsMutation.isPending || isTerminal}
+            disabled={!savedPhone || smsMutation.isPending || isTerminal}
             data-testid={`button-jordan-sms-${lead.id}`}
           >
             {smsMutation.isPending
               ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
               : <MessageSquare className="w-3.5 h-3.5 mr-1.5" />}
-            {lead.contactPhone ? 'Send SMS via Jordan' : 'No phone — cannot send'}
+            {savedPhone ? 'Send SMS via Jordan' : 'No phone — cannot send'}
           </Button>
 
           <div className="flex items-center justify-between pt-1">
