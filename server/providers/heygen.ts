@@ -69,12 +69,14 @@ class HeyGenProvider {
             character: {
               type: 'avatar',
               avatar_id: input.avatarId ?? this.defaultAvatarId,
-              avatar_style: 'normal',
+              avatar_style: 'expressive',
             },
             voice: {
               type: 'text',
               input_text: input.script,
               voice_id: input.voiceId ?? this.defaultVoiceId,
+              speed: 0.9,
+              emotion: 'Friendly',
             },
             background:
               input.background ?? {
@@ -83,6 +85,10 @@ class HeyGenProvider {
               },
           },
         ],
+        dimension: {
+          width: 1080,
+          height: 1920,
+        },
         aspect_ratio: input.aspectRatio ?? '9:16',
         caption: input.caption ?? true,
         title: input.title ?? 'LervIT Video',
