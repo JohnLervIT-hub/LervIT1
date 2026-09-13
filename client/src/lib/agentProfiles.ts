@@ -103,7 +103,7 @@ export const AGENT_PROFILES: Record<string, {
     role: 'Voice Agent',
     email: 'nova.clarke@lervit.com',
     avatar: '/avatars/nova-clarke.png',
-    color: '#db2777',
+    color: '#7c3aed',
     gender: 'female',
   },
   'ember-lane': {

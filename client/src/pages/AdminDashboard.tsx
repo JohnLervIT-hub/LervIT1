@@ -11,6 +11,7 @@ import { RileyMorganCard } from "@/components/RileyMorganCard";
 import { KaiBennettCard } from "@/components/KaiBennettCard";
 import { SamCarterCard } from "@/components/SamCarterCard";
 import { AegisCard } from "@/components/AegisCard";
+import { NovaCard } from "@/components/NovaCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1451,6 +1452,9 @@ export default function AdminDashboard() {
 
             {/* Compliance — full width */}
             <AegisCard />
+
+            {/* Voice — full width */}
+            <NovaCard />
           </TabsContent>
 
         </Tabs>

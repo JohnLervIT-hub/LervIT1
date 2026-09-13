@@ -42,11 +42,11 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -75,6 +75,8 @@ import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
 import { riley } from "./agents/riley";
+import { nova } from "./agents/nova";
+import { novaWebhookRouter } from "./nova-webhook-routes";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -312,6 +314,11 @@ async function setMoverVerified(moverId: string, userId: string): Promise<void> 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+  // Nova (VOICE) — Telnyx webhook + ElevenLabs tool endpoints. Mounted before
+  // authMiddleware so external callers (Telnyx, ElevenLabs) aren't blocked; the
+  // webhook uses `express.raw` inline so it bypasses any downstream JSON parser.
+  app.use(novaWebhookRouter);
 
   // Register auth middleware globally
   app.use(authMiddleware);
@@ -14023,6 +14030,97 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] aegis/stats failed');
       res.status(500).json({ error: 'Failed to load Aegis stats' });
+    }
+  });
+
+  // ===== NOVA CLARKE (VOICE) =====
+
+  const NOVA_ACTIONS = new Set([
+    'call_mover_dispatch',
+    'call_lead_conversion',
+    'call_review_request',
+    'check_call_hours',
+  ]);
+
+  app.post("/api/admin/agent/nova/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!NOVA_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      // check_call_hours is a cheap synchronous check — run inline even when
+      // dry_run isn't set so the admin sees the answer immediately.
+      if (dryRun || action === 'check_call_hours') {
+        const result = await nova.run(action, input, { dryRun });
+        return res.json({ ok: true, dryRun, action, result });
+      }
+
+      const novaQueue = createAgentQueue(QUEUE_NAMES.VOICE_AGENT);
+      if (!novaQueue) {
+        return res.status(503).json({ error: 'VOICE_AGENT queue unavailable (REDIS_URL not configured)' });
+      }
+      const job = await novaQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] nova/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/admin/agent/nova/stats", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const [callsTodayRows, moversAcceptedRows, bookingsCreatedRows, recentEvents] = await Promise.all([
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(voiceCalls)
+          .where(gte(voiceCalls.createdAt, todayStart)),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(businessEvents)
+          .where(
+            and(
+              eq(businessEvents.eventType, 'nova.mover_accepted'),
+              gte(businessEvents.createdAt, todayStart),
+            ),
+          ),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(businessEvents)
+          .where(
+            and(
+              eq(businessEvents.eventType, 'nova.booking_created'),
+              gte(businessEvents.createdAt, todayStart),
+            ),
+          ),
+        db
+          .select()
+          .from(businessEvents)
+          .where(sql`event_type LIKE 'nova.%'`)
+          .orderBy(desc(businessEvents.createdAt))
+          .limit(10),
+      ]);
+
+      const callHours = nova.checkCallHours();
+
+      res.json({
+        callsToday: callsTodayRows[0]?.count ?? 0,
+        moversAccepted: moversAcceptedRows[0]?.count ?? 0,
+        bookingsCreated: bookingsCreatedRows[0]?.count ?? 0,
+        callHoursAllowed: callHours.allowed,
+        callHoursReason: callHours.reason ?? null,
+        recentEvents,
+      });
+    } catch (err) {
+      logger.error({ err }, '[Admin] nova/stats failed');
+      res.status(500).json({ error: 'Failed to load Nova stats' });
     }
   });
 
