@@ -182,11 +182,6 @@ function slugify(title: string): string {
     .slice(0, 80);
 }
 
-function stripCodeFence(raw: string): string {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  return (fenced ? fenced[1] : raw).trim();
-}
-
 function pickTopic(): string {
   return BLOG_TOPICS[Math.floor(Math.random() * BLOG_TOPICS.length)];
 }
@@ -285,7 +280,7 @@ Category: ${category}.`;
     }
 
     const raw = await this.callAnthropic(systemPrompt, userMessage, 6000);
-    const parsed = this.parseJson(raw, 'generate_blog_post');
+    const parsed = this.parseJson(raw);
 
     const title: string = String(parsed.title ?? topic).slice(0, 200);
     const slug: string = String(parsed.slug ?? slugify(title)) || slugify(title);
@@ -500,7 +495,7 @@ Output STRICT JSON only:
       const userMessage = `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
 
       const raw = await this.callAnthropic(systemPrompt, userMessage, 1200);
-      const parsed = this.parseJson(raw, `generate_social_content:${platform}`);
+      const parsed = this.parseJson(raw);
 
       const content: string = String(parsed.content ?? '').trim();
       if (!content) throw new Error(`Ember: ${platform} content was empty`);
@@ -560,7 +555,7 @@ Output STRICT JSON only:
     if (options?.dryRun) return { dryRun: true, would: 'generate_newsletter' };
 
     const raw = await this.callAnthropic(systemPrompt, userMessage, 3500);
-    const parsed = this.parseJson(raw, 'generate_newsletter');
+    const parsed = this.parseJson(raw);
 
     const subject = String(parsed.subject ?? '').slice(0, 200);
     const preheader = String(parsed.preheader ?? '');
@@ -629,8 +624,23 @@ Create a complete content plan with 6–12 items across the requested platforms.
 
     let plan: any;
     try {
-      plan = this.parseJson(raw, 'create_campaign');
+      plan = this.parseJson(raw);
+
+      // Claude sometimes wraps the whole response in a second ```json fence
+      // inside the strategy field. If items came back empty but strategy
+      // looks parseable, use the inner object.
+      if ((!plan.items || plan.items.length === 0) && plan.strategy) {
+        try {
+          const inner = this.parseJson(String(plan.strategy));
+          if (inner.items?.length > 0) {
+            plan = inner;
+          }
+        } catch {
+          // Keep outer plan
+        }
+      }
     } catch {
+      logger.error('[Ember] Failed to parse campaign plan JSON');
       plan = { items: [], strategy: raw };
     }
 
@@ -743,7 +753,7 @@ Output STRICT JSON only — no prose, no markdown fence:
 
     let parsed: any;
     try {
-      parsed = this.parseJson(raw, 'generate_video_script');
+      parsed = this.parseJson(raw);
     } catch {
       return { error: 'parse_failed' };
     }
@@ -806,7 +816,7 @@ Type: ${item.type}`;
 
     let parsed: any;
     try {
-      parsed = this.parseJson(raw, 'generate_creative_brief');
+      parsed = this.parseJson(raw);
     } catch {
       return { error: 'parse_failed' };
     }
@@ -1022,7 +1032,7 @@ Platform: ${item.platform ?? 'N/A'}`;
 
     let qaResults: any;
     try {
-      qaResults = this.parseJson(raw, 'run_qa');
+      qaResults = this.parseJson(raw);
     } catch {
       qaResults = { passed: false, error: 'parse_failed', raw };
     }
@@ -1102,14 +1112,19 @@ Platform: ${item.platform ?? 'N/A'}`;
     return first && first.type === 'text' ? first.text : '';
   }
 
-  private parseJson(raw: string, ctx: string): Record<string, any> {
-    const cleaned = stripCodeFence(raw);
-    try {
-      return JSON.parse(cleaned);
-    } catch (err) {
-      logger.error({ err, ctx, raw: cleaned.slice(0, 500) }, '[Ember] JSON parse failed');
-      throw new Error(`Ember (${ctx}): model returned invalid JSON`);
+  private parseJson(raw: string): any {
+    let clean = raw
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/gi, '')
+      .trim();
+
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+      clean = clean.slice(start, end + 1);
     }
+
+    return JSON.parse(clean);
   }
 }
 
