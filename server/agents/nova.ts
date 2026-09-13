@@ -113,11 +113,7 @@ export class NovaAgent extends BaseAgent {
           { name: 'X-Nova-Type', value: opts.callType },
           { name: 'X-Nova-Entity-Id', value: opts.entityId },
         ],
-        answering_machine_detection: 'detect_beep',
-        answering_machine_detection_config: {
-          total_analysis_time_millis: 3500,
-          after_greeting_silence_millis: 800,
-        },
+        answering_machine_detection: 'disabled',
       });
 
       const callControlId = call.data?.call_control_id;
