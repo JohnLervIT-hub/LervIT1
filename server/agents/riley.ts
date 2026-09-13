@@ -337,25 +337,44 @@ export class RileyAgent extends BaseAgent {
     // this once per mover (the scan lands on day 7 exactly once per account).
     let smsSent = false;
     if (daysSinceSignup === 7 && mover.phone) {
-      smsSent = await notificationService.sendSMS({
-        to: mover.phone,
-        message:
-          `Hi ${mover.name}, Riley from LervIT. Complete your verification to start earning: ${verificationUrl} Reply STOP to opt out`,
-        type: 'pilot_status',
-      });
+      try {
+        smsSent = await notificationService.sendSMS({
+          to: mover.phone,
+          message:
+            `Hi ${mover.name}, Riley from LervIT. Complete your verification to start earning: ${verificationUrl} Reply STOP to opt out`,
+          type: 'pilot_status',
+        });
+      } catch (err) {
+        logger.error({ err, moverId: mover.id }, '[Riley] Verification SMS failed');
+      }
     }
 
-    await emitEvent('riley.verification_nudge', 'mover', mover.id, {
-      agentName: this.name,
-      daysSinceSignup,
-      email: emailSent,
-      sms: smsSent,
-    });
-
-    logger.info(
-      { moverId: mover.id, daysSinceSignup, emailSent, smsSent },
-      '[Riley] Verification nudge sent',
-    );
+    // Only emit the dedupe event if a channel actually succeeded — otherwise
+    // the daily scan should retry tomorrow instead of being blocked by a stale
+    // event from a silently-skipped send (dev mode, missing RESEND_API_KEY,
+    // thrown error, etc.).
+    if (emailSent || smsSent) {
+      await emitEvent('riley.verification_nudge', 'mover', mover.id, {
+        agentName: this.name,
+        daysSinceSignup,
+        email: emailSent,
+        sms: smsSent,
+      });
+      logger.info(
+        { moverId: mover.id, daysSinceSignup, emailSent, smsSent },
+        '[Riley] Verification nudge sent',
+      );
+    } else {
+      logger.warn(
+        {
+          moverId: mover.id,
+          daysSinceSignup,
+          hasEmail: !!mover.email,
+          hasPhone: !!mover.phone,
+        },
+        '[Riley] Verification nudge FAILED — no channels succeeded, will retry',
+      );
+    }
   }
 
   // ─── MOVER TRACK ────────────────────────────────────────────
