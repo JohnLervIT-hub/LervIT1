@@ -42,7 +42,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, campaigns, contentItems } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -14134,6 +14134,14 @@ Respond with VALID JSON only:
     'generate_social_content',
     'generate_newsletter',
     'publish_blog_post',
+    // Phase 2 — campaigns + video generation
+    'create_campaign',
+    'generate_video_script',
+    'generate_heygen_video',
+    'generate_higgsfield_video',
+    'generate_creative_brief',
+    'run_qa',
+    'get_campaign_status',
   ]);
 
   app.post("/api/admin/agent/ember/trigger", async (req: Request, res: Response) => {
@@ -14146,8 +14154,9 @@ Respond with VALID JSON only:
       const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
       const input = (req.body?.input ?? {}) as Record<string, any>;
 
-      // Publish is a cheap DB flip — always inline so admin sees the result.
-      if (dryRun || action === 'publish_blog_post') {
+      // Cheap DB-only actions — always inline so admin sees the result immediately.
+      const inlineActions = new Set(['publish_blog_post', 'get_campaign_status']);
+      if (dryRun || inlineActions.has(action)) {
         const result = await ember.run(action, input, { dryRun });
         return res.json({ ok: true, dryRun, action, result });
       }
@@ -14175,6 +14184,9 @@ Respond with VALID JSON only:
         gmbTotalRows,
         socialByPlatformRows,
         recentEvents,
+        activeCampaignsRows,
+        videosGeneratingRows,
+        videosReadyRows,
       ] = await Promise.all([
         db.select({ count: sql<number>`count(*)::int` }).from(blogPosts),
         db
@@ -14200,6 +14212,18 @@ Respond with VALID JSON only:
           .where(sql`event_type LIKE 'agent.ember.%'`)
           .orderBy(desc(businessEvents.createdAt))
           .limit(10),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(campaigns)
+          .where(sql`status IN ('draft','active')`),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(contentItems)
+          .where(eq(contentItems.status, 'generating')),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(contentItems)
+          .where(sql`status IN ('approved','qa')`),
       ]);
 
       const socialDraftsByPlatform: Record<string, number> = {
@@ -14219,10 +14243,119 @@ Respond with VALID JSON only:
         gmbPostsTotal: gmbTotalRows[0]?.count ?? 0,
         socialDraftsByPlatform,
         recentEvents,
+        activeCampaigns: activeCampaignsRows[0]?.count ?? 0,
+        videosGenerating: videosGeneratingRows[0]?.count ?? 0,
+        videosReady: videosReadyRows[0]?.count ?? 0,
       });
     } catch (err) {
       logger.error({ err }, '[Admin] ember/stats failed');
       res.status(500).json({ error: 'Failed to load Ember stats' });
+    }
+  });
+
+  // ===== Campaigns admin endpoints =====
+
+  app.get("/api/admin/campaigns", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const rows = await db
+        .select({
+          id: campaigns.id,
+          name: campaigns.name,
+          objective: campaigns.objective,
+          audience: campaigns.audience,
+          platforms: campaigns.platforms,
+          status: campaigns.status,
+          startDate: campaigns.startDate,
+          endDate: campaigns.endDate,
+          createdBy: campaigns.createdBy,
+          createdAt: campaigns.createdAt,
+          updatedAt: campaigns.updatedAt,
+          itemCount: sql<number>`(SELECT count(*)::int FROM ${contentItems} WHERE ${contentItems.campaignId} = ${campaigns.id})`,
+        })
+        .from(campaigns)
+        .orderBy(desc(campaigns.createdAt))
+        .limit(200);
+      res.json({ campaigns: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] campaigns list failed');
+      res.status(500).json({ error: 'Failed to load campaigns' });
+    }
+  });
+
+  app.get("/api/admin/campaigns/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const id = req.params.id;
+      const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+      if (!campaign) return res.status(404).json({ error: 'Not found' });
+
+      const items = await db
+        .select()
+        .from(contentItems)
+        .where(eq(contentItems.campaignId, id))
+        .orderBy(desc(contentItems.createdAt));
+
+      res.json({ campaign, items });
+    } catch (err) {
+      logger.error({ err }, '[Admin] campaign detail failed');
+      res.status(500).json({ error: 'Failed to load campaign' });
+    }
+  });
+
+  app.get("/api/admin/content-items/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const id = req.params.id;
+      const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
+      if (!item) return res.status(404).json({ error: 'Not found' });
+      res.json({ item });
+    } catch (err) {
+      logger.error({ err }, '[Admin] content item detail failed');
+      res.status(500).json({ error: 'Failed to load content item' });
+    }
+  });
+
+  app.post("/api/admin/campaigns/:id/approve/:itemId", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { id: campaignId, itemId } = req.params;
+
+      const [item] = await db
+        .select()
+        .from(contentItems)
+        .where(and(eq(contentItems.id, itemId), eq(contentItems.campaignId, campaignId)))
+        .limit(1);
+
+      if (!item) return res.status(404).json({ error: 'Content item not found in this campaign' });
+
+      const approverId = (req as any).user?.id ?? 'admin';
+      const now = new Date();
+
+      const [updated] = await db
+        .update(contentItems)
+        .set({
+          status: 'published',
+          approvedBy: String(approverId),
+          approvedAt: now,
+          publishedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(contentItems.id, itemId))
+        .returning();
+
+      await emitEvent(
+        'ember.content_item_approved',
+        'agent',
+        'ember',
+        { campaignId, itemId, approvedBy: approverId },
+        'admin',
+      );
+
+      res.json({ ok: true, item: updated });
+    } catch (err) {
+      logger.error({ err }, '[Admin] approve content item failed');
+      res.status(500).json({ error: 'Failed to approve content item' });
     }
   });
 

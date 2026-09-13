@@ -19,6 +19,9 @@ import {
   Music2,
   Linkedin,
   Eye,
+  Film,
+  Video,
+  Megaphone,
 } from "lucide-react";
 import { AgentAvatar } from "@/components/AgentAvatar";
 
@@ -40,13 +43,20 @@ interface EmberStats {
     payload: Record<string, any> | null;
     createdAt: string;
   }>;
+  // Phase 2 — campaigns + video generation
+  activeCampaigns: number;
+  videosGenerating: number;
+  videosReady: number;
 }
 
 type EmberAction =
   | "generate_blog_post"
   | "generate_gmb_post"
   | "generate_social_content"
-  | "generate_newsletter";
+  | "generate_newsletter"
+  | "create_campaign"
+  | "generate_heygen_video"
+  | "generate_higgsfield_video";
 
 export function EmberCard() {
   const { toast } = useToast();
@@ -80,7 +90,13 @@ export function EmberCard() {
             ? "GMB post"
             : action === "generate_social_content"
               ? "Social posts"
-              : "Newsletter";
+              : action === "create_campaign"
+                ? "Campaign"
+                : action === "generate_heygen_video"
+                  ? "HeyGen video"
+                  : action === "generate_higgsfield_video"
+                    ? "Higgsfield video"
+                    : "Newsletter";
       toast({
         title: dryRun ? `Ember dry-run — ${label}` : `Ember queued — ${label}`,
         description: dryRun
@@ -161,6 +177,66 @@ export function EmberCard() {
               <Eye className="w-3.5 h-3.5 mr-1.5" />
               Preview
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const name = window.prompt("Campaign name?");
+                if (!name) return;
+                const objective =
+                  window.prompt("Objective (awareness, conversion, retention)?") ??
+                  "awareness";
+                const audience =
+                  window.prompt("Audience (e.g. Calgary residents 25-45)?") ??
+                  "Calgary residents";
+                trigger.mutate({
+                  action: "create_campaign",
+                  dryRun: false,
+                  input: { name, objective, audience },
+                });
+              }}
+              disabled={trigger.isPending}
+              data-testid="button-ember-campaign"
+            >
+              <Megaphone className="w-3.5 h-3.5 mr-1.5" />
+              Create Campaign
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const contentItemId = window.prompt("Content item ID (must have script)?");
+                if (!contentItemId) return;
+                trigger.mutate({
+                  action: "generate_heygen_video",
+                  dryRun: false,
+                  input: { contentItemId },
+                });
+              }}
+              disabled={trigger.isPending}
+              data-testid="button-ember-heygen"
+            >
+              <Film className="w-3.5 h-3.5 mr-1.5" />
+              Generate HeyGen
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const contentItemId = window.prompt("Content item ID?");
+                if (!contentItemId) return;
+                trigger.mutate({
+                  action: "generate_higgsfield_video",
+                  dryRun: false,
+                  input: { contentItemId },
+                });
+              }}
+              disabled={trigger.isPending}
+              data-testid="button-ember-higgsfield"
+            >
+              <Video className="w-3.5 h-3.5 mr-1.5" />
+              Generate Higgsfield
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -197,6 +273,27 @@ export function EmberCard() {
                 value={data.gmbPostsTotal}
                 icon={<MapPin className="w-3 h-3" />}
                 tone="neutral"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <StatBox
+                label="Campaigns"
+                value={data.activeCampaigns}
+                icon={<Megaphone className="w-3 h-3" />}
+                tone="neutral"
+              />
+              <StatBox
+                label="Videos generating"
+                value={data.videosGenerating}
+                icon={<Loader2 className="w-3 h-3" />}
+                tone="warm"
+              />
+              <StatBox
+                label="Videos ready"
+                value={data.videosReady}
+                icon={<Video className="w-3 h-3" />}
+                tone="good"
               />
             </div>
 

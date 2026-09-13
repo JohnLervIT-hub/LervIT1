@@ -2,13 +2,23 @@
  * Ember Lane (MAGNET) — content & marketing agent.
  *
  * Actions:
- *   - `generate_blog_post`       : draft a Calgary-focused blog post → blog_posts (status='pending_review')
- *   - `generate_gmb_post`        : draft a Google Business post → gmb_posts (status='pending')
- *                                   Case: 8-3924000041848 (GMB API pending approval)
- *   - `respond_to_review`        : warm response for 4-5 star; escalate to Xavier for <=3
- *   - `generate_social_content`  : per-platform social copy → social_posts (status='draft')
- *   - `generate_newsletter`      : monthly newsletter draft (subject/preheader/HTML)
- *   - `publish_blog_post`        : flip a pending_review blog post to 'published' (public /blog picks up)
+ *   Phase 1 — Content generation:
+ *     - `generate_blog_post`         : draft a Calgary-focused blog post → blog_posts (status='pending_review')
+ *     - `generate_gmb_post`          : draft a Google Business post → gmb_posts (status='pending')
+ *                                       Case: 8-3924000041848 (GMB API pending approval)
+ *     - `respond_to_review`          : warm response for 4-5 star; escalate to Xavier for <=3
+ *     - `generate_social_content`    : per-platform social copy → social_posts (status='draft')
+ *     - `generate_newsletter`        : monthly newsletter draft (subject/preheader/HTML)
+ *     - `publish_blog_post`          : flip a pending_review blog post to 'published' (public /blog picks up)
+ *
+ *   Phase 2 — Campaigns + video (HeyGen presenter, Higgsfield cinematic):
+ *     - `create_campaign`            : plan a multi-item campaign → campaigns + content_items rows
+ *     - `generate_creative_brief`    : write directorial brief onto a content_items row
+ *     - `generate_video_script`      : write a video script onto a content_items row
+ *     - `generate_heygen_video`      : submit script to HeyGen, wait, save video_url
+ *     - `generate_higgsfield_video`  : submit prompt to Higgsfield, wait, save video_url
+ *     - `run_qa`                     : brand/claims/product QA over content_items row
+ *     - `get_campaign_status`        : campaign + item aggregates for the admin UI
  *
  * All generated copy is pending-review-by-default. John reviews via the APEX EmberCard
  * before anything goes live. Blog is live at lervit.com/blog and reads
@@ -21,9 +31,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { desc, eq } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { blogPosts, gmbPosts, socialPosts, reviews, users, bookings } from '@shared/schema';
+import { blogPosts, gmbPosts, socialPosts, reviews, users, bookings, campaigns, contentItems } from '@shared/schema';
 import { xavier } from './xavier';
 import { logger } from '../logger';
+import { emitEvent } from '../events';
+import { heygenProvider } from '../providers/heygen';
+import { higgsfieldProvider } from '../providers/higgsfield';
 
 const EMBER_MODEL = 'claude-sonnet-4-6';
 
@@ -116,6 +129,49 @@ interface PublishBlogInput {
   postId: string;
 }
 
+// ─── Phase 2 (campaigns + video) input shapes ────────────────
+
+interface CreateCampaignInput {
+  name: string;
+  objective: string;
+  audience: string;
+  offer?: string;
+  platforms?: string[];
+  durationDays?: number;
+}
+
+interface GenerateVideoScriptInput {
+  contentItemId: string;
+  concept?: string;
+  duration?: number;
+  audience?: string;
+}
+
+interface GenerateHeygenVideoInput {
+  contentItemId: string;
+  script?: string;
+}
+
+interface GenerateHiggsfieldVideoInput {
+  contentItemId: string;
+  prompt?: string;
+  style?: string;
+  duration?: number;
+}
+
+interface GenerateCreativeBriefInput {
+  contentItemId: string;
+  concept?: string;
+}
+
+interface RunQAInput {
+  contentItemId: string;
+}
+
+interface GetCampaignStatusInput {
+  campaignId: string;
+}
+
 function slugify(title: string): string {
   return title
     .toLowerCase()
@@ -164,6 +220,20 @@ export class EmberAgent extends BaseAgent {
         return this.generateNewsletter(options);
       case 'publish_blog_post':
         return this.publishBlogPost(input as PublishBlogInput, options);
+      case 'create_campaign':
+        return this.createCampaign(input as CreateCampaignInput, options);
+      case 'generate_video_script':
+        return this.generateVideoScript(input as GenerateVideoScriptInput, options);
+      case 'generate_heygen_video':
+        return this.generateHeygenVideo(input as GenerateHeygenVideoInput, options);
+      case 'generate_higgsfield_video':
+        return this.generateHiggsfieldVideo(input as GenerateHiggsfieldVideoInput, options);
+      case 'generate_creative_brief':
+        return this.generateCreativeBrief(input as GenerateCreativeBriefInput, options);
+      case 'run_qa':
+        return this.runQA(input as RunQAInput, options);
+      case 'get_campaign_status':
+        return this.getCampaignStatus(input as GetCampaignStatusInput, options);
       default:
         throw new Error(`Ember: unknown action "${action}"`);
     }
@@ -499,6 +569,519 @@ Output STRICT JSON only:
 
     logger.info({ subject }, '[Ember] newsletter drafted (not sent)');
     return { subject, preheader, html, sent: false, notice: 'Draft only — John sends via Resend' };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Phase 2 — Campaigns (multi-item content strategy)
+  // ─────────────────────────────────────────────────────────
+  async createCampaign(input: CreateCampaignInput, options?: AgentRunOptions) {
+    if (!input.name || !input.objective || !input.audience) {
+      throw new Error('create_campaign: name, objective, and audience are required');
+    }
+
+    if (options?.dryRun) {
+      return { dryRun: true, would: 'create_campaign', input };
+    }
+
+    const platformsList = input.platforms ?? ['instagram', 'tiktok', 'facebook'];
+
+    const systemPrompt = `You are Ember Lane, LervIT's creative strategist.
+Create a content plan for a LervIT marketing campaign.
+
+${LERVIT_BRAND}
+
+CONTENT TYPES AVAILABLE:
+  heygen_video     — presenter/explainer with a talking avatar
+  higgsfield_video — cinematic/lifestyle B-roll style
+  social           — text + caption for social feed
+  blog             — SEO article on lervit.com/blog
+  gmb              — Google My Business post
+  newsletter       — email
+
+Output STRICT JSON only — no prose, no markdown fence:
+{
+  "strategy": "one-paragraph overall approach",
+  "contentPillars": ["pillar 1", "pillar 2", "pillar 3"],
+  "items": [
+    {
+      "type": "higgsfield_video",
+      "objective": "awareness",
+      "platform": "instagram",
+      "concept": "specific creative concept, one sentence",
+      "week": 1,
+      "aspectRatio": "9:16",
+      "generator": "higgsfield",
+      "cta": "Book now — LERVIT10"
+    }
+  ]
+}`;
+
+    const userMessage = `Campaign: ${input.name}
+Objective: ${input.objective}
+Audience: ${input.audience}
+Offer: ${input.offer ?? 'LERVIT10'}
+Platforms: ${platformsList.join(', ')}
+Duration: ${input.durationDays ?? 30} days
+
+Create a complete content plan with 6–12 items across the requested platforms.`;
+
+    const raw = await this.callAnthropic(systemPrompt, userMessage, 2000);
+
+    let plan: any;
+    try {
+      plan = this.parseJson(raw, 'create_campaign');
+    } catch {
+      plan = { items: [], strategy: raw };
+    }
+
+    const [campaign] = await db
+      .insert(campaigns)
+      .values({
+        name: input.name,
+        objective: input.objective,
+        audience: input.audience,
+        offer: input.offer ?? null,
+        platforms: platformsList,
+        durationDays: input.durationDays ?? 30,
+        status: 'draft',
+        contentPlan: plan,
+        createdBy: 'ember',
+      })
+      .returning();
+
+    if (Array.isArray(plan.items) && plan.items.length > 0) {
+      await db.insert(contentItems).values(
+        plan.items.map((item: any) => ({
+          campaignId: campaign.id,
+          type: String(item.type ?? 'social'),
+          objective: item.objective ? String(item.objective) : null,
+          platform: item.platform ? String(item.platform) : null,
+          status: 'draft',
+          creativeBrief: item,
+          aspectRatio: item.aspectRatio ? String(item.aspectRatio) : null,
+          generator: item.generator ? String(item.generator) : null,
+          cta: item.cta ? String(item.cta) : null,
+        })),
+      );
+    }
+
+    await emitEvent(
+      'ember.campaign_created',
+      'agent',
+      'ember',
+      {
+        campaignId: campaign.id,
+        name: campaign.name,
+        itemCount: plan.items?.length ?? 0,
+      },
+      'agent',
+    );
+
+    // Nudge Xavier so admins see the new campaign in the daily brief.
+    await xavier
+      .run('escalate', {
+        issue: `New campaign draft: "${campaign.name}" — ${plan.items?.length ?? 0} content items ready for review`,
+        severity: 'low',
+        agentName: 'Ember Lane',
+        data: { campaignId: campaign.id },
+      })
+      .catch(() => {});
+
+    return {
+      created: true,
+      campaignId: campaign.id,
+      name: campaign.name,
+      itemCount: plan.items?.length ?? 0,
+      strategy: plan.strategy ?? null,
+    };
+  }
+
+  async generateVideoScript(input: GenerateVideoScriptInput, options?: AgentRunOptions) {
+    if (!input.contentItemId) throw new Error('generate_video_script: contentItemId required');
+    if (options?.dryRun) return { dryRun: true, would: 'generate_video_script', input };
+
+    const [item] = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.id, input.contentItemId))
+      .limit(1);
+
+    if (!item) return { error: 'item_not_found' };
+
+    const brief = (item.creativeBrief ?? {}) as any;
+    const concept = input.concept ?? brief.concept ?? 'LervIT moving service in Calgary';
+    const durationSec = input.duration ?? 30;
+    const audience = input.audience ?? 'Calgary residents planning a small or same-day move';
+
+    const systemPrompt = `You are Ember Lane, LervIT's script writer.
+Write a video script for LervIT Moving in Calgary.
+
+${LERVIT_BRAND}
+
+RULES:
+- Natural, conversational language.
+- Short sentences.
+- No invented features, prices, testimonials, or statistics.
+- End with a clear CTA.
+- Paced for ~${durationSec} seconds (roughly ${Math.max(30, durationSec * 2.5)} words).
+- Audience: ${audience}.
+
+Output STRICT JSON only — no prose, no markdown fence:
+{
+  "script": "full spoken script, one paragraph",
+  "hook": "first line hook",
+  "cta": "call to action line",
+  "estimatedDuration": ${durationSec},
+  "scenes": [
+    { "time": "0-5s", "text": "line spoken here", "direction": "visual direction note" }
+  ]
+}`;
+
+    const userMessage = `Write a script for: ${concept}`;
+
+    const raw = await this.callAnthropic(systemPrompt, userMessage, 800);
+
+    let parsed: any;
+    try {
+      parsed = this.parseJson(raw, 'generate_video_script');
+    } catch {
+      return { error: 'parse_failed' };
+    }
+
+    await db
+      .update(contentItems)
+      .set({
+        script: String(parsed.script ?? ''),
+        cta: parsed.cta ? String(parsed.cta) : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(contentItems.id, input.contentItemId));
+
+    return {
+      generated: true,
+      contentItemId: input.contentItemId,
+      script: parsed.script,
+      hook: parsed.hook,
+      cta: parsed.cta,
+      scenes: parsed.scenes,
+    };
+  }
+
+  async generateCreativeBrief(input: GenerateCreativeBriefInput, options?: AgentRunOptions) {
+    if (!input.contentItemId) throw new Error('generate_creative_brief: contentItemId required');
+    if (options?.dryRun) return { dryRun: true, would: 'generate_creative_brief', input };
+
+    const [item] = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.id, input.contentItemId))
+      .limit(1);
+
+    if (!item) return { error: 'item_not_found' };
+
+    const existing = (item.creativeBrief ?? {}) as any;
+    const concept = input.concept ?? existing.concept ?? 'LervIT moving service in Calgary';
+
+    const systemPrompt = `You are Ember Lane, LervIT's creative director.
+Write a directorial brief for a piece of video/social content.
+
+${LERVIT_BRAND}
+
+Output STRICT JSON only — no prose, no markdown fence:
+{
+  "concept": "one-sentence creative concept",
+  "mood": "adjectives describing tone",
+  "palette": ["#hex1", "#hex2"],
+  "visualStyle": "one sentence — camera, lighting, composition",
+  "audio": "music/sfx direction",
+  "textOverlays": ["on-screen text 1", "on-screen text 2"],
+  "callout": "the single line viewers should remember"
+}`;
+
+    const userMessage = `Brief the visual/tonal direction for: ${concept}
+Platform: ${item.platform ?? 'social'}
+Type: ${item.type}`;
+
+    const raw = await this.callAnthropic(systemPrompt, userMessage, 800);
+
+    let parsed: any;
+    try {
+      parsed = this.parseJson(raw, 'generate_creative_brief');
+    } catch {
+      return { error: 'parse_failed' };
+    }
+
+    // Merge into existing brief rather than replacing (createCampaign put concept/week/etc there).
+    const merged = { ...existing, ...parsed };
+
+    await db
+      .update(contentItems)
+      .set({ creativeBrief: merged, updatedAt: new Date() })
+      .where(eq(contentItems.id, input.contentItemId));
+
+    return {
+      generated: true,
+      contentItemId: input.contentItemId,
+      brief: merged,
+    };
+  }
+
+  async generateHeygenVideo(input: GenerateHeygenVideoInput, options?: AgentRunOptions) {
+    if (!input.contentItemId) throw new Error('generate_heygen_video: contentItemId required');
+    if (options?.dryRun) return { dryRun: true, would: 'generate_heygen_video', input };
+
+    const [item] = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.id, input.contentItemId))
+      .limit(1);
+
+    if (!item) return { error: 'item_not_found' };
+
+    const script = input.script ?? item.script;
+    if (!script) {
+      return { error: 'no_script', message: 'Generate script first via generate_video_script' };
+    }
+
+    await db
+      .update(contentItems)
+      .set({ status: 'generating', updatedAt: new Date() })
+      .where(eq(contentItems.id, input.contentItemId));
+
+    try {
+      const job = await heygenProvider.createVideo({
+        script,
+        aspectRatio: (item.aspectRatio as any) ?? '9:16',
+        caption: true,
+        title: `LervIT - ${item.id}`,
+      });
+
+      await db
+        .update(contentItems)
+        .set({ providerJobId: job.jobId, generator: 'heygen', updatedAt: new Date() })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      logger.info({ jobId: job.jobId, contentItemId: input.contentItemId }, '[Ember] HeyGen job started');
+
+      const result = await heygenProvider.waitForCompletion(job.jobId);
+
+      await db
+        .update(contentItems)
+        .set({
+          status: result.status === 'completed' ? 'qa' : 'failed',
+          videoUrl: result.videoUrl ?? null,
+          thumbnailUrl: result.thumbnailUrl ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      await emitEvent(
+        'ember.heygen_video_complete',
+        'agent',
+        'ember',
+        {
+          contentItemId: input.contentItemId,
+          jobId: job.jobId,
+          videoUrl: result.videoUrl,
+          status: result.status,
+        },
+        'agent',
+      );
+
+      return {
+        generated: result.status === 'completed',
+        contentItemId: input.contentItemId,
+        jobId: job.jobId,
+        videoUrl: result.videoUrl,
+        thumbnailUrl: result.thumbnailUrl,
+        status: result.status,
+      };
+    } catch (err: any) {
+      await db
+        .update(contentItems)
+        .set({ status: 'failed', updatedAt: new Date() })
+        .where(eq(contentItems.id, input.contentItemId));
+      logger.error({ err }, '[Ember] HeyGen video failed');
+      return { error: true, message: err?.message ?? String(err) };
+    }
+  }
+
+  async generateHiggsfieldVideo(input: GenerateHiggsfieldVideoInput, options?: AgentRunOptions) {
+    if (!input.contentItemId) throw new Error('generate_higgsfield_video: contentItemId required');
+    if (options?.dryRun) return { dryRun: true, would: 'generate_higgsfield_video', input };
+
+    const [item] = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.id, input.contentItemId))
+      .limit(1);
+
+    if (!item) return { error: 'item_not_found' };
+
+    const brief = (item.creativeBrief ?? {}) as any;
+    const prompt = input.prompt ?? brief?.concept ?? 'Calgary moving lifestyle scene';
+
+    await db
+      .update(contentItems)
+      .set({ status: 'generating', updatedAt: new Date() })
+      .where(eq(contentItems.id, input.contentItemId));
+
+    try {
+      const job = await higgsfieldProvider.createVideo({
+        prompt: `${prompt}. Cinematic, premium, urban Calgary. Professional lighting.`,
+        aspectRatio: (item.aspectRatio as any) ?? '9:16',
+        duration: input.duration ?? 5,
+        style: input.style ?? 'cinematic',
+      });
+
+      await db
+        .update(contentItems)
+        .set({ providerJobId: job.jobId, generator: 'higgsfield', updatedAt: new Date() })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      const result = await higgsfieldProvider.waitForCompletion(job.jobId);
+
+      await db
+        .update(contentItems)
+        .set({
+          status: result.status === 'completed' ? 'qa' : 'failed',
+          videoUrl: result.videoUrl ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      await emitEvent(
+        'ember.higgsfield_video_complete',
+        'agent',
+        'ember',
+        {
+          contentItemId: input.contentItemId,
+          videoUrl: result.videoUrl,
+          status: result.status,
+        },
+        'agent',
+      );
+
+      return {
+        generated: result.status === 'completed',
+        contentItemId: input.contentItemId,
+        jobId: job.jobId,
+        videoUrl: result.videoUrl,
+        status: result.status,
+      };
+    } catch (err: any) {
+      await db
+        .update(contentItems)
+        .set({ status: 'failed', updatedAt: new Date() })
+        .where(eq(contentItems.id, input.contentItemId));
+      logger.error({ err }, '[Ember] Higgsfield video failed');
+      return { error: true, message: err?.message ?? String(err) };
+    }
+  }
+
+  async runQA(input: RunQAInput, options?: AgentRunOptions) {
+    if (!input.contentItemId) throw new Error('run_qa: contentItemId required');
+
+    const [item] = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.id, input.contentItemId))
+      .limit(1);
+
+    if (!item) return { error: 'item_not_found' };
+
+    const systemPrompt = `You are LervIT's content QA reviewer.
+Review content against brand guidelines and flag anything that breaks them.
+
+BRAND RULES:
+- Tone: smart, modern, clear, reassuring, human.
+- Never invent features, prices, testimonials, statistics.
+- Never say "best in Calgary" without proof.
+- Always use approved promo codes only (LERVIT10 is approved).
+- "Snap. Book. Track." is the tagline.
+- lervit.com is the website.
+
+Output STRICT JSON only — no prose, no markdown fence:
+{
+  "passed": true,
+  "brandQA":   { "passed": true, "issues": [] },
+  "claimsQA":  { "passed": true, "issues": [] },
+  "productQA": { "passed": true, "issues": [] },
+  "recommendation": "approve"
+}
+recommendation must be one of: "approve", "revise", "reject".`;
+
+    const userMessage = `Review this content:
+Script: ${item.script ?? 'N/A'}
+Caption: ${item.caption ?? 'N/A'}
+CTA: ${item.cta ?? 'N/A'}
+Type: ${item.type}
+Platform: ${item.platform ?? 'N/A'}`;
+
+    const raw = await this.callAnthropic(systemPrompt, userMessage, 600);
+
+    let qaResults: any;
+    try {
+      qaResults = this.parseJson(raw, 'run_qa');
+    } catch {
+      qaResults = { passed: false, error: 'parse_failed', raw };
+    }
+
+    if (options?.dryRun) {
+      return { dryRun: true, qaResults };
+    }
+
+    await db
+      .update(contentItems)
+      .set({
+        qaResults,
+        status: qaResults.passed ? 'approved' : 'draft',
+        updatedAt: new Date(),
+      })
+      .where(eq(contentItems.id, input.contentItemId));
+
+    return {
+      contentItemId: input.contentItemId,
+      qaResults,
+      status: qaResults.passed ? 'approved' : 'needs_revision',
+    };
+  }
+
+  async getCampaignStatus(input: GetCampaignStatusInput, _options?: AgentRunOptions) {
+    if (!input.campaignId) throw new Error('get_campaign_status: campaignId required');
+
+    const [campaign] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, input.campaignId))
+      .limit(1);
+
+    if (!campaign) return { error: 'campaign_not_found' };
+
+    const items = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.campaignId, input.campaignId));
+
+    const byStatus = items.reduce<Record<string, number>>((acc, item) => {
+      const key = item.status ?? 'unknown';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      campaign,
+      itemCount: items.length,
+      byStatus,
+      items: items.map((i) => ({
+        id: i.id,
+        type: i.type,
+        platform: i.platform,
+        status: i.status,
+        videoUrl: i.videoUrl,
+        generator: i.generator,
+      })),
+    };
   }
 
   // ─────────────────────────────────────────────────────────

@@ -2141,3 +2141,65 @@ export type GmbPost = typeof gmbPosts.$inferSelect;
 export type InsertGmbPost = z.infer<typeof insertGmbPostSchema>;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
+
+// ============================================================
+// EMBER PHASE 2 — campaigns + content items (video, cross-channel)
+// Migration: 0015_campaigns.sql
+// ============================================================
+
+export const campaigns = pgTable("campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  objective: text("objective").notNull(),
+  audience: text("audience").notNull(),
+  offer: text("offer"),
+  platforms: text("platforms").array(),
+  durationDays: integer("duration_days").default(30),
+  status: text("status").default("draft"), // draft | active | completed | paused
+  contentPlan: jsonb("content_plan"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  createdBy: text("created_by").default("ember"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("idx_campaigns_status").on(table.status),
+}));
+
+export const contentItems = pgTable("content_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").references(() => campaigns.id),
+  type: text("type").notNull(), // blog | social | heygen_video | higgsfield_video | newsletter | gmb
+  objective: text("objective"),
+  platform: text("platform"),
+  status: text("status").default("draft"), // draft | generating | qa | approved | published | failed
+  script: text("script"),
+  creativeBrief: jsonb("creative_brief"),
+  caption: text("caption"),
+  hashtags: text("hashtags").array(),
+  cta: text("cta"),
+  aspectRatio: text("aspect_ratio"),
+  generator: text("generator"), // heygen | higgsfield | ember | manual
+  providerJobId: text("provider_job_id"),
+  videoUrl: text("video_url"),
+  thumbnailUrl: text("thumbnail_url"),
+  assetUrl: text("asset_url"),
+  qaResults: jsonb("qa_results"),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  publishedAt: timestamp("published_at"),
+  costEstimate: text("cost_estimate"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  campaignIdx: index("idx_content_items_campaign").on(table.campaignId),
+  statusIdx: index("idx_content_items_status").on(table.status),
+}));
+
+export const insertCampaignSchema = createInsertSchema(campaigns).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertContentItemSchema = createInsertSchema(contentItems).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type Campaign = typeof campaigns.$inferSelect;
+export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
+export type ContentItem = typeof contentItems.$inferSelect;
+export type InsertContentItem = z.infer<typeof insertContentItemSchema>;
