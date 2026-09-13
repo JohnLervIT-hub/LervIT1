@@ -119,6 +119,13 @@ LervIT mover benefits to weave in (pick the ones that fit the signal):
 
 Include this sign up link so they can create their mover account: ${applyLink}
 
+Subject: keep generic, no vehicle type unless explicitly mentioned in lead notes.
+Never use emoji in subject line.
+Examples:
+'Earn with your vehicle in Calgary'
+'Moving jobs available in Calgary'
+'Join LervIT — flexible moving work'
+
 Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.`,
       `Candidate signal:
 Source: ${lead.sourceChannel ?? 'unknown'}
@@ -247,6 +254,14 @@ Sign up link: ${applyLink}`,
 Write a ${isLast ? 'final' : 'follow-up'} recruitment email.
 ${isLast ? 'Create gentle urgency — this is the last outreach.' : 'Use a different angle from the first email.'}
 Warm, brief, not pushy. 2-3 paragraphs.
+
+Subject: keep generic, no vehicle type unless explicitly mentioned in lead notes.
+Never use emoji in subject line.
+Examples:
+'Earn with your vehicle in Calgary'
+'Moving jobs available in Calgary'
+'Join LervIT — flexible moving work'
+
 Format: first line "SUBJECT: <subject>", blank line, then the body.`,
         `Candidate context: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 200)}
 Touch number: ${touchNumber} of 4
