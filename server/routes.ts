@@ -46,7 +46,7 @@ import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessage
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, ne } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -14562,9 +14562,25 @@ Respond with VALID JSON only:
         if (!isNaN(since.getTime())) filters.push(sql`${leads.createdAt} >= ${since}`);
       }
       if (audience === 'movers') {
-        filters.push(eq(leads.utmCampaign, 'ryan-brooks'));
+        filters.push(
+          or(
+            eq(leads.leadType, 'b2b'),
+            eq(leads.utmCampaign, 'ryan-brooks'),
+          )!,
+        );
       } else if (audience === 'customers') {
-        filters.push(sql`(${leads.utmCampaign} IS NULL OR ${leads.utmCampaign} <> 'ryan-brooks')`);
+        filters.push(
+          and(
+            or(
+              eq(leads.leadType, 'b2c'),
+              isNull(leads.leadType),
+            ),
+            or(
+              isNull(leads.utmCampaign),
+              ne(leads.utmCampaign, 'ryan-brooks'),
+            ),
+          )!,
+        );
       }
       const whereClause = filters.length > 0 ? and(...filters) : undefined;
 
