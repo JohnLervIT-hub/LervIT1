@@ -14317,6 +14317,27 @@ Respond with VALID JSON only:
     }
   });
 
+  app.patch("/api/admin/content-items/:id/reset", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      await db
+        .update(contentItems)
+        .set({
+          status: 'draft',
+          videoUrl: null,
+          thumbnailUrl: null,
+          providerJobId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(contentItems.id, req.params.id));
+
+      return res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, '[Admin] reset content item failed');
+      res.status(500).json({ error: 'Failed to reset content item' });
+    }
+  });
+
   app.post("/api/admin/campaigns/:id/approve/:itemId", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
