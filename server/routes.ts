@@ -14620,6 +14620,64 @@ Respond with VALID JSON only:
     }
   });
 
+  // ===== PRIVACY: DATA DELETION REQUEST =====
+  // Public unauthenticated endpoint linked from lervit.com/data-deletion.
+  // Records the request as a business event + escalates to John via Xavier;
+  // 30-day fulfilment happens out-of-band.
+  app.post("/api/data-deletion", async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const rawEmail = typeof body.email === 'string' ? body.email.trim() : '';
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const fbUserId = typeof body.fbUserId === 'string' ? body.fbUserId.trim() : '';
+
+      if (!rawEmail) {
+        return res.status(400).json({ error: 'Email required' });
+      }
+      // Cheap format guard — anything more strict belongs in a shared validator.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+
+      await emitEvent(
+        'privacy.deletion_requested',
+        'customer',
+        rawEmail,
+        { name: name || null, email: rawEmail, fbUserId: fbUserId || null },
+        'system',
+      );
+
+      // Fire-and-forget escalate — never block the response on an SMS.
+      import('./agents/xavier')
+        .then(({ xavier }) =>
+          xavier.run('escalate', {
+            issue: `Data deletion request from ${name || 'Unknown'} (${rawEmail})${
+              fbUserId ? ` — Facebook ID: ${fbUserId}` : ''
+            }`,
+            severity: 'low',
+            agentName: 'System',
+            data: { name, email: rawEmail, fbUserId },
+          }),
+        )
+        .catch((err) =>
+          logger.warn({ err }, '[Privacy] Xavier escalation failed for deletion request'),
+        );
+
+      logger.info(
+        { email: rawEmail, hasName: !!name, hasFbUserId: !!fbUserId },
+        '[Privacy] Deletion request received',
+      );
+
+      return res.json({
+        ok: true,
+        message: 'Request received. We will process within 30 days and email confirmation.',
+      });
+    } catch (err) {
+      logger.error({ err }, '[Privacy] deletion request failed');
+      return res.status(500).json({ error: 'Failed to record request' });
+    }
+  });
+
   // ===== QUOTES =====
   // Anonymous quote persistence. Saved from the /request-move overlay the
   // moment a price is computed — before contact capture — so Alex can email

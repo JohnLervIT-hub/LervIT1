@@ -159,6 +159,18 @@ export default function PrivacyPolicy() {
                 <li><strong>Withdrawal of Consent:</strong> Withdraw consent for certain data processing activities (this may affect your ability to use some features).</li>
                 <li><strong>Deletion:</strong> Request deletion of your personal information, subject to legal retention requirements.</li>
                 <li><strong>Complaint:</strong> File a complaint with the Office of the Privacy Commissioner of Canada or the Office of the Information and Privacy Commissioner of Alberta.</li>
+                <li>
+                  <strong>Self-serve deletion:</strong> Visit{" "}
+                  <a
+                    href="https://lervit.com/data-deletion"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    lervit.com/data-deletion
+                  </a>{" "}
+                  for step-by-step instructions.
+                </li>
               </ul>
               <p>
                 To exercise any of these rights, contact us at the address provided below.

@@ -964,6 +964,16 @@ export default function LandingPage() {
                 <li><a href="#" className="hover:text-foreground transition-colors">Safety</a></li>
                 <li><Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link></li>
                 <li><Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link></li>
+                <li>
+                  <a
+                    href="https://lervit.com/data-deletion"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Data Deletion
+                  </a>
+                </li>
               </ul>
             </div>
             
