@@ -23,6 +23,9 @@ export interface AgentRunOptions {
   /** When true, agents run all checks and build the outreach payload but skip
    *  actually sending email/SMS. Used by the admin Preview button. */
   dryRun?: boolean;
+  /** When true, skip mover-facing email sends (used by backfill / bulk
+   *  reprocessing so historical uploads don't email movers). */
+  suppressEmail?: boolean;
 }
 
 export abstract class BaseAgent {

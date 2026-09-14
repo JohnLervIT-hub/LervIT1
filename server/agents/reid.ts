@@ -31,6 +31,7 @@ import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import {
+  businessEvents,
   documentAudits,
   documentIrregularities,
   movers,
@@ -257,9 +258,14 @@ export class ReidAgent extends BaseAgent {
       })
       .returning();
 
-    await this.sendMoverMessage(moverRow, 'receipt', {
-      documentType: input.documentType,
-    });
+    if (!options.suppressEmail) {
+      await this.sendMoverMessage(
+        moverRow,
+        'receipt',
+        { documentType: input.documentType },
+        audit.id,
+      );
+    }
 
     await xavier
       .run('escalate', {
@@ -470,10 +476,13 @@ If policy numbers are missing, flag it.`;
         .set({ documentsVerified: true })
         .where(eq(movers.id, input.moverId));
 
-      if (moverRow) {
-        await this.sendMoverMessage(moverRow, 'approved', {
-          documentType: input.documentType,
-        });
+      if (moverRow && !options.suppressEmail) {
+        await this.sendMoverMessage(
+          moverRow,
+          'approved',
+          { documentType: input.documentType },
+          input.auditId,
+        );
       }
 
       await emitEvent(
@@ -489,12 +498,17 @@ If policy numbers are missing, flag it.`;
         '[Reid] Document auto-approved',
       );
     } else if (status === 'pending_clarification') {
-      if (moverRow) {
-        await this.sendMoverMessage(moverRow, 'clarification', {
-          documentType: input.documentType,
-          irregularities: auditResult.irregularities ?? [],
-          score,
-        });
+      if (moverRow && !options.suppressEmail) {
+        await this.sendMoverMessage(
+          moverRow,
+          'clarification',
+          {
+            documentType: input.documentType,
+            irregularities: auditResult.irregularities ?? [],
+            score,
+          },
+          input.auditId,
+        );
       }
 
       logger.info(
@@ -524,10 +538,13 @@ If policy numbers are missing, flag it.`;
         })
         .catch(() => {});
 
-      if (moverRow) {
-        await this.sendMoverMessage(moverRow, 'under_review', {
-          documentType: input.documentType,
-        });
+      if (moverRow && !options.suppressEmail) {
+        await this.sendMoverMessage(
+          moverRow,
+          'under_review',
+          { documentType: input.documentType },
+          input.auditId,
+        );
       }
 
       await emitEvent(
@@ -594,9 +611,12 @@ If policy numbers are missing, flag it.`;
       .limit(1);
 
     if (moverRow) {
-      await this.sendMoverMessage(moverRow, 'approved', {
-        documentType: audit.documentType,
-      });
+      await this.sendMoverMessage(
+        moverRow,
+        'approved',
+        { documentType: audit.documentType },
+        input.auditId,
+      );
     }
 
     await emitEvent(
@@ -645,10 +665,12 @@ If policy numbers are missing, flag it.`;
       .limit(1);
 
     if (moverRow) {
-      await this.sendMoverMessage(moverRow, 'rejected', {
-        documentType: audit.documentType,
-        reason: input.reason,
-      });
+      await this.sendMoverMessage(
+        moverRow,
+        'rejected',
+        { documentType: audit.documentType, reason: input.reason },
+        input.auditId,
+      );
     }
 
     await emitEvent(
@@ -700,10 +722,15 @@ If policy numbers are missing, flag it.`;
       .limit(1);
 
     if (moverRow) {
-      await this.sendMoverMessage(moverRow, 'clarification', {
-        documentType: audit.documentType,
-        irregularities: [input.reason],
-      });
+      await this.sendMoverMessage(
+        moverRow,
+        'clarification',
+        {
+          documentType: audit.documentType,
+          irregularities: [input.reason],
+        },
+        input.auditId,
+      );
     }
 
     await emitEvent(
@@ -1083,7 +1110,7 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
               city: 'Calgary',
             },
           },
-          options,
+          { ...(options ?? {}), suppressEmail: true },
         );
 
         if (auditResult.status === 'auto_approved') {
@@ -1124,12 +1151,52 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
 
   // ─── mover comms ─────────────────────────────────────────
 
+  private async wasEmailSent(auditId: string, emailType: string): Promise<boolean> {
+    const prior = await db
+      .select({ id: businessEvents.id })
+      .from(businessEvents)
+      .where(
+        and(
+          eq(businessEvents.entityId, auditId),
+          eq(businessEvents.eventType, `reid.email_sent.${emailType}`),
+        ),
+      )
+      .limit(1);
+    return prior.length > 0;
+  }
+
+  private async markEmailSent(
+    auditId: string,
+    emailType: string,
+    moverId: string,
+  ): Promise<void> {
+    await emitEvent(
+      `reid.email_sent.${emailType}`,
+      'agent',
+      auditId,
+      { moverId, emailType },
+      'agent',
+    );
+  }
+
   private async sendMoverMessage(
-    mover: { name: string | null; email: string | null },
+    mover: { id?: string; name: string | null; email: string | null },
     type: 'receipt' | 'approved' | 'clarification' | 'under_review' | 'rejected',
     data: Record<string, any>,
+    auditId?: string,
   ) {
     if (!mover.email) return;
+
+    if (auditId) {
+      const alreadySent = await this.wasEmailSent(auditId, type);
+      if (alreadySent) {
+        logger.info(
+          { auditId, type, moverId: mover.id },
+          '[Reid] Email already sent — skipping duplicate',
+        );
+        return;
+      }
+    }
 
     const docLabel = String(data.documentType ?? 'document').replace(/_/g, ' ');
     const firstName = (mover.name ?? 'there').split(/\s+/)[0];
@@ -1151,6 +1218,10 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
         text,
         listUnsubscribeUrl: `${APP_BASE_URL}/mover/preferences`,
       });
+
+      if (auditId) {
+        await this.markEmailSent(auditId, type, mover.id ?? '');
+      }
     } catch (err) {
       logger.error({ err, type }, '[Reid] Email send failed');
     }

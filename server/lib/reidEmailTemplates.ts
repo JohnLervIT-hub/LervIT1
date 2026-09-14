@@ -132,9 +132,13 @@ function renderShell(opts: {
               <table cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="padding-right:12px;vertical-align:middle;">
-                    <div style="width:44px;height:44px;background:#EFF6FF;border-radius:50%;text-align:center;line-height:44px;font-size:18px;">
-                      &#128269;
-                    </div>
+                    <img
+                      src="${APP_BASE_URL}/avatars/reid-calloway.png"
+                      alt="Reid Calloway"
+                      width="44"
+                      height="44"
+                      style="width:44px;height:44px;border-radius:50%;object-fit:cover;display:block;"
+                    />
                   </td>
                   <td style="vertical-align:middle;">
                     <div style="font-size:14px;font-weight:600;color:#0F172A;">
