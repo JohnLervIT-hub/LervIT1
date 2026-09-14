@@ -14,6 +14,7 @@
 import crypto from 'crypto';
 import express, { type Request, type Response } from 'express';
 import { desc, eq } from 'drizzle-orm';
+import Anthropic from '@anthropic-ai/sdk';
 import {
   bookings,
   leads,
@@ -30,6 +31,7 @@ import {
   sendResendEmail,
 } from './notifications';
 import { victor } from './agents/victor';
+import { xavier } from './agents/xavier';
 
 const router = express.Router();
 
@@ -535,5 +537,325 @@ router.post(
     }
   },
 );
+
+// ─── Nova Messenger (Facebook Page inbox) ───────────────────
+//
+// Verification (GET) and event delivery (POST) for the LervIT Facebook Page.
+// Meta calls the same URL for both. Verification uses META_VERIFY_TOKEN;
+// event delivery is public so we ack fast and log everything.
+//
+// Conversation history is kept in-memory keyed by senderId. That is fine for
+// the MVP (one server, short-lived chats) but is lost on restart / horizontal
+// scale — swap for a table if this ever survives past the pilot.
+
+const MESSENGER_VERIFY_TOKEN =
+  process.env.META_VERIFY_TOKEN ?? 'lervit_nova_messenger';
+const MESSENGER_GRAPH_URL = 'https://graph.facebook.com/v19.0/me/messages';
+
+const NOVA_MESSENGER_CONTEXT = `
+KEY INFO:
+- Company: LervIT Moving Calgary
+- Website: lervit.com
+- Phone: 1-888-982-0885
+- Promo: LERVIT10 (10% off first move)
+- Pay in 4 via Afterpay
+- Service: Calgary, Airdrie, Cochrane
+- Rating: 5.0 stars Google
+- Verified local movers
+- Instant AI quote in 30 seconds
+- Snap a photo → get price → book
+
+QUOTE LINK: lervit.com
+BOOKING: app.lervit.com/request-move
+`.trim();
+
+type MessengerHistoryEntry = { role: 'user' | 'assistant'; content: string };
+const conversationHistory = new Map<string, MessengerHistoryEntry[]>();
+
+const messengerAnthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+});
+
+router.get('/api/nova/messenger/webhook', (req: Request, res: Response) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === MESSENGER_VERIFY_TOKEN) {
+    logger.info('[Nova Messenger] Webhook verified');
+    return res.status(200).send(challenge);
+  }
+
+  return res.status(403).json({ error: 'Verification failed' });
+});
+
+router.post(
+  '/api/nova/messenger/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req: Request, res: Response) => {
+    // Verify Meta's HMAC signature over the raw body before touching payload.
+    // Fail-open when META_APP_SECRET is unset so dev environments still work,
+    // but log the miss so misconfiguration in prod is visible.
+    const signature = req.headers['x-hub-signature-256'] as string | undefined;
+    const appSecret = process.env.META_APP_SECRET;
+
+    if (appSecret && signature) {
+      const raw = Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(req.body ?? '');
+      const expected =
+        'sha256=' +
+        crypto.createHmac('sha256', appSecret).update(raw).digest('hex');
+
+      // Constant-time compare to avoid signature-timing oracles.
+      const sigBuf = Buffer.from(signature);
+      const expBuf = Buffer.from(expected);
+      const valid =
+        sigBuf.length === expBuf.length &&
+        crypto.timingSafeEqual(sigBuf, expBuf);
+
+      if (!valid) {
+        logger.warn(
+          { ip: req.ip },
+          '[Nova Messenger] Invalid X-Hub-Signature-256 — rejecting',
+        );
+        return res.status(403).json({ error: 'Invalid signature' });
+      }
+    } else if (!appSecret) {
+      logger.warn(
+        '[Nova Messenger] META_APP_SECRET unset — webhook accepted without signature check',
+      );
+    }
+
+    let body: any;
+    try {
+      body = JSON.parse(req.body.toString());
+    } catch (err) {
+      logger.warn({ err }, '[Nova Messenger] Bad JSON body');
+      return res.status(400).json({ error: 'Invalid JSON' });
+    }
+
+    // Ack after we know the body parses so Meta stops retrying.
+    res.status(200).send('EVENT_RECEIVED');
+
+    if (body?.object !== 'page') return;
+
+    for (const entry of body.entry ?? []) {
+      for (const event of entry.messaging ?? []) {
+        if (event.message?.is_echo) continue;
+
+        const senderId = event.sender?.id as string | undefined;
+        if (!senderId) continue;
+
+        const messageText = event.message?.text as string | undefined;
+        const postback = event.postback?.payload as string | undefined;
+
+        logger.info(
+          { senderId, messageText, postback },
+          '[Nova Messenger] Message received',
+        );
+
+        handleMessengerMessage({
+          senderId,
+          message: messageText ?? '',
+          postback,
+          pageId: event.recipient?.id,
+        }).catch((err) =>
+          logger.error({ err, senderId }, '[Nova Messenger] Handler crashed'),
+        );
+      }
+    }
+  },
+);
+
+async function handleMessengerMessage(input: {
+  senderId: string;
+  message: string;
+  postback?: string;
+  pageId?: string;
+}): Promise<void> {
+  const { senderId, message, postback } = input;
+
+  // Postbacks (quick-reply / button taps) short-circuit the Claude flow.
+  if (postback === 'GET_QUOTE') {
+    await sendMessengerMessage(
+      senderId,
+      "Here's your instant quote link! 👉 lervit.com — takes 30 seconds. Use code LERVIT10 for 10% off! 🎉",
+    );
+    await emitEvent(
+      'nova.messenger_postback',
+      'agent',
+      'nova',
+      { senderId, postback },
+      'agent',
+    );
+    return;
+  }
+
+  if (postback === 'HUMAN_HANDOFF') {
+    await sendMessengerMessage(
+      senderId,
+      "Of course! I'll have someone from our team reach out to you shortly. You can also call us at 1-888-982-0885 anytime!",
+    );
+    await xavier
+      .run('escalate', {
+        issue: `Messenger handoff requested by user ${senderId}`,
+        severity: 'low',
+        agentName: 'Nova Clarke',
+        data: { senderId, channel: 'messenger' },
+      })
+      .catch((err) =>
+        logger.warn({ err, senderId }, '[Nova Messenger] Xavier escalation failed'),
+      );
+    await emitEvent(
+      'nova.messenger_postback',
+      'agent',
+      'nova',
+      { senderId, postback },
+      'agent',
+    );
+    return;
+  }
+
+  if (!message.trim()) return;
+
+  try {
+    const history = conversationHistory.get(senderId) ?? [];
+    history.push({ role: 'user', content: message });
+
+    // Keep last 10 turns so the context window and cost stay bounded.
+    if (history.length > 10) {
+      history.splice(0, history.length - 10);
+    }
+
+    const response = await messengerAnthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 150,
+      system: `You are Nova, a friendly representative for LervIT Moving in Calgary, AB.
+You handle Facebook Messenger inquiries.
+
+${NOVA_MESSENGER_CONTEXT}
+
+RULES:
+- Keep responses SHORT (2-3 sentences max)
+- Be warm and conversational
+- Calgary-friendly tone
+- Never invent prices or features
+- Always offer to send quote link
+- Use simple language (no markdown)
+- No bullet points in messages
+- Sound like a real person texting`,
+      messages: history,
+    });
+
+    const first = response.content[0];
+    const novaReply =
+      first && first.type === 'text'
+        ? first.text
+        : 'Hey! Thanks for reaching out to LervIT. How can I help with your move?';
+
+    history.push({ role: 'assistant', content: novaReply });
+    conversationHistory.set(senderId, history);
+
+    await sendMessengerMessage(senderId, novaReply);
+
+    // Naive quote-intent detector — if the message mentions price/booking,
+    // append quick-reply buttons on top of the Claude answer.
+    const wantsQuote = /quote|price|cost|how much|book|move/i.test(message);
+    if (wantsQuote) {
+      await sendMessengerQuickReplies(
+        senderId,
+        'Want an instant quote?',
+        [
+          { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
+          { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
+        ],
+      );
+    }
+
+    await emitEvent(
+      'nova.messenger_message_handled',
+      'agent',
+      'nova',
+      { senderId, messageLength: message.length },
+      'agent',
+    );
+  } catch (err) {
+    logger.error({ err, senderId }, '[Nova Messenger] Handler failed');
+    await sendMessengerMessage(
+      senderId,
+      'Hey! Nova from LervIT here. For instant help visit lervit.com or call us at 1-888-982-0885!',
+    ).catch(() => {});
+  }
+}
+
+async function sendMessengerMessage(
+  recipientId: string,
+  text: string,
+): Promise<void> {
+  const token = process.env.META_PAGE_ACCESS_TOKEN;
+  if (!token) {
+    logger.error('[Nova Messenger] META_PAGE_ACCESS_TOKEN not set — skipping send');
+    return;
+  }
+
+  try {
+    const res = await fetch(MESSENGER_GRAPH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient: { id: recipientId },
+        message: { text },
+        access_token: token,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      logger.warn(
+        { status: res.status, recipientId, errText },
+        '[Nova Messenger] Graph API send failed',
+      );
+    }
+  } catch (err) {
+    logger.error({ err, recipientId }, '[Nova Messenger] fetch threw');
+  }
+}
+
+async function sendMessengerQuickReplies(
+  recipientId: string,
+  text: string,
+  replies: Array<{ title: string; payload: string }>,
+): Promise<void> {
+  const token = process.env.META_PAGE_ACCESS_TOKEN;
+  if (!token) return;
+
+  try {
+    const res = await fetch(MESSENGER_GRAPH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient: { id: recipientId },
+        message: {
+          text,
+          quick_replies: replies.map((r) => ({
+            content_type: 'text',
+            title: r.title,
+            payload: r.payload,
+          })),
+        },
+        access_token: token,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      logger.warn(
+        { status: res.status, recipientId, errText },
+        '[Nova Messenger] Quick-replies send failed',
+      );
+    }
+  } catch (err) {
+    logger.error({ err, recipientId }, '[Nova Messenger] quick-replies fetch threw');
+  }
+}
 
 export { router as novaWebhookRouter };
