@@ -862,17 +862,19 @@ router.post(
 
           const senderId = event.sender?.id as string | undefined;
           const messageText = event.message?.text as string | undefined;
+          const postback = event.postback?.payload as string | undefined;
 
-          if (!senderId || !messageText) continue;
+          if (!senderId || (!messageText && !postback)) continue;
 
           logger.info(
-            { senderId, messageText },
+            { senderId, messageText, postback },
             '[Nova Instagram] Message received',
           );
 
           await handleInstagramMessage({
             senderId,
-            message: messageText,
+            message: messageText ?? '',
+            postback: postback ?? undefined,
           });
         }
       }
@@ -885,8 +887,51 @@ router.post(
 async function handleInstagramMessage(input: {
   senderId: string;
   message: string;
+  postback?: string;
 }): Promise<void> {
-  const { senderId, message } = input;
+  const { senderId, message, postback } = input;
+
+  if (postback === 'GET_QUOTE') {
+    await sendInstagramMessage(
+      senderId,
+      "Here's your instant quote link 👉 lervit.com — takes 30 seconds. Use code LERVIT10 for 10% off! 🎉",
+    );
+    await emitEvent(
+      'nova.instagram_postback',
+      'agent',
+      'nova',
+      { senderId, postback },
+      'agent',
+    );
+    return;
+  }
+
+  if (postback === 'HUMAN_HANDOFF') {
+    await sendInstagramMessage(
+      senderId,
+      'Of course! Someone from our team will reach out shortly. You can also call us at 1-888-982-0885 📞',
+    );
+    await xavier
+      .run('escalate', {
+        issue: `Instagram DM handoff requested by user ${senderId}`,
+        severity: 'low',
+        agentName: 'Nova Clarke',
+        data: { senderId, channel: 'instagram' },
+      })
+      .catch((err) =>
+        logger.warn({ err, senderId }, '[Nova Instagram] Xavier escalation failed'),
+      );
+    await emitEvent(
+      'nova.instagram_postback',
+      'agent',
+      'nova',
+      { senderId, postback },
+      'agent',
+    );
+    return;
+  }
+
+  if (!message.trim()) return;
 
   try {
     const history = igConversationHistory.get(senderId) ?? [];
@@ -927,9 +972,13 @@ INSTAGRAM RULES:
     const wantsQuote = /quote|price|cost|how much|book|move/i.test(message);
     if (wantsQuote) {
       await new Promise((r) => setTimeout(r, 1000));
-      await sendInstagramMessage(
+      await sendInstagramQuickReplies(
         senderId,
-        'Get your instant quote here 👉 lervit.com — use code LERVIT10 for 10% off! 🎉',
+        'Want an instant quote?',
+        [
+          { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
+          { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
+        ],
       );
     }
 
@@ -988,6 +1037,49 @@ async function sendInstagramMessage(
     }
   } catch (err) {
     logger.error({ err, recipientId }, '[Nova Instagram] fetch threw');
+  }
+}
+
+async function sendInstagramQuickReplies(
+  recipientId: string,
+  text: string,
+  replies: Array<{ title: string; payload: string }>,
+): Promise<void> {
+  const token =
+    process.env.INSTAGRAM_ACCESS_TOKEN ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const igBusinessId = process.env.INSTAGRAM_BUSINESS_ID;
+
+  if (!token || !igBusinessId) return;
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/${igBusinessId}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: {
+            text,
+            quick_replies: replies.map((r) => ({
+              content_type: 'text',
+              title: r.title,
+              payload: r.payload,
+            })),
+          },
+          access_token: token,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      logger.warn(
+        { status: res.status, recipientId, errText },
+        '[Nova Instagram] Quick-replies send failed',
+      );
+    }
+  } catch (err) {
+    logger.error({ err, recipientId }, '[Nova Instagram] quick-replies fetch threw');
   }
 }
 
