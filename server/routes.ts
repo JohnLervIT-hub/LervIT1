@@ -14374,6 +14374,23 @@ Respond with VALID JSON only:
         'admin',
       );
 
+      // Auto-publish to social after approval
+      const platform = item.platform;
+      const socialPlatforms = ['facebook', 'instagram', 'tiktok', 'linkedin'];
+
+      if (platform && socialPlatforms.includes(platform) && item.videoUrl) {
+        ember.run('publish_to_social', {
+          contentItemId: req.params.itemId,
+        }).catch(err =>
+          logger.error({ err }, '[Ember] Auto-publish failed'),
+        );
+
+        logger.info({
+          contentItemId: req.params.itemId,
+          platform,
+        }, '[Ember] Auto-publish triggered');
+      }
+
       res.json({ ok: true, item: updated });
     } catch (err) {
       logger.error({ err }, '[Admin] approve content item failed');
