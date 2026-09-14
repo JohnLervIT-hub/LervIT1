@@ -205,6 +205,7 @@ export async function sendResendEmail(opts: {
   to: string | string[];
   subject: string;
   html: string;
+  text?: string;
   replyTo?: string;
   headers?: Record<string, string>;
   tags?: { name: string; value: string }[];
@@ -216,7 +217,7 @@ export async function sendResendEmail(opts: {
     return;
   }
 
-  const { from, to, subject, html, replyTo, headers = {}, tags, listUnsubscribeUrl, attachments } = opts;
+  const { from, to, subject, html, text: providedText, replyTo, headers = {}, tags, listUnsubscribeUrl, attachments } = opts;
 
   const extraHeaders: Record<string, string> = { ...headers };
   if (listUnsubscribeUrl) {
@@ -229,7 +230,7 @@ export async function sendResendEmail(opts: {
     : addPreheader(html, subject);
 
   const fullHtml = wrapHtml(htmlWithPreheader);
-  const text = stripHtml(htmlWithPreheader);
+  const text = providedText ?? stripHtml(htmlWithPreheader);
 
   const { data, error } = await emailRateLimiter.enqueue(() => resend!.emails.send({
     from,

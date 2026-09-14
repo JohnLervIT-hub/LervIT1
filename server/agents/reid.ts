@@ -39,6 +39,7 @@ import {
 } from '@shared/schema';
 import { emitEvent } from '../events';
 import { sendResendEmail } from '../notifications';
+import { buildReidEmail } from '../lib/reidEmailTemplates';
 import { logger } from '../logger';
 import { xavier } from './xavier';
 
@@ -1007,126 +1008,15 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
   ) {
     if (!mover.email) return;
 
-    const documentsUrl = `${APP_BASE_URL}/profile/documents`;
-    const dashboardUrl = `${APP_BASE_URL}/dashboard`;
-
-    const REID_EMAIL_FOOTER = `
-      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
-      <p style="font-size:13px;color:#4b5563;margin:0 0 12px 0;">Please do not reply to this email.</p>
-      <p style="font-size:13px;color:#4b5563;margin:0 0 12px 0;">
-        To re-upload or update your documents:<br/>
-        <a href="${documentsUrl}">${documentsUrl}</a>
-      </p>
-      <p style="font-size:13px;color:#4b5563;margin:0 0 12px 0;">
-        Questions or concerns?<br/>
-        Email: <a href="mailto:support@lervit.com">support@lervit.com</a><br/>
-        Phone: 1-888-982-0885
-      </p>
-      <p style="font-size:13px;color:#4b5563;margin:0 0 12px 0;">
-        Reid Calloway<br/>
-        Document Operations Team<br/>
-        LervIT Technologies Corporation<br/>
-        Calgary, Alberta, Canada
-      </p>
-      <p style="font-size:11px;color:#9ca3af;margin:16px 0 0 0;">
-        This is an automated message from LervIT's document verification system.
-      </p>
-    `;
-
     const docLabel = String(data.documentType ?? 'document').replace(/_/g, ' ');
     const firstName = (mover.name ?? 'there').split(/\s+/)[0];
 
-    let subject = '';
-    let bodyHtml = '';
-
-    switch (type) {
-      case 'receipt':
-        subject = `[LervIT] Document received — ${docLabel} under review`;
-        bodyHtml = `
-          <p>Hi ${firstName},</p>
-          <p>We've received your <strong>${docLabel}</strong> ✅</p>
-          <p>Our system will review it within 4 hours and notify you of the outcome.</p>
-          <p><strong>What happens next:</strong></p>
-          <ol>
-            <li>Reid reviews your document</li>
-            <li>You receive approval or clarification request</li>
-            <li>Once approved, you're eligible for dispatch</li>
-          </ol>
-          <p>Estimated review time: 2-4 hours</p>
-          ${REID_EMAIL_FOOTER}
-        `;
-        break;
-      case 'approved':
-        subject = `[LervIT] ✅ ${docLabel} verified — you're ready for dispatch`;
-        bodyHtml = `
-          <p>Hi ${firstName},</p>
-          <p>Great news — your <strong>${docLabel}</strong> has been verified! ✅</p>
-          <p><strong>Your account status:</strong></p>
-          <ul>
-            <li>Document: Verified ✅</li>
-            <li>Dispatch eligibility: Active ✅</li>
-            <li>Jobs: Available in your area</li>
-          </ul>
-          <p>You can now accept jobs on LervIT. Make sure your availability is updated in the app to start receiving job offers.</p>
-          <p><a href="${dashboardUrl}">${dashboardUrl}</a></p>
-          ${REID_EMAIL_FOOTER}
-        `;
-        break;
-      case 'clarification': {
-        const list = Array.isArray(data.irregularities)
-          ? (data.irregularities as string[])
-              .map((issue) => `<li>${issue}</li>`)
-              .join('')
-          : '';
-        subject = `[LervIT] Action required — ${docLabel} needs clarification`;
-        bodyHtml = `
-          <p>Hi ${firstName},</p>
-          <p>Thank you for submitting your ${docLabel}. We reviewed it and need a few things clarified before we can approve it.</p>
-          <p><strong>Items to address:</strong></p>
-          <ol>${list}</ol>
-          <p><strong>How to resolve:</strong></p>
-          <ol>
-            <li>Address the items above</li>
-            <li>Re-upload your document at: <a href="${documentsUrl}">${documentsUrl}</a></li>
-            <li>We'll review within 4 hours</li>
-          </ol>
-          <p>Please re-upload within 48 hours to avoid delays to your account.</p>
-          ${REID_EMAIL_FOOTER}
-        `;
-        break;
-      }
-      case 'under_review':
-        subject = `[LervIT] ${docLabel} under additional review`;
-        bodyHtml = `
-          <p>Hi ${firstName},</p>
-          <p>Your ${docLabel} is currently under additional review by our compliance team.</p>
-          <p><strong>Timeline:</strong></p>
-          <ul>
-            <li>Review completion: within 24 hours</li>
-            <li>You will be notified by email</li>
-            <li>No action required from you now</li>
-          </ul>
-          <p>We appreciate your patience.</p>
-          ${REID_EMAIL_FOOTER}
-        `;
-        break;
-      case 'rejected':
-        subject = `[LervIT] ${docLabel} not accepted — action required`;
-        bodyHtml = `
-          <p>Hi ${firstName},</p>
-          <p>After careful review, we were unable to accept your ${docLabel}.</p>
-          <p><strong>Reason:</strong> ${data.reason ?? 'Document did not meet our verification requirements'}</p>
-          <p><strong>Next steps:</strong></p>
-          <ol>
-            <li>Review the reason above</li>
-            <li>Obtain a valid document</li>
-            <li>Re-upload at: <a href="${documentsUrl}">${documentsUrl}</a></li>
-          </ol>
-          <p>If you believe this is an error or need help, contact our support team — we're happy to assist.</p>
-          ${REID_EMAIL_FOOTER}
-        `;
-        break;
-    }
+    const { subject, html, text } = buildReidEmail(type, {
+      firstName,
+      docLabel,
+      irregularities: Array.isArray(data.irregularities) ? data.irregularities : undefined,
+      reason: typeof data.reason === 'string' ? data.reason : undefined,
+    });
 
     try {
       await sendResendEmail({
@@ -1134,7 +1024,8 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
         to: mover.email,
         replyTo: process.env.REID_REPLY_TO ?? 'support@lervit.com',
         subject,
-        html: bodyHtml,
+        html,
+        text,
         listUnsubscribeUrl: `${APP_BASE_URL}/mover/preferences`,
       });
     } catch (err) {
