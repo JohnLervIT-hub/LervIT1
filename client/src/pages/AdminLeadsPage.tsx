@@ -40,18 +40,21 @@ import {
   AlertCircle,
   Truck,
   UserSearch,
+  Building2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { MoverCandidateCard, type MoverLead } from "@/components/MoverCandidateCard";
 import { AddMoverCandidateCard } from "@/components/AddMoverCandidateCard";
 import { CustomerLeadCard, type CustomerLead } from "@/components/CustomerLeadCard";
 import { AddCustomerLeadCard } from "@/components/AddCustomerLeadCard";
+import { PartnerLeadCard, type PartnerLead } from "@/components/PartnerLeadCard";
 
 interface Lead {
   id: string;
   contactName: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  companyName: string | null;
   sourceChannel: string | null;
   utmCampaign: string | null;
   intentScore: number | null;
@@ -618,7 +621,32 @@ export default function AdminLeadsPage() {
               </div>
             </div>
           )}
-          {leads.length > 0 && (audience === "all" || audience === "partners") && (
+          {!isLoading && !error && audience === "partners" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {leads.length} prospect{leads.length === 1 ? "" : "s"}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {leads.map(lead => (
+                  <PartnerLeadCard
+                    key={lead.id}
+                    lead={lead as PartnerLead}
+                    onRefresh={refreshLeads}
+                  />
+                ))}
+                {leads.length === 0 && (
+                  <div className="col-span-full text-center py-12 text-muted-foreground">
+                    <Building2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No partner prospects yet</p>
+                    <p className="text-xs mt-1">
+                      Sam scans Google Places daily for moving companies and fleet operators in Calgary.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {leads.length > 0 && audience === "all" && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted-foreground uppercase tracking-wide">
