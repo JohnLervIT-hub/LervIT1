@@ -78,6 +78,9 @@ const AdminSupportDashboard = lazy(
 const AdminVerificationDashboard = lazy(
   () => import("@/pages/AdminVerificationDashboard"),
 );
+const AdminAuditDetailPage = lazy(
+  () => import("@/pages/AdminAuditDetailPage"),
+);
 const AdminEmailCenter = lazy(() => import("@/pages/AdminEmailCenter"));
 const AdminVoicePage = lazy(() => import("@/pages/AdminVoicePage"));
 const Payment = lazy(() => import("@/pages/Payment"));
@@ -266,6 +269,11 @@ function Router() {
         <Route path="/admin/verification">
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminVerificationDashboard />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/audits/:auditId">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminAuditDetailPage />
           </ProtectedRoute>
         </Route>
         <Route path="/admin/users">

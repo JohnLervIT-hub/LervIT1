@@ -155,6 +155,12 @@ interface RejectDocumentInput {
   reviewedBy: string;
 }
 
+interface RequestClarificationInput {
+  auditId: string;
+  reason: string;
+  reviewedBy: string;
+}
+
 interface EscalateDocumentInput {
   auditId: string;
   reason?: string;
@@ -195,6 +201,8 @@ export class ReidAgent extends BaseAgent {
         return this.approveDocument(input as ApproveDocumentInput, options);
       case 'reject_document':
         return this.rejectDocument(input as RejectDocumentInput, options);
+      case 'request_clarification':
+        return this.requestClarification(input as RequestClarificationInput, options);
       case 'escalate_document':
         return this.escalateDocument(input as EscalateDocumentInput, options);
       case 'generate_audit_report':
@@ -623,6 +631,61 @@ ${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
     );
 
     return { rejected: true, auditId: input.auditId, reason: input.reason };
+  }
+
+  // ─── request_clarification ───────────────────────────────
+
+  private async requestClarification(
+    input: RequestClarificationInput,
+    options: AgentRunOptions = {},
+  ) {
+    if (!input?.auditId || !input?.reason) {
+      throw new Error('Reid.requestClarification: auditId and reason required');
+    }
+    if (options.dryRun) return { dryRun: true, auditId: input.auditId };
+
+    const [audit] = await db
+      .select()
+      .from(documentAudits)
+      .where(eq(documentAudits.id, input.auditId))
+      .limit(1);
+
+    if (!audit) return { error: 'audit_not_found' };
+
+    await db
+      .update(documentAudits)
+      .set({
+        status: 'pending_clarification',
+        clarificationRequested: new Date(),
+        reviewedBy: input.reviewedBy,
+        notes: input.reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(documentAudits.id, input.auditId));
+
+    const [moverRow] = await db
+      .select({ id: movers.id, name: users.name, email: users.email })
+      .from(movers)
+      .innerJoin(users, eq(users.id, movers.userId))
+      .where(eq(movers.id, audit.moverId))
+      .limit(1);
+
+    if (moverRow) {
+      await this.sendMoverMessage(moverRow, 'clarification', {
+        documentType: audit.documentType,
+        irregularities: [input.reason],
+      });
+    }
+
+    await emitEvent(
+      'reid.clarification_requested',
+      'mover',
+      audit.moverId,
+      { auditId: input.auditId, reason: input.reason, reviewedBy: input.reviewedBy },
+      'agent',
+    );
+
+    return { clarificationRequested: true, auditId: input.auditId };
   }
 
   // ─── escalate_document ───────────────────────────────────

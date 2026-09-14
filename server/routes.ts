@@ -46,7 +46,7 @@ import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessage
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
-import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, ne } from "drizzle-orm";
+import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, lte, ne, ilike } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { calculateDistance } from "./utils/distance";
 import multer from "multer";
@@ -14439,10 +14439,38 @@ Respond with VALID JSON only:
   app.get("/api/admin/document-audits", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const status = (req.query.status as string | undefined)?.trim();
-      const limit = Math.min(Number(req.query.limit ?? 100), 500);
 
-      const query = db
+      const rawStatus = (req.query.status as string | undefined)?.trim();
+      const rawType = (req.query.documentType as string | undefined)?.trim();
+      const rawMin = req.query.minScore as string | undefined;
+      const rawMax = req.query.maxScore as string | undefined;
+      const search = (req.query.search as string | undefined)?.trim();
+      const limit = Math.min(Number(req.query.limit ?? 50), 500);
+      const offset = Math.max(Number(req.query.offset ?? 0), 0);
+
+      const filters = [] as any[];
+      if (rawStatus && rawStatus !== 'all') {
+        // status can be comma-separated: "pending_review,escalated"
+        const list = rawStatus.split(',').map(s => s.trim()).filter(Boolean);
+        if (list.length === 1) filters.push(eq(documentAudits.status, list[0]));
+        else if (list.length > 1) filters.push(inArray(documentAudits.status, list));
+      }
+      if (rawType && rawType !== 'all') {
+        filters.push(eq(documentAudits.documentType, rawType));
+      }
+      if (rawMin !== undefined && rawMin !== '' && !Number.isNaN(Number(rawMin))) {
+        filters.push(gte(documentAudits.irregularityScore, Number(rawMin)));
+      }
+      if (rawMax !== undefined && rawMax !== '' && !Number.isNaN(Number(rawMax))) {
+        filters.push(lte(documentAudits.irregularityScore, Number(rawMax)));
+      }
+      if (search) {
+        filters.push(ilike(usersTable.name, `%${search}%`));
+      }
+
+      const whereClause = filters.length > 0 ? and(...filters) : undefined;
+
+      const rowsQuery = db
         .select({
           id: documentAudits.id,
           moverId: documentAudits.moverId,
@@ -14462,13 +14490,26 @@ Respond with VALID JSON only:
         .leftJoin(moversTable, eq(moversTable.id, documentAudits.moverId))
         .leftJoin(usersTable, eq(usersTable.id, moversTable.userId))
         .orderBy(desc(documentAudits.createdAt))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
 
-      const rows = status
-        ? await query.where(eq(documentAudits.status, status))
-        : await query;
+      const countQuery = db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(documentAudits)
+        .leftJoin(moversTable, eq(moversTable.id, documentAudits.moverId))
+        .leftJoin(usersTable, eq(usersTable.id, moversTable.userId));
 
-      res.json({ audits: rows });
+      const [rows, totalRow] = await Promise.all([
+        whereClause ? rowsQuery.where(whereClause) : rowsQuery,
+        whereClause ? countQuery.where(whereClause) : countQuery,
+      ]);
+
+      res.json({
+        audits: rows,
+        total: totalRow[0]?.count ?? 0,
+        limit,
+        offset,
+      });
     } catch (err) {
       logger.error({ err }, '[Admin] document-audits list failed');
       res.status(500).json({ error: 'Failed to load audits' });
@@ -14570,6 +14611,27 @@ Respond with VALID JSON only:
       res.json({ ok: true, result });
     } catch (err) {
       logger.error({ err }, '[Admin] document-audit reject failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/admin/document-audits/:id/clarify", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const reason = (req.body?.reason as string | undefined)?.trim();
+      if (!reason) return res.status(400).json({ error: 'reason is required' });
+      const reviewer =
+        (req.session as any)?.userId ??
+        (req.session as any)?.user?.email ??
+        'admin';
+      const result = await reid.run('request_clarification', {
+        auditId: req.params.id,
+        reason,
+        reviewedBy: reviewer,
+      });
+      res.json({ ok: true, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] document-audit clarify failed');
       res.status(500).json({ error: (err as Error).message });
     }
   });
