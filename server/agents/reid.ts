@@ -27,7 +27,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import {
@@ -932,23 +932,19 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
       const total = await db
         .select({ count: sql<number>`count(*)` })
         .from(verificationItems)
-        .leftJoin(
-          documentAudits,
-          eq(documentAudits.verificationItemId, verificationItems.id),
-        )
         .where(
-          and(
-            isNull(documentAudits.id),
-            inArray(verificationItems.status, [
-              'approved',
-              'pending',
-              'under_review',
-              'Approved',
-              'Pending',
-              'Under Review',
-              'pending_review',
-            ]),
-          ),
+          inArray(verificationItems.status, [
+            'Approved',
+            'Pending',
+            'Under Review',
+            'Pending Review',
+            'approved',
+            'pending',
+            'under_review',
+            'pending_review',
+            'APPROVED',
+            'PENDING',
+          ]),
         );
 
       return {
@@ -967,23 +963,19 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
         expiryDate: verificationItems.expiryDate,
       })
       .from(verificationItems)
-      .leftJoin(
-        documentAudits,
-        eq(documentAudits.verificationItemId, verificationItems.id),
-      )
       .where(
-        and(
-          isNull(documentAudits.id),
-          inArray(verificationItems.status, [
-            'approved',
-            'pending',
-            'under_review',
-            'Approved',
-            'Pending',
-            'Under Review',
-            'pending_review',
-          ]),
-        ),
+        inArray(verificationItems.status, [
+          'Approved',
+          'Pending',
+          'Under Review',
+          'Pending Review',
+          'approved',
+          'pending',
+          'under_review',
+          'pending_review',
+          'APPROVED',
+          'PENDING',
+        ]),
       )
       .limit(input.limit ?? 100)
       .orderBy(desc(verificationItems.createdAt));
@@ -1012,7 +1004,16 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
           .replace('driver', 'drivers')
           .replace("driver's_license", 'drivers_license')
           .replace('criminal_background', 'background_check')
-          .replace('background_check_report', 'background_check');
+          .replace('background_check_report', 'background_check')
+          .replace('driverss_license', 'drivers_license')
+          .replace(/^id$/, 'drivers_license')
+          .replace('vehicle_photos', 'vehicle_registration')
+          .replace('payout_setup', '');
+
+        if (!docType) {
+          results.skipped++;
+          continue;
+        }
 
         const documentUrl = item.fileUrls?.[0];
 
