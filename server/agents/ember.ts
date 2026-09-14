@@ -37,6 +37,7 @@ import { logger } from '../logger';
 import { emitEvent } from '../events';
 import { heygenProvider } from '../providers/heygen';
 import { higgsfieldProvider } from '../providers/higgsfield';
+import { metaProvider } from '../providers/meta';
 
 const EMBER_MODEL = 'claude-sonnet-4-6';
 
@@ -172,6 +173,10 @@ interface GetCampaignStatusInput {
   campaignId: string;
 }
 
+interface PublishToSocialInput {
+  contentItemId: string;
+}
+
 function slugify(title: string): string {
   return title
     .toLowerCase()
@@ -229,6 +234,8 @@ export class EmberAgent extends BaseAgent {
         return this.runQA(input as RunQAInput, options);
       case 'get_campaign_status':
         return this.getCampaignStatus(input as GetCampaignStatusInput, options);
+      case 'publish_to_social':
+        return this.publishToSocial(input as PublishToSocialInput, options);
       default:
         throw new Error(`Ember: unknown action "${action}"`);
     }
@@ -1161,6 +1168,107 @@ Platform: ${item.platform ?? 'N/A'}`;
         videoUrl: i.videoUrl,
         generator: i.generator,
       })),
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Distribution — Meta (Facebook + Instagram)
+  // ─────────────────────────────────────────────────────────
+  async publishToSocial(input: PublishToSocialInput, options?: AgentRunOptions) {
+    if (!input.contentItemId) throw new Error('publish_to_social: contentItemId required');
+
+    const [item] = await db
+      .select()
+      .from(contentItems)
+      .where(eq(contentItems.id, input.contentItemId))
+      .limit(1);
+
+    if (!item) return { error: 'item_not_found' };
+
+    if (item.status !== 'published' && item.status !== 'approved') {
+      return {
+        error: 'not_approved',
+        message: 'Item must be approved before publishing',
+        status: item.status,
+      };
+    }
+
+    const platform = item.platform as 'facebook' | 'instagram';
+    if (platform !== 'facebook' && platform !== 'instagram') {
+      return {
+        error: 'unsupported_platform',
+        message: `Meta provider supports facebook | instagram (got: ${platform ?? 'null'})`,
+      };
+    }
+
+    if (options?.dryRun) {
+      return {
+        dryRun: true,
+        would: 'publish_to_social',
+        platform,
+        contentItemId: input.contentItemId,
+      };
+    }
+
+    const caption = item.caption ?? item.script?.slice(0, 200) ?? '';
+
+    const results = await metaProvider.publish({
+      message: caption,
+      videoUrl: item.videoUrl ?? undefined,
+      hashtags: item.hashtags ?? [],
+      platform,
+    });
+
+    const first = results[0];
+    const success = !!first && !first.error && !!first.postId;
+
+    if (success) {
+      await db
+        .update(contentItems)
+        .set({
+          status: 'posted',
+          publishedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      await emitEvent(
+        'ember.content_posted',
+        'agent',
+        'ember',
+        {
+          contentItemId: input.contentItemId,
+          platform,
+          postId: first.postId,
+          url: first.url,
+        },
+        'agent',
+      );
+
+      logger.info(
+        {
+          contentItemId: input.contentItemId,
+          platform,
+          postId: first.postId,
+        },
+        '[Ember] Content posted',
+      );
+    } else {
+      logger.error(
+        {
+          contentItemId: input.contentItemId,
+          platform,
+          error: first?.error,
+        },
+        '[Ember] publish_to_social failed',
+      );
+    }
+
+    return {
+      success,
+      platform,
+      results,
+      contentItemId: input.contentItemId,
     };
   }
 

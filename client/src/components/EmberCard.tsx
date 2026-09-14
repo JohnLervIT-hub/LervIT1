@@ -22,6 +22,7 @@ import {
   Film,
   Video,
   Megaphone,
+  Send,
 } from "lucide-react";
 import { AgentAvatar } from "@/components/AgentAvatar";
 
@@ -56,7 +57,8 @@ type EmberAction =
   | "generate_newsletter"
   | "create_campaign"
   | "generate_heygen_video"
-  | "generate_higgsfield_video";
+  | "generate_higgsfield_video"
+  | "publish_to_social";
 
 export function EmberCard() {
   const { toast } = useToast();
@@ -96,7 +98,9 @@ export function EmberCard() {
                   ? "HeyGen video"
                   : action === "generate_higgsfield_video"
                     ? "Higgsfield video"
-                    : "Newsletter";
+                    : action === "publish_to_social"
+                      ? "Publish to social"
+                      : "Newsletter";
       toast({
         title: dryRun ? `Ember dry-run — ${label}` : `Ember queued — ${label}`,
         description: dryRun
@@ -236,6 +240,26 @@ export function EmberCard() {
             >
               <Video className="w-3.5 h-3.5 mr-1.5" />
               Generate Higgsfield
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const contentItemId = window.prompt(
+                  "Content item ID (approved facebook/instagram item)?",
+                );
+                if (!contentItemId) return;
+                trigger.mutate({
+                  action: "publish_to_social",
+                  dryRun: false,
+                  input: { contentItemId },
+                });
+              }}
+              disabled={trigger.isPending}
+              data-testid="button-ember-publish-social"
+            >
+              <Send className="w-3.5 h-3.5 mr-1.5" />
+              Publish to Social
             </Button>
           </div>
         </div>

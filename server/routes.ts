@@ -14142,6 +14142,7 @@ Respond with VALID JSON only:
     'generate_creative_brief',
     'run_qa',
     'get_campaign_status',
+    'publish_to_social',
   ]);
 
   app.post("/api/admin/agent/ember/trigger", async (req: Request, res: Response) => {
