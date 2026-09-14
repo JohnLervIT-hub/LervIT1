@@ -2777,16 +2777,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      // Reid Calloway (DOCOPS) — pre-fetch which movers currently have an
+      // escalation-worthy audit (score > 4). Batch once so we don't fan out
+      // one query per driver row.
+      const moverIds = filteredMovers.map(({ mover }) => mover.id);
+      const reidEscalatedMovers = new Set<string>();
+      if (moverIds.length > 0) {
+        const escalationRows = await db
+          .select({ moverId: documentAudits.moverId })
+          .from(documentAudits)
+          .where(
+            and(
+              inArray(documentAudits.moverId, moverIds),
+              gte(documentAudits.irregularityScore, 5),
+            ),
+          );
+        for (const row of escalationRows) {
+          reidEscalatedMovers.add(row.moverId);
+        }
+      }
+
       // Get verification summaries for each mover
       const driversWithVerification = await Promise.all(
         filteredMovers.map(async ({ mover, user }) => {
           const summary = await getDriverVerificationSummary(mover.id);
-          const lastVerificationItem = summary.items.length > 0 
-            ? summary.items.sort((a, b) => 
+          const lastVerificationItem = summary.items.length > 0
+            ? summary.items.sort((a, b) =>
                 new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
               )[0]
             : null;
-          
+
           // Check if mover has accepted Early Access terms
           const hasAcceptedTerms = await storage.hasAcceptedCurrentTerms(mover.id);
 
@@ -2801,6 +2821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalRequired: summary.totalRequired,
             hasExpired: summary.hasExpired,
             hasRejected: summary.hasRejected,
+            hasReidEscalation: reidEscalatedMovers.has(mover.id),
             isAvailable: mover.isAvailable,
             lastUpdated: lastVerificationItem?.updatedAt || mover.createdAt,
             pilotStatus: mover.pilotStatus,
@@ -2815,6 +2836,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         finalDrivers = driversWithVerification.filter(d => {
           if (statusFilter === 'MISSING_REQUIRED') {
             return d.approvedCount < d.totalRequired;
+          }
+          if (statusFilter === 'REID_ESCALATED') {
+            return d.hasReidEscalation;
           }
           return d.overallStatus === statusFilter;
         });
@@ -2848,6 +2872,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(mover.userId);
       const summary = await getDriverVerificationSummary(driverId);
 
+      // Reid Calloway (DOCOPS) — pull the latest audit per verification item
+      // so the dashboard can render Reid's findings inline with each doc.
+      const typeToReidKey = (t: string) => t.toLowerCase().replace(/ /g, '_');
+      const auditMap = new Map<string, typeof documentAudits.$inferSelect>();
+
+      if (summary.items.length > 0) {
+        const itemIds = summary.items.map(i => i.id);
+        const reidTypes = summary.items.map(i => typeToReidKey(i.type));
+
+        const auditRows = await db.select()
+          .from(documentAudits)
+          .where(
+            or(
+              inArray(documentAudits.verificationItemId, itemIds),
+              and(
+                eq(documentAudits.moverId, driverId),
+                inArray(documentAudits.documentType, reidTypes),
+              ),
+            ),
+          )
+          .orderBy(desc(documentAudits.createdAt));
+
+        for (const audit of auditRows) {
+          const key = audit.verificationItemId ?? audit.documentType;
+          if (key && !auditMap.has(key)) {
+            auditMap.set(key, audit);
+          }
+        }
+      }
+
+      const itemsWithReid = summary.items.map(item => {
+        const audit = auditMap.get(item.id) ?? auditMap.get(typeToReidKey(item.type));
+        const score = audit?.irregularityScore ?? 0;
+        return {
+          ...item,
+          reid: audit
+            ? {
+                auditId: audit.id,
+                status: audit.status,
+                score,
+                irregularities: (audit.irregularities as any[]) ?? [],
+                checksRun: (audit.checksRun as any[]) ?? [],
+                recommendation:
+                  score === 0 ? 'approve' : score <= 4 ? 'clarification' : 'escalate',
+                auditedAt: audit.createdAt,
+              }
+            : null,
+        };
+      });
+
       res.json({
         driver: {
           id: mover.id,
@@ -2878,7 +2952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           hasExpired: summary.hasExpired,
           hasRejected: summary.hasRejected,
         },
-        verificationItems: summary.items,
+        verificationItems: itemsWithReid,
       });
     } catch (error) {
       console.error('Admin driver detail error:', error);
@@ -2919,7 +2993,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Stub notification hook
       const item = result[0];
+      const reidDocType = item.type.toLowerCase().replace(/ /g, '_');
+      const reidMatch = or(
+        eq(documentAudits.verificationItemId, req.params.id),
+        and(
+          eq(documentAudits.moverId, item.moverId),
+          eq(documentAudits.documentType, reidDocType),
+        ),
+      );
       if (status === 'Approved') {
+        try {
+          await db.update(documentAudits)
+            .set({
+              status: 'approved',
+              approvedAt: new Date(),
+              reviewedBy: user?.id ?? 'admin',
+              updatedAt: new Date(),
+            })
+            .where(reidMatch);
+        } catch (reidSyncErr) {
+          logEvent.error('reid_audit_sync_approve', reidSyncErr, { itemId: req.params.id, moverId: item.moverId });
+        }
         console.log(`[Notification] Verification item ${item.type} approved for mover ${item.moverId}`);
 
         // Notify mover of verification approval
@@ -2984,6 +3078,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } else if (status === 'Rejected') {
+        try {
+          await db.update(documentAudits)
+            .set({
+              status: 'rejected',
+              rejectedAt: new Date(),
+              rejectionReason,
+              reviewedBy: user?.id ?? 'admin',
+              updatedAt: new Date(),
+            })
+            .where(reidMatch);
+        } catch (reidSyncErr) {
+          logEvent.error('reid_audit_sync_reject', reidSyncErr, { itemId: req.params.id, moverId: item.moverId });
+        }
         console.log(`[Notification] Verification item ${item.type} rejected for mover ${item.moverId}: ${rejectionReason}`);
 
         // Notify mover of verification rejection

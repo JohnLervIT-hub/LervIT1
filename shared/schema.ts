@@ -2209,6 +2209,7 @@ export type InsertContentItem = z.infer<typeof insertContentItemSchema>;
 export const documentAudits = pgTable("document_audits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  verificationItemId: varchar("verification_item_id"),
   documentType: text("document_type").notNull(),
   documentUrl: text("document_url"),
   status: text("status").default("pending_review"),
@@ -2231,6 +2232,7 @@ export const documentAudits = pgTable("document_audits", {
 }, (table) => ({
   moverIdx: index("idx_doc_audits_mover").on(table.moverId),
   statusIdx: index("idx_doc_audits_status").on(table.status),
+  verificationItemIdx: index("idx_doc_audits_verification_item").on(table.verificationItemId),
 }));
 
 export const documentIrregularities = pgTable("document_irregularities", {

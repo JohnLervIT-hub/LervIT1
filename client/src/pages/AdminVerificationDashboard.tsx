@@ -16,6 +16,7 @@ import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Cale
 import { format } from "date-fns";
 import { AdminRowLayout, AdminRowCell, AdminRowPrimary, AdminRowProgress, AdminRowMobileExtras } from "@/components/admin/AdminRowLayout";
 import { ClickToCall } from "@/components/ClickToCall";
+import { cn } from "@/lib/utils";
 
 interface Driver {
   driverId: string;
@@ -28,10 +29,21 @@ interface Driver {
   totalRequired: number;
   hasExpired: boolean;
   hasRejected: boolean;
+  hasReidEscalation?: boolean;
   isAvailable: boolean;
   lastUpdated: string;
   pilotStatus?: string;
   hasAcceptedTerms?: boolean;
+}
+
+interface ReidAudit {
+  auditId: string;
+  status: string;
+  score: number;
+  irregularities: string[];
+  checksRun: any[];
+  recommendation: 'approve' | 'clarification' | 'escalate';
+  auditedAt: string;
 }
 
 interface VerificationItem {
@@ -44,6 +56,7 @@ interface VerificationItem {
   submittedAt: string | null;
   reviewedAt: string | null;
   updatedAt: string;
+  reid?: ReidAudit | null;
 }
 
 interface DriverDetail {
@@ -343,6 +356,7 @@ export default function AdminVerificationDashboard() {
                   <SelectItem value="MISSING_REQUIRED">Missing Required</SelectItem>
                   <SelectItem value="INCOMPLETE">Incomplete</SelectItem>
                   <SelectItem value="ATTENTION">Needs Attention</SelectItem>
+                  <SelectItem value="REID_ESCALATED">Reid Escalated</SelectItem>
                   <SelectItem value="APPROVED">Approved</SelectItem>
                 </SelectContent>
               </Select>
@@ -352,10 +366,28 @@ export default function AdminVerificationDashboard() {
 
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <CardTitle className="text-xl">Drivers ({driversData?.total || 0})</CardTitle>
                 <CardDescription>Click on a driver to review their verification documents</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2" data-testid="reid-status-filters">
+                {[
+                  { value: "ALL", label: "All" },
+                  { value: "INCOMPLETE", label: "Pending" },
+                  { value: "REID_ESCALATED", label: "Reid Escalated" },
+                  { value: "APPROVED", label: "Approved" },
+                ].map(f => (
+                  <Button
+                    key={f.value}
+                    variant={statusFilter === f.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setStatusFilter(f.value); setPage(1); }}
+                    data-testid={`filter-${f.value.toLowerCase()}`}
+                  >
+                    {f.label}
+                  </Button>
+                ))}
               </div>
             </div>
           </CardHeader>
@@ -717,8 +749,28 @@ export default function AdminVerificationDashboard() {
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
                               <div className="font-medium">{formatType(item.type)}</div>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 {getStatusBadge(item.status)}
+                                {item.reid ? (
+                                  <span
+                                    className={cn(
+                                      "text-xs font-bold px-2 py-0.5 rounded-full",
+                                      item.reid.score === 0
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : item.reid.score <= 4
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-red-100 text-red-700"
+                                    )}
+                                    data-testid={`reid-score-${item.type}`}
+                                    title={`Reid audit score: ${item.reid.score}`}
+                                  >
+                                    Reid: {item.reid.score === 0 ? "✅" : item.reid.score > 4 ? "🚨" : "⚠️"} {item.reid.score}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                                    Reid: —
+                                  </span>
+                                )}
                                 {item.expiryDate && (
                                   <span className="text-sm text-muted-foreground">
                                     Expires: {format(new Date(item.expiryDate), "MMM d, yyyy")}
@@ -795,6 +847,74 @@ export default function AdminVerificationDashboard() {
                     <div className="text-sm bg-destructive/10 text-destructive p-2 rounded">
                       {selectedItem.rejectionReason}
                     </div>
+                  </div>
+                )}
+
+                {selectedItem.reid && (
+                  <div
+                    className="rounded-xl border p-4 space-y-3 bg-slate-50"
+                    data-testid="reid-audit-block"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src="/avatars/reid-calloway.png"
+                          alt="Reid Calloway"
+                          className="w-6 h-6 rounded-full"
+                        />
+                        <span className="text-sm font-semibold">Reid's Audit</span>
+                      </div>
+                      <span
+                        className={cn(
+                          "text-xs font-bold px-2 py-1 rounded-full",
+                          selectedItem.reid.score === 0
+                            ? "bg-emerald-100 text-emerald-700"
+                            : selectedItem.reid.score <= 4
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-red-100 text-red-700"
+                        )}
+                      >
+                        Score: {selectedItem.reid.score}
+                      </span>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "text-sm font-medium px-3 py-2 rounded-lg",
+                        selectedItem.reid.recommendation === 'approve'
+                          ? "bg-emerald-50 text-emerald-700"
+                          : selectedItem.reid.recommendation === 'clarification'
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-red-50 text-red-700"
+                      )}
+                    >
+                      Reid recommends:{" "}
+                      {selectedItem.reid.recommendation === 'approve'
+                        ? "✅ Approve"
+                        : selectedItem.reid.recommendation === 'clarification'
+                        ? "⚠️ Request clarification"
+                        : "🚨 Escalate — review carefully"}
+                    </div>
+
+                    {selectedItem.reid.irregularities?.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">Issues found:</p>
+                        <ul className="space-y-1">
+                          {selectedItem.reid.irregularities.map((issue, i) => (
+                            <li key={i} className="text-xs text-red-600 flex gap-2">
+                              <span>•</span>
+                              <span>{issue}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedItem.reid.score === 0 && (
+                      <p className="text-xs text-emerald-600">
+                        ✅ No issues found — document passed all checks
+                      </p>
+                    )}
                   </div>
                 )}
 
