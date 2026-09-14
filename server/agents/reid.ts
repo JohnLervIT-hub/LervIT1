@@ -27,7 +27,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { and, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import {
@@ -35,6 +35,7 @@ import {
   documentIrregularities,
   movers,
   users,
+  verificationItems,
 } from '@shared/schema';
 import { emitEvent } from '../events';
 import { sendResendEmail } from '../notifications';
@@ -201,6 +202,8 @@ export class ReidAgent extends BaseAgent {
         return this.getKpiReport(input as KpiInput);
       case 'daily_audit_sweep':
         return this.dailyAuditSweep(options);
+      case 'backfill_existing_documents':
+        return this.backfillExistingDocuments(input, options);
       default:
         throw new Error(`Reid: unknown action "${action}"`);
     }
@@ -824,6 +827,154 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
     await emitEvent('reid.daily_sweep_complete', 'agent', this.code, { results, kpi }, 'agent');
 
     return { results, kpi };
+  }
+
+  // ─── backfill_existing_documents ─────────────────────────
+
+  private async backfillExistingDocuments(
+    input: { limit?: number; dryRun?: boolean },
+    options?: AgentRunOptions,
+  ) {
+    if (input.dryRun || options?.dryRun) {
+      const total = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(verificationItems)
+        .leftJoin(
+          documentAudits,
+          eq(documentAudits.verificationItemId, verificationItems.id),
+        )
+        .where(
+          and(
+            isNull(documentAudits.id),
+            inArray(verificationItems.status, ['Approved', 'Pending', 'Under Review']),
+          ),
+        );
+
+      return {
+        dryRun: true,
+        itemsNeedingBackfill: total[0]?.count ?? 0,
+      };
+    }
+
+    const items = await db
+      .select({
+        id: verificationItems.id,
+        moverId: verificationItems.moverId,
+        type: verificationItems.type,
+        status: verificationItems.status,
+        fileUrls: verificationItems.fileUrls,
+        expiryDate: verificationItems.expiryDate,
+      })
+      .from(verificationItems)
+      .leftJoin(
+        documentAudits,
+        eq(documentAudits.verificationItemId, verificationItems.id),
+      )
+      .where(isNull(documentAudits.id))
+      .limit(input.limit ?? 100)
+      .orderBy(desc(verificationItems.createdAt));
+
+    logger.info({ count: items.length }, '[Reid] Starting backfill');
+
+    const results = {
+      total: items.length,
+      autoApproved: 0,
+      needsClarification: 0,
+      escalated: 0,
+      skipped: 0,
+      errors: 0,
+    };
+
+    for (const item of items) {
+      try {
+        if (!item.moverId) {
+          results.skipped++;
+          continue;
+        }
+
+        const docType = item.type
+          .toLowerCase()
+          .replace(/\s+/g, '_')
+          .replace('driver', 'drivers')
+          .replace("driver's_license", 'drivers_license')
+          .replace('criminal_background', 'background_check')
+          .replace('background_check_report', 'background_check');
+
+        const documentUrl = item.fileUrls?.[0];
+
+        const docContext = [
+          item.status ? `Current status: ${item.status}` : '',
+          item.expiryDate
+            ? `Expiry date: ${new Date(item.expiryDate).toLocaleDateString()}`
+            : '',
+          documentUrl ? `Document URL: ${documentUrl}` : 'No document URL available',
+        ]
+          .filter(Boolean)
+          .join('\n');
+
+        const [audit] = await db
+          .insert(documentAudits)
+          .values({
+            moverId: item.moverId,
+            documentType: docType,
+            documentUrl: documentUrl ?? null,
+            verificationItemId: item.id,
+            status: 'pending_review',
+            auditedBy: 'reid',
+          })
+          .returning();
+
+        const auditResult = await this.runDocumentAudit(
+          {
+            auditId: audit.id,
+            moverId: item.moverId,
+            documentType: docType,
+            documentUrl,
+            documentText: docContext,
+            moverName: item.moverId,
+            moverProfile: {
+              name: item.moverId,
+              vehicle: 'unknown',
+              city: 'Calgary',
+            },
+          },
+          options,
+        );
+
+        if (auditResult.status === 'auto_approved') {
+          results.autoApproved++;
+        } else if (auditResult.status === 'pending_clarification') {
+          results.needsClarification++;
+        } else if (auditResult.status === 'escalated') {
+          results.escalated++;
+        }
+
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        logger.error({ err, itemId: item.id }, '[Reid] Backfill item failed');
+        results.errors++;
+      }
+    }
+
+    await xavier
+      .run('escalate', {
+        issue: `Reid Backfill Complete:
+         Total reviewed: ${results.total}
+         Auto-approved: ${results.autoApproved} ✅
+         Needs clarification: ${results.needsClarification} ⚠️
+         Escalated: ${results.escalated} 🚨
+         Errors: ${results.errors}`,
+        severity: 'low',
+        agentName: 'Reid Calloway',
+        data: results,
+      })
+      .catch(() => {});
+
+    await emitEvent('reid.backfill_complete', 'agent', 'reid', results, 'agent');
+
+    logger.info(results, '[Reid] Backfill complete ✅');
+
+    return results;
   }
 
   // ─── mover comms ─────────────────────────────────────────

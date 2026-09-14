@@ -14398,6 +14398,7 @@ Respond with VALID JSON only:
     'generate_audit_report',
     'get_kpi_report',
     'daily_audit_sweep',
+    'backfill_existing_documents',
   ]);
 
   app.post("/api/admin/agent/reid/trigger", async (req: Request, res: Response) => {
