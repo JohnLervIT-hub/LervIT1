@@ -131,14 +131,19 @@ class MetaProvider {
       this.assertConfigured();
 
       // Step 1 — resolve the IG Business account linked to the Page.
-      const igResponse = await fetch(
-        `${this.baseUrl}/${this.pageId}` +
-          `?fields=instagram_business_account` +
-          `&access_token=${this.pageAccessToken}`,
-      );
-      const igData = await igResponse.json();
-      const igAccountId: string | undefined =
-        igData.instagram_business_account?.id;
+      // Prefer INSTAGRAM_BUSINESS_ID env var when present to skip the Graph
+      // lookup entirely; otherwise ask the Page for its linked IG account.
+      let igAccountId: string | undefined = process.env.INSTAGRAM_BUSINESS_ID;
+
+      if (!igAccountId) {
+        const igResponse = await fetch(
+          `${this.baseUrl}/${this.pageId}` +
+            `?fields=instagram_business_account` +
+            `&access_token=${this.pageAccessToken}`,
+        );
+        const igData = await igResponse.json();
+        igAccountId = igData.instagram_business_account?.id;
+      }
 
       if (!igAccountId) {
         return {

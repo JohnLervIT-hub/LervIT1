@@ -820,4 +820,175 @@ async function sendMessengerQuickReplies(
   }
 }
 
+// ─── Nova Instagram (DM inbox) ──────────────────────────────
+//
+// Instagram Messaging via the Graph API. Meta uses a separate `object=instagram`
+// webhook payload but the messaging shape mirrors Messenger closely. Sends go
+// through the IG Business account's /messages endpoint (not the Page's), so we
+// require INSTAGRAM_BUSINESS_ID. Access token falls back to the Page token
+// since the Page + linked IG Business account share auth via the Meta App.
+
+const INSTAGRAM_VERIFY_TOKEN =
+  process.env.INSTAGRAM_VERIFY_TOKEN ?? 'lervit_nova_instagram';
+
+type IgHistoryEntry = { role: 'user' | 'assistant'; content: string };
+const igConversationHistory = new Map<string, IgHistoryEntry[]>();
+
+router.get('/api/nova/instagram/webhook', (req: Request, res: Response) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === INSTAGRAM_VERIFY_TOKEN) {
+    logger.info('[Nova Instagram] Webhook verified');
+    return res.status(200).send(challenge);
+  }
+
+  return res.status(403).json({ error: 'Verification failed' });
+});
+
+router.post(
+  '/api/nova/instagram/webhook',
+  async (req: Request, res: Response) => {
+    res.status(200).send('EVENT_RECEIVED');
+
+    try {
+      const body = req.body;
+      if (body?.object !== 'instagram') return;
+
+      for (const entry of body.entry ?? []) {
+        for (const event of entry.messaging ?? []) {
+          if (event.message?.is_echo) continue;
+
+          const senderId = event.sender?.id as string | undefined;
+          const messageText = event.message?.text as string | undefined;
+
+          if (!senderId || !messageText) continue;
+
+          logger.info(
+            { senderId, messageText },
+            '[Nova Instagram] Message received',
+          );
+
+          await handleInstagramMessage({
+            senderId,
+            message: messageText,
+          });
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, '[Nova Instagram] Webhook error');
+    }
+  },
+);
+
+async function handleInstagramMessage(input: {
+  senderId: string;
+  message: string;
+}): Promise<void> {
+  const { senderId, message } = input;
+
+  try {
+    const history = igConversationHistory.get(senderId) ?? [];
+    history.push({ role: 'user', content: message });
+
+    if (history.length > 10) {
+      history.splice(0, history.length - 10);
+    }
+
+    const response = await messengerAnthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 150,
+      system: `You are Nova, LervIT Moving's friendly Instagram DM assistant in Calgary, AB.
+
+${NOVA_MESSENGER_CONTEXT}
+
+INSTAGRAM RULES:
+- Keep responses SHORT (2-3 sentences)
+- Warm, casual Instagram tone
+- Use 1 emoji max per message
+- No markdown or bullet points
+- Sound like a real person DMing
+- Always offer quote link when someone asks about moving`,
+      messages: history,
+    });
+
+    const first = response.content[0];
+    const novaReply =
+      first && first.type === 'text'
+        ? first.text
+        : 'Hey! Thanks for reaching out to LervIT 👋 How can I help with your move?';
+
+    history.push({ role: 'assistant', content: novaReply });
+    igConversationHistory.set(senderId, history);
+
+    await sendInstagramMessage(senderId, novaReply);
+
+    const wantsQuote = /quote|price|cost|how much|book|move/i.test(message);
+    if (wantsQuote) {
+      await new Promise((r) => setTimeout(r, 1000));
+      await sendInstagramMessage(
+        senderId,
+        'Get your instant quote here 👉 lervit.com — use code LERVIT10 for 10% off! 🎉',
+      );
+    }
+
+    await emitEvent(
+      'nova.instagram_message_handled',
+      'agent',
+      'nova',
+      { senderId, messageLength: message.length },
+      'agent',
+    );
+  } catch (err) {
+    logger.error({ err, senderId }, '[Nova Instagram] Handler failed');
+    await sendInstagramMessage(
+      senderId,
+      'Hey! For instant help visit lervit.com or call 1-888-982-0885 📞',
+    ).catch(() => {});
+  }
+}
+
+async function sendInstagramMessage(
+  recipientId: string,
+  text: string,
+): Promise<void> {
+  const token =
+    process.env.INSTAGRAM_ACCESS_TOKEN ?? process.env.META_PAGE_ACCESS_TOKEN;
+  if (!token) {
+    logger.error('[Nova Instagram] No access token — skipping send');
+    return;
+  }
+
+  const igBusinessId = process.env.INSTAGRAM_BUSINESS_ID;
+  if (!igBusinessId) {
+    logger.error('[Nova Instagram] INSTAGRAM_BUSINESS_ID not set — skipping send');
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/${igBusinessId}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: { text },
+          access_token: token,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      logger.warn(
+        { status: res.status, recipientId, errText },
+        '[Nova Instagram] Graph API send failed',
+      );
+    }
+  } catch (err) {
+    logger.error({ err, recipientId }, '[Nova Instagram] fetch threw');
+  }
+}
+
 export { router as novaWebhookRouter };
