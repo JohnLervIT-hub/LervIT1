@@ -14558,12 +14558,22 @@ Respond with VALID JSON only:
         .from(documentIrregularities)
         .where(eq(documentIrregularities.auditId, row.id));
 
+      let documentUrl: string | null = row.documentUrl ?? null;
+      if (documentUrl?.startsWith('{')) {
+        documentUrl =
+          documentUrl
+            .replace(/^\{|\}$/g, '')
+            .split(',')[0]
+            .trim() || null;
+      }
+
       const score = row.irregularityScore ?? 0;
       const recommendation = score === 0 ? 'approve' : score <= 4 ? 'clarification' : 'escalate';
 
       res.json({
         audit: {
           ...row,
+          documentUrl,
           irregularities,
           recommendation,
         },
