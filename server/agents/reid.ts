@@ -846,7 +846,15 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
         .where(
           and(
             isNull(documentAudits.id),
-            inArray(verificationItems.status, ['Approved', 'Pending', 'Under Review']),
+            inArray(verificationItems.status, [
+              'approved',
+              'pending',
+              'under_review',
+              'Approved',
+              'Pending',
+              'Under Review',
+              'pending_review',
+            ]),
           ),
         );
 
@@ -870,7 +878,20 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
         documentAudits,
         eq(documentAudits.verificationItemId, verificationItems.id),
       )
-      .where(isNull(documentAudits.id))
+      .where(
+        and(
+          isNull(documentAudits.id),
+          inArray(verificationItems.status, [
+            'approved',
+            'pending',
+            'under_review',
+            'Approved',
+            'Pending',
+            'Under Review',
+            'pending_review',
+          ]),
+        ),
+      )
       .limit(input.limit ?? 100)
       .orderBy(desc(verificationItems.createdAt));
 
