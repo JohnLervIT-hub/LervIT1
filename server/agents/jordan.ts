@@ -184,6 +184,8 @@ Sign up link: ${applyLink}`,
       logger.warn({ leadId }, 'Jordan: vetter queue unavailable — follow-ups not scheduled');
     }
 
+    await this.scheduleNovaColdCallFollowUp(lead);
+
     await emitEvent('lead.mover_contacted', 'lead', leadId, {
       touchNumber: 1,
       channel: 'email',
@@ -358,6 +360,8 @@ Sign up link: ${applyLink}`,
       })
       .where(eq(leads.id, lead.id));
 
+    await this.scheduleNovaColdCallFollowUp(lead);
+
     await emitEvent('lead.mover_touched', 'lead', lead.id, {
       touchNumber: (lead.touchpoints ?? 0) + 1,
       channel: 'sms',
@@ -367,6 +371,49 @@ Sign up link: ${applyLink}`,
     });
 
     return { success: true, channel: 'sms', delivered };
+  }
+
+  /**
+   * After Touch 1, queue Nova for a mover cold-call at +48h (day after the
+   * Touch 2 SMS at +24h) if the lead has a phone and is either b2b or came
+   * in via one of the Kijiji supply channels.
+   * BullMQ jobId dedupes so a repeat schedule for the same lead is a no-op.
+   */
+  private async scheduleNovaColdCallFollowUp(lead: typeof leads.$inferSelect) {
+    if (!lead.contactPhone) return;
+    const isMoverCandidate =
+      lead.leadType === 'b2b' ||
+      lead.sourceChannel === 'kijiji_services' ||
+      lead.sourceChannel === 'kijiji_jobs';
+    if (!isMoverCandidate) return;
+
+    const novaQueue = createAgentQueue(QUEUE_NAMES.VOICE_AGENT);
+    if (!novaQueue) {
+      logger.warn({ leadId: lead.id }, '[Jordan] voice-agent queue unavailable — Nova cold call not scheduled');
+      return;
+    }
+
+    try {
+      await novaQueue.add(
+        'call_mover_cold',
+        {
+          leadId: lead.id,
+          phone: lead.contactPhone,
+          name: lead.contactName,
+          sourceChannel: lead.sourceChannel,
+        },
+        {
+          delay: 48 * 60 * 60 * 1000,
+          jobId: `nova_cold_${lead.id}`,
+        },
+      );
+      logger.info(
+        { leadId: lead.id, phone: lead.contactPhone },
+        '[Jordan] Nova cold call scheduled for 48hrs',
+      );
+    } catch (err) {
+      logger.error({ err, leadId: lead.id }, '[Jordan] failed to schedule Nova cold call');
+    }
   }
 
   private async getLead(leadId: string) {

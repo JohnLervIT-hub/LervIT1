@@ -14039,6 +14039,7 @@ Respond with VALID JSON only:
   const NOVA_ACTIONS = new Set([
     'call_mover_dispatch',
     'call_lead_conversion',
+    'call_mover_cold',
     'call_review_request',
     'check_call_hours',
   ]);

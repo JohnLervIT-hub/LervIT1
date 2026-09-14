@@ -19,6 +19,7 @@ import { db } from '../db';
 import { bookings, leads, movers, users, voiceCalls } from '@shared/schema';
 import { emitEvent } from '../events';
 import { logger } from '../logger';
+import { wasContactedToday } from './dedupe';
 
 const NOVA_PHONE = process.env.TELNYX_PHONE_NUMBER ?? '+18889820885';
 const TELNYX_CONNECTION_ID = process.env.TELNYX_CONNECTION_ID;
@@ -72,6 +73,8 @@ export class NovaAgent extends BaseAgent {
         return this.callMoverDispatch(input as any, options);
       case 'call_lead_conversion':
         return this.callLeadConversion(input as any, options);
+      case 'call_mover_cold':
+        return this.callMoverCold(input as any, options);
       case 'call_review_request':
         return this.callReviewRequest(input as any, options);
       case 'check_call_hours':
@@ -249,6 +252,87 @@ export class NovaAgent extends BaseAgent {
         dropoffArea: input.dropoffArea,
       },
     });
+  }
+
+  async callMoverCold(
+    input: {
+      leadId: string;
+      phone: string;
+      name?: string;
+      sourceChannel?: string;
+    },
+    options?: AgentRunOptions,
+  ) {
+    const { allowed, reason } = this.checkCallHours();
+    if (!allowed) return { skipped: true, reason };
+
+    if (options?.dryRun) {
+      return {
+        dryRun: true,
+        would: 'call_mover_cold',
+        leadId: input.leadId,
+        phone: input.phone,
+      };
+    }
+
+    const { contacted } = await wasContactedToday({
+      entityId: input.leadId,
+      entityType: 'lead',
+      eventTypes: ['nova.cold_call_initiated'],
+    });
+    if (contacted) {
+      return { skipped: true, reason: 'already_called_today' };
+    }
+
+    const lead = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, input.leadId))
+      .limit(1);
+
+    if (!lead[0]) {
+      return { skipped: true, reason: 'lead_not_found' };
+    }
+
+    if (['converted', 'cold', 'lost'].includes(lead[0].status ?? '')) {
+      return { skipped: true, reason: `lead_${lead[0].status}` };
+    }
+
+    const name = input.name ?? lead[0].contactName ?? 'there';
+
+    logger.info(
+      { leadId: input.leadId, phone: input.phone, name },
+      '[Nova] Initiating mover cold call',
+    );
+
+    const result = await this.initiateCall({
+      to: input.phone,
+      entityId: input.leadId,
+      entityType: 'lead',
+      callType: 'mover_cold_intro',
+      metadata: {
+        leadId: input.leadId,
+        moverName: name,
+        sourceChannel: input.sourceChannel,
+        script: `Hi ${name}, this is Nova from LervIT Moving in Calgary. I saw your listing and wanted to reach out about earning extra income with your vehicle. Do you have a quick minute?`,
+      },
+    });
+
+    if (result.callControlId) {
+      await emitEvent(
+        'nova.cold_call_initiated',
+        'lead',
+        input.leadId,
+        {
+          callControlId: result.callControlId,
+          callType: 'mover_cold_intro',
+          phone: input.phone,
+        },
+        'agent',
+      );
+    }
+
+    return result;
   }
 
   async callReviewRequest(input: { bookingId: string }, options?: AgentRunOptions) {
