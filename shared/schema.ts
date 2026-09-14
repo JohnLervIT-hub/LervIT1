@@ -2203,3 +2203,51 @@ export type Campaign = typeof campaigns.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type ContentItem = typeof contentItems.$inferSelect;
 export type InsertContentItem = z.infer<typeof insertContentItemSchema>;
+
+// ─── Reid Calloway (DOCOPS) — document audit + irregularity tracking ───
+
+export const documentAudits = pgTable("document_audits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moverId: varchar("mover_id").references(() => movers.id).notNull(),
+  documentType: text("document_type").notNull(),
+  documentUrl: text("document_url"),
+  status: text("status").default("pending_review"),
+  irregularityScore: integer("irregularity_score").default(0),
+  irregularities: jsonb("irregularities"),
+  checksRun: jsonb("checks_run"),
+  auditedBy: text("audited_by").default("reid"),
+  reviewedBy: text("reviewed_by"),
+  approvedAt: timestamp("approved_at"),
+  rejectedAt: timestamp("rejected_at"),
+  rejectionReason: text("rejection_reason"),
+  clarificationRequested: timestamp("clarification_requested"),
+  clarificationReceived: timestamp("clarification_received"),
+  escalatedAt: timestamp("escalated_at"),
+  escalationReason: text("escalation_reason"),
+  notes: text("notes"),
+  kpiData: jsonb("kpi_data"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  moverIdx: index("idx_doc_audits_mover").on(table.moverId),
+  statusIdx: index("idx_doc_audits_status").on(table.status),
+}));
+
+export const documentIrregularities = pgTable("document_irregularities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  auditId: varchar("audit_id").references(() => documentAudits.id),
+  moverId: varchar("mover_id").notNull(),
+  checkName: text("check_name").notNull(),
+  result: text("result").notNull(),
+  severity: text("severity").notNull(),
+  details: text("details"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  auditIdx: index("idx_doc_irregularities_audit").on(table.auditId),
+}));
+
+export type DocumentAudit = typeof documentAudits.$inferSelect;
+export type InsertDocumentAudit = typeof documentAudits.$inferInsert;
+export type DocumentIrregularity = typeof documentIrregularities.$inferSelect;
+export type InsertDocumentIrregularity = typeof documentIrregularities.$inferInsert;

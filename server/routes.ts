@@ -77,6 +77,8 @@ import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
 import { riley } from "./agents/riley";
 import { nova } from "./agents/nova";
 import { ember } from "./agents/ember";
+import { reid } from "./agents/reid";
+import { documentAudits, documentIrregularities } from "@shared/schema";
 import { novaWebhookRouter } from "./nova-webhook-routes";
 
 // Middleware to parse JSON
@@ -2541,7 +2543,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .values(validatedData as any)
           .returning();
       }
-      
+
+      // Fire Reid Calloway (DOCOPS) to audit the upload. Only for document
+      // types Reid knows how to audit; other types (ID, VEHICLE_PHOTOS,
+      // PAYOUT_SETUP) still go through the manual verification queue.
+      const REID_TYPES: Record<string, string> = {
+        INSURANCE: 'insurance',
+        DRIVERS_LICENSE: 'drivers_license',
+        VEHICLE_REGISTRATION: 'vehicle_registration',
+        BACKGROUND_CHECK: 'background_check',
+      };
+      const reidType = REID_TYPES[req.params.type.toUpperCase()];
+      if (reidType && result[0]) {
+        reid
+          .run('review_document', {
+            moverId: req.params.moverId,
+            documentType: reidType,
+            documentUrl: fileUrls[0],
+            verificationItemId: result[0].id,
+          })
+          .catch((err) =>
+            logger.error({ err, moverId: req.params.moverId }, '[Reid] review_document trigger failed'),
+          );
+      }
+
       res.json(result[0]);
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
@@ -14252,6 +14277,167 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] ember/stats failed');
       res.status(500).json({ error: 'Failed to load Ember stats' });
+    }
+  });
+
+  // ===== REID CALLOWAY (DOCOPS) =====
+
+  const REID_ACTIONS = new Set([
+    'review_document',
+    'run_document_audit',
+    'approve_document',
+    'reject_document',
+    'escalate_document',
+    'generate_audit_report',
+    'get_kpi_report',
+    'daily_audit_sweep',
+  ]);
+
+  app.post("/api/admin/agent/reid/trigger", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const action = (req.body?.action ?? '') as string;
+      if (!REID_ACTIONS.has(action)) {
+        return res.status(400).json({ error: `Unsupported action: ${action}` });
+      }
+      const dryRun = req.body?.dry_run === true || req.body?.dryRun === true;
+      const input = (req.body?.input ?? {}) as Record<string, any>;
+
+      const inlineActions = new Set([
+        'generate_audit_report',
+        'get_kpi_report',
+        'approve_document',
+        'reject_document',
+        'escalate_document',
+      ]);
+      if (dryRun || inlineActions.has(action)) {
+        const result = await reid.run(action, input, { dryRun });
+        return res.json({ ok: true, dryRun, action, result });
+      }
+
+      const reidQueue = createAgentQueue(QUEUE_NAMES.DOCOPS);
+      if (!reidQueue) {
+        return res.status(503).json({ error: 'DOCOPS queue unavailable (REDIS_URL not configured)' });
+      }
+      const job = await reidQueue.add(action, input);
+      res.status(202).json({ ok: true, queued: true, action, jobId: job.id });
+    } catch (err) {
+      logger.error({ err }, '[Admin] reid/trigger: failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/admin/document-audits", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const status = (req.query.status as string | undefined)?.trim();
+      const limit = Math.min(Number(req.query.limit ?? 100), 500);
+
+      const query = db
+        .select({
+          id: documentAudits.id,
+          moverId: documentAudits.moverId,
+          documentType: documentAudits.documentType,
+          documentUrl: documentAudits.documentUrl,
+          status: documentAudits.status,
+          irregularityScore: documentAudits.irregularityScore,
+          irregularities: documentAudits.irregularities,
+          notes: documentAudits.notes,
+          createdAt: documentAudits.createdAt,
+          updatedAt: documentAudits.updatedAt,
+          escalatedAt: documentAudits.escalatedAt,
+          reviewedBy: documentAudits.reviewedBy,
+          moverName: usersTable.name,
+        })
+        .from(documentAudits)
+        .leftJoin(moversTable, eq(moversTable.id, documentAudits.moverId))
+        .leftJoin(usersTable, eq(usersTable.id, moversTable.userId))
+        .orderBy(desc(documentAudits.createdAt))
+        .limit(limit);
+
+      const rows = status
+        ? await query.where(eq(documentAudits.status, status))
+        : await query;
+
+      res.json({ audits: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] document-audits list failed');
+      res.status(500).json({ error: 'Failed to load audits' });
+    }
+  });
+
+  app.get("/api/admin/document-audits/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const [audit] = await db
+        .select()
+        .from(documentAudits)
+        .where(eq(documentAudits.id, req.params.id))
+        .limit(1);
+      if (!audit) return res.status(404).json({ error: 'Not found' });
+
+      const irregularities = await db
+        .select()
+        .from(documentIrregularities)
+        .where(eq(documentIrregularities.auditId, audit.id));
+
+      res.json({ audit, irregularities });
+    } catch (err) {
+      logger.error({ err }, '[Admin] document-audit detail failed');
+      res.status(500).json({ error: 'Failed to load audit' });
+    }
+  });
+
+  app.post("/api/admin/document-audits/:id/approve", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const reviewer =
+        (req.session as any)?.userId ??
+        (req.session as any)?.user?.email ??
+        'admin';
+      const notes = (req.body?.notes as string | undefined) ?? undefined;
+      const result = await reid.run('approve_document', {
+        auditId: req.params.id,
+        reviewedBy: reviewer,
+        notes,
+      });
+      res.json({ ok: true, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] document-audit approve failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/admin/document-audits/:id/reject", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const reason = (req.body?.reason as string | undefined)?.trim();
+      if (!reason) return res.status(400).json({ error: 'reason is required' });
+      const reviewer =
+        (req.session as any)?.userId ??
+        (req.session as any)?.user?.email ??
+        'admin';
+      const result = await reid.run('reject_document', {
+        auditId: req.params.id,
+        reason,
+        reviewedBy: reviewer,
+      });
+      res.json({ ok: true, result });
+    } catch (err) {
+      logger.error({ err }, '[Admin] document-audit reject failed');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/admin/reid/kpi", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const days = Number(req.query.days ?? 30);
+      const result = await reid.run('get_kpi_report', { days });
+      res.json(result);
+    } catch (err) {
+      logger.error({ err }, '[Admin] reid kpi failed');
+      res.status(500).json({ error: 'Failed to load Reid KPI' });
     }
   });
 

@@ -20,6 +20,7 @@ import { sam } from './agents/sam';
 import { riley } from './agents/riley';
 import { aegis } from './agents/aegis';
 import { ember } from './agents/ember';
+import { reid } from './agents/reid';
 import { gt } from 'drizzle-orm';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -258,6 +259,20 @@ export function initBackgroundJobs() {
         logger.info({ event: 'aegis_daily_scan', expiry, eligibility }, 'Aegis daily scan complete');
       } catch (err) {
         logger.error({ err, event: 'aegis_daily_scan' }, 'Aegis daily scan failed');
+      }
+    });
+  }, TZ);
+
+  // Daily 09:00 Calgary — Reid Calloway (DOCOPS) sweeps document audits:
+  // nudges John on pending reviews >24h, escalates unanswered clarifications
+  // >48h, and posts a 7-day KPI summary through Xavier.
+  cron.schedule('0 9 * * *', async () => {
+    await withJobLock('reid_daily_audit_sweep', async () => {
+      try {
+        const result = await reid.run('daily_audit_sweep', {});
+        logger.info({ event: 'reid_daily_audit_sweep', result }, 'Reid daily sweep complete');
+      } catch (err) {
+        logger.error({ err, event: 'reid_daily_audit_sweep' }, 'Reid daily sweep failed');
       }
     });
   }, TZ);

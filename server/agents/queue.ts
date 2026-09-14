@@ -61,6 +61,7 @@ export function initAgentQueues(): void {
     QUEUE_NAMES.COMPLIANCE,
     QUEUE_NAMES.ONBOARD,
     QUEUE_NAMES.SALES,
+    QUEUE_NAMES.DOCOPS,
   ];
   for (const name of agentNames) createAgentQueue(name);
 }

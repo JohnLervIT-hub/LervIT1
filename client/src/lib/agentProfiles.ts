@@ -133,6 +133,15 @@ export const AGENT_PROFILES: Record<string, {
     color: '#dc2626',
     gender: 'male',
   },
+  'reid-calloway': {
+    name: 'Reid Calloway',
+    code: 'DOCOPS',
+    role: 'Document Operations',
+    email: 'reid@lervit.com',
+    avatar: '/avatars/reid-calloway.png',
+    color: '#0f766e',
+    gender: 'male',
+  },
 };
 
 export const DEFAULT_AVATAR = (name: string) =>

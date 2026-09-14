@@ -25,6 +25,7 @@ export const QUEUE_NAMES = {
   COMPLIANCE: 'compliance',
   ONBOARD: 'onboard',
   SALES: 'sales',
+  DOCOPS: 'docops',
 } as const;
 
 let _connection: IORedis | null = null;
