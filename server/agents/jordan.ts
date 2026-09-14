@@ -374,10 +374,10 @@ Sign up link: ${applyLink}`,
   }
 
   /**
-   * After Touch 1, queue Nova for a mover cold-call at +48h (day after the
-   * Touch 2 SMS at +24h) if the lead has a phone and is either b2b or came
-   * in via one of the Kijiji supply channels.
-   * BullMQ jobId dedupes so a repeat schedule for the same lead is a no-op.
+   * After Touch 1, queue Nova for a mover cold-call at +24h if the lead has
+   * a phone and is either b2b or came in via one of the Kijiji supply
+   * channels. BullMQ jobId dedupes so a repeat schedule for the same lead
+   * is a no-op.
    */
   private async scheduleNovaColdCallFollowUp(lead: typeof leads.$inferSelect) {
     if (!lead.contactPhone) return;
@@ -403,13 +403,13 @@ Sign up link: ${applyLink}`,
           sourceChannel: lead.sourceChannel,
         },
         {
-          delay: 48 * 60 * 60 * 1000,
+          delay: 24 * 60 * 60 * 1000,
           jobId: `nova_cold_${lead.id}`,
         },
       );
       logger.info(
         { leadId: lead.id, phone: lead.contactPhone },
-        '[Jordan] Nova cold call scheduled for 48hrs',
+        '[Jordan] Nova cold call scheduled for 24hrs',
       );
     } catch (err) {
       logger.error({ err, leadId: lead.id }, '[Jordan] failed to schedule Nova cold call');
