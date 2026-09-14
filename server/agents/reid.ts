@@ -1015,7 +1015,17 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
           continue;
         }
 
-        const documentUrl = item.fileUrls?.[0];
+        const rawFileUrls = item.fileUrls as unknown;
+        let documentUrl: string | undefined;
+        if (Array.isArray(rawFileUrls)) {
+          documentUrl = rawFileUrls[0];
+        } else if (typeof rawFileUrls === 'string') {
+          documentUrl =
+            (rawFileUrls as string)
+              .replace(/^\{|\}$/g, '')
+              .split(',')[0]
+              .trim() || undefined;
+        }
 
         const [moverRow] = await db
           .select({ name: users.name, vehicle: movers.vehicleType })

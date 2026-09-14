@@ -19,6 +19,7 @@ interface VisionResult {
 }
 
 const VISION_API_KEY = process.env.GOOGLE_VISION_API_KEY;
+const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
 
 export async function extractTextFromDocument(documentUrl: string): Promise<VisionResult> {
   if (!VISION_API_KEY) {
@@ -26,8 +27,10 @@ export async function extractTextFromDocument(documentUrl: string): Promise<Visi
     return { text: '', confidence: 0, error: 'no_api_key' };
   }
 
+  const fullUrl = documentUrl.startsWith('/') ? `${APP_BASE_URL}${documentUrl}` : documentUrl;
+
   try {
-    const docResponse = await fetch(documentUrl);
+    const docResponse = await fetch(fullUrl);
 
     if (!docResponse.ok) {
       return { text: '', confidence: 0, error: 'fetch_failed' };
@@ -96,5 +99,6 @@ export async function extractTextFromDocument(documentUrl: string): Promise<Visi
 }
 
 export function isImageUrl(url: string): boolean {
-  return /\.(jpg|jpeg|png|gif|webp|bmp|tiff|pdf)(\?|$)/i.test(url);
+  const lower = url.toLowerCase();
+  return /\.(jpg|jpeg|png|gif|webp|bmp|tiff|pdf)(\?|$)/.test(lower);
 }
