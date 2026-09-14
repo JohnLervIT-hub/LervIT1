@@ -11,6 +11,7 @@ import { RileyMorganCard } from "@/components/RileyMorganCard";
 import { KaiBennettCard } from "@/components/KaiBennettCard";
 import { SamCarterCard } from "@/components/SamCarterCard";
 import { AegisCard } from "@/components/AegisCard";
+import { ReidCard } from "@/components/ReidCard";
 import { NovaCard } from "@/components/NovaCard";
 import { EmberCard } from "@/components/EmberCard";
 import { AdminDashboardSkeleton } from "@/components/DashboardSkeleton";
@@ -1453,6 +1454,9 @@ export default function AdminDashboard() {
 
             {/* Compliance — full width */}
             <AegisCard />
+
+            {/* Document Intelligence — full width */}
+            <ReidCard />
 
             {/* Voice — full width */}
             <NovaCard />
