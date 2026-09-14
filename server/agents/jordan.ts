@@ -382,7 +382,7 @@ Sign up link: ${applyLink}`,
   private async scheduleNovaColdCallFollowUp(lead: typeof leads.$inferSelect) {
     if (!lead.contactPhone) return;
     const isMoverCandidate =
-      lead.leadType === 'b2b' ||
+      lead.utmCampaign === 'ryan-brooks' ||
       lead.sourceChannel === 'kijiji_services' ||
       lead.sourceChannel === 'kijiji_jobs';
     if (!isMoverCandidate) return;

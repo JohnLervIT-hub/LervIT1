@@ -14562,23 +14562,38 @@ Respond with VALID JSON only:
         if (!isNaN(since.getTime())) filters.push(sql`${leads.createdAt} >= ${since}`);
       }
       if (audience === 'movers') {
+        // Ryan's individual gig workers.
         filters.push(
           or(
-            eq(leads.leadType, 'b2b'),
             eq(leads.utmCampaign, 'ryan-brooks'),
+            and(
+              eq(leads.leadType, 'b2b'),
+              inArray(leads.sourceChannel, [
+                'kijiji_services',
+                'kijiji_jobs',
+                'craigslist_services',
+              ]),
+            ),
+          )!,
+        );
+      } else if (audience === 'partners') {
+        // Sam's B2B fleet-partner prospects.
+        filters.push(
+          and(
+            eq(leads.leadType, 'b2b'),
+            notInArray(leads.sourceChannel, [
+              'kijiji_services',
+              'kijiji_jobs',
+              'craigslist_services',
+            ]),
           )!,
         );
       } else if (audience === 'customers') {
+        // Demand side — quote leads.
         filters.push(
-          and(
-            or(
-              eq(leads.leadType, 'b2c'),
-              isNull(leads.leadType),
-            ),
-            or(
-              isNull(leads.utmCampaign),
-              ne(leads.utmCampaign, 'ryan-brooks'),
-            ),
+          or(
+            eq(leads.leadType, 'b2c'),
+            isNull(leads.leadType),
           )!,
         );
       }
@@ -15258,6 +15273,21 @@ Respond with VALID JSON only:
       const action = (req.body?.action ?? 'onboard_candidate') as string;
       if (action === 'onboard_candidate' || action === 'send_touch') {
         if (!req.body?.leadId) return res.status(400).json({ error: 'leadId required' });
+
+        const [lead] = await db
+          .select({ leadType: leads.leadType })
+          .from(leads)
+          .where(eq(leads.id, String(req.body.leadId)))
+          .limit(1);
+        if (!lead) return res.status(404).json({ error: 'Lead not found' });
+        if (lead.leadType === 'b2b') {
+          return res.status(400).json({
+            error: 'Wrong agent',
+            message:
+              'Jordan handles individual mover candidates only. Use Sam Carter for B2B fleet partners.',
+          });
+        }
+
         const channelOverride = req.body?.channelOverride;
         const input: Record<string, unknown> = {
           leadId: String(req.body.leadId),

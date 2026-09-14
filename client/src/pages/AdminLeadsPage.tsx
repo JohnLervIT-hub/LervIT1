@@ -65,11 +65,12 @@ interface Lead {
   createdAt: string;
 }
 
-type Audience = "all" | "customers" | "movers";
+type Audience = "all" | "customers" | "movers" | "partners";
 const AUDIENCE_TABS: Array<{ value: Audience; label: string }> = [
   { value: "all", label: "All" },
   { value: "customers", label: "Customers" },
   { value: "movers", label: "Mover Candidates" },
+  { value: "partners", label: "Partners" },
 ];
 
 function isMoverCandidate(lead: Lead): boolean {
@@ -476,7 +477,9 @@ export default function AdminLeadsPage() {
                   ? "Ryan Brooks supply pipeline"
                   : audience === "customers"
                     ? "Scout Reid demand pipeline"
-                    : "Demand + supply pipelines"}
+                    : audience === "partners"
+                      ? "Sam Carter B2B partner pipeline"
+                      : "Demand + supply pipelines"}
                 {" · "}
                 {total} lead{total === 1 ? "" : "s"} total
               </CardDescription>
@@ -522,6 +525,11 @@ export default function AdminLeadsPage() {
           {!isLoading && !error && leads.length === 0 && audience === "all" && (
             <div className="text-sm text-muted-foreground py-8 text-center">
               No leads yet. Add one above, or trigger Scout from the APEX tab.
+            </div>
+          )}
+          {!isLoading && !error && leads.length === 0 && audience === "partners" && (
+            <div className="text-sm text-muted-foreground py-8 text-center">
+              No B2B partner prospects yet. Sam Carter's daily Places sweep populates this pipeline.
             </div>
           )}
           {!isLoading && !error && audience === "customers" && (
@@ -610,7 +618,7 @@ export default function AdminLeadsPage() {
               </div>
             </div>
           )}
-          {leads.length > 0 && audience === "all" && (
+          {leads.length > 0 && (audience === "all" || audience === "partners") && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-muted-foreground uppercase tracking-wide">
