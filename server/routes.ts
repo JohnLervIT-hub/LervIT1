@@ -2916,6 +2916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 checksRun: (audit.checksRun as any[]) ?? [],
                 recommendation:
                   score === 0 ? 'approve' : score <= 4 ? 'clarification' : 'escalate',
+                notes: audit.notes,
                 auditedAt: audit.createdAt,
               }
             : null,
@@ -14477,19 +14478,55 @@ Respond with VALID JSON only:
   app.get("/api/admin/document-audits/:id", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
-      const [audit] = await db
-        .select()
+      const [row] = await db
+        .select({
+          id: documentAudits.id,
+          moverId: documentAudits.moverId,
+          verificationItemId: documentAudits.verificationItemId,
+          documentType: documentAudits.documentType,
+          documentUrl: documentAudits.documentUrl,
+          status: documentAudits.status,
+          irregularityScore: documentAudits.irregularityScore,
+          irregularities: documentAudits.irregularities,
+          checksRun: documentAudits.checksRun,
+          auditedBy: documentAudits.auditedBy,
+          reviewedBy: documentAudits.reviewedBy,
+          approvedAt: documentAudits.approvedAt,
+          rejectedAt: documentAudits.rejectedAt,
+          rejectionReason: documentAudits.rejectionReason,
+          escalatedAt: documentAudits.escalatedAt,
+          escalationReason: documentAudits.escalationReason,
+          notes: documentAudits.notes,
+          createdAt: documentAudits.createdAt,
+          updatedAt: documentAudits.updatedAt,
+          moverName: usersTable.name,
+          moverEmail: usersTable.email,
+          moverPhone: usersTable.phone,
+          moverVehicle: moversTable.vehicleType,
+        })
         .from(documentAudits)
+        .leftJoin(moversTable, eq(moversTable.id, documentAudits.moverId))
+        .leftJoin(usersTable, eq(usersTable.id, moversTable.userId))
         .where(eq(documentAudits.id, req.params.id))
         .limit(1);
-      if (!audit) return res.status(404).json({ error: 'Not found' });
+
+      if (!row) return res.status(404).json({ error: 'Not found' });
 
       const irregularities = await db
         .select()
         .from(documentIrregularities)
-        .where(eq(documentIrregularities.auditId, audit.id));
+        .where(eq(documentIrregularities.auditId, row.id));
 
-      res.json({ audit, irregularities });
+      const score = row.irregularityScore ?? 0;
+      const recommendation = score === 0 ? 'approve' : score <= 4 ? 'clarification' : 'escalate';
+
+      res.json({
+        audit: {
+          ...row,
+          irregularities,
+          recommendation,
+        },
+      });
     } catch (err) {
       logger.error({ err }, '[Admin] document-audit detail failed');
       res.status(500).json({ error: 'Failed to load audit' });

@@ -22,6 +22,8 @@ const XAVIER_MODEL = 'claude-opus-4-6';
 
 const CALGARY_TZ = 'America/Edmonton';
 
+const APP_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+
 interface DailyBriefResult {
   brief: string;
   summary: IntelligenceSummary;
@@ -115,21 +117,34 @@ Data: ${JSON.stringify(input.data ?? {})}`,
       300,
     );
 
+    const links: string[] = [];
+    const data = input.data ?? {};
+    if (data.auditId) {
+      links.push(`Audit: ${APP_URL}/admin/verification?auditId=${data.auditId}`);
+    }
+    if (data.moverId) {
+      links.push(`Mover: ${APP_URL}/admin/verification?moverId=${data.moverId}`);
+    }
+    if (data.campaignId) {
+      links.push(`Campaign: ${APP_URL}/admin/campaigns/${data.campaignId}`);
+    }
+    const messageWithLinks = links.length ? `${message}\n\n${links.join('\n')}` : message;
+
     const sentAt = new Date().toISOString();
 
     await emitEvent(
       'apex.escalation',
       'agent',
       this.code,
-      { ...input, message, sentAt },
+      { ...input, message: messageWithLinks, sentAt },
       'agent',
     );
 
     const smsSent = await this.sendSms(
-      `LervIT Alert [${input.severity.toUpperCase()}]\n${message}`,
+      `LervIT Alert [${input.severity.toUpperCase()}]\n${messageWithLinks}`,
     );
 
-    return { message, smsSent, sentAt };
+    return { message: messageWithLinks, smsSent, sentAt };
   }
 
   private async sendSms(text: string): Promise<boolean> {

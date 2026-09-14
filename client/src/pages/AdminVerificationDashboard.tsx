@@ -43,6 +43,7 @@ interface ReidAudit {
   irregularities: string[];
   checksRun: any[];
   recommendation: 'approve' | 'clarification' | 'escalate';
+  notes?: string | null;
   auditedAt: string;
 }
 
@@ -101,6 +102,30 @@ export default function AdminVerificationDashboard() {
   const [pilotStatus, setPilotStatus] = useState<string>("");
   const [pilotNotes, setPilotNotes] = useState("");
   const [pilotExpiresAt, setPilotExpiresAt] = useState("");
+  const [highlightedAuditId, setHighlightedAuditId] = useState<string | null>(null);
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const auditIdParam = searchParams.get("auditId");
+  const moverIdParam = searchParams.get("moverId");
+
+  useEffect(() => {
+    if (!auditIdParam) return;
+    fetch(`/api/admin/document-audits/${auditIdParam}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        const audit = data.audit ?? data;
+        if (audit?.moverId) {
+          setSelectedDriverId(audit.moverId);
+          setHighlightedAuditId(auditIdParam);
+        }
+      })
+      .catch(console.error);
+  }, [auditIdParam]);
+
+  useEffect(() => {
+    if (!moverIdParam) return;
+    setSelectedDriverId(moverIdParam);
+  }, [moverIdParam]);
 
   // Build drivers URL with filters
   const buildDriversUrl = () => {
@@ -159,6 +184,18 @@ export default function AdminVerificationDashboard() {
       setPilotExpiresAt(driverDetail.driver.pilotExpiresAt ? driverDetail.driver.pilotExpiresAt.split('T')[0] : "");
     }
   }, [driverDetail]);
+
+  // Deep-link: once driver detail arrives, open the matching verification item.
+  useEffect(() => {
+    if (!highlightedAuditId || !driverDetail?.verificationItems) return;
+    const match = driverDetail.verificationItems.find(
+      (item) => item.reid?.auditId === highlightedAuditId,
+    );
+    if (match) {
+      setSelectedItem(match);
+      setHighlightedAuditId(null);
+    }
+  }, [highlightedAuditId, driverDetail]);
 
   // Review mutation
   const reviewMutation = useMutation({
@@ -855,18 +892,19 @@ export default function AdminVerificationDashboard() {
                     className="rounded-xl border p-4 space-y-3 bg-slate-50"
                     data-testid="reid-audit-block"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src="/avatars/reid-calloway.png"
-                          alt="Reid Calloway"
-                          className="w-6 h-6 rounded-full"
-                        />
-                        <span className="text-sm font-semibold">Reid's Audit</span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <img
+                        src="/avatars/reid-calloway.png"
+                        className="w-8 h-8 rounded-full object-cover"
+                        alt="Reid"
+                      />
+                      <div>
+                        <div className="text-sm font-semibold">Reid's Assessment</div>
+                        <div className="text-xs text-muted-foreground">AI Document Intelligence</div>
                       </div>
-                      <span
+                      <div
                         className={cn(
-                          "text-xs font-bold px-2 py-1 rounded-full",
+                          "ml-auto text-xs font-bold px-2.5 py-1 rounded-full",
                           selectedItem.reid.score === 0
                             ? "bg-emerald-100 text-emerald-700"
                             : selectedItem.reid.score <= 4
@@ -874,46 +912,64 @@ export default function AdminVerificationDashboard() {
                             : "bg-red-100 text-red-700"
                         )}
                       >
-                        Score: {selectedItem.reid.score}
-                      </span>
+                        {selectedItem.reid.score === 0
+                          ? "✓ Clean"
+                          : `Score: ${selectedItem.reid.score}/10`}
+                      </div>
                     </div>
 
                     <div
                       className={cn(
-                        "text-sm font-medium px-3 py-2 rounded-lg",
+                        "rounded-lg px-4 py-3 text-sm font-medium",
                         selectedItem.reid.recommendation === 'approve'
-                          ? "bg-emerald-50 text-emerald-700"
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                           : selectedItem.reid.recommendation === 'clarification'
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-red-50 text-red-700"
+                          ? "bg-amber-50 text-amber-800 border border-amber-200"
+                          : "bg-red-50 text-red-800 border border-red-200"
                       )}
                     >
-                      Reid recommends:{" "}
-                      {selectedItem.reid.recommendation === 'approve'
-                        ? "✅ Approve"
-                        : selectedItem.reid.recommendation === 'clarification'
-                        ? "⚠️ Request clarification"
-                        : "🚨 Escalate — review carefully"}
+                      {selectedItem.reid.recommendation === 'approve' &&
+                        "✅ Reid recommends: Approve — no issues found"}
+                      {selectedItem.reid.recommendation === 'clarification' &&
+                        "⚠️ Reid recommends: Request clarification from mover"}
+                      {selectedItem.reid.recommendation === 'escalate' &&
+                        "🚨 Reid recommends: Escalate — review carefully before approving"}
                     </div>
 
+                    {selectedItem.reid.notes && (
+                      <div className="text-sm text-muted-foreground italic px-1">
+                        "{selectedItem.reid.notes}"
+                      </div>
+                    )}
+
                     {selectedItem.reid.irregularities?.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Issues found:</p>
-                        <ul className="space-y-1">
-                          {selectedItem.reid.irregularities.map((issue, i) => (
-                            <li key={i} className="text-xs text-red-600 flex gap-2">
-                              <span>•</span>
-                              <span>{issue}</span>
-                            </li>
-                          ))}
-                        </ul>
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Issues detected
+                        </div>
+                        {selectedItem.reid.irregularities.map((issue: string, i: number) => (
+                          <div key={i} className="flex gap-2 text-sm text-red-700">
+                            <span className="text-red-400 flex-shrink-0">●</span>
+                            <span>{issue}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
 
                     {selectedItem.reid.score === 0 && (
-                      <p className="text-xs text-emerald-600">
-                        ✅ No issues found — document passed all checks
-                      </p>
+                      <div className="text-sm text-emerald-700 flex gap-2">
+                        <span>✓</span>
+                        <span>All checks passed — document meets requirements</span>
+                      </div>
+                    )}
+
+                    {selectedItem.reid.auditId && (
+                      <a
+                        href={`/admin/verification?auditId=${selectedItem.reid.auditId}`}
+                        className="text-xs text-primary underline block mt-1"
+                      >
+                        View full audit report →
+                      </a>
                     )}
                   </div>
                 )}
