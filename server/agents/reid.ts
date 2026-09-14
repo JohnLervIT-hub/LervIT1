@@ -40,6 +40,7 @@ import {
 import { emitEvent } from '../events';
 import { sendResendEmail } from '../notifications';
 import { buildReidEmail } from '../lib/reidEmailTemplates';
+import { extractTextFromDocument, isImageUrl } from '../lib/googleVision';
 import { logger } from '../logger';
 import { xavier } from './xavier';
 
@@ -273,13 +274,36 @@ export class ReidAgent extends BaseAgent {
       })
       .catch(() => {});
 
+    let extractedText = input.documentText ?? '';
+    if (input.documentUrl && isImageUrl(input.documentUrl) && !extractedText) {
+      logger.info(
+        { documentUrl: input.documentUrl, moverId: input.moverId },
+        '[Reid] Extracting text via Vision',
+      );
+      const vision = await extractTextFromDocument(input.documentUrl);
+      if (vision.text) {
+        extractedText = `[OCR extracted text (confidence: ${Math.round(
+          vision.confidence * 100,
+        )}%)]:\n${vision.text}`;
+        logger.info(
+          { textLength: vision.text.length, moverId: input.moverId },
+          '[Reid] Vision extraction complete',
+        );
+      } else {
+        logger.warn(
+          { error: vision.error, moverId: input.moverId },
+          '[Reid] Vision extraction failed',
+        );
+      }
+    }
+
     return this.runDocumentAudit(
       {
         auditId: audit.id,
         moverId: input.moverId,
         documentType: input.documentType,
         documentUrl: input.documentUrl,
-        documentText: input.documentText,
+        documentText: extractedText,
         moverName: moverRow.name ?? 'Mover',
         moverProfile: {
           name: moverRow.name,
@@ -338,12 +362,17 @@ Profile: ${JSON.stringify(input.moverProfile)}
 ${input.documentUrl ? `URL: ${input.documentUrl}` : ''}
 ${
   input.documentText
-    ? `Content: ${input.documentText.slice(0, 2000)}`
-    : 'No text extracted — evaluate based on document type requirements'
+    ? `Document content (OCR extracted):\n${input.documentText.slice(0, 3000)}`
+    : 'No document content available — evaluate based on document type requirements and URL only'
 }
 
 Requirements to check:
-${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+IMPORTANT: Base your assessment on the actual document content above.
+If name in document doesn't match mover profile name, flag it.
+If dates appear expired, flag it.
+If policy numbers are missing, flag it.`;
 
     let raw = '';
     try {
@@ -987,6 +1016,16 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
 
         const documentUrl = item.fileUrls?.[0];
 
+        const [moverRow] = await db
+          .select({ name: users.name, vehicle: movers.vehicleType })
+          .from(movers)
+          .innerJoin(users, eq(users.id, movers.userId))
+          .where(eq(movers.id, item.moverId))
+          .limit(1);
+
+        const moverName = moverRow?.name ?? 'Mover';
+        const vehicleType = moverRow?.vehicle ?? 'unknown';
+
         const docContext = [
           item.status ? `Current status: ${item.status}` : '',
           item.expiryDate
@@ -996,6 +1035,16 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
         ]
           .filter(Boolean)
           .join('\n');
+
+        let documentText = '';
+        if (documentUrl && isImageUrl(documentUrl)) {
+          const vision = await extractTextFromDocument(documentUrl);
+          if (vision.text) {
+            documentText = `[OCR extracted text (confidence: ${Math.round(
+              vision.confidence * 100,
+            )}%)]:\n${vision.text}`;
+          }
+        }
 
         const [audit] = await db
           .insert(documentAudits)
@@ -1015,11 +1064,11 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
             moverId: item.moverId,
             documentType: docType,
             documentUrl,
-            documentText: docContext,
-            moverName: item.moverId,
+            documentText: documentText || docContext,
+            moverName,
             moverProfile: {
-              name: item.moverId,
-              vehicle: 'unknown',
+              name: moverName,
+              vehicle: vehicleType,
               city: 'Calgary',
             },
           },
