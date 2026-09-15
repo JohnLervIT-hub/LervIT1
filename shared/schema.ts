@@ -2254,32 +2254,41 @@ export type InsertDocumentAudit = typeof documentAudits.$inferInsert;
 export type DocumentIrregularity = typeof documentIrregularities.$inferSelect;
 export type InsertDocumentIrregularity = typeof documentIrregularities.$inferInsert;
 
-// Nova DM identity mapping — cross-restart persistence for
-// (platform, senderId) → users. See server/lib/identityResolver.ts for the
-// resolveIdentity + linkIdentityFromContact API. Rows are created on every
-// first inbound DM; the user_id column is filled once Nova collects contact
-// info in-conversation (phone/email regex extract → users lookup).
+// Nova cross-channel identity mapping. One row per known customer; every
+// channel handle they've been reached on lives on the same row so a
+// customer who DMs on Instagram and later texts us gets identified as the
+// same person once contact info is collected. Channel columns are nullable
+// and independently indexed. `last_channel` records the most recent
+// touchpoint so Nova can prefer that channel on outbound replies.
 export const messengerIdentities = pgTable("messenger_identities", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  platform: text("platform").notNull(),      // 'messenger' | 'instagram'
-  senderId: text("sender_id").notNull(),     // Meta page-scoped id
+  id: varchar("id").primaryKey().default(sql`'mid_' || gen_random_uuid()::text`),
   userId: varchar("user_id").references(() => users.id),
   name: text("name"),
   phone: text("phone"),
   email: text("email"),
+  // Per-channel handles — nullable, indexed individually.
+  instagramSenderId: text("instagram_sender_id"),
+  messengerSenderId: text("messenger_sender_id"),
+  whatsappPhone: text("whatsapp_phone"),
+  tiktokUserId: text("tiktok_user_id"),
+  lastChannel: text("last_channel"),           // 'messenger' | 'instagram' | 'whatsapp' | 'tiktok' | 'voice' | 'sms'
   isResolved: boolean("is_resolved").notNull().default(false),
   isReturnCustomer: boolean("is_return_customer").notNull().default(false),
   totalMessages: integer("total_messages").notNull().default(0),
   firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
   resolvedAt: timestamp("resolved_at"),
-  resolvedBy: text("resolved_by"),           // 'auto_dm' | 'admin' | agent code
+  resolvedBy: text("resolved_by"),             // 'auto_dm' | 'admin' | agent code
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
-  platformSenderUniq: unique("messenger_identities_platform_sender_uniq").on(table.platform, table.senderId),
   userIdIdx: index("messenger_identities_user_id_idx").on(table.userId),
-  platformSenderIdx: index("messenger_identities_platform_sender_idx").on(table.platform, table.senderId),
+  instagramIdx: index("messenger_identities_instagram_idx").on(table.instagramSenderId),
+  messengerIdx: index("messenger_identities_messenger_idx").on(table.messengerSenderId),
+  whatsappIdx: index("messenger_identities_whatsapp_idx").on(table.whatsappPhone),
+  tiktokIdx: index("messenger_identities_tiktok_idx").on(table.tiktokUserId),
+  phoneIdx: index("messenger_identities_phone_idx").on(table.phone),
+  emailIdx: index("messenger_identities_email_idx").on(table.email),
 }));
 
 export type MessengerIdentity = typeof messengerIdentities.$inferSelect;
