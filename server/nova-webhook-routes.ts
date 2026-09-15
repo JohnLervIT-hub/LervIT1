@@ -929,23 +929,6 @@ async function handleMessengerMessage(input: {
             );
         }
 
-        const wantsQuote =
-          decision.action === 'send_link' ||
-          decision.action === 'book_now' ||
-          decision.action === 'offer_discount' ||
-          /quote|price|cost|how much|book|move/i.test(message);
-
-        if (wantsQuote) {
-          await sendMessengerQuickReplies(
-            senderId,
-            'Want an instant quote?',
-            [
-              { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
-              { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
-            ],
-          );
-        }
-
         await emitEvent(
           'nova.messenger_message_handled',
           'agent',
@@ -997,20 +980,6 @@ RULES:
 
     await sendMessengerMessage(senderId, novaReply);
 
-    // Naive quote-intent detector — if the message mentions price/booking,
-    // append quick-reply buttons on top of the Claude answer.
-    const wantsQuote = /quote|price|cost|how much|book|move/i.test(message);
-    if (wantsQuote) {
-      await sendMessengerQuickReplies(
-        senderId,
-        'Want an instant quote?',
-        [
-          { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
-          { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
-        ],
-      );
-    }
-
     await emitEvent(
       'nova.messenger_message_handled',
       'agent',
@@ -1056,43 +1025,6 @@ async function sendMessengerMessage(
     }
   } catch (err) {
     logger.error({ err, recipientId }, '[Nova Messenger] fetch threw');
-  }
-}
-
-async function sendMessengerQuickReplies(
-  recipientId: string,
-  text: string,
-  replies: Array<{ title: string; payload: string }>,
-): Promise<void> {
-  const token = process.env.META_PAGE_ACCESS_TOKEN;
-  if (!token) return;
-
-  try {
-    const res = await fetch(MESSENGER_GRAPH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipient: { id: recipientId },
-        message: {
-          text,
-          quick_replies: replies.map((r) => ({
-            content_type: 'text',
-            title: r.title,
-            payload: r.payload,
-          })),
-        },
-        access_token: token,
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      logger.warn(
-        { status: res.status, recipientId, errText },
-        '[Nova Messenger] Quick-replies send failed',
-      );
-    }
-  } catch (err) {
-    logger.error({ err, recipientId }, '[Nova Messenger] quick-replies fetch threw');
   }
 }
 
@@ -1287,24 +1219,6 @@ async function handleInstagramMessage(input: {
             );
         }
 
-        const wantsQuote =
-          decision.action === 'send_link' ||
-          decision.action === 'book_now' ||
-          decision.action === 'offer_discount' ||
-          /quote|price|cost|how much|book|move/i.test(message);
-
-        if (wantsQuote) {
-          await new Promise((r) => setTimeout(r, 1000));
-          await sendInstagramQuickReplies(
-            senderId,
-            'Want an instant quote?',
-            [
-              { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
-              { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
-            ],
-          );
-        }
-
         await emitEvent(
           'nova.instagram_message_handled',
           'agent',
@@ -1351,19 +1265,6 @@ INSTAGRAM RULES:
     igConversationHistory.set(senderId, history);
 
     await sendInstagramMessage(senderId, novaReply);
-
-    const wantsQuote = /quote|price|cost|how much|book|move/i.test(message);
-    if (wantsQuote) {
-      await new Promise((r) => setTimeout(r, 1000));
-      await sendInstagramQuickReplies(
-        senderId,
-        'Want an instant quote?',
-        [
-          { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
-          { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
-        ],
-      );
-    }
 
     await emitEvent(
       'nova.instagram_message_handled',
@@ -1421,49 +1322,6 @@ async function sendInstagramMessage(
     }
   } catch (err) {
     logger.error({ err, recipientId }, '[Nova Instagram] fetch threw');
-  }
-}
-
-async function sendInstagramQuickReplies(
-  recipientId: string,
-  text: string,
-  replies: Array<{ title: string; payload: string }>,
-): Promise<void> {
-  const igId = process.env.INSTAGRAM_BUSINESS_ID;
-  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
-  if (!igId || !token) return;
-
-  try {
-    const res = await fetch(
-      `https://graph.instagram.com/v26.0/${igId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recipient: { id: recipientId },
-          message: {
-            text,
-            quick_replies: replies.map((r) => ({
-              content_type: 'text',
-              title: r.title,
-              payload: r.payload,
-            })),
-          },
-        }),
-      },
-    );
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      logger.warn(
-        { status: res.status, recipientId, errText },
-        '[Nova Instagram] Quick-replies send failed',
-      );
-    }
-  } catch (err) {
-    logger.error({ err, recipientId }, '[Nova Instagram] quick-replies fetch threw');
   }
 }
 
