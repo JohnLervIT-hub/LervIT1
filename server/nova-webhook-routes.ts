@@ -1002,22 +1002,15 @@ async function sendInstagramMessage(
   recipientId: string,
   text: string,
 ): Promise<void> {
-  const token =
-    process.env.INSTAGRAM_ACCESS_TOKEN ?? process.env.META_PAGE_ACCESS_TOKEN;
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
   if (!token) {
-    logger.error('[Nova Instagram] No access token — skipping send');
-    return;
-  }
-
-  const igBusinessId = process.env.INSTAGRAM_BUSINESS_ID;
-  if (!igBusinessId) {
-    logger.error('[Nova Instagram] INSTAGRAM_BUSINESS_ID not set — skipping send');
+    logger.error('[Nova Instagram] INSTAGRAM_ACCESS_TOKEN not set — skipping send');
     return;
   }
 
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v19.0/${igBusinessId}/messages`,
+      'https://graph.facebook.com/v19.0/me/messages',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1045,15 +1038,12 @@ async function sendInstagramQuickReplies(
   text: string,
   replies: Array<{ title: string; payload: string }>,
 ): Promise<void> {
-  const token =
-    process.env.INSTAGRAM_ACCESS_TOKEN ?? process.env.META_PAGE_ACCESS_TOKEN;
-  const igBusinessId = process.env.INSTAGRAM_BUSINESS_ID;
-
-  if (!token || !igBusinessId) return;
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  if (!token) return;
 
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v19.0/${igBusinessId}/messages`,
+      'https://graph.facebook.com/v19.0/me/messages',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
