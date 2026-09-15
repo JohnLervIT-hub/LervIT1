@@ -22,6 +22,7 @@ import { aegis } from './agents/aegis';
 import { ember } from './agents/ember';
 import { reid } from './agents/reid';
 import { gt } from 'drizzle-orm';
+import { paymentRecoverySweep } from './lib/paymentRecovery';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -73,6 +74,23 @@ export function initBackgroundJobs() {
   cron.schedule('*/5 * * * *', async () => {
     await withJobLock('expire_notifications', expireOldNotifications);
     await withJobLock('expire_stale_bookings', expireStaleBookings);
+  }, TZ);
+
+  // Payment recovery — staged customer nudges for pending-payment bookings.
+  // Offset by 2 minutes so it never collides with the :00 stale-booking tick
+  // above. Each stage records a business_events dedupe tag so a booking
+  // can't be nudged twice for the same stage even across restarts.
+  // TODO Sprint 5 — replace with a Bull delayed-job chain seeded at booking
+  // creation so recovery is mechanism-driven, not sweep-driven.
+  cron.schedule('2-57/5 * * * *', async () => {
+    await withJobLock('payment_recovery_sweep', async () => {
+      try {
+        const result = await paymentRecoverySweep();
+        logger.info({ event: 'payment_recovery_sweep', result }, 'Payment recovery sweep complete');
+      } catch (err) {
+        logger.error({ err, event: 'payment_recovery_sweep' }, 'Payment recovery sweep failed');
+      }
+    });
   }, TZ);
 
   // Offset by 1 min so it never fires at the same second as the */5 job above
