@@ -15,6 +15,7 @@ import crypto from 'crypto';
 import express, { type Request, type Response } from 'express';
 import { desc, eq } from 'drizzle-orm';
 import Anthropic from '@anthropic-ai/sdk';
+import Telnyx from 'telnyx';
 import {
   bookings,
   leads,
@@ -48,6 +49,13 @@ const DM_EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
 const router = express.Router();
 
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+
+// Lazy Telnyx client — matches the pattern in voice-routes.ts so we don't
+// crash boot when TELNYX_API_KEY is missing in local/dev.
+function telnyxSdk() {
+  return new Telnyx({ apiKey: process.env.TELNYX_API_KEY ?? '' });
+}
 
 // ─── Telnyx webhook ──────────────────────────────────────────
 
@@ -96,6 +104,42 @@ router.post(
           { callControlId, callType },
           'agent',
         );
+
+        if (ELEVENLABS_AGENT_ID && callControlId) {
+          try {
+            await telnyxSdk().calls.actions.startStreaming(callControlId, {
+              stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
+              stream_track: 'both_tracks',
+              enable_dialogflow: false,
+            });
+
+            logger.info(
+              { callControlId, agentId: ELEVENLABS_AGENT_ID, callType },
+              '[Nova] ElevenLabs stream started',
+            );
+          } catch (err: any) {
+            logger.error(
+              { err, callControlId },
+              '[Nova] ElevenLabs stream failed — falling back to speak',
+            );
+
+            await telnyxSdk()
+              .calls.actions.speak(callControlId, {
+                payload:
+                  'Hi! This is Nova from LervIT. ' +
+                  'Please visit lervit.com to complete your booking. ' +
+                  'Have a great day!',
+                voice: 'female',
+                language: 'en-US',
+              })
+              .catch(() => {});
+          }
+        } else if (!ELEVENLABS_AGENT_ID) {
+          logger.warn(
+            { callControlId },
+            '[Nova] ELEVENLABS_AGENT_ID not set — call will stay silent',
+          );
+        }
         break;
 
       case 'call.machine.detection.ended': {
