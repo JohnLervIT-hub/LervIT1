@@ -27,6 +27,8 @@
  * structured shape (sections/faq/CTAs). Schema: shared/schema.ts blogPosts.
  */
 
+import fs from 'fs';
+import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import { desc, eq } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
@@ -41,6 +43,30 @@ import { metaProvider } from '../providers/meta';
 import { linkedInProvider } from '../providers/linkedin';
 
 const EMBER_MODEL = 'claude-sonnet-4-6';
+
+// CreativeOS skill — viral hooks, HeyGen/Higgsfield rules, Calgary content, brand voice.
+// Loaded once at startup; injected into content-generation system prompts.
+let CREATIVEOS_SKILL = '';
+try {
+  const skillPath = path.join(process.cwd(), '.agents/skills/creativeos/SKILL.md');
+  CREATIVEOS_SKILL = fs.readFileSync(skillPath, 'utf-8');
+  logger.info('[Ember] CreativeOS skill loaded');
+} catch {
+  logger.warn('[Ember] CreativeOS skill not found — using base prompts');
+}
+
+const CREATIVEOS_APPENDIX = CREATIVEOS_SKILL
+  ? `\n\n---\n## CREATIVEOS SKILL\n${CREATIVEOS_SKILL}`
+  : '';
+
+// For blog posts, only inject sections 5 (Calgary) and 7 (Brand Voice) to keep prompt lean.
+const CREATIVEOS_BLOG_APPENDIX = (() => {
+  if (!CREATIVEOS_SKILL) return '';
+  const calgary = CREATIVEOS_SKILL.split('## 5.')[1]?.split('## 6.')[0] ?? '';
+  const brand = CREATIVEOS_SKILL.split('## 7.')[1]?.split('## 8.')[0] ?? '';
+  if (!calgary && !brand) return '';
+  return `\n\n---\n## CREATIVEOS SKILL (excerpt)\n${calgary ? `## 5.${calgary}` : ''}${brand ? `## 7.${brand}` : ''}`;
+})();
 
 const LERVIT_BRAND = `
 LervIT is Calgary's AI-powered moving platform connecting customers with
@@ -282,7 +308,7 @@ Rules:
 - No markdown, no HTML tags anywhere. Plain sentences only.
 - Each section must have a distinct angle; do not repeat information across sections.
 - FAQs must answer real questions, not restate section content.
-- Bake in Calgary neighbourhood references and at least one mention of lervit.com or the LERVIT10 promo.`;
+- Bake in Calgary neighbourhood references and at least one mention of lervit.com or the LERVIT10 promo.${CREATIVEOS_BLOG_APPENDIX}`;
 
     const userMessage = `Draft a blog post on: "${topic}".
 Category: ${category}.`;
@@ -508,7 +534,7 @@ No markdown. No code fences.
 No backticks. No explanation.
 Start your response with { directly.
 
-{ "content": string, "hashtags": string[] }`;
+{ "content": string, "hashtags": string[] }${CREATIVEOS_APPENDIX}`;
 
       const userMessage = `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
 
@@ -659,7 +685,7 @@ Do NOT include campaign name, objective,
 audience, or offer in the response.
 Only strategy, contentPillars, items.
 No newlines inside string values.
-All strings under 100 characters.`;
+All strings under 100 characters.${CREATIVEOS_APPENDIX}`;
 
     const userMessage = `Create a content plan for this campaign.
 Return ONLY the JSON with strategy,
@@ -825,7 +851,7 @@ Start your response with { directly.
   "scenes": [
     { "time": "0-5s", "text": "line spoken here", "direction": "visual direction note" }
   ]
-}`;
+}${CREATIVEOS_APPENDIX}`;
 
     const userMessage = `Write a script for: ${concept}`;
 
@@ -886,7 +912,7 @@ Output STRICT JSON only — no prose, no markdown fence:
   "audio": "music/sfx direction",
   "textOverlays": ["on-screen text 1", "on-screen text 2"],
   "callout": "the single line viewers should remember"
-}`;
+}${CREATIVEOS_APPENDIX}`;
 
     const userMessage = `Brief the visual/tonal direction for: ${concept}
 Platform: ${item.platform ?? 'social'}
