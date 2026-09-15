@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, inAppNotifications } from '@shared/schema';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, inAppNotifications, quotes, leads } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
@@ -23,6 +23,7 @@ import { ember } from './agents/ember';
 import { reid } from './agents/reid';
 import { gt } from 'drizzle-orm';
 import { paymentRecoverySweep } from './lib/paymentRecovery';
+import { agentEventBus } from './lib/agentEventBus';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -415,6 +416,84 @@ export function initBackgroundJobs() {
         logger.info({ event: 'ember_newsletter', subject: (result as any)?.subject }, 'Ember newsletter drafted');
       } catch (err) {
         logger.error({ err, event: 'ember_newsletter' }, 'Ember newsletter failed');
+      }
+    });
+  }, TZ);
+
+  // Hourly — surface quotes that have sat >48h without a booking so Nova
+  // can call. Dedup keyed on business_events 'nova.quote_abandoned_fired'
+  // so a quote never fires twice.
+  cron.schedule('0 * * * *', async () => {
+    await withJobLock('quote-abandonment-check', async () => {
+      try {
+        const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+        const abandonedQuotes = await db
+          .select({
+            quoteId: quotes.id,
+            leadId: leads.id,
+            email: leads.contactEmail,
+            phone: leads.contactPhone,
+            name: leads.contactName,
+            price: quotes.totalPrice,
+            pickupAddress: quotes.pickupAddress,
+          })
+          .from(quotes)
+          .innerJoin(leads, eq(leads.quoteId, quotes.id))
+          .where(
+            and(
+              eq(quotes.status, 'pending'),
+              lt(quotes.createdAt, cutoff),
+              // Booking relationship is stored on quotes.bookingId, not the
+              // other way around, so "never converted" is a NULL check.
+              isNull(quotes.bookingId),
+            ),
+          )
+          .limit(50);
+
+        for (const q of abandonedQuotes) {
+          const alreadyNotified = await db
+            .select({ id: businessEvents.id })
+            .from(businessEvents)
+            .where(
+              and(
+                eq(businessEvents.entityId, q.quoteId),
+                eq(businessEvents.eventType, 'nova.quote_abandoned_fired'),
+              ),
+            )
+            .limit(1);
+
+          if (alreadyNotified.length) continue;
+
+          await agentEventBus.emit(
+            'lead.quote_abandoned',
+            {
+              leadId: q.leadId,
+              quoteId: q.quoteId,
+              email: q.email,
+              phone: q.phone,
+              name: q.name,
+              price: q.price,
+              pickupAddress: q.pickupAddress,
+            },
+            'background-jobs',
+          );
+
+          await emitEvent(
+            'nova.quote_abandoned_fired',
+            'quote',
+            q.quoteId,
+            { leadId: q.leadId },
+            'system',
+          );
+
+          logger.info(
+            { quoteId: q.quoteId, leadId: q.leadId },
+            '[Jobs] Quote abandoned → Nova',
+          );
+        }
+      } catch (err) {
+        logger.error({ err, event: 'quote_abandonment_check' }, 'Quote abandonment sweep failed');
       }
     });
   }, TZ);

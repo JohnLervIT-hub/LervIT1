@@ -15458,6 +15458,55 @@ Respond with VALID JSON only:
         }
       }
       if (!quote) throw new Error('quote insert failed after retries');
+
+      // Auto-capture lead from quote when the client attached contact info.
+      // Best-effort: a failure here must not block the quote response.
+      const email = typeof b.email === 'string' ? b.email.trim() : '';
+      const phone = typeof b.phone === 'string' ? b.phone.trim() : '';
+      const contactName = typeof b.name === 'string' ? b.name.trim() : '';
+      if (email || phone) {
+        try {
+          const existingLead = await db
+            .select()
+            .from(leads)
+            .where(email ? eq(leads.contactEmail, email) : eq(leads.contactPhone, phone))
+            .limit(1);
+
+          if (!existingLead.length) {
+            const [newLead] = await db
+              .insert(leads)
+              .values({
+                contactEmail: email || null,
+                contactPhone: phone || null,
+                contactName: contactName || null,
+                sourceChannel: 'quote_form',
+                utmCampaign: 'scout-reid',
+                leadType: 'b2c',
+                intentScore: 85,
+                status: 'new',
+                quoteId: quote.id,
+                notes:
+                  `Auto-captured from quote.\n` +
+                  `Pickup: ${quote.pickupAddress}\n` +
+                  `Dropoff: ${quote.dropoffAddress ?? '—'}\n` +
+                  `Price: $${quote.totalPrice ?? '—'}`,
+              })
+              .returning();
+            logger.info(
+              { leadId: newLead.id, quoteId: quote.id, email },
+              '[quotes] Lead auto-captured',
+            );
+          } else {
+            await db
+              .update(leads)
+              .set({ quoteId: quote.id, updatedAt: new Date() })
+              .where(eq(leads.id, existingLead[0].id));
+          }
+        } catch (leadErr) {
+          logger.warn({ err: leadErr, quoteId: quote.id }, '[quotes] auto lead-capture failed (non-fatal)');
+        }
+      }
+
       return res.status(201).json({
         ok: true,
         quoteId: quote.id,
