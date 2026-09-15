@@ -15064,11 +15064,19 @@ Respond with VALID JSON only:
           )!,
         );
       } else if (audience === 'customers') {
-        // Demand side — quote leads.
+        // Demand side — quote leads. Guard on utmCampaign excludes Ryan's
+        // mover candidates (leadType=NULL, utmCampaign='ryan-brooks') from
+        // leaking into the customers tab.
         filters.push(
-          or(
-            eq(leads.leadType, 'b2c'),
-            isNull(leads.leadType),
+          and(
+            or(
+              eq(leads.leadType, 'b2c'),
+              isNull(leads.leadType),
+            ),
+            or(
+              isNull(leads.utmCampaign),
+              ne(leads.utmCampaign, 'ryan-brooks'),
+            ),
           )!,
         );
       }
@@ -15330,6 +15338,7 @@ Respond with VALID JSON only:
         sourceChannel: 'quote_form',
         utmSource: 'quote_form',
         utmCampaign: 'scout-reid',
+        leadType: 'b2c',
         intentScore: 85,
         status: 'new',
         notes: finalNotes,
@@ -15453,6 +15462,14 @@ Respond with VALID JSON only:
         ? body.utmCampaign.trim()
         : 'admin-manual';
 
+      // Admin add is dual-purpose: the client sends utmCampaign='ryan-brooks'
+      // when the audience tab is 'movers', otherwise it's a customer add. For
+      // customers we set leadType explicitly so future filter changes can rely
+      // on a populated column instead of IS-NULL. Mover adds leave leadType
+      // to the schema default; the customers filter's utmCampaign guard keeps
+      // them out of the customers tab.
+      const isMoverAdd = utmCampaign === 'ryan-brooks';
+
       const [row] = await db.insert(leads).values({
         contactName: contactName || null,
         contactEmail,
@@ -15460,6 +15477,7 @@ Respond with VALID JSON only:
         sourceChannel,
         utmSource: sourceChannel,
         utmCampaign,
+        ...(isMoverAdd ? {} : { leadType: 'b2c' }),
         notes,
         intentScore,
         status,
