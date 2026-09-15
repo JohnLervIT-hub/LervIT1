@@ -185,6 +185,38 @@ router.post(
   },
 );
 
+// ─── Inbound SMS webhook ─────────────────────────────────────
+//
+// Captures WhatsApp OTPs and any other inbound SMS delivered to our Telnyx
+// number. Ack fast, log to business_events, never throw back to Telnyx.
+
+router.post(
+  '/api/nova/sms/inbound',
+  async (req: Request, res: Response) => {
+    res.status(200).send('OK');
+
+    try {
+      const { from, to, text, id, received_at } =
+        req.body?.data?.payload ?? req.body ?? {};
+
+      logger.info(
+        { from, to, text, id, received_at },
+        '[Nova SMS] Inbound SMS received',
+      );
+
+      await emitEvent(
+        'nova.sms_received',
+        'sms',
+        id ?? 'unknown',
+        { from, to, text },
+        'system',
+      ).catch(() => {});
+    } catch (err) {
+      logger.error({ err }, '[Nova SMS] Inbound webhook error');
+    }
+  },
+);
+
 // ─── Tool 1: lookup_quote ────────────────────────────────────
 
 router.get('/api/nova/quote', async (req: Request, res: Response) => {
