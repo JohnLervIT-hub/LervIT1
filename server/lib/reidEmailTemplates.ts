@@ -18,6 +18,7 @@ const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
 export type ReidEmailType =
   | 'receipt'
   | 'approved'
+  | 'document_approved'
   | 'clarification'
   | 'under_review'
   | 'rejected';
@@ -251,6 +252,32 @@ function approvedBody(_data: ReidEmailData): string {
     </p>`;
 }
 
+function documentApprovedBody(data: ReidEmailData): string {
+  const docLabelSafe = escapeHtml(data.docLabel);
+
+  return `
+    <div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:8px;padding:20px;margin-bottom:24px;text-align:center;">
+      <div style="font-size:36px;margin-bottom:8px;line-height:1;">&#9989;</div>
+      <div style="font-size:16px;font-weight:700;color:#065F46;">
+        Document Verified
+      </div>
+    </div>
+
+    <p style="margin:0 0 16px;font-size:15px;color:#475569;line-height:1.6;">
+      Your <strong>${docLabelSafe}</strong> has been successfully verified.
+    </p>
+
+    <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
+      This document is now on file. Once all required documents are verified, your account will be fully activated for dispatch.
+    </p>
+
+    <div style="text-align:center;margin-bottom:8px;">
+      <a href="${APP_BASE_URL}/profile/documents" style="display:inline-block;background:#2563EB;color:#FFFFFF;font-size:15px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none;letter-spacing:-0.2px;">
+        View Document Status &rarr;
+      </a>
+    </div>`;
+}
+
 function clarificationBody(data: ReidEmailData): string {
   const docLabelSafe = escapeHtml(data.docLabel);
   const irregularities = Array.isArray(data.irregularities) ? data.irregularities : [];
@@ -433,6 +460,21 @@ function approvedText(data: ReidEmailData): string {
   ].join('\n');
 }
 
+function documentApprovedText(data: ReidEmailData): string {
+  return [
+    `Hi ${data.firstName},`,
+    '',
+    `Your ${data.docLabel} has been successfully verified.`,
+    '',
+    'This document is now on file. Once all required documents are verified,',
+    'your account will be fully activated for dispatch.',
+    '',
+    `View document status: ${APP_BASE_URL}/profile/documents`,
+    '',
+    '— Reid Calloway, Document Operations, LervIT Technologies',
+  ].join('\n');
+}
+
 function clarificationText(data: ReidEmailData): string {
   const issues = (data.irregularities ?? []).map((s, i) => `  ${i + 1}. ${s}`).join('\n');
   return [
@@ -519,6 +561,16 @@ export function buildReidEmail(type: ReidEmailType, data: ReidEmailData): BuiltE
         body: approvedBody(data),
       });
       return { subject, html, text: approvedText(data) };
+    }
+    case 'document_approved': {
+      const subject = `[LervIT] ${data.docLabel} verified`;
+      const html = renderShell({
+        subject,
+        banner: { bg: '#ECFDF5', icon: '&#9989;', text: '#065F46', title: 'Document Verified' },
+        firstName: data.firstName,
+        body: documentApprovedBody(data),
+      });
+      return { subject, html, text: documentApprovedText(data) };
     }
     case 'clarification': {
       const subject = `[LervIT] Action required — ${data.docLabel} needs clarification`;

@@ -2994,49 +2994,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Stub notification hook
       const item = result[0];
-      const reidDocType = item.type.toLowerCase().replace(/ /g, '_');
-      const reidMatch = or(
-        eq(documentAudits.verificationItemId, req.params.id),
-        and(
-          eq(documentAudits.moverId, item.moverId),
-          eq(documentAudits.documentType, reidDocType),
-        ),
-      );
+      // Verification-item types (dashboard) do not 1:1 with Reid document
+      // types. Explicit map avoids false matches on dashboard-only items
+      // (payout_setup, vehicle_photos have no Reid audit).
+      const VERIF_TO_REID_TYPE: Record<string, string> = {
+        id: 'drivers_license',
+        drivers_license: 'drivers_license',
+        vehicle_registration: 'vehicle_registration',
+        vehicle_photos: 'vehicle_registration',
+        insurance: 'insurance',
+        background_check: 'background_check',
+        payout_setup: '',
+        wcb: 'wcb',
+      };
+      const normalizedType = item.type.toLowerCase().replace(/ /g, '_');
+      const reidDocType = VERIF_TO_REID_TYPE[normalizedType] ?? normalizedType;
+      const reidMatch = reidDocType
+        ? or(
+            eq(documentAudits.verificationItemId, req.params.id),
+            and(
+              eq(documentAudits.moverId, item.moverId),
+              eq(documentAudits.documentType, reidDocType),
+            ),
+          )
+        : eq(documentAudits.verificationItemId, req.params.id);
       if (status === 'Approved') {
+        let syncedAuditId: string | null = null;
         try {
-          await db.update(documentAudits)
+          const updated = await db.update(documentAudits)
             .set({
               status: 'approved',
               approvedAt: new Date(),
               reviewedBy: user?.id ?? 'admin',
               updatedAt: new Date(),
             })
-            .where(reidMatch);
+            .where(reidMatch)
+            .returning({ id: documentAudits.id });
+          syncedAuditId = updated[0]?.id ?? null;
         } catch (reidSyncErr) {
           logEvent.error('reid_audit_sync_approve', reidSyncErr, { itemId: req.params.id, moverId: item.moverId });
         }
         console.log(`[Notification] Verification item ${item.type} approved for mover ${item.moverId}`);
 
-        // Notify mover of verification approval
+        // Notify mover of verification approval — but skip if Reid already
+        // emailed the mover about this audit (see Reid.markEmailSent).
         try {
-          const verifMover = await storage.getMover(item.moverId);
-          if (verifMover) {
-            const verifMoverUser = await storage.getUser(verifMover.userId);
-            if (verifMoverUser) {
-              await notificationService.sendEmail({
-                to: verifMoverUser.email,
-                subject: `Your ${item.type} has been approved`,
-                body: `<p>Hi ${verifMoverUser.name},</p><p>Your <strong>${item.type}</strong> has been approved. You're one step closer to going online!</p><p>Log in to your dashboard to check your full verification status.</p><p>The LervIT Team</p>`,
-                type: 'status_update',
-              });
-              await storage.createNotification({
-                userId: verifMoverUser.id,
-                type: 'verification_update',
-                title: `${item.type} Approved`,
-                message: `Your ${item.type} has been approved. You're one step closer to going online!`,
-                actionUrl: '/mover-verification',
-                isRead: false,
-              });
+          let reidAlreadyNotified = false;
+          if (syncedAuditId) {
+            const priorReidEmail = await db
+              .select({ id: businessEvents.id })
+              .from(businessEvents)
+              .where(
+                and(
+                  eq(businessEvents.entityId, syncedAuditId),
+                  inArray(businessEvents.eventType, [
+                    'reid.email_sent.approved',
+                    'reid.email_sent.document_approved',
+                  ]),
+                ),
+              )
+              .limit(1);
+            reidAlreadyNotified = priorReidEmail.length > 0;
+          }
+
+          if (reidAlreadyNotified) {
+            logger.info(
+              { itemId: req.params.id, moverId: item.moverId, auditId: syncedAuditId },
+              '[Verification] Skipping dashboard email — Reid already notified mover',
+            );
+          } else {
+            const verifMover = await storage.getMover(item.moverId);
+            if (verifMover) {
+              const verifMoverUser = await storage.getUser(verifMover.userId);
+              if (verifMoverUser) {
+                await notificationService.sendEmail({
+                  to: verifMoverUser.email,
+                  subject: `Your ${item.type} has been approved`,
+                  body: `<p>Hi ${verifMoverUser.name},</p><p>Your <strong>${item.type}</strong> has been approved. You're one step closer to going online!</p><p>Log in to your dashboard to check your full verification status.</p><p>The LervIT Team</p>`,
+                  type: 'status_update',
+                });
+                await storage.createNotification({
+                  userId: verifMoverUser.id,
+                  type: 'verification_update',
+                  title: `${item.type} Approved`,
+                  message: `Your ${item.type} has been approved. You're one step closer to going online!`,
+                  actionUrl: '/mover-verification',
+                  isRead: false,
+                });
+              }
             }
           }
         } catch (verifNotifErr) {

@@ -27,13 +27,14 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, notInArray, sql } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import {
   businessEvents,
   documentAudits,
   documentIrregularities,
+  inAppNotifications,
   movers,
   users,
   verificationItems,
@@ -471,15 +472,14 @@ If policy numbers are missing, flag it.`;
       .limit(1);
 
     if (status === 'auto_approved') {
-      await db
-        .update(movers)
-        .set({ documentsVerified: true })
-        .where(eq(movers.id, input.moverId));
+      // NOTE: movers.documentsVerified is intentionally NOT flipped here.
+      // Only the verification-dashboard PATCH (via setMoverVerified) may set
+      // it, and only after ALL required items are approved.
 
       if (moverRow && !options.suppressEmail) {
         await this.sendMoverMessage(
           moverRow,
-          'approved',
+          'document_approved',
           { documentType: input.documentType },
           input.auditId,
         );
@@ -598,13 +598,12 @@ If policy numbers are missing, flag it.`;
       })
       .where(eq(documentAudits.id, input.auditId));
 
-    await db
-      .update(movers)
-      .set({ documentsVerified: true })
-      .where(eq(movers.id, audit.moverId));
+    // NOTE: movers.documentsVerified is intentionally NOT flipped here.
+    // Approving a single document does not mean the mover is fully verified;
+    // that gate lives in the verification-dashboard PATCH via setMoverVerified.
 
     const [moverRow] = await db
-      .select({ id: movers.id, name: users.name, email: users.email })
+      .select({ id: movers.id, userId: users.id, name: users.name, email: users.email })
       .from(movers)
       .innerJoin(users, eq(users.id, movers.userId))
       .where(eq(movers.id, audit.moverId))
@@ -613,10 +612,25 @@ If policy numbers are missing, flag it.`;
     if (moverRow) {
       await this.sendMoverMessage(
         moverRow,
-        'approved',
+        'document_approved',
         { documentType: audit.documentType },
         input.auditId,
       );
+
+      const docLabel = String(audit.documentType ?? 'document').replace(/_/g, ' ');
+      await db
+        .insert(inAppNotifications)
+        .values({
+          userId: moverRow.userId,
+          type: 'document_approved',
+          title: 'Document Verified',
+          message: `Your ${docLabel} has been verified.`,
+          actionUrl: '/profile/documents',
+          isRead: false,
+        })
+        .catch((err) =>
+          logger.error({ err }, '[Reid] In-app notification failed'),
+        );
     }
 
     await emitEvent(
@@ -626,6 +640,42 @@ If policy numbers are missing, flag it.`;
       { auditId: input.auditId, reviewedBy: input.reviewedBy },
       'agent',
     );
+
+    // Check whether Reid has now cleared every required verification item
+    // for this mover. If so, emit a signal event; the actual isVerified /
+    // documentsVerified flip stays with the dashboard PATCH so there is one
+    // choke-point (setMoverVerified) that owns the state change.
+    const REID_REQUIRED_ITEMS = [
+      'INSURANCE',
+      'DRIVERS_LICENSE',
+      'VEHICLE_REGISTRATION',
+      'BACKGROUND_CHECK',
+      'ID',
+    ];
+    const pendingItems = await db
+      .select({ id: verificationItems.id })
+      .from(verificationItems)
+      .where(
+        and(
+          eq(verificationItems.moverId, audit.moverId),
+          inArray(verificationItems.type, REID_REQUIRED_ITEMS),
+          notInArray(verificationItems.status, ['Approved', 'approved']),
+        ),
+      );
+
+    if (pendingItems.length === 0) {
+      logger.info(
+        { moverId: audit.moverId },
+        '[Reid] All required documents approved — emitting reid.all_documents_approved',
+      );
+      await emitEvent(
+        'reid.all_documents_approved',
+        'mover',
+        audit.moverId,
+        { moverId: audit.moverId },
+        'agent',
+      );
+    }
 
     return { approved: true, auditId: input.auditId, moverId: audit.moverId };
   }
@@ -1181,7 +1231,7 @@ Avg irregularity score: ${kpi.avgIrregularityScore}`,
 
   private async sendMoverMessage(
     mover: { id?: string; name: string | null; email: string | null },
-    type: 'receipt' | 'approved' | 'clarification' | 'under_review' | 'rejected',
+    type: 'receipt' | 'approved' | 'document_approved' | 'clarification' | 'under_review' | 'rejected',
     data: Record<string, any>,
     auditId?: string,
   ) {
