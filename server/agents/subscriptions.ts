@@ -16,7 +16,6 @@ import { ember } from './ember';
 import { xavier } from './xavier';
 import { logger } from '../logger';
 import { buildCustomerContext } from '../lib/novaContext';
-import { decideRecoveryStrategy } from '../lib/novaReasoning';
 import { notificationService } from '../notifications';
 
 export function registerAgentSubscriptions(): void {
@@ -206,31 +205,19 @@ export function registerAgentSubscriptions(): void {
         phone: data.phone,
       }).catch(() => null);
 
-      const strategy = context
-        ? await decideRecoveryStrategy(context, {
-            bookingId: data.leadId ?? '',
-            price: 0,
-            pickupAddress: data.pickupAddress,
-            minutesSinceCreated: 0,
-            smsSent: false,
-          }).catch(() => null)
-        : null;
+      // Customer explicitly asked for human contact → always call during
+      // reasonable Calgary hours (8AM–9PM), regardless of Tier 2's downgrade.
+      // Only outside that window do we fall back to SMS.
+      const calgaryHour = context?.currentHourCalgary ?? 12;
+      const isReasonableHour = calgaryHour >= 8 && calgaryHour < 21;
 
-      // Customer explicitly asked for human contact — always call if we're
-      // inside any call window, even if Tier 2 wanted to downgrade to SMS.
-      // Only skip when truly out-of-hours.
-      const shouldCall =
-        strategy?.action !== 'skip' ||
-        context?.isBusinessHours ||
-        context?.isEveningHours;
-
-      if (!shouldCall) {
+      if (!isReasonableHour) {
         await notificationService
           .sendSMS({
             to: data.phone,
             message:
               `Hi ${data.name ?? 'there'}! Nova from LervIT — you asked to chat. ` +
-              `Get an instant quote here: lervit.com 🚛`,
+              `We'll call you first thing tomorrow! In the meantime: lervit.com 🚛`,
             type: 'pilot_status',
           })
           .catch(() => {});

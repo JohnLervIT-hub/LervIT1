@@ -73,12 +73,19 @@ export async function buildCustomerContext(identifier: {
 }): Promise<NovaCustomerContext> {
   const timezone = CALGARY_TZ;
   const now = new Date();
-  const calgaryHour = Number(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      hour: 'numeric',
-      hour12: false,
-    }).format(now),
+
+  // en-CA with hour12:false formats as "15 h" — Number() → NaN, so use
+  // parseInt which tolerates the trailing " h" and any locale suffix.
+  const calgaryTime = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+  }).format(now);
+  const calgaryHour = parseInt(calgaryTime, 10);
+
+  logger.info(
+    { utcHour: now.getUTCHours(), calgaryHour, timezone },
+    '[NovaContext] Calgary time check',
   );
 
   const isBusinessHours = calgaryHour >= 9 && calgaryHour < 18;
