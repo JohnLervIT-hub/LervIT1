@@ -216,7 +216,15 @@ export function registerAgentSubscriptions(): void {
           }).catch(() => null)
         : null;
 
-      if (strategy?.action === 'skip') {
+      // Customer explicitly asked for human contact — always call if we're
+      // inside any call window, even if Tier 2 wanted to downgrade to SMS.
+      // Only skip when truly out-of-hours.
+      const shouldCall =
+        strategy?.action !== 'skip' ||
+        context?.isBusinessHours ||
+        context?.isEveningHours;
+
+      if (!shouldCall) {
         await notificationService
           .sendSMS({
             to: data.phone,
