@@ -40,7 +40,7 @@ import { resolveIdentity, linkIdentityFromContact } from './lib/identityResolver
 // senderIds can be linked to a users row mid-conversation. Kept loose — a
 // false-positive on the phone regex just triggers a failed users lookup,
 // which no-ops on the resolver side.
-const DM_PHONE_REGEX = /(\+?1?\s*\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4})/;
+const DM_PHONE_REGEX = /(\+?1?[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4})/;
 const DM_EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
 
 const router = express.Router();
