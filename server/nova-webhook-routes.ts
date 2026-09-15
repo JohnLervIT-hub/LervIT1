@@ -1261,7 +1261,13 @@ async function handleInstagramMessage(input: {
         phone: identity?.phone,
         email: identity?.email,
       });
-      const decision = await decideNextDMResponse(context, history, 'instagram', 'general');
+
+      const hasAddresses =
+        /from|pickup|moving from|at\s+\d/i.test(message) ||
+        history.some((h) => /to\s+\w|dropoff|deliver/i.test(h.content));
+      const conversationGoal: 'book' | 'quote' = hasAddresses ? 'book' : 'quote';
+
+      const decision = await decideNextDMResponse(context, history, 'instagram', conversationGoal);
 
       if (decision?.nextMessage) {
         history.push({ role: 'assistant', content: decision.nextMessage });

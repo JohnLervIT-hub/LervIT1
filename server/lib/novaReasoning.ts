@@ -203,7 +203,17 @@ RULES:
 - If customer wants quote → collect pickup + dropoff
 - If ready to book → send lervit.com link
 - If complaint → empathize first, then offer solution
-- If confused → simplify
+- If confused → simplify${
+        goal === 'book'
+          ? `
+- Customer has already given pickup + dropoff addresses
+- Send direct booking link: lervit.com/request-move?pickup=...&dropoff=... (fill in the addresses from the conversation)
+- Give a rough price estimate, e.g. "$65-85 for a single item move in Calgary"
+- Offer to send an SMS with the link
+- Do NOT just say "go to website" — give the direct link
+- Phrase it like: "Here's your direct booking link — takes 2 minutes to confirm"`
+          : ''
+      }
 
 Return ONLY valid JSON:
 {
