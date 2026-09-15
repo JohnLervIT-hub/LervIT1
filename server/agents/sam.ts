@@ -307,6 +307,26 @@ export class SamAgent extends BaseAgent {
         continue;
       }
 
+      // Third dedup: same (companyName, sourceChannel) pair already logged as
+      // a b2bp lead. Catches cases where a business is re-crawled with a new
+      // phone number (VoIP re-provisioning, etc.) but should still be treated
+      // as one prospect.
+      const [existingByCompany] = await db
+        .select({ id: leads.id })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.companyName, c.name),
+            eq(leads.sourceChannel, c.source),
+            eq(leads.leadType, 'b2bp'),
+          ),
+        )
+        .limit(1);
+      if (existingByCompany) {
+        result.duplicatesSkipped++;
+        continue;
+      }
+
       const [inserted] = await db
         .insert(leads)
         .values({
@@ -314,7 +334,7 @@ export class SamAgent extends BaseAgent {
           contactEmail: null,
           contactPhone: phone,
           companyName: c.name,
-          leadType: 'b2b',
+          leadType: 'b2bp',
           industry: c.industry,
           dealStage: 'prospect',
           sourceChannel: c.source,
@@ -649,8 +669,8 @@ export class SamAgent extends BaseAgent {
     const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
     if (!lead) return { skipped: true, reason: 'lead not found', leadId };
 
-    if (lead.leadType !== 'b2b') {
-      return { skipped: true, reason: `leadType is ${lead.leadType}, need b2b`, leadId };
+    if (lead.leadType !== 'b2bp') {
+      return { skipped: true, reason: `leadType is ${lead.leadType}, need b2bp`, leadId };
     }
     if (lead.dealStage !== 'warm') {
       return { skipped: true, reason: `dealStage is ${lead.dealStage}, need warm`, leadId };

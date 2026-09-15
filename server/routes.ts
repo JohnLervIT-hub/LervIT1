@@ -14063,13 +14063,13 @@ Respond with VALID JSON only:
     }
   });
 
-  // B2B pipeline view. Filters leads where leadType='b2b'; optional stage
-  // query param narrows by dealStage.
+  // B2B partner pipeline view. Filters leads where leadType='b2bp'; optional
+  // stage query param narrows by dealStage.
   app.get("/api/admin/agent/sam/pipeline", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       const stage = typeof req.query.stage === 'string' ? req.query.stage.trim() : '';
-      const conditions = [eq(leads.leadType, 'b2b')];
+      const conditions = [eq(leads.leadType, 'b2bp')];
       if (stage) conditions.push(eq(leads.dealStage, stage));
       const rows = await db
         .select()
@@ -14116,7 +14116,10 @@ Respond with VALID JSON only:
         }
         update.dealStage = body.dealStage;
       }
-      if (typeof body.leadType === 'string' && (body.leadType === 'b2c' || body.leadType === 'b2b')) {
+      if (
+        typeof body.leadType === 'string' &&
+        (body.leadType === 'b2c' || body.leadType === 'b2bm' || body.leadType === 'b2bp')
+      ) {
         update.leadType = body.leadType;
       }
       if (typeof body.notes === 'string') update.notes = body.notes;
@@ -15037,42 +15040,23 @@ Respond with VALID JSON only:
         if (!isNaN(since.getTime())) filters.push(sql`${leads.createdAt} >= ${since}`);
       }
       if (audience === 'movers') {
-        // Ryan's individual gig workers.
+        // Ryan's individual gig workers (b2bm). utmCampaign fallback catches
+        // historical rows still on the legacy 'ryan-brooks' tag pre-backfill.
         filters.push(
           or(
+            eq(leads.leadType, 'b2bm'),
             eq(leads.utmCampaign, 'ryan-brooks'),
-            and(
-              eq(leads.leadType, 'b2b'),
-              inArray(leads.sourceChannel, [
-                'kijiji_services',
-                'kijiji_jobs',
-                'craigslist_services',
-              ]),
-            ),
           )!,
         );
       } else if (audience === 'partners') {
-        // Sam's B2B fleet-partner prospects.
-        filters.push(
-          and(
-            eq(leads.leadType, 'b2b'),
-            notInArray(leads.sourceChannel, [
-              'kijiji_services',
-              'kijiji_jobs',
-              'craigslist_services',
-            ]),
-          )!,
-        );
+        // Sam's B2B fleet-partner prospects (b2bp).
+        filters.push(eq(leads.leadType, 'b2bp'));
       } else if (audience === 'customers') {
-        // Demand side — quote leads. Guard on utmCampaign excludes Ryan's
-        // mover candidates (leadType=NULL, utmCampaign='ryan-brooks') from
-        // leaking into the customers tab.
+        // Demand side — quote leads. utmCampaign guard is defence-in-depth
+        // against Ryan's legacy rows still stuck at leadType='b2c' pre-backfill.
         filters.push(
           and(
-            or(
-              eq(leads.leadType, 'b2c'),
-              isNull(leads.leadType),
-            ),
+            eq(leads.leadType, 'b2c'),
             or(
               isNull(leads.utmCampaign),
               ne(leads.utmCampaign, 'ryan-brooks'),
@@ -15416,6 +15400,7 @@ Respond with VALID JSON only:
         sourceChannel: 'mover_application',
         utmSource: referralSource || 'direct',
         utmCampaign: 'ryan-brooks',
+        leadType: 'b2bm',
         intentScore: 90,
         status: 'new',
         notes,
@@ -15463,11 +15448,9 @@ Respond with VALID JSON only:
         : 'admin-manual';
 
       // Admin add is dual-purpose: the client sends utmCampaign='ryan-brooks'
-      // when the audience tab is 'movers', otherwise it's a customer add. For
-      // customers we set leadType explicitly so future filter changes can rely
-      // on a populated column instead of IS-NULL. Mover adds leave leadType
-      // to the schema default; the customers filter's utmCampaign guard keeps
-      // them out of the customers tab.
+      // when the audience tab is 'movers', otherwise it's a customer add.
+      // Set leadType explicitly per-branch so the row is correctly classified
+      // for the audience filters.
       const isMoverAdd = utmCampaign === 'ryan-brooks';
 
       const [row] = await db.insert(leads).values({
@@ -15477,7 +15460,7 @@ Respond with VALID JSON only:
         sourceChannel,
         utmSource: sourceChannel,
         utmCampaign,
-        ...(isMoverAdd ? {} : { leadType: 'b2c' }),
+        leadType: isMoverAdd ? 'b2bm' : 'b2c',
         notes,
         intentScore,
         status,
@@ -15831,7 +15814,10 @@ Respond with VALID JSON only:
           .where(eq(leads.id, String(req.body.leadId)))
           .limit(1);
         if (!lead) return res.status(404).json({ error: 'Lead not found' });
-        if (lead.leadType === 'b2b') {
+        // Jordan handles individual movers (b2bm) and unclassified/customer
+        // leads that happen to be routed to him. Only B2B fleet partners
+        // (b2bp) are Sam's exclusive domain.
+        if (lead.leadType === 'b2bp') {
           return res.status(400).json({
             error: 'Wrong agent',
             message:

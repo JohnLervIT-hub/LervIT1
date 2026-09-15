@@ -16,7 +16,7 @@
  * Jordan Hayes handles first-touch recruitment.
  */
 
-import { and, eq, gte, isNull, like } from 'drizzle-orm';
+import { and, eq, gte, isNull, like, or } from 'drizzle-orm';
 import { BaseAgent } from './base';
 import { db } from '../db';
 import { leads } from '@shared/schema';
@@ -356,6 +356,7 @@ export class RyanAgent extends BaseAgent {
             sourceChannel: source,
             utmSource: 'google_alerts',
             utmCampaign: 'ryan-brooks',
+            leadType: 'b2bm',
             intentScore: score,
             status: 'new',
             notes: `Title: ${title}\nURL: ${link}\nDesc: ${summary.slice(0, 300)}`,
@@ -430,6 +431,7 @@ export class RyanAgent extends BaseAgent {
           sourceChannel: 'google_maps_supply',
           utmSource: 'google_maps',
           utmCampaign: 'ryan-brooks',
+          leadType: 'b2bm',
           intentScore: GMAPS_OPERATOR_INTENT_SCORE,
           status: 'new',
           notes:
@@ -606,6 +608,20 @@ export class RyanAgent extends BaseAgent {
         },
         'Ryan: attempting lead insert',
       );
+
+      // Contact-level dedup — same phone/email already in the b2bm pool.
+      // Only meaningful when we actually extracted contact info; the
+      // fingerprint check above handles the no-contact case.
+      const contactPhone = phone ? `+1${phone}` : null;
+      const contactEmail = email ?? null;
+      if (await this.isContactDuplicate(contactPhone, contactEmail)) {
+        logger.info(
+          { source: opts.source, hasPhone: !!phone, hasEmail: !!email },
+          'Ryan: skipping — contact already exists in b2bm pool',
+        );
+        continue;
+      }
+
       try {
         const notesLines = [
           `${opts.source.replace('_', ' ')} listing: ${title}`,
@@ -618,10 +634,11 @@ export class RyanAgent extends BaseAgent {
           .values({
             contactName: opts.contactName,
             contactEmail: email ?? undefined,
-            contactPhone: phone ? `+1${phone}` : undefined,
+            contactPhone: contactPhone ?? undefined,
             sourceChannel: opts.source,
             utmSource: opts.utmSource,
             utmCampaign: 'ryan-brooks',
+            leadType: 'b2bm',
             intentScore: score,
             status: 'new',
             notes: notesLines.join('\n'),
@@ -681,6 +698,29 @@ export class RyanAgent extends BaseAgent {
           gte(leads.createdAt, sevenDaysAgo),
         ),
       )
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /**
+   * Dedup guard for contact-bearing scraped leads. Skips if any b2bm lead
+   * already exists with the same phone or email. Complements wasSeen() —
+   * fingerprint-dedupe catches the same listing on the same source, this
+   * catches the same person posting across sources (Kijiji + Craigslist,
+   * or a repost with a different title).
+   */
+  private async isContactDuplicate(
+    phone: string | null,
+    email: string | null,
+  ): Promise<boolean> {
+    if (!phone && !email) return false;
+    const clauses: any[] = [];
+    if (phone) clauses.push(eq(leads.contactPhone, phone));
+    if (email) clauses.push(eq(leads.contactEmail, email));
+    const rows = await db
+      .select({ id: leads.id })
+      .from(leads)
+      .where(and(eq(leads.leadType, 'b2bm'), or(...clauses)!))
       .limit(1);
     return rows.length > 0;
   }

@@ -42,7 +42,7 @@ export function AddCustomerLeadCard({ onClose, onRefresh }: AddCustomerLeadCardP
         contactPhone: phone.trim() || undefined,
         notes: moveDetails.trim() || null,
         sourceChannel: source,
-        leadType: 'customer',
+        leadType: 'b2c',
         intentScore: 70,
         status: 'new',
         assignedAgent: 'alex',

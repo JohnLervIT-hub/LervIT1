@@ -81,7 +81,7 @@ function isMoverCandidate(lead: Lead): boolean {
 }
 
 function isSamProspect(lead: Lead): boolean {
-  return lead.leadType === "b2b" && (lead.sourceChannel?.startsWith("sam_") ?? false);
+  return lead.leadType === "b2bp";
 }
 
 function canAutoInvite(lead: Lead): boolean {

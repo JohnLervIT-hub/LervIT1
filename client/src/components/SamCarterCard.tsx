@@ -105,7 +105,7 @@ export function SamCarterCard() {
               Check Onboarding
             </Button>
             <Button asChild size="sm" variant="secondary">
-              <Link href="/admin/leads?type=b2b">
+              <Link href="/admin/leads?type=b2bp">
                 View Pipeline
                 <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
               </Link>
