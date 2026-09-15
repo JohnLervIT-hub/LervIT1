@@ -2253,3 +2253,34 @@ export type DocumentAudit = typeof documentAudits.$inferSelect;
 export type InsertDocumentAudit = typeof documentAudits.$inferInsert;
 export type DocumentIrregularity = typeof documentIrregularities.$inferSelect;
 export type InsertDocumentIrregularity = typeof documentIrregularities.$inferInsert;
+
+// Nova DM identity mapping — cross-restart persistence for
+// (platform, senderId) → users. See server/lib/identityResolver.ts for the
+// resolveIdentity + linkIdentityFromContact API. Rows are created on every
+// first inbound DM; the user_id column is filled once Nova collects contact
+// info in-conversation (phone/email regex extract → users lookup).
+export const messengerIdentities = pgTable("messenger_identities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(),      // 'messenger' | 'instagram'
+  senderId: text("sender_id").notNull(),     // Meta page-scoped id
+  userId: varchar("user_id").references(() => users.id),
+  name: text("name"),
+  phone: text("phone"),
+  email: text("email"),
+  isResolved: boolean("is_resolved").notNull().default(false),
+  isReturnCustomer: boolean("is_return_customer").notNull().default(false),
+  totalMessages: integer("total_messages").notNull().default(0),
+  firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: text("resolved_by"),           // 'auto_dm' | 'admin' | agent code
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  platformSenderUniq: unique("messenger_identities_platform_sender_uniq").on(table.platform, table.senderId),
+  userIdIdx: index("messenger_identities_user_id_idx").on(table.userId),
+  platformSenderIdx: index("messenger_identities_platform_sender_idx").on(table.platform, table.senderId),
+}));
+
+export type MessengerIdentity = typeof messengerIdentities.$inferSelect;
+export type InsertMessengerIdentity = typeof messengerIdentities.$inferInsert;

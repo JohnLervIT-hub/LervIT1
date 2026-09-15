@@ -34,7 +34,14 @@ import { xavier } from './agents/xavier';
 import { geocodeAddress, getDrivingDistance } from './google-maps';
 import { buildCustomerContext } from './lib/novaContext';
 import { decideNextDMResponse } from './lib/novaReasoning';
-import { resolveIdentity } from './lib/identityResolver';
+import { resolveIdentity, linkIdentityFromContact } from './lib/identityResolver';
+
+// Regexes used to auto-extract contact info from customer DMs so anonymous
+// senderIds can be linked to a users row mid-conversation. Kept loose — a
+// false-positive on the phone regex just triggers a failed users lookup,
+// which no-ops on the resolver side.
+const DM_PHONE_REGEX = /(\+?1?\s*\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4})/;
+const DM_EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
 
 const router = express.Router();
 
@@ -853,13 +860,14 @@ async function handleMessengerMessage(input: {
       history.splice(0, history.length - 10);
     }
 
-    // Tier 1 + Tier 2 pre-pass. resolveIdentity() checks the senderId map for
-    // a prior linked users row; unknown senders fall through with defaults but
-    // still get time-of-day awareness. Once Nova collects contact info
-    // in-conversation, linkIdentityFromContact() upgrades the mapping and
-    // subsequent DMs return the enriched identity.
+    // Tier 1 + Tier 2 pre-pass. resolveIdentity() upserts the messenger_identities
+    // row and returns the enriched profile if the sender has been linked. On
+    // unknown senders we regex-scan the customer message for a phone/email —
+    // a hit triggers linkIdentityFromContact, which permanently binds the
+    // (platform, senderId) mapping so the CURRENT message already picks up
+    // return-customer context in buildCustomerContext.
     try {
-      const identity = await resolveIdentity('messenger', senderId).catch((err) => {
+      let identity = await resolveIdentity('messenger', senderId).catch((err) => {
         logger.warn({ err, senderId }, '[Nova Messenger] Identity resolution failed');
         return null;
       });
@@ -874,6 +882,27 @@ async function handleMessengerMessage(input: {
         },
         '[Nova Messenger] Identity resolved',
       );
+
+      if (identity && !identity.isKnown) {
+        const phoneMatch = message.match(DM_PHONE_REGEX);
+        const emailMatch = message.match(DM_EMAIL_REGEX);
+        if (phoneMatch || emailMatch) {
+          const linked = await linkIdentityFromContact('messenger', senderId, {
+            phone: phoneMatch?.[0],
+            email: emailMatch?.[0],
+          }).catch((err) => {
+            logger.warn({ err, senderId }, '[Nova Messenger] Auto-link failed');
+            return null;
+          });
+          if (linked?.isKnown) {
+            identity = linked;
+            logger.info(
+              { senderId, userId: linked.userId, resolvedBy: linked.resolvedBy },
+              '[Nova Messenger] Identity auto-linked',
+            );
+          }
+        }
+      }
 
       const context = await buildCustomerContext({
         userId: identity?.userId,
@@ -1190,7 +1219,7 @@ async function handleInstagramMessage(input: {
 
     // Tier 1 + Tier 2 pre-pass — same shape as the Messenger handler.
     try {
-      const identity = await resolveIdentity('instagram', senderId).catch((err) => {
+      let identity = await resolveIdentity('instagram', senderId).catch((err) => {
         logger.warn({ err, senderId }, '[Nova Instagram] Identity resolution failed');
         return null;
       });
@@ -1205,6 +1234,27 @@ async function handleInstagramMessage(input: {
         },
         '[Nova Instagram] Identity resolved',
       );
+
+      if (identity && !identity.isKnown) {
+        const phoneMatch = message.match(DM_PHONE_REGEX);
+        const emailMatch = message.match(DM_EMAIL_REGEX);
+        if (phoneMatch || emailMatch) {
+          const linked = await linkIdentityFromContact('instagram', senderId, {
+            phone: phoneMatch?.[0],
+            email: emailMatch?.[0],
+          }).catch((err) => {
+            logger.warn({ err, senderId }, '[Nova Instagram] Auto-link failed');
+            return null;
+          });
+          if (linked?.isKnown) {
+            identity = linked;
+            logger.info(
+              { senderId, userId: linked.userId, resolvedBy: linked.resolvedBy },
+              '[Nova Instagram] Identity auto-linked',
+            );
+          }
+        }
+      }
 
       const context = await buildCustomerContext({
         userId: identity?.userId,
