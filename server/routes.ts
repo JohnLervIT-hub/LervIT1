@@ -58,6 +58,7 @@ import { format } from "date-fns";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
 import { emitEvent } from "./events";
+import { agentEventBus } from "./lib/agentEventBus";
 import { buildIntelligenceSummary } from "./intelligence";
 import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
@@ -2555,16 +2556,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       const reidType = REID_TYPES[req.params.type.toUpperCase()];
       if (reidType && result[0]) {
-        reid
-          .run('review_document', {
+        // Direct call removed — now handled via agentEventBus subscription
+        await agentEventBus.emit(
+          'mover.document_uploaded',
+          {
             moverId: req.params.moverId,
             documentType: reidType,
             documentUrl: fileUrls[0],
             verificationItemId: result[0].id,
-          })
-          .catch((err) =>
-            logger.error({ err, moverId: req.params.moverId }, '[Reid] review_document trigger failed'),
-          );
+          },
+          'system',
+        );
       }
 
       res.json(result[0]);
@@ -4260,6 +4262,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         utmSource: (booking as any).utmSource ?? null,
         utmCampaign: (booking as any).utmCampaign ?? null,
       });
+
+      await agentEventBus.emit(
+        'booking.created',
+        {
+          bookingId: booking.id,
+          customerId: user.id,
+          moverId: booking.moverId,
+        },
+        'system',
+      );
 
       // Link anonymous quote → booking (non-fatal). Client may send quoteId
       // directly, or we fall back to a quote already attached to the lead
@@ -9745,6 +9757,16 @@ Respond with VALID JSON only:
         completedAt: new Date().toISOString(),
         onTime: booking.slaDeadlineAt ? Date.now() <= new Date(booking.slaDeadlineAt).getTime() : null,
       });
+
+      await agentEventBus.emit(
+        'booking.completed',
+        {
+          bookingId,
+          customerId: booking.customerId,
+          moverId: booking.moverId,
+        },
+        'system',
+      );
       
       // Record earnings using persisted commission data from booking
       const earnings = await recordMoverEarnings(bookingId, booking.moverId!, updatedBooking);
@@ -13750,6 +13772,11 @@ Respond with VALID JSON only:
 
   // Victor dispatch stats — today's dispatched + escalated counts, plus
   // all-time total so the card reflects lifetime throughput.
+  app.get("/api/admin/agent-bus/stats", (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+    res.json(agentEventBus.getStats());
+  });
+
   app.get("/api/admin/agent/victor/stats", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;

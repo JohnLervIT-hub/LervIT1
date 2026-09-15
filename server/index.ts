@@ -13,6 +13,7 @@ import { logger, logEvent } from "./logger";
 import { randomBytes } from "crypto";
 import { initBackgroundJobs } from "./background-jobs";
 import { startAgentWorkers } from "./agents/workers";
+import { registerAgentSubscriptions } from "./agents/subscriptions";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
@@ -286,6 +287,13 @@ let serverStarted = false;
         startAgentWorkers();
       } catch (workerErr) {
         logEvent.error('agent_workers_init', workerErr);
+      }
+
+      try {
+        registerAgentSubscriptions();
+        logger.info('[Server] Agent event bus active ✅');
+      } catch (busErr) {
+        logEvent.error('agent_event_bus_init', busErr);
       }
     });
 
