@@ -1923,7 +1923,7 @@ export const leads = pgTable("leads", {
   // B2B sales pipeline (Sam Carter — SALES). All nullable so existing rows
   // stay valid; leadType defaults to 'b2c' to keep existing rows classified.
   companyName: text("company_name"),
-  leadType: text("lead_type").notNull().default("b2c"),               // 'b2c' | 'b2bm' (individual mover candidate) | 'b2bp' (B2B fleet partner)
+  leadType: text("lead_type").notNull().default("b2c").$type<'b2c' | 'b2bm' | 'b2bp'>(), // b2c | b2bm (individual mover candidate) | b2bp (B2B fleet partner) — DB CHECK constraint enforces this set (migrations/0018_lead_type_check.sql)
   industry: text("industry"),                                          // 'real_estate' | 'property_management' | 'corporate' | 'university' | 'insurance' | 'moving_company' | 'other'
   dealStage: text("deal_stage").default("prospect"),                   // 'prospect' | 'contacted' | 'warm' | 'meeting' | 'closed' | 'lost'
   estimatedMonthlyMoves: integer("estimated_monthly_moves"),
