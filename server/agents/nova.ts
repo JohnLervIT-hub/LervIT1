@@ -234,8 +234,26 @@ export class NovaAgent extends BaseAgent {
 
     if (!lead[0]?.contactPhone) return { skipped: true, reason: 'no_phone' };
 
-    const consentSources = ['quote_form', 'manual'];
+    // Consent-by-inbound-contact: every channel below represents the
+    // customer initiating contact (form submit, DM, voice, SMS reply), so
+    // returning their call is expected, not cold outreach.
+    const consentSources = [
+      'quote_form',
+      'manual',
+      'instagram_dm',
+      'messenger_dm',
+      'nova_voice',
+      'sms',
+    ];
     if (!consentSources.includes(lead[0].sourceChannel ?? '')) {
+      logger.info(
+        {
+          leadId: input.leadId,
+          sourceChannel: lead[0].sourceChannel,
+          reason: 'no_consent',
+        },
+        '[Nova] call_lead_conversion skipped — no consent',
+      );
       return { skipped: true, reason: 'no_consent' };
     }
 
