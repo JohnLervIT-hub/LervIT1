@@ -34,6 +34,7 @@ import { xavier } from './agents/xavier';
 import { geocodeAddress, getDrivingDistance } from './google-maps';
 import { buildCustomerContext } from './lib/novaContext';
 import { decideNextDMResponse } from './lib/novaReasoning';
+import { resolveIdentity } from './lib/identityResolver';
 
 const router = express.Router();
 
@@ -852,12 +853,33 @@ async function handleMessengerMessage(input: {
       history.splice(0, history.length - 10);
     }
 
-    // Tier 1 + Tier 2 pre-pass. Anonymous DMs mean we can't correlate the
-    // senderId to a users row yet, so context is largely defaults — but
-    // Tier 2 still gains time-of-day awareness and its structured `action`
-    // signal (escalate_human, send_link, etc.) drives quick-reply routing.
+    // Tier 1 + Tier 2 pre-pass. resolveIdentity() checks the senderId map for
+    // a prior linked users row; unknown senders fall through with defaults but
+    // still get time-of-day awareness. Once Nova collects contact info
+    // in-conversation, linkIdentityFromContact() upgrades the mapping and
+    // subsequent DMs return the enriched identity.
     try {
-      const context = await buildCustomerContext({});
+      const identity = await resolveIdentity('messenger', senderId).catch((err) => {
+        logger.warn({ err, senderId }, '[Nova Messenger] Identity resolution failed');
+        return null;
+      });
+
+      logger.info(
+        {
+          senderId,
+          identityId: identity?.identityId,
+          isKnown: identity?.isKnown,
+          userId: identity?.userId,
+          totalInteractions: identity?.totalInteractions,
+        },
+        '[Nova Messenger] Identity resolved',
+      );
+
+      const context = await buildCustomerContext({
+        userId: identity?.userId,
+        phone: identity?.phone,
+        email: identity?.email,
+      });
       const decision = await decideNextDMResponse(context, history, 'messenger', 'general');
 
       if (decision?.nextMessage) {
@@ -1168,7 +1190,27 @@ async function handleInstagramMessage(input: {
 
     // Tier 1 + Tier 2 pre-pass — same shape as the Messenger handler.
     try {
-      const context = await buildCustomerContext({});
+      const identity = await resolveIdentity('instagram', senderId).catch((err) => {
+        logger.warn({ err, senderId }, '[Nova Instagram] Identity resolution failed');
+        return null;
+      });
+
+      logger.info(
+        {
+          senderId,
+          identityId: identity?.identityId,
+          isKnown: identity?.isKnown,
+          userId: identity?.userId,
+          totalInteractions: identity?.totalInteractions,
+        },
+        '[Nova Instagram] Identity resolved',
+      );
+
+      const context = await buildCustomerContext({
+        userId: identity?.userId,
+        phone: identity?.phone,
+        email: identity?.email,
+      });
       const decision = await decideNextDMResponse(context, history, 'instagram', 'general');
 
       if (decision?.nextMessage) {
