@@ -38,6 +38,7 @@ import { emitEvent } from '../events';
 import { heygenProvider } from '../providers/heygen';
 import { higgsfieldProvider } from '../providers/higgsfield';
 import { metaProvider } from '../providers/meta';
+import { linkedInProvider } from '../providers/linkedin';
 
 const EMBER_MODEL = 'claude-sonnet-4-6';
 
@@ -1193,11 +1194,11 @@ Platform: ${item.platform ?? 'N/A'}`;
       };
     }
 
-    const platform = item.platform as 'facebook' | 'instagram';
-    if (platform !== 'facebook' && platform !== 'instagram') {
+    const platform = item.platform as 'facebook' | 'instagram' | 'linkedin';
+    if (platform !== 'facebook' && platform !== 'instagram' && platform !== 'linkedin') {
       return {
         error: 'unsupported_platform',
-        message: `Meta provider supports facebook | instagram (got: ${platform ?? 'null'})`,
+        message: `Supported platforms: facebook | instagram | linkedin (got: ${platform ?? 'null'})`,
       };
     }
 
@@ -1212,12 +1213,31 @@ Platform: ${item.platform ?? 'N/A'}`;
 
     const caption = item.caption ?? item.script?.slice(0, 200) ?? '';
 
-    const results = await metaProvider.publish({
-      message: caption,
-      videoUrl: item.videoUrl ?? undefined,
-      hashtags: item.hashtags ?? [],
-      platform,
-    });
+    let results: Array<{ postId: string; platform: string; url?: string; error?: string }>;
+
+    if (platform === 'linkedin') {
+      const result = await linkedInProvider.post({
+        text: caption,
+        url: item.videoUrl ?? undefined,
+        title: 'LervIT Moving Calgary',
+        description: caption.slice(0, 200),
+      });
+      results = [
+        {
+          postId: result.postId,
+          platform: 'linkedin',
+          url: result.url,
+          error: result.error,
+        },
+      ];
+    } else {
+      results = await metaProvider.publish({
+        message: caption,
+        videoUrl: item.videoUrl ?? undefined,
+        hashtags: item.hashtags ?? [],
+        platform,
+      });
+    }
 
     const first = results[0];
     const success = !!first && !first.error && !!first.postId;

@@ -26,7 +26,7 @@ export interface PostRequest {
   photoUrl?: string;
   videoUrl?: string;
   hashtags?: string[];
-  platform: 'facebook' | 'instagram';
+  platform: 'facebook' | 'instagram' | 'linkedin';
 }
 
 export interface PostResult {
@@ -269,6 +269,16 @@ class MetaProvider {
     }
     if (input.platform === 'instagram') {
       return [await this.postToInstagram(input)];
+    }
+    if (input.platform === 'linkedin') {
+      // LinkedIn goes through linkedInProvider directly from the caller.
+      return [
+        {
+          postId: '',
+          platform: 'linkedin',
+          error: 'Use linkedInProvider directly',
+        },
+      ];
     }
     return [
       {
