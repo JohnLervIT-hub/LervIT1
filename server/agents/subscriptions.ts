@@ -15,6 +15,9 @@ import { kai } from './kai';
 import { ember } from './ember';
 import { xavier } from './xavier';
 import { logger } from '../logger';
+import { buildCustomerContext } from '../lib/novaContext';
+import { decideRecoveryStrategy } from '../lib/novaReasoning';
+import { notificationService } from '../notifications';
 
 export function registerAgentSubscriptions(): void {
   logger.info('[EventBus] Registering agent subscriptions...');
@@ -187,6 +190,73 @@ export function registerAgentSubscriptions(): void {
   // ═══════════════════════════════
   // LEAD CHAIN
   // ═══════════════════════════════
+
+  // DM human handoff → Nova voice close within 5 minutes.
+  // Falls back to SMS if we're outside call hours; John is only notified
+  // upstream when no phone was captured during the DM.
+  agentEventBus.subscribe(
+    'nova.call_dm_handoff',
+    async (data) => {
+      logger.info(
+        { leadId: data.leadId, phone: data.phone },
+        '[EventBus] DM handoff → Nova call',
+      );
+
+      const context = await buildCustomerContext({
+        phone: data.phone,
+      }).catch(() => null);
+
+      const strategy = context
+        ? await decideRecoveryStrategy(context, {
+            bookingId: data.leadId ?? '',
+            price: 0,
+            pickupAddress: data.pickupAddress,
+            minutesSinceCreated: 0,
+            smsSent: false,
+          }).catch(() => null)
+        : null;
+
+      if (strategy?.action === 'skip') {
+        await notificationService
+          .sendSMS({
+            to: data.phone,
+            message:
+              `Hi ${data.name ?? 'there'}! Nova from LervIT — you asked to chat. ` +
+              `Get an instant quote here: lervit.com 🚛`,
+            type: 'pilot_status',
+          })
+          .catch(() => {});
+        return;
+      }
+
+      setTimeout(
+        async () => {
+          await nova
+            .run(
+              'call_lead_conversion',
+              {
+                leadId: data.leadId,
+                phone: data.phone,
+                name: data.name,
+                context:
+                  `Customer came from ${data.channel === 'instagram' ? 'Instagram' : 'Messenger'} DM. ` +
+                  `They asked to talk to someone.\n` +
+                  `${data.pickupAddress ? 'Pickup: ' + data.pickupAddress + '\n' : ''}` +
+                  `${data.dropoffAddress ? 'Dropoff: ' + data.dropoffAddress + '\n' : ''}` +
+                  `Conversation:\n${data.conversationSummary ?? ''}\n\n` +
+                  `Goal: Book the move live on call. Offer LERVIT10 if they hesitate.`,
+              },
+              { dryRun: false },
+            )
+            .catch((err) =>
+              logger.error({ err }, '[EventBus] DM handoff call failed'),
+            );
+        },
+        5 * 60 * 1000,
+      );
+    },
+    'Nova Clarke',
+  );
 
   // Quote abandoned 48hrs → Nova call
   agentEventBus.subscribe(

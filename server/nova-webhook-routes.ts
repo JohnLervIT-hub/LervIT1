@@ -34,7 +34,8 @@ import { xavier } from './agents/xavier';
 import { geocodeAddress, getDrivingDistance } from './google-maps';
 import { buildCustomerContext } from './lib/novaContext';
 import { decideNextDMResponse } from './lib/novaReasoning';
-import { resolveIdentity, linkIdentityFromContact } from './lib/identityResolver';
+import { resolveIdentity, linkIdentityFromContact, type ResolvedIdentity } from './lib/identityResolver';
+import { agentEventBus } from './lib/agentEventBus';
 
 // Regexes used to auto-extract contact info from customer DMs so anonymous
 // senderIds can be linked to a users row mid-conversation. Kept loose — a
@@ -800,6 +801,132 @@ router.post(
   },
 );
 
+// DM human-handoff flow — replaces the old "notify John via Xavier" path with
+// a lead upsert + `nova.call_dm_handoff` event. Nova voice picks up the event
+// and calls the customer within 5 minutes; John is only pinged as a fallback
+// when the DM never surfaced a phone number.
+const DM_ADDRESS_FROM_REGEX = /(?:from|pickup(?:\s+at)?|moving from)\s+([^\n]+?)(?=\s+to\s+|[.,\n]|$)/i;
+const DM_ADDRESS_TO_REGEX = /(?:^|\s)(?:to|dropoff(?:\s+at)?|deliver(?:ed)?(?:\s+to)?)\s+([^\n]+?)(?=[.,\n]|$)/i;
+
+async function runDMHumanHandoff(input: {
+  channel: 'messenger' | 'instagram';
+  senderId: string;
+  identity?: ResolvedIdentity | null;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): Promise<void> {
+  const { channel, senderId } = input;
+  const send = channel === 'instagram' ? sendInstagramMessage : sendMessengerMessage;
+  const channelLabel = channel === 'instagram' ? 'Instagram' : 'Messenger';
+
+  let identity = input.identity ?? null;
+  if (!identity) {
+    identity = await resolveIdentity(channel, senderId).catch((err) => {
+      logger.warn({ err, senderId, channel }, '[Nova DM] Handoff identity lookup failed');
+      return null;
+    });
+  }
+
+  const history =
+    input.history ??
+    (channel === 'instagram'
+      ? igConversationHistory.get(senderId)
+      : conversationHistory.get(senderId)) ??
+    [];
+
+  const customerPhone = identity?.phone;
+  const customerEmail = identity?.email;
+  const customerName = identity?.name ?? undefined;
+
+  const conversationText = history
+    .map((h) => `${h.role === 'user' ? 'Customer' : 'Nova'}: ${h.content}`)
+    .join('\n');
+  const combinedTurns = history.map((h) => h.content).join('\n');
+  const addressMatch = combinedTurns.match(DM_ADDRESS_FROM_REGEX);
+  const dropoffMatch = combinedTurns.match(DM_ADDRESS_TO_REGEX);
+
+  let leadId: string | undefined;
+
+  if (customerPhone || customerEmail) {
+    const existingLead = customerPhone
+      ? await db
+          .select()
+          .from(leads)
+          .where(eq(leads.contactPhone, customerPhone))
+          .limit(1)
+      : [];
+
+    if (existingLead.length) {
+      leadId = existingLead[0].id;
+      await db
+        .update(leads)
+        .set({
+          status: 'contacted',
+          notes: `${channelLabel} DM handoff requested.\n${conversationText}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, leadId));
+    } else {
+      const newLead = await db
+        .insert(leads)
+        .values({
+          contactPhone: customerPhone,
+          contactEmail: customerEmail,
+          contactName: customerName,
+          sourceChannel: channel === 'instagram' ? 'instagram_dm' : 'messenger_dm',
+          utmCampaign: 'nova-clarke',
+          leadType: 'b2c',
+          intentScore: 90,
+          status: 'new',
+          notes: `${channelLabel} DM handoff.\nConversation:\n${conversationText}`,
+        })
+        .returning();
+      leadId = newLead[0]?.id;
+    }
+  }
+
+  if (customerPhone) {
+    await agentEventBus.emit(
+      'nova.call_dm_handoff',
+      {
+        leadId,
+        phone: customerPhone,
+        name: customerName,
+        channel,
+        senderId,
+        conversationSummary: conversationText,
+        pickupAddress: addressMatch?.[1]?.trim(),
+        dropoffAddress: dropoffMatch?.[1]?.trim(),
+      },
+      channel === 'instagram' ? 'nova-instagram' : 'nova-messenger',
+    );
+
+    await send(
+      senderId,
+      `Perfect! One of our team will call you at ${customerPhone} within 5 minutes to get you booked 🚛`,
+    );
+  } else {
+    await send(
+      senderId,
+      `Happy to have someone call you! What's the best number to reach you on? 📞`,
+    );
+
+    await xavier
+      .run('escalate', {
+        issue:
+          `${channelLabel} DM handoff — no phone number captured.\n` +
+          `Customer: ${customerName ?? senderId}\n\n` +
+          `${conversationText}\n\n` +
+          `Reply: ${APP_BASE_URL}/admin?tab=nova`,
+        severity: 'low',
+        agentName: 'Nova Clarke',
+        data: { senderId, channel },
+      })
+      .catch((err) =>
+        logger.warn({ err, senderId, channel }, '[Nova DM] Xavier fallback failed'),
+      );
+  }
+}
+
 async function handleMessengerMessage(input: {
   senderId: string;
   message: string;
@@ -825,20 +952,7 @@ async function handleMessengerMessage(input: {
   }
 
   if (postback === 'HUMAN_HANDOFF') {
-    await sendMessengerMessage(
-      senderId,
-      "Of course! I'll have someone from our team reach out to you shortly. You can also call us at 1-888-982-0885 anytime!",
-    );
-    await xavier
-      .run('escalate', {
-        issue: `Messenger handoff requested by user ${senderId}`,
-        severity: 'low',
-        agentName: 'Nova Clarke',
-        data: { senderId, channel: 'messenger' },
-      })
-      .catch((err) =>
-        logger.warn({ err, senderId }, '[Nova Messenger] Xavier escalation failed'),
-      );
+    await runDMHumanHandoff({ channel: 'messenger', senderId });
     await emitEvent(
       'nova.messenger_postback',
       'agent',
@@ -917,16 +1031,12 @@ async function handleMessengerMessage(input: {
         await sendMessengerMessage(senderId, decision.nextMessage);
 
         if (decision.action === 'escalate_human') {
-          await xavier
-            .run('escalate', {
-              issue: `Messenger DM escalation for user ${senderId}`,
-              severity: 'low',
-              agentName: 'Nova Clarke',
-              data: { senderId, channel: 'messenger', reason: 'reasoning_escalation' },
-            })
-            .catch((err) =>
-              logger.warn({ err, senderId }, '[Nova Messenger] Xavier escalation failed'),
-            );
+          await runDMHumanHandoff({
+            channel: 'messenger',
+            senderId,
+            identity,
+            history,
+          });
         }
 
         await emitEvent(
@@ -1115,20 +1225,7 @@ async function handleInstagramMessage(input: {
   }
 
   if (postback === 'HUMAN_HANDOFF') {
-    await sendInstagramMessage(
-      senderId,
-      'Of course! Someone from our team will reach out shortly. You can also call us at 1-888-982-0885 📞',
-    );
-    await xavier
-      .run('escalate', {
-        issue: `Instagram DM handoff requested by user ${senderId}`,
-        severity: 'low',
-        agentName: 'Nova Clarke',
-        data: { senderId, channel: 'instagram' },
-      })
-      .catch((err) =>
-        logger.warn({ err, senderId }, '[Nova Instagram] Xavier escalation failed'),
-      );
+    await runDMHumanHandoff({ channel: 'instagram', senderId });
     await emitEvent(
       'nova.instagram_postback',
       'agent',
@@ -1207,16 +1304,12 @@ async function handleInstagramMessage(input: {
         await sendInstagramMessage(senderId, decision.nextMessage);
 
         if (decision.action === 'escalate_human') {
-          await xavier
-            .run('escalate', {
-              issue: `Instagram DM escalation for user ${senderId}`,
-              severity: 'low',
-              agentName: 'Nova Clarke',
-              data: { senderId, channel: 'instagram', reason: 'reasoning_escalation' },
-            })
-            .catch((err) =>
-              logger.warn({ err, senderId }, '[Nova Instagram] Xavier escalation failed'),
-            );
+          await runDMHumanHandoff({
+            channel: 'instagram',
+            senderId,
+            identity,
+            history,
+          });
         }
 
         await emitEvent(
