@@ -32,6 +32,8 @@ import {
 } from './notifications';
 import { xavier } from './agents/xavier';
 import { geocodeAddress, getDrivingDistance } from './google-maps';
+import { buildCustomerContext } from './lib/novaContext';
+import { decideNextDMResponse } from './lib/novaReasoning';
 
 const router = express.Router();
 
@@ -850,6 +852,69 @@ async function handleMessengerMessage(input: {
       history.splice(0, history.length - 10);
     }
 
+    // Tier 1 + Tier 2 pre-pass. Anonymous DMs mean we can't correlate the
+    // senderId to a users row yet, so context is largely defaults — but
+    // Tier 2 still gains time-of-day awareness and its structured `action`
+    // signal (escalate_human, send_link, etc.) drives quick-reply routing.
+    try {
+      const context = await buildCustomerContext({});
+      const decision = await decideNextDMResponse(context, history, 'messenger', 'general');
+
+      if (decision?.nextMessage) {
+        history.push({ role: 'assistant', content: decision.nextMessage });
+        conversationHistory.set(senderId, history);
+        await sendMessengerMessage(senderId, decision.nextMessage);
+
+        if (decision.action === 'escalate_human') {
+          await xavier
+            .run('escalate', {
+              issue: `Messenger DM escalation for user ${senderId}`,
+              severity: 'low',
+              agentName: 'Nova Clarke',
+              data: { senderId, channel: 'messenger', reason: 'reasoning_escalation' },
+            })
+            .catch((err) =>
+              logger.warn({ err, senderId }, '[Nova Messenger] Xavier escalation failed'),
+            );
+        }
+
+        const wantsQuote =
+          decision.action === 'send_link' ||
+          decision.action === 'book_now' ||
+          decision.action === 'offer_discount' ||
+          /quote|price|cost|how much|book|move/i.test(message);
+
+        if (wantsQuote) {
+          await sendMessengerQuickReplies(
+            senderId,
+            'Want an instant quote?',
+            [
+              { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
+              { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
+            ],
+          );
+        }
+
+        await emitEvent(
+          'nova.messenger_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'reasoning',
+            sentiment: decision.sentiment,
+            action: decision.action ?? null,
+          },
+          'agent',
+        );
+        return;
+      }
+    } catch (reasoningErr) {
+      logger.warn({ err: reasoningErr, senderId }, '[Nova Messenger] Reasoning failed — falling back to direct Claude');
+    }
+
+    // Fallback: direct Claude call (pre-reasoning behavior).
     const response = await messengerAnthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 150,
@@ -1099,6 +1164,66 @@ async function handleInstagramMessage(input: {
 
     if (history.length > 10) {
       history.splice(0, history.length - 10);
+    }
+
+    // Tier 1 + Tier 2 pre-pass — same shape as the Messenger handler.
+    try {
+      const context = await buildCustomerContext({});
+      const decision = await decideNextDMResponse(context, history, 'instagram', 'general');
+
+      if (decision?.nextMessage) {
+        history.push({ role: 'assistant', content: decision.nextMessage });
+        igConversationHistory.set(senderId, history);
+        await sendInstagramMessage(senderId, decision.nextMessage);
+
+        if (decision.action === 'escalate_human') {
+          await xavier
+            .run('escalate', {
+              issue: `Instagram DM escalation for user ${senderId}`,
+              severity: 'low',
+              agentName: 'Nova Clarke',
+              data: { senderId, channel: 'instagram', reason: 'reasoning_escalation' },
+            })
+            .catch((err) =>
+              logger.warn({ err, senderId }, '[Nova Instagram] Xavier escalation failed'),
+            );
+        }
+
+        const wantsQuote =
+          decision.action === 'send_link' ||
+          decision.action === 'book_now' ||
+          decision.action === 'offer_discount' ||
+          /quote|price|cost|how much|book|move/i.test(message);
+
+        if (wantsQuote) {
+          await new Promise((r) => setTimeout(r, 1000));
+          await sendInstagramQuickReplies(
+            senderId,
+            'Want an instant quote?',
+            [
+              { title: 'Get Quote 🚛', payload: 'GET_QUOTE' },
+              { title: 'Talk to Someone', payload: 'HUMAN_HANDOFF' },
+            ],
+          );
+        }
+
+        await emitEvent(
+          'nova.instagram_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'reasoning',
+            sentiment: decision.sentiment,
+            action: decision.action ?? null,
+          },
+          'agent',
+        );
+        return;
+      }
+    } catch (reasoningErr) {
+      logger.warn({ err: reasoningErr, senderId }, '[Nova Instagram] Reasoning failed — falling back to direct Claude');
     }
 
     const response = await messengerAnthropic.messages.create({
