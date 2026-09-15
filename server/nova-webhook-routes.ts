@@ -30,8 +30,8 @@ import {
   notificationService,
   sendResendEmail,
 } from './notifications';
-import { victor } from './agents/victor';
 import { xavier } from './agents/xavier';
+import { geocodeAddress, getDrivingDistance } from './google-maps';
 
 const router = express.Router();
 
@@ -394,13 +394,45 @@ router.post(
         });
       }
 
+      // FIX 1 — reject rather than fall back pickup→dropoff (which would
+      // create a same-address booking and confuse dispatch).
+      const finalPickup = pickupAddress ?? quote.pickupAddress;
+      const finalDropoff = dropoffAddress ?? quote.dropoffAddress;
+
+      if (!finalDropoff) {
+        return res.json({
+          success: false,
+          action: 'collect_dropoff',
+          message:
+            'I need the dropoff address to complete your booking. Where would you like your items delivered?',
+        });
+      }
+
+      // FIX 2 — geocode + driving distance so lat/lng and distance are real.
+      // google-maps.ts falls back to Haversine / mock geocoder if no API key,
+      // so this never fails hard.
+      const [pickupGeo, dropoffGeo] = await Promise.all([
+        geocodeAddress(finalPickup),
+        geocodeAddress(finalDropoff),
+      ]);
+
+      const driving = await getDrivingDistance(
+        pickupGeo.coordinates,
+        dropoffGeo.coordinates,
+      );
+
       const bookingId = crypto.randomUUID();
 
       await db.insert(bookings).values({
         id: bookingId,
         customerId: customer.id,
-        pickupAddress: pickupAddress ?? quote.pickupAddress,
-        dropoffAddress: dropoffAddress ?? quote.dropoffAddress ?? quote.pickupAddress,
+        pickupAddress: finalPickup,
+        dropoffAddress: finalDropoff,
+        pickupLatitude: pickupGeo.coordinates.lat,
+        pickupLongitude: pickupGeo.coordinates.lng,
+        dropoffLatitude: dropoffGeo.coordinates.lat,
+        dropoffLongitude: dropoffGeo.coordinates.lng,
+        distance: String(driving.distanceKm),
         loadSize: quote.loadSize ?? 'medium',
         preferredDate: preferredDate ? new Date(preferredDate) : new Date(),
         numberOfMovers,
@@ -409,20 +441,26 @@ router.post(
         price: quote.totalPrice ?? '0',
         status: 'pending',
         paymentStatus: 'pending',
+        // FIX 3 (attribution) — every voice booking is tagged so analytics
+        // and the agent bus can distinguish Nova-originated bookings.
+        sourceChannel: 'nova_voice',
+        utmSource: 'nova',
+        utmMedium: 'voice',
       });
 
-      await victor
-        .run('dispatch', { bookingId })
-        .catch((err) =>
-          logger.error({ err }, '[Nova] Victor dispatch failed'),
-        );
-
+      // FIX 4 — payment gate.
+      // Nova bookings are always created with paymentStatus='pending' because
+      // the voice call cannot capture payment inline. We SMS a payment link
+      // and defer dispatch to the Stripe payment.succeeded webhook flow, which
+      // will emit the standard `booking.created` bus event (dispatch + Mark
+      // monitor) once payment lands. Skipping the bus emit here avoids firing
+      // Victor before the customer has paid.
       if (customer.phone) {
         await notificationService.sendSMS({
           to: customer.phone,
           message:
-            `LervIT booking confirmed! Finding you a mover now. ` +
-            `Track: ${APP_BASE_URL}/track/${bookingId}`,
+            `LervIT booking reserved! Complete payment: ${APP_BASE_URL}/pay/${bookingId} ` +
+            `Your mover will be assigned once payment is confirmed.`,
           type: 'booking_update',
         });
       }
@@ -436,16 +474,21 @@ router.post(
           customerId: customer.id,
           quoteId,
           source: 'nova_voice',
+          paymentStatus: 'pending',
         },
         'agent',
       );
 
-      logger.info({ bookingId, quoteId }, '[Nova] Live booking created');
+      logger.info(
+        { bookingId, quoteId, distanceKm: driving.distanceKm },
+        '[Nova] Live booking created — awaiting payment',
+      );
 
       return res.json({
         success: true,
         bookingId,
-        message: `Booking confirmed! Confirmation sent to ${customer.phone ?? customer.email}`,
+        action: 'payment_required',
+        message: `Your booking is reserved! I've sent a payment link to your phone. Once payment is confirmed, we'll assign your mover immediately.`,
       });
     } catch (err) {
       logger.error({ err }, '[Nova] book-move failed');
@@ -535,6 +578,123 @@ router.post(
       logger.error({ err }, '[Nova] signup failed');
       return res.status(500).json({ error: 'Signup failed' });
     }
+  },
+);
+
+// ─── Tool 6: send_signup (unified) ───────────────────────────
+//
+// Consolidated replacement for collect-email + send-link + signup. Accepts
+// email, phone, or both; sends the link via whichever channels were provided.
+// The three legacy tools are kept for backward compatibility with existing
+// ElevenLabs agent configs.
+
+router.post(
+  '/api/nova/send-signup',
+  express.json(),
+  async (req: Request, res: Response) => {
+    const {
+      email,
+      phone,
+      name,
+      account_type = 'customer',
+      lead_id,
+    } = req.body ?? {};
+
+    if (!email && !phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Need either email or phone',
+      });
+    }
+
+    const params = new URLSearchParams();
+    if (email) params.set('email', email);
+    if (name) params.set('name', name);
+    if (phone) params.set('phone', phone);
+    if (account_type === 'mover') params.set('role', 'mover');
+
+    const signupUrl = `${APP_BASE_URL}/signup?${params.toString()}`;
+
+    const sent = { email: false, sms: false };
+
+    if (email) {
+      try {
+        await sendResendEmail({
+          from: EMAIL_SENDERS.OUTREACH,
+          to: email,
+          subject:
+            account_type === 'mover'
+              ? 'Your LervIT mover signup link'
+              : 'Your LervIT signup link',
+          html: `
+            <p>Hi ${name ?? 'there'},</p>
+            <p>Great talking with you! Here is your signup link:</p>
+            <a href="${signupUrl}"
+               style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0;">
+              ${account_type === 'mover' ? 'Complete mover signup' : 'Complete your account'} &rarr;
+            </a>
+            <p>Use code LERVIT10 for 10% off your first move.</p>
+            <p>Nova Clarke<br/>LervIT Moving</p>
+          `,
+          listUnsubscribeUrl: `${APP_BASE_URL}/preferences`,
+        });
+        sent.email = true;
+      } catch (err) {
+        logger.error({ err, email }, '[Nova] send-signup email failed');
+      }
+    }
+
+    if (phone) {
+      try {
+        await notificationService.sendSMS({
+          to: phone,
+          message:
+            `${name ? `Hi ${name}! ` : ''}` +
+            `Nova from LervIT. Signup link: ${signupUrl} ` +
+            `Use LERVIT10 for 10% off. Reply STOP to opt out`,
+          type: 'pilot_status',
+        });
+        sent.sms = true;
+      } catch (err) {
+        logger.error({ err, phone }, '[Nova] send-signup SMS failed');
+      }
+    }
+
+    if (lead_id) {
+      await db
+        .update(leads)
+        .set({
+          contactEmail: email ?? undefined,
+          contactName: name ?? undefined,
+          contactPhone: phone ?? undefined,
+          status: 'contacted',
+        })
+        .where(eq(leads.id, lead_id))
+        .catch((err) =>
+          logger.error({ err, lead_id }, '[Nova] send-signup lead update failed'),
+        );
+    }
+
+    await emitEvent(
+      'nova.signup_initiated',
+      'lead',
+      lead_id ?? email ?? phone,
+      { email, phone, name, account_type, sent },
+      'agent',
+    );
+
+    return res.json({
+      success: sent.email || sent.sms,
+      sent,
+      message:
+        sent.sms && sent.email
+          ? 'Link sent to your phone and email!'
+          : sent.sms
+            ? 'Link sent to your phone!'
+            : sent.email
+              ? 'Link sent to your email!'
+              : 'Failed to send link — please try again',
+    });
   },
 );
 
