@@ -151,12 +151,16 @@ interface ApproveDocumentInput {
   auditId: string;
   reviewedBy: string;
   notes?: string;
+  // Set true when the caller is the shared approveVerificationItem pipeline
+  // (see routes.ts). Suppresses Reid's own mover email so only one fires.
+  fromVerificationPipeline?: boolean;
 }
 
 interface RejectDocumentInput {
   auditId: string;
   reason: string;
   reviewedBy: string;
+  fromVerificationPipeline?: boolean;
 }
 
 interface RequestClarificationInput {
@@ -619,27 +623,32 @@ If policy numbers are missing, flag it.`;
       .limit(1);
 
     if (moverRow) {
-      await this.sendMoverMessage(
-        moverRow,
-        'document_approved',
-        { documentType: audit.documentType },
-        input.auditId,
-      );
-
-      const docLabel = String(audit.documentType ?? 'document').replace(/_/g, ' ');
-      await db
-        .insert(inAppNotifications)
-        .values({
-          userId: moverRow.userId,
-          type: 'document_approved',
-          title: 'Document Verified',
-          message: `Your ${docLabel} has been verified.`,
-          actionUrl: '/profile/documents',
-          isRead: false,
-        })
-        .catch((err) =>
-          logger.error({ err }, '[Reid] In-app notification failed'),
+      // Email and in-app notification are the pipeline's responsibility when
+      // this method is invoked by approveVerificationItem. In standalone mode
+      // (orphan audit with no linked verification_items row), Reid owns both.
+      if (!input.fromVerificationPipeline) {
+        await this.sendMoverMessage(
+          moverRow,
+          'document_approved',
+          { documentType: audit.documentType },
+          input.auditId,
         );
+
+        const docLabel = String(audit.documentType ?? 'document').replace(/_/g, ' ');
+        await db
+          .insert(inAppNotifications)
+          .values({
+            userId: moverRow.userId,
+            type: 'document_approved',
+            title: 'Document Verified',
+            message: `Your ${docLabel} has been verified.`,
+            actionUrl: '/profile/documents',
+            isRead: false,
+          })
+          .catch((err) =>
+            logger.error({ err }, '[Reid] In-app notification failed'),
+          );
+      }
     }
 
     await emitEvent(
@@ -723,7 +732,7 @@ If policy numbers are missing, flag it.`;
       .where(eq(movers.id, audit.moverId))
       .limit(1);
 
-    if (moverRow) {
+    if (moverRow && !input.fromVerificationPipeline) {
       await this.sendMoverMessage(
         moverRow,
         'rejected',

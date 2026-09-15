@@ -59,6 +59,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { logger, logEvent } from "./logger";
 import { emitEvent } from "./events";
 import { agentEventBus } from "./lib/agentEventBus";
+import { buildReidEmail } from "./lib/reidEmailTemplates";
 import { buildIntelligenceSummary } from "./intelligence";
 import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
@@ -315,6 +316,353 @@ async function setMoverVerified(moverId: string, userId: string): Promise<void> 
     logger.warn({ moverId }, '[Riley] ONBOARD queue unavailable — running inline');
     await riley.run('mover_verified', { moverId, userId });
   }
+}
+
+// Verification-item type → Reid audit type. Dashboard items and Reid audits
+// are not 1:1 (payout_setup, vehicle_photos have no Reid counterpart), so
+// the mapping is explicit rather than a name transform.
+const VERIF_TO_REID_TYPE: Record<string, string> = {
+  id: 'drivers_license',
+  drivers_license: 'drivers_license',
+  vehicle_registration: 'vehicle_registration',
+  vehicle_photos: 'vehicle_registration',
+  insurance: 'insurance',
+  background_check: 'background_check',
+  payout_setup: '',
+  wcb: 'wcb',
+};
+
+const REID_REQUIRED_ITEM_TYPES = [
+  'INSURANCE',
+  'DRIVERS_LICENSE',
+  'VEHICLE_REGISTRATION',
+  'BACKGROUND_CHECK',
+  'ID',
+];
+
+const DASHBOARD_REQUIRED_ITEM_TYPES = [
+  'ID',
+  'DRIVERS_LICENSE',
+  'VEHICLE_REGISTRATION',
+  'VEHICLE_PHOTOS',
+  'INSURANCE',
+  'BACKGROUND_CHECK',
+  'PAYOUT_SETUP',
+];
+
+interface ApproveVerificationItemOptions {
+  reason?: string;
+  notes?: string;
+  suppressEmail?: boolean;
+  // True when called from the Reid audit-page endpoint. Signals that the
+  // pipeline should send a Reid-styled email (via buildReidEmail) instead of
+  // the dashboard plain template, so email quality doesn't regress when
+  // admins approve from the audit page.
+  fromReid?: boolean;
+  // Optional pre-known Reid audit id (from the caller that already looked it
+  // up). If omitted, the pipeline finds a matching audit via VERIF_TO_REID_TYPE.
+  auditId?: string;
+}
+
+interface ApproveVerificationItemResult {
+  ok: boolean;
+  error?: string;
+  itemId: string;
+  moverId?: string;
+  auditSynced: boolean;
+  emailSent: boolean;
+  emailSkippedReason?: 'already_sent' | 'suppressed' | 'no_mover_email' | 'no_mover';
+}
+
+/**
+ * Single source of truth for verification-item approval + rejection. Both the
+ * dashboard PATCH endpoint and the Reid audit approve/reject endpoints funnel
+ * through this. Handles:
+ *   - verification_items write
+ *   - mirror to document_audits (via reidMatch OR clause)
+ *   - dedupe against Reid email events on business_events
+ *   - one mover email (Reid template when fromReid + audit exists, dashboard
+ *     template otherwise)
+ *   - in-app notification
+ *   - reid.all_documents_approved bus emit when all 5 Reid docs approved
+ *   - setMoverVerified when all 7 dashboard docs approved
+ *   - mark mover not-verified on rejection
+ */
+async function approveVerificationItem(
+  itemId: string,
+  status: 'Approved' | 'Rejected',
+  actor: string,
+  options: ApproveVerificationItemOptions = {},
+): Promise<ApproveVerificationItemResult> {
+  const [item] = await db
+    .select()
+    .from(verificationItems)
+    .where(eq(verificationItems.id, itemId))
+    .limit(1);
+
+  if (!item) {
+    return { ok: false, error: 'Verification item not found', itemId, auditSynced: false, emailSent: false };
+  }
+
+  const rejectionReason = status === 'Rejected' ? (options.reason ?? null) : null;
+
+  await db
+    .update(verificationItems)
+    .set({
+      status,
+      rejectionReason,
+      reviewedAt: new Date(),
+      reviewedBy: actor,
+      updatedAt: new Date(),
+    })
+    .where(eq(verificationItems.id, itemId));
+
+  // ── Mirror to document_audits ──────────────────────────
+  const normalizedType = item.type.toLowerCase().replace(/ /g, '_');
+  const reidDocType = VERIF_TO_REID_TYPE[normalizedType] ?? normalizedType;
+  const reidMatch = reidDocType
+    ? or(
+        eq(documentAudits.verificationItemId, itemId),
+        and(
+          eq(documentAudits.moverId, item.moverId),
+          eq(documentAudits.documentType, reidDocType),
+        ),
+      )
+    : eq(documentAudits.verificationItemId, itemId);
+
+  let syncedAuditId: string | null = options.auditId ?? null;
+  let auditSynced = false;
+
+  try {
+    if (status === 'Approved') {
+      const updated = await db
+        .update(documentAudits)
+        .set({
+          status: 'approved',
+          approvedAt: new Date(),
+          reviewedBy: actor,
+          notes: options.notes ?? undefined,
+          updatedAt: new Date(),
+        })
+        .where(reidMatch)
+        .returning({ id: documentAudits.id });
+      syncedAuditId = updated[0]?.id ?? syncedAuditId;
+      auditSynced = updated.length > 0;
+    } else {
+      const updated = await db
+        .update(documentAudits)
+        .set({
+          status: 'rejected',
+          rejectedAt: new Date(),
+          rejectionReason,
+          reviewedBy: actor,
+          updatedAt: new Date(),
+        })
+        .where(reidMatch)
+        .returning({ id: documentAudits.id });
+      syncedAuditId = updated[0]?.id ?? syncedAuditId;
+      auditSynced = updated.length > 0;
+    }
+  } catch (syncErr) {
+    logEvent.error('reid_audit_sync', syncErr, { itemId, moverId: item.moverId, status });
+  }
+
+  // ── Email ──────────────────────────────────────────────
+  let emailSent = false;
+  let emailSkippedReason: ApproveVerificationItemResult['emailSkippedReason'];
+
+  if (options.suppressEmail) {
+    emailSkippedReason = 'suppressed';
+  } else {
+    // Dedupe against prior Reid emails on this audit — either a Reid audit
+    // page approve (this pipeline running fromReid=true) or Reid's own
+    // sendMoverMessage (which also writes reid.email_sent.* events).
+    let alreadyEmailed = false;
+    if (syncedAuditId) {
+      const eventTypes = status === 'Approved'
+        ? ['reid.email_sent.approved', 'reid.email_sent.document_approved']
+        : ['reid.email_sent.rejected'];
+      const prior = await db
+        .select({ id: businessEvents.id })
+        .from(businessEvents)
+        .where(
+          and(
+            eq(businessEvents.entityId, syncedAuditId),
+            inArray(businessEvents.eventType, eventTypes),
+          ),
+        )
+        .limit(1);
+      alreadyEmailed = prior.length > 0;
+    }
+
+    if (alreadyEmailed) {
+      emailSkippedReason = 'already_sent';
+      logger.info(
+        { itemId, moverId: item.moverId, auditId: syncedAuditId },
+        '[Verification] Skipping email — mover already notified',
+      );
+    } else {
+      const mover = await storage.getMover(item.moverId);
+      if (!mover) {
+        emailSkippedReason = 'no_mover';
+      } else {
+        const moverUser = await storage.getUser(mover.userId);
+        if (!moverUser?.email) {
+          emailSkippedReason = 'no_mover_email';
+        } else {
+          try {
+            if (options.fromReid && syncedAuditId) {
+              // Rich Reid-branded template — parity with the old audit-page
+              // path. Record the reid.email_sent.* event so future dedupe
+              // against this audit works from either code path.
+              const emailType: 'document_approved' | 'rejected' =
+                status === 'Approved' ? 'document_approved' : 'rejected';
+              const firstName = (moverUser.name ?? 'there').split(/\s+/)[0];
+              const docLabel = String(item.type).replace(/_/g, ' ');
+              const built = buildReidEmail(emailType, {
+                firstName,
+                docLabel,
+                reason: rejectionReason ?? undefined,
+              });
+              await sendResendEmail({
+                from: `${process.env.REID_EMAIL_NAME ?? 'Reid at LervIT'} <${process.env.REID_EMAIL ?? 'noreply@lervit.com'}>`,
+                to: moverUser.email,
+                replyTo: process.env.REID_REPLY_TO ?? 'support@lervit.com',
+                subject: built.subject,
+                html: built.html,
+                text: built.text,
+                listUnsubscribeUrl: `${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/mover/preferences`,
+              });
+              await emitEvent(
+                `reid.email_sent.${emailType}`,
+                'agent',
+                syncedAuditId,
+                { moverId: mover.id, emailType, source: 'verification_pipeline' },
+                'agent',
+              );
+              emailSent = true;
+            } else if (status === 'Approved') {
+              await notificationService.sendEmail({
+                to: moverUser.email,
+                subject: `Your ${item.type} has been approved`,
+                body: `<p>Hi ${moverUser.name},</p><p>Your <strong>${item.type}</strong> has been approved. You're one step closer to going online!</p><p>Log in to your dashboard to check your full verification status.</p><p>The LervIT Team</p>`,
+                type: 'status_update',
+              });
+              emailSent = true;
+            } else {
+              await notificationService.sendEmail({
+                to: moverUser.email,
+                subject: `Your ${item.type} was not approved`,
+                body: `<p>Hi ${moverUser.name},</p><p>Unfortunately your <strong>${item.type}</strong> was not approved${rejectionReason ? `: ${rejectionReason}` : ''}. Please re-upload a corrected version from your dashboard.</p><p>If you have any questions, contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+                type: 'status_update',
+              });
+              emailSent = true;
+            }
+
+            // In-app notification (parity with dashboard PATCH).
+            await storage.createNotification({
+              userId: moverUser.id,
+              type: 'verification_update',
+              title: status === 'Approved' ? `${item.type} Approved` : `${item.type} Not Approved`,
+              message:
+                status === 'Approved'
+                  ? `Your ${item.type} has been approved. You're one step closer to going online!`
+                  : `One or more documents were not approved. Please re-upload.`,
+              actionUrl: '/mover-verification',
+              isRead: false,
+            });
+          } catch (notifErr) {
+            logEvent.error('verification_notification', notifErr, {
+              moverId: item.moverId,
+              itemType: item.type,
+              status,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // ── Post-approval gates ────────────────────────────────
+  if (status === 'Approved') {
+    // Reid-required subset done → emit bus event so Riley + Aegis pick up.
+    try {
+      const pendingReidItems = await db
+        .select({ id: verificationItems.id })
+        .from(verificationItems)
+        .where(
+          and(
+            eq(verificationItems.moverId, item.moverId),
+            inArray(verificationItems.type, REID_REQUIRED_ITEM_TYPES),
+            notInArray(verificationItems.status, ['Approved', 'approved']),
+          ),
+        );
+
+      if (pendingReidItems.length === 0) {
+        logger.info(
+          { moverId: item.moverId },
+          '[Verification] All Reid-required docs approved — emitting reid.all_documents_approved',
+        );
+        await emitEvent(
+          'reid.all_documents_approved',
+          'mover',
+          item.moverId,
+          { moverId: item.moverId, source: 'verification_pipeline' },
+          'agent',
+        );
+      }
+    } catch (gateErr) {
+      logger.warn({ err: gateErr, moverId: item.moverId }, '[Verification] Reid gate check failed');
+    }
+
+    // Full 7-doc set done → flip isVerified + queue Riley welcome sequence.
+    try {
+      const allItems = await db
+        .select()
+        .from(verificationItems)
+        .where(eq(verificationItems.moverId, item.moverId));
+      const allApproved = DASHBOARD_REQUIRED_ITEM_TYPES.every((type) => {
+        const typeItem = allItems.find((i) => i.type === type);
+        return typeItem && typeItem.status === 'Approved';
+      });
+      if (allApproved) {
+        const mover = await storage.getMover(item.moverId);
+        if (mover) {
+          await setMoverVerified(mover.id, mover.userId);
+        }
+      } else {
+        const missing = DASHBOARD_REQUIRED_ITEM_TYPES.filter((type) => {
+          const typeItem = allItems.find((i) => i.type === type);
+          return !(typeItem && typeItem.status === 'Approved');
+        });
+        logger.info(
+          { moverId: item.moverId, missing },
+          `[Riley] Not all items approved yet — missing: ${missing.join(', ')}`,
+        );
+      }
+    } catch (verErr) {
+      logger.warn({ err: verErr, moverId: item.moverId }, 'setMoverVerified gate failed');
+    }
+  } else {
+    // Rejected → ensure mover is not-verified.
+    try {
+      await storage.updateMover(item.moverId, {
+        documentsVerified: false,
+        isVerified: false,
+      });
+    } catch (unverErr) {
+      logger.warn({ err: unverErr, moverId: item.moverId }, 'mark not-verified failed');
+    }
+  }
+
+  return {
+    ok: true,
+    itemId,
+    moverId: item.moverId,
+    auditSynced,
+    emailSent,
+    emailSkippedReason,
+  };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -2963,221 +3311,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // PATCH /api/admin/verification/item/:id - Approve/reject verification item
+  // PATCH /api/admin/verification/item/:id - Approve/reject verification item.
+  //
+  // Thin wrapper over approveVerificationItem — the shared pipeline that also
+  // backs the Reid audit approve/reject endpoints, so one email fires per
+  // approval regardless of which UI the admin used.
   app.patch("/api/admin/verification/item/:id", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       const user = (req as any).user;
-      
-      const { status, rejectionReason } = req.body;
-      
-      if (!['Approved', 'Rejected', 'Under Review'].includes(status)) {
+
+      const { status, rejectionReason, notes } = req.body;
+
+      if (status === 'Under Review') {
+        // Legacy "unset" case — only mutates verification_items, no email or
+        // audit sync. Left inline so the pipeline stays focused on Approve/Reject.
+        const result = await db
+          .update(verificationItems)
+          .set({
+            status,
+            rejectionReason: null,
+            reviewedAt: new Date(),
+            reviewedBy: user.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(verificationItems.id, req.params.id))
+          .returning();
+        if (result.length === 0) return res.status(404).json({ error: 'Verification item not found' });
+        return res.json(result[0]);
+      }
+
+      if (!['Approved', 'Rejected'].includes(status)) {
         return res.status(400).json({ error: "Status must be 'Approved', 'Rejected', or 'Under Review'" });
       }
-      
+
       if (status === 'Rejected' && !rejectionReason) {
-        return res.status(400).json({ error: "Rejection reason is required when rejecting" });
+        return res.status(400).json({ error: 'Rejection reason is required when rejecting' });
       }
-      
-      const result = await db.update(verificationItems)
-        .set({
-          status,
-          rejectionReason: status === 'Rejected' ? rejectionReason : null,
-          reviewedAt: new Date(),
-          reviewedBy: user.id,
-          updatedAt: new Date()
-        })
+
+      const pipelineResult = await approveVerificationItem(
+        req.params.id,
+        status as 'Approved' | 'Rejected',
+        user?.id ?? user?.email ?? 'admin',
+        {
+          reason: rejectionReason,
+          notes,
+          fromReid: false,
+        },
+      );
+
+      if (!pipelineResult.ok) {
+        return res.status(404).json({ error: pipelineResult.error });
+      }
+
+      const [row] = await db
+        .select()
+        .from(verificationItems)
         .where(eq(verificationItems.id, req.params.id))
-        .returning();
-      
-      if (result.length === 0) {
-        return res.status(404).json({ error: "Verification item not found" });
-      }
-
-      // Stub notification hook
-      const item = result[0];
-      // Verification-item types (dashboard) do not 1:1 with Reid document
-      // types. Explicit map avoids false matches on dashboard-only items
-      // (payout_setup, vehicle_photos have no Reid audit).
-      const VERIF_TO_REID_TYPE: Record<string, string> = {
-        id: 'drivers_license',
-        drivers_license: 'drivers_license',
-        vehicle_registration: 'vehicle_registration',
-        vehicle_photos: 'vehicle_registration',
-        insurance: 'insurance',
-        background_check: 'background_check',
-        payout_setup: '',
-        wcb: 'wcb',
-      };
-      const normalizedType = item.type.toLowerCase().replace(/ /g, '_');
-      const reidDocType = VERIF_TO_REID_TYPE[normalizedType] ?? normalizedType;
-      const reidMatch = reidDocType
-        ? or(
-            eq(documentAudits.verificationItemId, req.params.id),
-            and(
-              eq(documentAudits.moverId, item.moverId),
-              eq(documentAudits.documentType, reidDocType),
-            ),
-          )
-        : eq(documentAudits.verificationItemId, req.params.id);
-      if (status === 'Approved') {
-        let syncedAuditId: string | null = null;
-        try {
-          const updated = await db.update(documentAudits)
-            .set({
-              status: 'approved',
-              approvedAt: new Date(),
-              reviewedBy: user?.id ?? 'admin',
-              updatedAt: new Date(),
-            })
-            .where(reidMatch)
-            .returning({ id: documentAudits.id });
-          syncedAuditId = updated[0]?.id ?? null;
-        } catch (reidSyncErr) {
-          logEvent.error('reid_audit_sync_approve', reidSyncErr, { itemId: req.params.id, moverId: item.moverId });
-        }
-        console.log(`[Notification] Verification item ${item.type} approved for mover ${item.moverId}`);
-
-        // Notify mover of verification approval — but skip if Reid already
-        // emailed the mover about this audit (see Reid.markEmailSent).
-        try {
-          let reidAlreadyNotified = false;
-          if (syncedAuditId) {
-            const priorReidEmail = await db
-              .select({ id: businessEvents.id })
-              .from(businessEvents)
-              .where(
-                and(
-                  eq(businessEvents.entityId, syncedAuditId),
-                  inArray(businessEvents.eventType, [
-                    'reid.email_sent.approved',
-                    'reid.email_sent.document_approved',
-                  ]),
-                ),
-              )
-              .limit(1);
-            reidAlreadyNotified = priorReidEmail.length > 0;
-          }
-
-          if (reidAlreadyNotified) {
-            logger.info(
-              { itemId: req.params.id, moverId: item.moverId, auditId: syncedAuditId },
-              '[Verification] Skipping dashboard email — Reid already notified mover',
-            );
-          } else {
-            const verifMover = await storage.getMover(item.moverId);
-            if (verifMover) {
-              const verifMoverUser = await storage.getUser(verifMover.userId);
-              if (verifMoverUser) {
-                await notificationService.sendEmail({
-                  to: verifMoverUser.email,
-                  subject: `Your ${item.type} has been approved`,
-                  body: `<p>Hi ${verifMoverUser.name},</p><p>Your <strong>${item.type}</strong> has been approved. You're one step closer to going online!</p><p>Log in to your dashboard to check your full verification status.</p><p>The LervIT Team</p>`,
-                  type: 'status_update',
-                });
-                await storage.createNotification({
-                  userId: verifMoverUser.id,
-                  type: 'verification_update',
-                  title: `${item.type} Approved`,
-                  message: `Your ${item.type} has been approved. You're one step closer to going online!`,
-                  actionUrl: '/mover-verification',
-                  isRead: false,
-                });
-              }
-            }
-          }
-        } catch (verifNotifErr) {
-          logEvent.error('verification_approval_notification', verifNotifErr, { moverId: item.moverId, itemType: item.type });
-        }
-
-        // Check if ALL 7 required verification items are now approved
-        const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
-        const allItems = await db.select().from(verificationItems).where(eq(verificationItems.moverId, item.moverId));
-
-        const allApproved = requiredTypes.every(type => {
-          const typeItem = allItems.find(i => i.type === type);
-          return typeItem && typeItem.status === 'Approved';
-        });
-
-        if (!allApproved) {
-          // Drift protection: if the requiredTypes list ever diverges from the
-          // actual verification-items catalog, this log tells us why Riley
-          // never fires even though the admin thinks they're done.
-          const missing = requiredTypes.filter(type => {
-            const typeItem = allItems.find(i => i.type === type);
-            return !(typeItem && typeItem.status === 'Approved');
-          });
-          logger.info(
-            { moverId: item.moverId, missing },
-            `[Riley] Not all items approved yet — missing: ${missing.join(', ')}`,
-          );
-        } else {
-          logger.info({ moverId: item.moverId }, '[Notification] All verification items approved. Mover is now fully verified.');
-
-          // Funnel through setMoverVerified so the DB write and Riley handoff
-          // stay atomic (single choke-point, inline fallback if Redis is down).
-          try {
-            const rileyMover = await storage.getMover(item.moverId);
-            if (rileyMover) {
-              await setMoverVerified(rileyMover.id, rileyMover.userId);
-            }
-          } catch (qErr) {
-            logger.warn({ err: qErr, moverId: item.moverId }, 'setMoverVerified failed');
-          }
-        }
-      } else if (status === 'Rejected') {
-        try {
-          await db.update(documentAudits)
-            .set({
-              status: 'rejected',
-              rejectedAt: new Date(),
-              rejectionReason,
-              reviewedBy: user?.id ?? 'admin',
-              updatedAt: new Date(),
-            })
-            .where(reidMatch);
-        } catch (reidSyncErr) {
-          logEvent.error('reid_audit_sync_reject', reidSyncErr, { itemId: req.params.id, moverId: item.moverId });
-        }
-        console.log(`[Notification] Verification item ${item.type} rejected for mover ${item.moverId}: ${rejectionReason}`);
-
-        // Notify mover of verification rejection
-        try {
-          const verifMover = await storage.getMover(item.moverId);
-          if (verifMover) {
-            const verifMoverUser = await storage.getUser(verifMover.userId);
-            if (verifMoverUser) {
-              await notificationService.sendEmail({
-                to: verifMoverUser.email,
-                subject: `Your ${item.type} was not approved`,
-                body: `<p>Hi ${verifMoverUser.name},</p><p>Unfortunately your <strong>${item.type}</strong> was not approved${rejectionReason ? `: ${rejectionReason}` : ''}. Please re-upload a corrected version from your dashboard.</p><p>If you have any questions, contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
-                type: 'status_update',
-              });
-              await storage.createNotification({
-                userId: verifMoverUser.id,
-                type: 'verification_update',
-                title: `${item.type} Not Approved`,
-                message: `One or more documents were not approved. Please re-upload.`,
-                actionUrl: '/mover-verification',
-                isRead: false,
-              });
-            }
-          }
-        } catch (verifNotifErr) {
-          logEvent.error('verification_rejection_notification', verifNotifErr, { moverId: item.moverId, itemType: item.type });
-        }
-
-        // If any item is rejected, ensure mover is NOT marked as verified
-        await storage.updateMover(item.moverId, { 
-          documentsVerified: false,
-          isVerified: false 
-        });
-      }
-      
-      res.json(result[0]);
+        .limit(1);
+      return res.json(row);
     } catch (error) {
       console.error('Admin verification item update error:', error);
-      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid request' });
     }
   });
 
@@ -14659,6 +14854,13 @@ Respond with VALID JSON only:
     }
   });
 
+  // POST /api/admin/document-audits/:id/approve
+  //
+  // Prefers the shared approveVerificationItem pipeline when the audit has a
+  // linked verification_items row — same code path as the dashboard PATCH so
+  // exactly one mover email fires. Falls back to reid.run('approve_document')
+  // for orphan audits (historical rows without verification_item_id, or
+  // document types like wcb that have no dashboard counterpart).
   app.post("/api/admin/document-audits/:id/approve", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
@@ -14667,12 +14869,38 @@ Respond with VALID JSON only:
         (req.session as any)?.user?.email ??
         'admin';
       const notes = (req.body?.notes as string | undefined) ?? undefined;
+
+      const [audit] = await db
+        .select({ id: documentAudits.id, verificationItemId: documentAudits.verificationItemId })
+        .from(documentAudits)
+        .where(eq(documentAudits.id, req.params.id))
+        .limit(1);
+
+      if (!audit) return res.status(404).json({ error: 'Audit not found' });
+
+      if (audit.verificationItemId) {
+        const result = await approveVerificationItem(
+          audit.verificationItemId,
+          'Approved',
+          reviewer,
+          {
+            notes,
+            fromReid: true,
+            auditId: audit.id,
+          },
+        );
+        if (!result.ok) return res.status(500).json({ error: result.error });
+        return res.json({ ok: true, source: 'verification_pipeline', result });
+      }
+
+      // Fallback: no linked item — let Reid handle the audit-only approval
+      // and its own email side-effect.
       const result = await reid.run('approve_document', {
         auditId: req.params.id,
         reviewedBy: reviewer,
         notes,
       });
-      res.json({ ok: true, result });
+      res.json({ ok: true, source: 'reid_agent', result });
     } catch (err) {
       logger.error({ err }, '[Admin] document-audit approve failed');
       res.status(500).json({ error: (err as Error).message });
@@ -14688,12 +14916,36 @@ Respond with VALID JSON only:
         (req.session as any)?.userId ??
         (req.session as any)?.user?.email ??
         'admin';
+
+      const [audit] = await db
+        .select({ id: documentAudits.id, verificationItemId: documentAudits.verificationItemId })
+        .from(documentAudits)
+        .where(eq(documentAudits.id, req.params.id))
+        .limit(1);
+
+      if (!audit) return res.status(404).json({ error: 'Audit not found' });
+
+      if (audit.verificationItemId) {
+        const result = await approveVerificationItem(
+          audit.verificationItemId,
+          'Rejected',
+          reviewer,
+          {
+            reason,
+            fromReid: true,
+            auditId: audit.id,
+          },
+        );
+        if (!result.ok) return res.status(500).json({ error: result.error });
+        return res.json({ ok: true, source: 'verification_pipeline', result });
+      }
+
       const result = await reid.run('reject_document', {
         auditId: req.params.id,
         reason,
         reviewedBy: reviewer,
       });
-      res.json({ ok: true, result });
+      res.json({ ok: true, source: 'reid_agent', result });
     } catch (err) {
       logger.error({ err }, '[Admin] document-audit reject failed');
       res.status(500).json({ error: (err as Error).message });
