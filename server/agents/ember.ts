@@ -601,6 +601,9 @@ Start your response with { directly.
     }
 
     const platformsList = input.platforms ?? ['instagram', 'tiktok', 'facebook'];
+    const platformCount = platformsList.length;
+    const minItems = Math.max(3, platformCount * 3);
+    const maxItems = Math.min(12, Math.max(minItems, platformCount * 4));
 
     const systemPrompt = `You are Ember Lane, LervIT's creative strategist.
 Create a content plan for a LervIT marketing campaign.
@@ -648,7 +651,10 @@ other fields:
   ]
 }
 
-The "items" array MUST have 8-12 items.
+The "items" array MUST have ${minItems}-${maxItems} items.
+Distribute items evenly across these platforms: ${platformsList.join(', ')}.
+For a single platform, cap at ${minItems} items (avoid over-posting to one channel).
+For 3+ platforms, you may use up to ${maxItems} items total.
 Do NOT include campaign name, objective,
 audience, or offer in the response.
 Only strategy, contentPillars, items.

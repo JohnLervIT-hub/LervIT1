@@ -82,6 +82,7 @@ const AdminAuditDetailPage = lazy(
   () => import("@/pages/AdminAuditDetailPage"),
 );
 const AdminEmailCenter = lazy(() => import("@/pages/AdminEmailCenter"));
+const AdminCampaignsPage = lazy(() => import("@/pages/AdminCampaignsPage"));
 const AdminVoicePage = lazy(() => import("@/pages/AdminVoicePage"));
 const Payment = lazy(() => import("@/pages/Payment"));
 const TrackTrip = lazy(() => import("@/pages/TrackTrip"));
@@ -309,6 +310,16 @@ function Router() {
         <Route path="/admin/email-center">
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminEmailCenter />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/campaigns/:id">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminCampaignsPage />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin/campaigns">
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminCampaignsPage />
           </ProtectedRoute>
         </Route>
         <Route path="/admin/voice">
