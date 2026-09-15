@@ -28,6 +28,7 @@ import { emitEvent } from '../events';
 import { notificationService, sendResendEmail } from '../notifications';
 import { logger } from '../logger';
 import { xavier } from './xavier';
+import { escapeHtml } from '../lib/promptSanitizer';
 
 // ─── constants ─────────────────────────────────────────────
 
@@ -314,7 +315,7 @@ export class AegisAgent extends BaseAgent {
             replyTo: AEGIS_REPLY_TO,
             subject: 'Your availability has been turned off',
             html: `
-              <p>Hi ${m.name ?? 'there'},</p>
+              <p>Hi ${escapeHtml(m.name ?? 'there')},</p>
               <p>Your availability has been turned off because your account verification is not yet complete.</p>
               <p>Complete your verification to go online and start accepting jobs:</p>
               <p><a href="${APP_BASE_URL}/mover/verification">Complete verification →</a></p>
@@ -394,7 +395,7 @@ export class AegisAgent extends BaseAgent {
           replyTo: AEGIS_REPLY_TO,
           subject: 'Your LervIT account has been reactivated',
           html: `
-            <p>Hi ${moverRow.name ?? 'there'},</p>
+            <p>Hi ${escapeHtml(moverRow.name ?? 'there')},</p>
             <p>Your account has been reactivated. You can now go available and start accepting jobs again.</p>
             <p><a href="${APP_BASE_URL}/mover/dashboard">Go to dashboard →</a></p>
             <p>Aegis Ford<br/>LervIT Compliance</p>
@@ -436,7 +437,7 @@ export class AegisAgent extends BaseAgent {
         replyTo: AEGIS_REPLY_TO,
         subject: `${urgency}${docLabel} expires in ${daysUntilExpiry} days`,
         html: `
-          <p>Hi ${item.moverName ?? 'there'},</p>
+          <p>Hi ${escapeHtml(item.moverName ?? 'there')},</p>
           <p>Your <strong>${docLabel}</strong> expires on
           <strong>${item.expiryDate.toDateString()}</strong> — ${daysUntilExpiry} days from now.</p>
           <p>Please upload your renewed document to keep your account active:</p>
@@ -489,7 +490,7 @@ export class AegisAgent extends BaseAgent {
         replyTo: AEGIS_REPLY_TO,
         subject: 'Account suspended — document expired',
         html: `
-          <p>Hi ${item.moverName ?? 'there'},</p>
+          <p>Hi ${escapeHtml(item.moverName ?? 'there')},</p>
           <p>Your <strong>${docLabel}</strong> expired on ${item.expiryDate.toDateString()}.
           Your account has been temporarily suspended.</p>
           <p>Upload your renewed document to reactivate your account:</p>

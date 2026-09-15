@@ -23,6 +23,7 @@ import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifica
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedToday } from './dedupe';
+import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 
 const JORDAN_EMAIL_MODEL = 'claude-sonnet-4-6';
 const JORDAN_SMS_MODEL = 'claude-haiku-4-5-20251001';
@@ -100,8 +101,11 @@ export class JordanAgent extends BaseAgent {
 
     const applyLink = 'https://app.lervit.com/signup';
 
+    const safeNotes = sanitizeForPrompt(lead.notes ?? '', 'notes');
     const raw = await this.callClaude(
-      `You are Jordan Hayes, a mover recruitment specialist at LervIT, Calgary's
+      `${JAILBREAK_PREAMBLE}
+
+You are Jordan Hayes, a mover recruitment specialist at LervIT, Calgary's
 AI-powered moving platform. Write a friendly recruitment email to someone who
 might want to earn money as a mover/driver.
 
@@ -129,7 +133,9 @@ Examples:
 Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.`,
       `Candidate signal:
 Source: ${lead.sourceChannel ?? 'unknown'}
-Notes: ${(lead.notes ?? '').slice(0, 300)}
+<data>
+Notes: ${safeNotes}
+</data>
 Intent score: ${lead.intentScore}
 
 Write recruitment email with CTA "Apply to become a LervIT mover".
@@ -223,7 +229,9 @@ Sign up link: ${applyLink}`,
     if (touchNumber === 2 && lead.contactPhone) {
       channel = 'sms';
       const smsBody = await this.callClaude(
-        `You are Jordan from LervIT, Calgary's moving platform.
+        `${JAILBREAK_PREAMBLE}
+
+You are Jordan from LervIT, Calgary's moving platform.
 Write a brief, friendly SMS follow-up to
 someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
@@ -231,7 +239,9 @@ Then add personalized follow-up based on
 the candidate context. Include sign up link.
 Not pushy. Total under 160 characters.
 Return only the SMS text, nothing else.`,
-        `Follow up for: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 100)}
+        `<data>
+Follow up for: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
+</data>
 Sign up link: ${applyLink}`,
         JORDAN_SMS_MODEL,
         120,
@@ -252,7 +262,9 @@ Sign up link: ${applyLink}`,
       channel = 'email';
       const isLast = touchNumber === 4;
       const raw = await this.callClaude(
-        `You are Jordan Hayes from LervIT Calgary — mover recruitment.
+        `${JAILBREAK_PREAMBLE}
+
+You are Jordan Hayes from LervIT Calgary — mover recruitment.
 Write a ${isLast ? 'final' : 'follow-up'} recruitment email.
 ${isLast ? 'Create gentle urgency — this is the last outreach.' : 'Use a different angle from the first email.'}
 Warm, brief, not pushy. 2-3 paragraphs.
@@ -265,7 +277,9 @@ Examples:
 'Join LervIT — flexible moving work'
 
 Format: first line "SUBJECT: <subject>", blank line, then the body.`,
-        `Candidate context: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 200)}
+        `<data>
+Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
+</data>
 Touch number: ${touchNumber} of 4
 Sign up link: ${applyLink}`,
         JORDAN_EMAIL_MODEL,
@@ -323,13 +337,17 @@ Sign up link: ${applyLink}`,
 
     const applyLink = 'https://app.lervit.com/signup';
     const raw = await this.callClaude(
-      `You are Jordan from LervIT, Calgary's moving platform.
+      `${JAILBREAK_PREAMBLE}
+
+You are Jordan from LervIT, Calgary's moving platform.
 Write a brief, friendly SMS to someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
 Personalize from the candidate context. Include the sign up link.
 Not pushy. Total under 160 characters.
 Return only the SMS text, nothing else.`,
-      `Candidate context: ${(lead.notes ?? 'Calgary mover candidate').slice(0, 100)}
+      `<data>
+Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
+</data>
 Sign up link: ${applyLink}`,
       JORDAN_SMS_MODEL,
       120,

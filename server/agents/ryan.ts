@@ -26,6 +26,7 @@ import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { fetchWithScrapingBee } from '../scraping-bee';
 import { parseListingTitles, parseCraigslistDatedItems } from './scout';
 import { searchPlacesText } from './places-crawl';
+import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 
 const RYAN_SCORING_MODEL = 'claude-haiku-4-5-20251001';
 
@@ -686,8 +687,11 @@ export class RyanAgent extends BaseAgent {
 
   private async scoreCandidate(text: string): Promise<number> {
     if (!text.trim()) return 0;
+    const safeText = sanitizeForPrompt(text, 'description');
     const response = await this.callClaude(
-      `You are Ryan Brooks, a supply-side recruiter for LervIT, Calgary's moving and delivery platform. Ryan hunts SUPPLY only — people who want to EARN MONEY as movers/drivers. Scout is the sister agent who handles DEMAND (customers needing movers).
+      `${JAILBREAK_PREAMBLE}
+
+You are Ryan Brooks, a supply-side recruiter for LervIT, Calgary's moving and delivery platform. Ryan hunts SUPPLY only — people who want to EARN MONEY as movers/drivers. Scout is the sister agent who handles DEMAND (customers needing movers).
 
 Score 0-100 for likelihood this person wants to EARN MONEY doing moving or delivery work in Calgary.
 
@@ -713,7 +717,10 @@ CRITICAL:
   (Scout handles demand, Ryan handles supply)
 
 Return ONLY a number 0-100.`,
-      `Score this signal:\n${text.slice(0, 500)}`,
+      `<data>
+Score this signal:
+${safeText}
+</data>`,
       RYAN_SCORING_MODEL,
       20,
     );

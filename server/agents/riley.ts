@@ -30,6 +30,7 @@ import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifica
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedWithinDays } from './dedupe';
+import { escapeHtml } from '../lib/promptSanitizer';
 
 const RILEY_EMAIL = process.env.RILEY_EMAIL?.trim() || 'riley.morgan@lervit.com';
 const RILEY_FROM = `Riley Morgan | LervIT <${RILEY_EMAIL}>`;
@@ -511,7 +512,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
           to: user.email,
           subject: 'Your LervIT payouts are ready',
           html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
-            <p>Hi ${firstName},</p>
+            <p>Hi ${escapeHtml(firstName)},</p>
             <p>Great news — your Stripe account is fully connected and your payouts are now active.</p>
             <p>You'll receive payment within 2 business days after each completed move.</p>
             <p>The LervIT team</p>
@@ -672,7 +673,7 @@ Dashboard: ${APP_BASE_URL}/mover-dashboard`,
             to: user.email,
             subject: 'Welcome to LervIT — your account is verified',
             html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
-              <p>Hi ${firstName},</p>
+              <p>Hi ${escapeHtml(firstName)},</p>
               <p>Your LervIT account is now verified. You can track your booking, manage preferences, and book future moves all from your dashboard.</p>
               <p>Use <strong>LERVIT10</strong> for 10% off your next move.</p>
               ${ctaHtml('Go to my dashboard →', `${APP_BASE_URL}/dashboard`)}

@@ -25,6 +25,7 @@ import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { fetchWithScrapingBee } from '../scraping-bee';
 import { searchPlacesText, getPlaceDetails } from './places-crawl';
+import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 
 const SCOUT_MODEL = 'claude-haiku-4-5-20251001';
 const HIGH_INTENT_THRESHOLD = 70;
@@ -773,8 +774,11 @@ export class ScoutAgent extends BaseAgent {
 
   private async scoreSignal(text: string): Promise<number> {
     if (!text.trim()) return 0;
+    const safeText = sanitizeForPrompt(text, 'description');
     const response = await this.callClaude(
-      `You are Scout Reid, a lead scoring agent for LervIT, a Calgary moving and delivery platform. Score ONLY physical moving intent.
+      `${JAILBREAK_PREAMBLE}
+
+You are Scout Reid, a lead scoring agent for LervIT, a Calgary moving and delivery platform. Score ONLY physical moving intent.
 
 CRITICAL RULE:
 If the signal is NOT from Calgary or Alberta, Canada — score it 0 regardless
@@ -804,7 +808,10 @@ IMPORTANT RULES:
 - Job postings for movers/drivers = 0 (supply side, not demand)
 
 Return ONLY a number 0-100.`,
-      `Score this signal for moving intent:\n${text}`,
+      `<data>
+Score this signal for moving intent:
+${safeText}
+</data>`,
       SCOUT_MODEL,
       20,
     );

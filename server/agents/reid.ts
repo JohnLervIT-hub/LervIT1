@@ -44,6 +44,7 @@ import { sendResendEmail } from '../notifications';
 import { buildReidEmail } from '../lib/reidEmailTemplates';
 import { extractTextFromDocument, isImageUrl } from '../lib/googleVision';
 import { logger } from '../logger';
+import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { xavier } from './xavier';
 
 const REID_MODEL = 'claude-sonnet-4-6';
@@ -332,7 +333,15 @@ export class ReidAgent extends BaseAgent {
     const requirements =
       DOCUMENT_REQUIREMENTS[input.documentType] ?? DOCUMENT_REQUIREMENTS.default;
 
-    const systemPrompt = `${REID_PERSONA}
+    // OCR text is the primary attack surface — an attacker can upload a
+    // doctored document image whose OCR extraction contains a jailbreak
+    // payload. Sanitize before it enters the prompt.
+    const safeOcrText = sanitizeForPrompt(input.documentText ?? '', 'ocr');
+    const safeMoverName = sanitizeForPrompt(input.moverName ?? '', 'name');
+
+    const systemPrompt = `${JAILBREAK_PREAMBLE}
+
+${REID_PERSONA}
 
 You are reviewing a mover document.
 Return ONLY valid JSON. No markdown. No explanation.
@@ -364,12 +373,12 @@ THRESHOLDS:
     const userMessage = `Review this document:
 
 Type: ${input.documentType}
-Mover: ${input.moverName}
+Mover: ${safeMoverName}
 Profile: ${JSON.stringify(input.moverProfile)}
 ${input.documentUrl ? `URL: ${input.documentUrl}` : ''}
 ${
-  input.documentText
-    ? `Document content (OCR extracted):\n${input.documentText.slice(0, 3000)}`
+  safeOcrText
+    ? `<data>\nDocument content (OCR extracted):\n${safeOcrText}\n</data>`
     : 'No document content available — evaluate based on document type requirements and URL only'
 }
 

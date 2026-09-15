@@ -37,6 +37,7 @@ import { blogPosts, gmbPosts, socialPosts, reviews, users, bookings, campaigns, 
 import { xavier } from './xavier';
 import { logger } from '../logger';
 import { emitEvent } from '../events';
+import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { heygenProvider } from '../providers/heygen';
 import { higgsfieldProvider } from '../providers/higgsfield';
 import { metaProvider } from '../providers/meta';
@@ -272,8 +273,8 @@ export class EmberAgent extends BaseAgent {
   // Blog
   // ─────────────────────────────────────────────────────────
   async generateBlogPost(input: GenerateBlogInput, options?: AgentRunOptions) {
-    const topic = input.topic?.trim() || pickTopic();
-    const category = input.category?.trim() || 'Moving Tips';
+    const topic = sanitizeForPrompt(input.topic?.trim() || pickTopic(), 'description');
+    const category = sanitizeForPrompt(input.category?.trim() || 'Moving Tips', 'title');
 
     const systemPrompt = `You are Ember Lane, content & marketing lead for LervIT.
 Write helpful, actionable, SEO-friendly blog posts for Calgary movers and customers.
@@ -494,9 +495,11 @@ Rules:
 
 Return the reply text ONLY.`;
 
-    const userMessage = `Customer: ${review.customerName}
+    const userMessage = `<data>
+Customer: ${sanitizeForPrompt(review.customerName, 'name')}
 Rating: ${review.rating}★
-Their review: ${review.comment ?? '(no comment)'}`;
+Their review: ${sanitizeForPrompt(review.comment ?? '(no comment)', 'review')}
+</data>`;
 
     if (options?.dryRun) {
       return { dryRun: true, would: 'respond', reviewId: review.id, rating: review.rating };
@@ -687,18 +690,25 @@ Only strategy, contentPillars, items.
 No newlines inside string values.
 All strings under 100 characters.${CREATIVEOS_APPENDIX}`;
 
+    const safeName = sanitizeForPrompt(input.name, 'title');
+    const safeObjective = sanitizeForPrompt(input.objective, 'description');
+    const safeAudience = sanitizeForPrompt(input.audience, 'description');
+    const safeOffer = sanitizeForPrompt(input.offer ?? 'LERVIT10', 'title');
+
     const userMessage = `Create a content plan for this campaign.
 Return ONLY the JSON with strategy,
 contentPillars, and items fields.
 
 Campaign details (do not repeat these
 in your response):
-Name: ${input.name}
-Objective: ${input.objective}
-Audience: ${input.audience}
-Offer: ${input.offer ?? 'LERVIT10'}
+<data>
+Name: ${safeName}
+Objective: ${safeObjective}
+Audience: ${safeAudience}
+Offer: ${safeOffer}
 Platforms: ${platformsList.join(', ')}
-Duration: ${input.durationDays ?? 30} days`;
+Duration: ${input.durationDays ?? 30} days
+</data>`;
 
     const raw = await this.callAnthropic(systemPrompt, userMessage, 2000);
 
@@ -821,9 +831,15 @@ Duration: ${input.durationDays ?? 30} days`;
     if (!item) return { error: 'item_not_found' };
 
     const brief = (item.creativeBrief ?? {}) as any;
-    const concept = input.concept ?? brief.concept ?? 'LervIT moving service in Calgary';
+    const concept = sanitizeForPrompt(
+      input.concept ?? brief.concept ?? 'LervIT moving service in Calgary',
+      'description',
+    );
     const durationSec = input.duration ?? 30;
-    const audience = input.audience ?? 'Calgary residents planning a small or same-day move';
+    const audience = sanitizeForPrompt(
+      input.audience ?? 'Calgary residents planning a small or same-day move',
+      'description',
+    );
 
     const systemPrompt = `You are Ember Lane, LervIT's script writer.
 Write a video script for LervIT Moving in Calgary.
@@ -896,7 +912,10 @@ Start your response with { directly.
     if (!item) return { error: 'item_not_found' };
 
     const existing = (item.creativeBrief ?? {}) as any;
-    const concept = input.concept ?? existing.concept ?? 'LervIT moving service in Calgary';
+    const concept = sanitizeForPrompt(
+      input.concept ?? existing.concept ?? 'LervIT moving service in Calgary',
+      'description',
+    );
 
     const systemPrompt = `You are Ember Lane, LervIT's creative director.
 Write a directorial brief for a piece of video/social content.
@@ -1332,11 +1351,15 @@ Platform: ${item.platform ?? 'N/A'}`;
     userMessage: string,
     maxTokens: number,
   ): Promise<string> {
+    // Every Ember Claude call gets the jailbreak-defense preamble prepended
+    // so persona hardening applies to all 9 content generators without
+    // per-site edits. Individual generators still sanitize user-supplied
+    // topic/concept/etc before embedding them in the user message.
     const response = await this.anthropic.messages.create({
       model: EMBER_MODEL,
       max_tokens: maxTokens,
       temperature: 0,
-      system: systemPrompt,
+      system: `${JAILBREAK_PREAMBLE}\n\n${systemPrompt}`,
       messages: [{ role: 'user', content: userMessage }],
     });
     const first = response.content[0];

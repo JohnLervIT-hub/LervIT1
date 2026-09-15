@@ -31,6 +31,7 @@ import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifica
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedWithinDays } from './dedupe';
+import { escapeHtml } from '../lib/promptSanitizer';
 
 const KAI_CUSTOMER_WINBACK_EVENTS = [
   'kai.customer_winback_touch1',
@@ -594,7 +595,7 @@ CTA link: ${APP_BASE_URL}/request-move`,
 // ─── HTML builders ─────────────────────────────────────────
 
 function customerWinbackTouch1Html(firstName: string): string {
-  return `<p>Hi ${firstName},</p>
+  return `<p>Hi ${escapeHtml(firstName)},</p>
     <p>It's been a while since your last move with LervIT and we'd love to have you back.</p>
     <p>As a thank you for being a LervIT customer, here's an exclusive discount just for you:</p>
     <div style="background:#f0f9ff;border:2px solid #2563eb;border-radius:12px;padding:20px;text-align:center;margin:20px 0;">
@@ -609,7 +610,7 @@ function customerWinbackTouch1Html(firstName: string): string {
 }
 
 function customerWinbackTouch3Html(firstName: string): string {
-  return `<p>Hi ${firstName},</p>
+  return `<p>Hi ${escapeHtml(firstName)},</p>
     <p>This is your last reminder — your exclusive 15% discount code <strong>${KAI_PROMO_CODE}</strong> expires soon.</p>
     <p>LervIT makes moving easy: snap a photo for an instant AI quote, book verified Calgary movers, transparent pricing with no hidden fees, and same-day service available.</p>
     <p><a href="${APP_BASE_URL}/request-move" style="background:#2563eb;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:bold;">Use ${KAI_PROMO_CODE} Before It Expires →</a></p>
@@ -617,14 +618,14 @@ function customerWinbackTouch3Html(firstName: string): string {
 }
 
 function moverReactivationTouch1FallbackHtml(firstName: string): string {
-  return `<p>Hi ${firstName},</p>
+  return `<p>Hi ${escapeHtml(firstName)},</p>
     <p>There are moving jobs available in Calgary right now — open the app to see what's near you and start earning.</p>
     <p><a href="${APP_BASE_URL}/mover-dashboard" style="background:#2563eb;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:bold;">View available jobs →</a></p>
     <p>Kai Bennett<br/>LervIT Team</p>`;
 }
 
 function moverReactivationTouch2Html(firstName: string): string {
-  return `<p>Hi ${firstName},</p>
+  return `<p>Hi ${escapeHtml(firstName)},</p>
     <p>We noticed you haven't accepted a job recently and wanted to check in.</p>
     <p>Calgary customers are actively booking moves — your availability could mean $500–$2,000 this week.</p>
     <p>If you're available, just open the app and enable your availability toggle. Jobs will come to you automatically.</p>
@@ -634,7 +635,7 @@ function moverReactivationTouch2Html(firstName: string): string {
 }
 
 function moverReactivationTouch3Html(firstName: string): string {
-  return `<p>Hi ${firstName},</p>
+  return `<p>Hi ${escapeHtml(firstName)},</p>
     <p>It's been 30 days since your last job with LervIT. We want to make sure your account stays active.</p>
     <p>If you're still interested in earning with LervIT, just accept one job this week to keep your account in good standing.</p>
     <p>If something isn't working or you have concerns, please reply to this email — I read every response.</p>

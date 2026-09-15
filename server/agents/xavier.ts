@@ -17,6 +17,7 @@ import { BaseAgent } from './base';
 import { emitEvent } from '../events';
 import { buildIntelligenceSummary, type IntelligenceSummary } from '../intelligence';
 import { logger } from '../logger';
+import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 
 const XAVIER_MODEL = 'claude-opus-4-6';
 
@@ -63,12 +64,16 @@ export class XavierAgent extends BaseAgent {
     const summary = await buildIntelligenceSummary();
 
     const brief = await this.callClaude(
-      `You are Xavier Cole, the AI CEO Agent for LervIT Technologies.
+      `${JAILBREAK_PREAMBLE}
+
+You are Xavier Cole, the AI CEO Agent for LervIT Technologies.
 You generate concise daily operational briefs for John Eki, the founder.
 Be direct, data-driven, and flag anything requiring his attention.
 Format: plain text, no markdown, no emojis.`,
       `Generate today's LervIT brief based on this data:
+<data>
 ${JSON.stringify(summary, null, 2)}
+</data>
 
 Include:
 1. Revenue snapshot (today vs target)
@@ -105,14 +110,40 @@ Keep it under 300 words. Direct and actionable.`,
       throw new Error('Xavier.escalate: issue, severity, and agentName are required');
     }
 
+    // Whitelist safe fields from escalation data — only primitive IDs and
+    // sanitized free-text land in Claude's context. Prevents an attacker-
+    // authored `notes` / `reason` field from prompt-injecting Xavier's SMS.
+    const rawData = input.data ?? {};
+    const safeEscalationData = {
+      agentName: rawData.agentName,
+      severity: rawData.severity,
+      moverId: rawData.moverId,
+      bookingId: rawData.bookingId,
+      auditId: rawData.auditId,
+      campaignId: rawData.campaignId,
+      leadId: rawData.leadId,
+      score: rawData.score,
+      count: rawData.count,
+      issue: sanitizeForPrompt(rawData.issue ?? '', 'notes'),
+      reason: sanitizeForPrompt(rawData.reason ?? '', 'notes'),
+      notes: sanitizeForPrompt(rawData.notes ?? '', 'notes'),
+    };
+
+    const safeIssue = sanitizeForPrompt(input.issue, 'notes');
+    const safeAgentName = sanitizeForPrompt(input.agentName, 'name');
+
     const message = await this.callClaude(
-      `You are Xavier Cole, AI CEO Agent for LervIT.
+      `${JAILBREAK_PREAMBLE}
+
+You are Xavier Cole, AI CEO Agent for LervIT.
 Craft a brief escalation alert for John Eki. Be specific and actionable.
 Under 100 words. Plain text, no markdown.`,
-      `Escalation from ${input.agentName}:
-Issue: ${input.issue}
+      `Escalation from ${safeAgentName}:
+<data>
+Issue: ${safeIssue}
 Severity: ${input.severity}
-Data: ${JSON.stringify(input.data ?? {})}`,
+Data: ${JSON.stringify(safeEscalationData)}
+</data>`,
       XAVIER_MODEL,
       300,
     );
