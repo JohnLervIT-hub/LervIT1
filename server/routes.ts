@@ -15105,11 +15105,18 @@ Respond with VALID JSON only:
         'admin',
       );
 
-      // Auto-publish to social after approval
-      const platform = item.platform;
-      const socialPlatforms = ['facebook', 'instagram', 'tiktok', 'linkedin'];
+      // Auto-publish to social after approval. Text/caption-only posts should
+      // ship too — the old videoUrl gate silently dropped copy-only items.
+      // TikTok is excluded here because publishToSocial rejects it as
+      // unsupported_platform.
+      const publishablePlatforms = ['facebook', 'instagram', 'linkedin'];
 
-      if (platform && socialPlatforms.includes(platform) && item.videoUrl) {
+      const hasContent = !!(item.videoUrl || item.caption || item.script);
+
+      if (
+        publishablePlatforms.includes(item.platform ?? '') &&
+        hasContent
+      ) {
         ember.run('publish_to_social', {
           contentItemId: req.params.itemId,
         }).catch(err =>
@@ -15118,7 +15125,8 @@ Respond with VALID JSON only:
 
         logger.info({
           contentItemId: req.params.itemId,
-          platform,
+          platform: item.platform,
+          hasVideo: !!item.videoUrl,
         }, '[Ember] Auto-publish triggered');
       }
 
