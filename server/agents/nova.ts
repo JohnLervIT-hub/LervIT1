@@ -110,7 +110,9 @@ export class NovaAgent extends BaseAgent {
         connection_id: TELNYX_CONNECTION_ID,
         to: opts.to,
         from: NOVA_PHONE,
-        webhook_url: `${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/api/nova/webhook`,
+        webhook_url: `${(
+          process.env.APP_BASE_URL ?? 'https://app.lervit.com'
+        ).trim()}/api/nova/webhook`,
         webhook_url_method: 'POST',
         custom_headers: [
           { name: 'X-Nova-Type', value: opts.callType },
