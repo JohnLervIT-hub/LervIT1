@@ -59,7 +59,7 @@ const KAI_EMAIL = process.env.KAI_EMAIL?.trim() || 'kai.bennett@lervit.com';
 const KAI_FROM = `Kai Bennett | LervIT <${KAI_EMAIL}>`;
 const KAI_REPLY_TO = 'support@lervit.com';
 const KAI_MODEL = 'claude-haiku-4-5-20251001';
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;

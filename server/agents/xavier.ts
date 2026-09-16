@@ -23,7 +23,7 @@ const XAVIER_MODEL = 'claude-opus-4-6';
 
 const CALGARY_TZ = 'America/Edmonton';
 
-const APP_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 
 interface DailyBriefResult {
   brief: string;

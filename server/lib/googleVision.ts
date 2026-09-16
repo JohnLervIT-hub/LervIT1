@@ -19,7 +19,7 @@ interface VisionResult {
 }
 
 const VISION_API_KEY = process.env.GOOGLE_VISION_API_KEY;
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 
 export async function extractTextFromDocument(documentUrl: string): Promise<VisionResult> {
   if (!VISION_API_KEY) {

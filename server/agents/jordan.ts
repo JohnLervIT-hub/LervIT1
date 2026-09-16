@@ -466,7 +466,7 @@ async function sendJordanEmail(to: string, subject: string, body: string): Promi
     .filter(Boolean)
     .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
     .join('');
-  const appBase = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+  const appBase = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
   const header = `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">
     <tr>
       <td width="52" valign="middle">

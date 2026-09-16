@@ -13,7 +13,7 @@
  * HTML-escaped before interpolation.
  */
 
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 
 export type ReidEmailType =
   | 'receipt'

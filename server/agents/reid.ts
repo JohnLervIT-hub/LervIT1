@@ -48,7 +48,7 @@ import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { xavier } from './xavier';
 
 const REID_MODEL = 'claude-sonnet-4-6';
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 
 const REID_PERSONA = `
 You are Reid Calloway, LervIT's Document Operations agent. You are precise,

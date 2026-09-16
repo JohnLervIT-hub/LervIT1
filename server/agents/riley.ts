@@ -36,7 +36,7 @@ const RILEY_EMAIL = process.env.RILEY_EMAIL?.trim() || 'riley.morgan@lervit.com'
 const RILEY_FROM = `Riley Morgan | LervIT <${RILEY_EMAIL}>`;
 const RILEY_REPLY_TO = 'support@lervit.com';
 const RILEY_MODEL = 'claude-sonnet-4-6';
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

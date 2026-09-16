@@ -37,7 +37,7 @@ import { notificationService } from '../notifications';
 import { buildCustomerContext } from './novaContext';
 import { decideRecoveryStrategy } from './novaReasoning';
 
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 
 const SWEEP_LOOKBACK_HOURS = 24;
 

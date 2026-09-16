@@ -48,7 +48,7 @@ const DM_EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
 
 const router = express.Router();
 
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
 // Per-phone dedupe for DM → voice handoffs. Same phone hitting handoff

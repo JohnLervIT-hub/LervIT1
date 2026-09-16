@@ -74,7 +74,7 @@ const SAM_EMAIL = process.env.SAM_EMAIL?.trim() || 'sam.carter@lervit.com';
 const SAM_FROM = `Sam Carter | LervIT <${SAM_EMAIL}>`;
 const SAM_REPLY_TO = 'support@lervit.com';
 const SAM_MODEL = 'claude-sonnet-4-6';
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 const PARTNERS_PORTAL_URL = `${APP_BASE_URL}/partners`;
 const DAY_MS = 24 * 60 * 60 * 1000;
 

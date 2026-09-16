@@ -234,7 +234,7 @@ export class AlexAgent extends BaseAgent {
       return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
-    const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+    const baseUrl = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
     const quoteAddresses = await fetchQuoteAddresses(lead.quoteId);
     const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
     const pickupArea = trimArea(quoteAddresses?.pickupAddress);
@@ -370,7 +370,7 @@ Write a conversion email. Include:
       return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
-    const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+    const baseUrl = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
     const quoteAddresses = await fetchQuoteAddresses(lead.quoteId);
     const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
     const pickupArea = trimArea(quoteAddresses?.pickupAddress);
@@ -494,7 +494,7 @@ Format: first line "SUBJECT: <subject>", blank line, then the body.`,
 From: ${booking.pickupAddress ?? 'unknown'}
 To: ${booking.dropoffAddress ?? 'unknown'}
 Date: ${booking.preferredDate ?? 'unspecified'}
-Complete link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/payment/${bookingId}`,
+Complete link: ${(process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim()}/payment/${bookingId}`,
       ALEX_EMAIL_MODEL,
       500,
     );
@@ -539,7 +539,7 @@ Complete link: ${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/payment/$
       return { skipped: true, reason: 'no_sms_consent' };
     }
 
-    const baseUrl = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+    const baseUrl = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
     const quoteAddresses = await fetchQuoteAddresses(lead.quoteId);
     const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
     const pickupArea = trimArea(quoteAddresses?.pickupAddress);
@@ -629,7 +629,7 @@ async function sendAlexEmail(to: string, subject: string, body: string): Promise
     .filter(Boolean)
     .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
     .join('');
-  const appBase = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+  const appBase = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
   const header = `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">
     <tr>
       <td width="52" valign="middle">

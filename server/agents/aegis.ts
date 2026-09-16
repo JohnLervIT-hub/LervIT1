@@ -36,7 +36,7 @@ const AEGIS_EMAIL = process.env.AEGIS_EMAIL?.trim() || 'aegis.ford@lervit.com';
 const AEGIS_FROM = `Aegis Ford | LervIT <${AEGIS_EMAIL}>`;
 const AEGIS_REPLY_TO = 'support@lervit.com';
 const AEGIS_MODEL = 'claude-haiku-4-5-20251001';
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
+const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Documents that carry an expiry_date and must be re-uploaded on renewal.
