@@ -28,6 +28,8 @@ export function createNovaBridge(
     `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
   );
 
+  let telnyxStreamId: string | undefined;
+
   elevenWs.on('open', () => {
     logger.info({ callControlId }, '[Bridge] ElevenLabs connected');
 
@@ -74,12 +76,25 @@ export function createNovaBridge(
             language: 'en',
           },
           tts: {
-            stability: 0.3,
-            similarity_boost: 0.75,
-            style: 0.0,
-            use_speaker_boost: true,
-            optimize_streaming_latency: 4,
             model_id: 'eleven_flash_v2_5',
+            voice_settings: {
+              stability: 0.25,
+              similarity_boost: 0.75,
+              style: 0.0,
+              use_speaker_boost: true,
+            },
+            optimize_streaming_latency: 4,
+          },
+          conversation: {
+            client_events: ['audio', 'interruption', 'agent_response'],
+          },
+          input_format: {
+            type: 'ulaw',
+            sample_rate: 8000,
+          },
+          output_format: {
+            type: 'ulaw',
+            sample_rate: 8000,
           },
         },
       }),
@@ -95,6 +110,7 @@ export function createNovaBridge(
           telnyxWs.send(
             JSON.stringify({
               event: 'media',
+              stream_id: telnyxStreamId,
               media: {
                 payload: msg.audio_event.audio_base_64,
               },
@@ -117,7 +133,19 @@ export function createNovaBridge(
     try {
       const msg = JSON.parse(data.toString());
 
-      if (msg.event === 'media' && msg.media?.payload) {
+      if (msg.event === 'start') {
+        telnyxStreamId = msg.stream_id;
+        logger.info(
+          { callControlId, streamId: telnyxStreamId },
+          '[Bridge] Stream started',
+        );
+      }
+
+      if (
+        msg.event === 'media' &&
+        msg.media?.payload &&
+        msg.media?.track === 'inbound'
+      ) {
         if (elevenWs.readyState === WebSocket.OPEN) {
           elevenWs.send(
             JSON.stringify({
