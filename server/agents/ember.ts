@@ -148,6 +148,12 @@ interface GenerateBlogInput {
 
 interface GenerateSocialInput {
   platform?: SocialPlatform;
+  // When set, persist the generated copy onto this campaign content_items row
+  // (caption/hashtags/cta/status) instead of inserting a new social_posts row.
+  contentItemId?: string;
+  topic?: string;
+  tone?: string;
+  cta?: string;
 }
 
 interface RespondToReviewInput {
@@ -174,6 +180,8 @@ interface GenerateVideoScriptInput {
   concept?: string;
   duration?: number;
   audience?: string;
+  hook?: string;
+  platform?: string;
 }
 
 interface GenerateHeygenVideoInput {
@@ -514,6 +522,73 @@ Their review: ${sanitizeForPrompt(review.comment ?? '(no comment)', 'review')}
   // Social
   // ─────────────────────────────────────────────────────────
   async generateSocialContent(input: GenerateSocialInput, options?: AgentRunOptions) {
+    // Campaign-item branch: when contentItemId is set, generate a single post
+    // for that item's platform and persist onto the content_items row instead
+    // of inserting a new social_posts draft.
+    if (input.contentItemId) {
+      if (options?.dryRun) {
+        return { dryRun: true, would: 'generate_social_content', contentItemId: input.contentItemId };
+      }
+
+      const [item] = await db
+        .select()
+        .from(contentItems)
+        .where(eq(contentItems.id, input.contentItemId))
+        .limit(1);
+      if (!item) return { error: 'item_not_found' };
+
+      const brief = (item.creativeBrief ?? {}) as any;
+      const platform = (input.platform ?? item.platform ?? 'instagram') as SocialPlatform;
+      const guide = SOCIAL_GUIDES[platform] ?? SOCIAL_GUIDES.instagram;
+      const topic = sanitizeForPrompt(
+        input.topic ?? brief.concept ?? 'LervIT moving service in Calgary',
+        'description',
+      );
+      const tone = sanitizeForPrompt(input.tone ?? 'casual', 'title');
+      const cta = sanitizeForPrompt(input.cta ?? item.cta ?? 'Book at lervit.com', 'title');
+
+      const systemPrompt = `You are Ember Lane, social lead for LervIT.
+Write a ${platform} post following these rules:
+
+${guide}
+
+${LERVIT_BRAND}
+
+Tone: ${tone}. End with this CTA: ${cta}.
+
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
+{ "content": string, "hashtags": string[] }${CREATIVEOS_APPENDIX}`;
+
+      const userMessage = `Draft the ${platform} post. Topic: ${topic}.`;
+      const raw = await this.callAnthropic(systemPrompt, userMessage, 1200);
+      const parsed = this.parseJson(raw);
+
+      const content = String(parsed.content ?? '').trim();
+      if (!content) return { error: 'empty_content' };
+
+      const hashtags = Array.isArray(parsed.hashtags)
+        ? parsed.hashtags.map((h: any) => String(h).replace(/^#/, '').trim()).filter(Boolean)
+        : null;
+
+      await db
+        .update(contentItems)
+        .set({
+          caption: content,
+          hashtags,
+          cta,
+          status: 'ready',
+          updatedAt: new Date(),
+        })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      logger.info({ contentItemId: input.contentItemId, platform }, '[Ember] campaign social generated');
+      return { generated: true, contentItemId: input.contentItemId, platform, caption: content, hashtags };
+    }
+
     const platforms: SocialPlatform[] = input.platform
       ? [input.platform]
       : SOCIAL_PLATFORMS;
@@ -771,20 +846,74 @@ Duration: ${input.durationDays ?? 30} days
       })
       .returning();
 
+    let savedItems: Array<typeof contentItems.$inferSelect> = [];
     if (Array.isArray(plan.items) && plan.items.length > 0) {
-      await db.insert(contentItems).values(
-        plan.items.map((item: any) => ({
-          campaignId: campaign.id,
-          type: String(item.type ?? 'social'),
-          objective: item.objective ? String(item.objective) : null,
-          platform: item.platform ? String(item.platform) : null,
-          status: 'draft',
-          creativeBrief: item,
-          aspectRatio: item.aspectRatio ? String(item.aspectRatio) : null,
-          generator: item.generator ? String(item.generator) : null,
-          cta: item.cta ? String(item.cta) : null,
-        })),
-      );
+      savedItems = await db
+        .insert(contentItems)
+        .values(
+          plan.items.map((item: any) => ({
+            campaignId: campaign.id,
+            type: String(item.type ?? 'social'),
+            objective: item.objective ? String(item.objective) : null,
+            platform: item.platform ? String(item.platform) : null,
+            status: 'draft',
+            creativeBrief: item,
+            aspectRatio: item.aspectRatio ? String(item.aspectRatio) : null,
+            generator: item.generator ? String(item.generator) : null,
+            cta: item.cta ? String(item.cta) : null,
+          })),
+        )
+        .returning();
+    }
+
+    // Auto-generate script/caption for each item right after insert so the
+    // admin isn't staring at a wall of empty drafts. Fire-and-forget: the
+    // createCampaign response returns before these complete, and the admin
+    // page polls while items are `generating`.
+    if (savedItems.length > 0) {
+      setImmediate(() => {
+        (async () => {
+          for (const item of savedItems) {
+            const brief = (item.creativeBrief ?? {}) as any;
+            try {
+              if (item.type === 'heygen_video' || item.type === 'higgsfield_video') {
+                await this.generateVideoScript({
+                  contentItemId: item.id,
+                  concept: brief.concept,
+                  hook: brief.hook,
+                  platform: item.platform ?? undefined,
+                  duration: 30,
+                });
+              } else if (item.type === 'social') {
+                const p = (item.platform ?? 'instagram') as string;
+                const platform = (['facebook', 'instagram', 'tiktok', 'linkedin'] as const).includes(
+                  p as any,
+                )
+                  ? (p as SocialPlatform)
+                  : ('instagram' as SocialPlatform);
+                await this.generateSocialContent({
+                  contentItemId: item.id,
+                  platform,
+                  topic: brief.concept,
+                  tone: 'casual',
+                  cta: item.cta ?? 'Book at lervit.com',
+                });
+              }
+              // blog / newsletter / gmb items are handled via their own actions.
+            } catch (err) {
+              logger.error(
+                { err, itemId: item.id, type: item.type },
+                '[Ember] auto-generate for campaign item failed',
+              );
+              await db
+                .update(contentItems)
+                .set({ status: 'failed', updatedAt: new Date() })
+                .where(eq(contentItems.id, item.id))
+                .catch(() => {});
+            }
+          }
+        })().catch((err) => logger.error({ err }, '[Ember] auto-chain crashed'));
+      });
     }
 
     await emitEvent(
@@ -841,8 +970,13 @@ Duration: ${input.durationDays ?? 30} days
       'description',
     );
 
+    const platformLabel = sanitizeForPrompt(
+      input.platform ?? item.platform ?? 'social',
+      'title',
+    );
+
     const systemPrompt = `You are Ember Lane, LervIT's script writer.
-Write a video script for LervIT Moving in Calgary.
+Write a video script AND the accompanying social caption for LervIT Moving in Calgary.
 
 ${LERVIT_BRAND}
 
@@ -853,6 +987,8 @@ RULES:
 - End with a clear CTA.
 - Paced for ~${durationSec} seconds (roughly ${Math.max(30, durationSec * 2.5)} words).
 - Audience: ${audience}.
+- Caption is for ${platformLabel}: 1-3 short sentences that pair with the video.
+- Hashtags are lowercase, no leading '#', 5-8 items relevant to Calgary moving.
 
 CRITICAL: Respond with ONLY raw JSON.
 No markdown. No code fences.
@@ -862,6 +998,8 @@ Start your response with { directly.
 {
   "script": "full spoken script, one paragraph",
   "hook": "first line hook",
+  "caption": "social caption for the video",
+  "hashtags": ["calgarymoving", "movingtips"],
   "cta": "call to action line",
   "estimatedDuration": ${durationSec},
   "scenes": [
@@ -869,9 +1007,9 @@ Start your response with { directly.
   ]
 }${CREATIVEOS_APPENDIX}`;
 
-    const userMessage = `Write a script for: ${concept}`;
+    const userMessage = `Write a script and caption for: ${concept}`;
 
-    const raw = await this.callAnthropic(systemPrompt, userMessage, 800);
+    const raw = await this.callAnthropic(systemPrompt, userMessage, 1000);
 
     let parsed: any;
     try {
@@ -880,11 +1018,23 @@ Start your response with { directly.
       return { error: 'parse_failed' };
     }
 
+    const script = String(parsed.script ?? '');
+    const caption = parsed.caption ? String(parsed.caption) : null;
+    const cta = parsed.cta ? String(parsed.cta) : null;
+    const hashtags = Array.isArray(parsed.hashtags)
+      ? parsed.hashtags
+          .map((h: any) => String(h).replace(/^#/, '').trim())
+          .filter(Boolean)
+      : null;
+
     await db
       .update(contentItems)
       .set({
-        script: String(parsed.script ?? ''),
-        cta: parsed.cta ? String(parsed.cta) : null,
+        script,
+        caption,
+        hashtags,
+        cta,
+        status: 'ready',
         updatedAt: new Date(),
       })
       .where(eq(contentItems.id, input.contentItemId));
@@ -894,7 +1044,9 @@ Start your response with { directly.
       contentItemId: input.contentItemId,
       script: parsed.script,
       hook: parsed.hook,
-      cta: parsed.cta,
+      caption,
+      hashtags,
+      cta,
       scenes: parsed.scenes,
     };
   }

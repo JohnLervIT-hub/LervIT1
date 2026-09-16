@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -12,11 +12,22 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -50,6 +61,8 @@ import {
   ChevronRight,
   AlertCircle,
   PlayCircle,
+  RotateCcw,
+  Type,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -57,11 +70,14 @@ type CampaignStatus = "draft" | "active" | "completed" | "paused";
 type ItemStatus =
   | "draft"
   | "generating"
+  | "ready"
   | "qa"
   | "approved"
   | "published"
   | "failed";
 type EmberAction =
+  | "generate_video_script"
+  | "generate_social_content"
   | "generate_heygen_video"
   | "generate_higgsfield_video"
   | "publish_to_social";
@@ -108,8 +124,18 @@ interface ContentItem {
   updatedAt: string;
 }
 
+interface ContentPlan {
+  strategy?: string;
+  contentPillars?: string[];
+  items?: unknown[];
+}
+
 interface CampaignDetail {
-  campaign: CampaignRow & { contentPlan: unknown; offer: string | null; durationDays: number | null };
+  campaign: CampaignRow & {
+    contentPlan: ContentPlan | null;
+    offer: string | null;
+    durationDays: number | null;
+  };
   items: ContentItem[];
 }
 
@@ -134,6 +160,7 @@ const STATUS_TONE: Record<string, string> = {
   completed: "bg-blue-100 text-blue-700",
   paused: "bg-amber-100 text-amber-700",
   generating: "bg-blue-100 text-blue-700",
+  ready: "bg-cyan-100 text-cyan-700",
   qa: "bg-purple-100 text-purple-700",
   approved: "bg-teal-100 text-teal-700",
   published: "bg-emerald-100 text-emerald-700",
@@ -170,7 +197,15 @@ function wordCount(text: string | null): number {
   return trimmed.split(/\s+/).length;
 }
 
+function pluralize(n: number | null | undefined, singular: string, plural?: string): string {
+  const count = n ?? 0;
+  return `${count} ${count === 1 ? singular : plural ?? `${singular}s`}`;
+}
+
 const SOCIAL_PLATFORMS = new Set(["facebook", "instagram", "tiktok", "linkedin"]);
+const VIDEO_TYPES = new Set(["heygen_video", "higgsfield_video"]);
+const AVAILABLE_PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin"] as const;
+const OBJECTIVES = ["awareness", "conversion", "retention"] as const;
 
 export default function AdminCampaignsPage() {
   const params = useParams<{ id?: string }>();
@@ -182,9 +217,12 @@ export default function AdminCampaignsPage() {
   return <CampaignListView />;
 }
 
+// ─── List view ────────────────────────────────────────────────
+
 function CampaignListView() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery<{ campaigns: CampaignRow[] }>({
     queryKey: ["/api/admin/campaigns"],
@@ -195,7 +233,9 @@ function CampaignListView() {
       name: string;
       objective: string;
       audience: string;
+      offer?: string;
       platforms?: string[];
+      durationDays?: number;
     }) => {
       const res = await apiRequest("POST", "/api/admin/agent/ember/trigger", {
         action: "create_campaign",
@@ -207,9 +247,10 @@ function CampaignListView() {
     onSuccess: () => {
       toast({
         title: "Campaign queued",
-        description: "Ember is drafting the content plan. Refresh in a moment.",
+        description: "Ember is drafting the content plan. Scripts and captions will populate shortly.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/campaigns"] });
+      setCreateOpen(false);
     },
     onError: (err: any) => {
       toast({
@@ -219,23 +260,6 @@ function CampaignListView() {
       });
     },
   });
-
-  const promptForCampaign = () => {
-    const name = window.prompt("Campaign name?");
-    if (!name) return;
-    const objective =
-      window.prompt("Objective (awareness | conversion | retention)?") ?? "awareness";
-    const audience =
-      window.prompt("Audience (e.g. Calgary residents 25-45)?") ?? "Calgary residents";
-    const platformsRaw =
-      window.prompt("Platforms (comma-separated: instagram,tiktok,facebook)?") ??
-      "instagram,tiktok,facebook";
-    const platforms = platformsRaw
-      .split(",")
-      .map((p) => p.trim().toLowerCase())
-      .filter(Boolean);
-    create.mutate({ name, objective, audience, platforms });
-  };
 
   const rows = data?.campaigns ?? [];
 
@@ -258,7 +282,7 @@ function CampaignListView() {
             Multi-item content plans generated by Ember Lane.
           </p>
         </div>
-        <Button onClick={promptForCampaign} disabled={create.isPending}>
+        <Button onClick={() => setCreateOpen(true)} disabled={create.isPending}>
           {create.isPending ? (
             <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
           ) : (
@@ -308,7 +332,7 @@ function CampaignListView() {
                       </Badge>
                     ))}
                     <span className="text-xs text-muted-foreground ml-1">
-                      · {c.itemCount} item{c.itemCount === 1 ? "" : "s"}
+                      · {pluralize(c.itemCount, "item")}
                     </span>
                     <span className="text-xs text-muted-foreground ml-1">
                       · created {format(new Date(c.createdAt), "PP")}
@@ -328,9 +352,176 @@ function CampaignListView() {
           </Card>
         ))}
       </div>
+
+      <CreateCampaignDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSubmit={(payload) => create.mutate(payload)}
+        submitting={create.isPending}
+      />
     </div>
   );
 }
+
+// ─── Create dialog ────────────────────────────────────────────
+
+function CreateCampaignDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  submitting,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: {
+    name: string;
+    objective: string;
+    audience: string;
+    offer?: string;
+    platforms?: string[];
+    durationDays?: number;
+  }) => void;
+  submitting: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [objective, setObjective] = useState<(typeof OBJECTIVES)[number]>("awareness");
+  const [audience, setAudience] = useState("Calgary residents 25-45");
+  const [offer, setOffer] = useState("LERVIT10");
+  const [platforms, setPlatforms] = useState<string[]>(["instagram", "facebook"]);
+  const [durationDays, setDurationDays] = useState(30);
+
+  const togglePlatform = (p: string, checked: boolean) => {
+    setPlatforms((prev) => (checked ? [...prev, p] : prev.filter((x) => x !== p)));
+  };
+
+  const canSubmit = !!name.trim() && !!audience.trim() && platforms.length > 0;
+
+  const submit = () => {
+    if (!canSubmit) return;
+    onSubmit({
+      name: name.trim(),
+      objective,
+      audience: audience.trim(),
+      offer: offer.trim() || undefined,
+      platforms,
+      durationDays,
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) {
+          setName("");
+          setOffer("LERVIT10");
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create a campaign</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="campaign-name">Name</Label>
+            <Input
+              id="campaign-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Spring Move-in Rush"
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="campaign-objective">Objective</Label>
+            <Select
+              value={objective}
+              onValueChange={(v) => setObjective(v as (typeof OBJECTIVES)[number])}
+            >
+              <SelectTrigger id="campaign-objective">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OBJECTIVES.map((o) => (
+                  <SelectItem key={o} value={o} className="capitalize">
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="campaign-audience">Audience</Label>
+            <Input
+              id="campaign-audience"
+              value={audience}
+              onChange={(e) => setAudience(e.target.value)}
+              placeholder="Calgary residents 25-45"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="campaign-offer">Offer code</Label>
+            <Input
+              id="campaign-offer"
+              value={offer}
+              onChange={(e) => setOffer(e.target.value)}
+              placeholder="LERVIT10"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Platforms</Label>
+            <div className="flex flex-wrap gap-3">
+              {AVAILABLE_PLATFORMS.map((p) => (
+                <label key={p} className="flex items-center gap-1.5 text-sm capitalize">
+                  <Checkbox
+                    checked={platforms.includes(p)}
+                    onCheckedChange={(v) => togglePlatform(p, v === true)}
+                  />
+                  {p}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="campaign-duration">Duration (days)</Label>
+            <Input
+              id="campaign-duration"
+              type="number"
+              min={1}
+              max={180}
+              value={durationDays}
+              onChange={(e) => setDurationDays(Math.max(1, Number(e.target.value) || 30))}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!canSubmit || submitting}>
+            {submitting ? (
+              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4 mr-1.5" />
+            )}
+            Create Campaign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Detail view ──────────────────────────────────────────────
 
 function CampaignDetailView({ campaignId }: { campaignId: string }) {
   const { toast } = useToast();
@@ -338,15 +529,30 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
   const [previewedIds, setPreviewedIds] = useState<Set<string>>(new Set());
   const [confirmingItem, setConfirmingItem] = useState<ContentItem | null>(null);
 
+  const detailKey = [`/api/admin/campaigns/${campaignId}`];
+
   const { data, isLoading, error } = useQuery<CampaignDetail>({
-    queryKey: [`/api/admin/campaigns/${campaignId}`],
+    queryKey: detailKey,
     enabled: !!campaignId,
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: [`/api/admin/campaigns/${campaignId}`] });
+    queryClient.invalidateQueries({ queryKey: detailKey });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/campaigns"] });
   };
+
+  // Auto-poll while any item is generating so the UI reflects Ember's progress
+  // without a manual refresh. Stops as soon as everything settles.
+  const items = data?.items ?? [];
+  const hasGenerating = items.some((i) => i.status === "generating" || i.status === "draft");
+  useEffect(() => {
+    if (!hasGenerating) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: detailKey });
+    }, 5000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasGenerating, campaignId]);
 
   const approve = useMutation({
     mutationFn: async (itemId: string) => {
@@ -381,16 +587,20 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
       });
       return res.json();
     },
-    onSuccess: (payload, { action }) => {
+    onSuccess: (_payload, { action }) => {
       const label =
-        action === "generate_heygen_video"
-          ? "HeyGen video"
-          : action === "generate_higgsfield_video"
-            ? "Higgsfield video"
-            : "Publish to social";
+        action === "generate_video_script"
+          ? "Script"
+          : action === "generate_social_content"
+            ? "Caption"
+            : action === "generate_heygen_video"
+              ? "HeyGen video"
+              : action === "generate_higgsfield_video"
+                ? "Higgsfield video"
+                : "Publish";
       toast({
-        title: `Ember queued — ${label}`,
-        description: `Job ${payload?.jobId ?? ""} runs in background.`,
+        title: `${label} generating…`,
+        description: "Watching for updates.",
       });
       invalidate();
     },
@@ -402,6 +612,40 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
       });
     },
   });
+
+  const reset = useMutation({
+    mutationFn: async (itemId: string) => {
+      const res = await apiRequest("PATCH", `/api/admin/content-items/${itemId}/reset`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Item reset — ready to retry" });
+      invalidate();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Reset failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const generateScript = (item: ContentItem) => {
+    const action: EmberAction = VIDEO_TYPES.has(item.type)
+      ? "generate_video_script"
+      : "generate_social_content";
+    trigger.mutate({ action, contentItemId: item.id });
+  };
+
+  const generateVideo = (item: ContentItem) => {
+    if (!VIDEO_TYPES.has(item.type)) return;
+    const action: EmberAction =
+      item.type === "higgsfield_video"
+        ? "generate_higgsfield_video"
+        : "generate_heygen_video";
+    trigger.mutate({ action, contentItemId: item.id });
+  };
 
   const openPreview = (item: ContentItem) => {
     setPreviewItem(item);
@@ -440,7 +684,10 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
   if (error || !data?.campaign) {
     return (
       <div className="container mx-auto max-w-5xl px-4 py-6 space-y-3">
-        <Link href="/admin/campaigns" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/admin/campaigns"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to campaigns
         </Link>
@@ -453,7 +700,9 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
     );
   }
 
-  const { campaign, items } = data;
+  const { campaign } = data;
+  const strategy = campaign.contentPlan?.strategy;
+  const pillars = campaign.contentPlan?.contentPillars ?? [];
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6 space-y-4">
@@ -494,18 +743,38 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
                 Offer: {campaign.offer}
               </Badge>
             )}
-            {campaign.durationDays && (
+            {typeof campaign.durationDays === "number" && campaign.durationDays > 0 && (
               <span className="text-xs text-muted-foreground ml-1">
-                · {campaign.durationDays} days
+                · {pluralize(campaign.durationDays, "day")}
               </span>
             )}
           </div>
         </CardContent>
       </Card>
 
+      {(strategy || pillars.length > 0) && (
+        <Card className="bg-muted/30">
+          <CardContent className="py-4 space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Campaign strategy
+            </div>
+            {strategy && <p className="text-sm">{strategy}</p>}
+            {pillars.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {pillars.map((p, i) => (
+                  <Badge key={i} variant="outline" className="text-xs">
+                    {p}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-          Content items ({items.length})
+          Content items ({pluralize(items.length, "item")})
         </h2>
         {items.length === 0 ? (
           <Card>
@@ -522,11 +791,15 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
                 previewed={previewedIds.has(item.id)}
                 onOpen={() => openPreview(item)}
                 onApprove={() => requestApprove(item)}
-                onTrigger={(action) =>
-                  trigger.mutate({ action, contentItemId: item.id })
+                onGenerateScript={() => generateScript(item)}
+                onGenerateVideo={() => generateVideo(item)}
+                onPublish={() =>
+                  trigger.mutate({ action: "publish_to_social", contentItemId: item.id })
                 }
+                onReset={() => reset.mutate(item.id)}
                 approvePending={approve.isPending}
                 triggerPending={trigger.isPending}
+                resetPending={reset.isPending}
               />
             ))}
           </div>
@@ -539,8 +812,10 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
         onApprove={() => {
           if (previewItem) requestApprove(previewItem);
         }}
-        onTrigger={(action, itemId) =>
-          trigger.mutate({ action, contentItemId: itemId })
+        onGenerateScript={(item) => generateScript(item)}
+        onGenerateVideo={(item) => generateVideo(item)}
+        onPublish={(item) =>
+          trigger.mutate({ action: "publish_to_social", contentItemId: item.id })
         }
         triggerPending={trigger.isPending}
         approvePending={approve.isPending}
@@ -555,12 +830,44 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Approve & publish?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmingItem?.platform &&
-              SOCIAL_PLATFORMS.has(confirmingItem.platform) &&
-              confirmingItem.videoUrl
-                ? `This will publish to ${confirmingItem.platform} immediately. This action cannot be undone from here.`
-                : "This will mark the item approved and published. Auto-publish will run if the platform and video are ready."}
+            <AlertDialogDescription asChild>
+              <div className="space-y-1.5 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Platform:</span>{" "}
+                  <span className="font-medium capitalize">
+                    {confirmingItem?.platform ?? "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Video:</span>{" "}
+                  {confirmingItem?.videoUrl ? "ready" : "not attached"}
+                </div>
+                {confirmingItem?.caption && (
+                  <div className="pt-1">
+                    <div className="text-muted-foreground text-xs uppercase tracking-wide mb-0.5">
+                      Caption
+                    </div>
+                    <div className="whitespace-pre-wrap text-xs bg-muted/50 rounded p-2">
+                      {confirmingItem.caption}
+                    </div>
+                  </div>
+                )}
+                {confirmingItem &&
+                  !confirmingItem.videoUrl &&
+                  !confirmingItem.caption &&
+                  !confirmingItem.script && (
+                    <div className="text-xs text-amber-700">
+                      Nothing to publish yet — no video, caption, or script.
+                    </div>
+                  )}
+                <div className="text-xs text-muted-foreground pt-1">
+                  {confirmingItem?.platform &&
+                  SOCIAL_PLATFORMS.has(confirmingItem.platform) &&
+                  confirmingItem.platform !== "tiktok"
+                    ? `Auto-publishes to ${confirmingItem.platform} immediately.`
+                    : "Marks the item approved. Auto-publish only runs for facebook / instagram / linkedin."}
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -591,27 +898,45 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
   );
 }
 
+// ─── Content item card ───────────────────────────────────────
+
 function ContentItemCard({
   item,
   previewed,
   onOpen,
   onApprove,
-  onTrigger,
+  onGenerateScript,
+  onGenerateVideo,
+  onPublish,
+  onReset,
   approvePending,
   triggerPending,
+  resetPending,
 }: {
   item: ContentItem;
   previewed: boolean;
   onOpen: () => void;
   onApprove: () => void;
-  onTrigger: (action: EmberAction) => void;
+  onGenerateScript: () => void;
+  onGenerateVideo: () => void;
+  onPublish: () => void;
+  onReset: () => void;
   approvePending: boolean;
   triggerPending: boolean;
+  resetPending: boolean;
 }) {
-  const canApprove = item.status !== "published" && item.status !== "approved";
-  const canGenerateHeygen = item.type === "heygen_video" && !item.videoUrl;
-  const canGenerateHiggsfield =
-    item.type === "higgsfield_video" && !item.videoUrl;
+  const isVideoType = VIDEO_TYPES.has(item.type);
+  const isSocialType = item.type === "social";
+  const isGenerating = item.status === "generating";
+  const isFailed = item.status === "failed";
+
+  const canApprove = item.status !== "published" && item.status !== "approved" && !isGenerating;
+  const canGenerateScriptOrCaption =
+    !item.script &&
+    !item.caption &&
+    !isGenerating &&
+    (isVideoType || isSocialType);
+  const canGenerateVideo = isVideoType && !!item.script && !item.videoUrl && !isGenerating;
   const canPublish =
     item.status === "approved" &&
     !!item.videoUrl &&
@@ -642,7 +967,14 @@ function ContentItemCard({
                   {item.platform}
                 </Badge>
               )}
-              {statusBadge(item.status)}
+              {isGenerating ? (
+                <Badge variant="outline" className="animate-pulse bg-blue-50 text-blue-700 border-blue-200">
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Generating…
+                </Badge>
+              ) : (
+                statusBadge(item.status)
+              )}
               {!!item.qaResults && (
                 <Badge variant="secondary" className="bg-blue-100 text-blue-700">
                   QA
@@ -655,19 +987,26 @@ function ContentItemCard({
                 </Badge>
               )}
             </div>
+
             {brief?.concept && (
               <div className="text-sm mt-1.5">{brief.concept}</div>
             )}
-            {item.caption && (
-              <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                {item.caption}
-              </div>
+            {item.script && (
+              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                {item.script}
+              </p>
             )}
+            {item.caption && (
+              <p className="text-xs text-muted-foreground italic line-clamp-1 mt-1">
+                “{item.caption}”
+              </p>
+            )}
+
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {scriptWords > 0 && (
                 <span className="inline-flex items-center gap-1">
                   <FileText className="w-3 h-3" />
-                  {scriptWords} word{scriptWords === 1 ? "" : "s"}
+                  {pluralize(scriptWords, "word")}
                 </span>
               )}
               {hashtagCount > 0 && (
@@ -683,28 +1022,48 @@ function ContentItemCard({
                 </span>
               )}
             </div>
+
+            {isFailed && (
+              <div className="mt-2 flex items-center gap-2">
+                <Badge variant="destructive">Failed</Badge>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={resetPending}
+                  onClick={stop(onReset)}
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                  Reset & Retry
+                </Button>
+              </div>
+            )}
           </div>
+
           <div className="flex flex-wrap items-center gap-1.5">
-            {canGenerateHeygen && (
+            {canGenerateScriptOrCaption && (
               <Button
                 size="sm"
                 variant="outline"
                 disabled={triggerPending}
-                onClick={stop(() => onTrigger("generate_heygen_video"))}
+                onClick={stop(onGenerateScript)}
               >
-                <Film className="w-3.5 h-3.5 mr-1.5" />
-                Generate
+                <Type className="w-3.5 h-3.5 mr-1.5" />
+                {isVideoType ? "Generate Script" : "Generate Caption"}
               </Button>
             )}
-            {canGenerateHiggsfield && (
+            {canGenerateVideo && (
               <Button
                 size="sm"
                 variant="outline"
                 disabled={triggerPending}
-                onClick={stop(() => onTrigger("generate_higgsfield_video"))}
+                onClick={stop(onGenerateVideo)}
               >
-                <Video className="w-3.5 h-3.5 mr-1.5" />
-                Generate
+                {item.type === "higgsfield_video" ? (
+                  <Video className="w-3.5 h-3.5 mr-1.5" />
+                ) : (
+                  <Film className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Generate Video
               </Button>
             )}
             {canApprove && (
@@ -722,7 +1081,7 @@ function ContentItemCard({
                 size="sm"
                 variant="outline"
                 disabled={triggerPending}
-                onClick={stop(() => onTrigger("publish_to_social"))}
+                onClick={stop(onPublish)}
               >
                 <Send className="w-3.5 h-3.5 mr-1.5" />
                 Publish
@@ -734,6 +1093,8 @@ function ContentItemCard({
     </Card>
   );
 }
+
+// ─── QA block ────────────────────────────────────────────────
 
 function QABlock({ label, section }: { label: string; section?: QASection }) {
   if (!section) return null;
@@ -770,42 +1131,46 @@ function QABlock({ label, section }: { label: string; section?: QASection }) {
   );
 }
 
+// ─── Preview modal ───────────────────────────────────────────
+
 function ContentPreviewModal({
   item,
   onClose,
   onApprove,
-  onTrigger,
+  onGenerateScript,
+  onGenerateVideo,
+  onPublish,
   triggerPending,
   approvePending,
 }: {
   item: ContentItem | null;
   onClose: () => void;
   onApprove: () => void;
-  onTrigger: (action: EmberAction, itemId: string) => void;
+  onGenerateScript: (item: ContentItem) => void;
+  onGenerateVideo: (item: ContentItem) => void;
+  onPublish: (item: ContentItem) => void;
   triggerPending: boolean;
   approvePending: boolean;
 }) {
   const [briefOpen, setBriefOpen] = useState(false);
+  const [videoErrored, setVideoErrored] = useState(false);
 
-  if (!item) {
-    return (
-      <Dialog open={false} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent />
-      </Dialog>
-    );
-  }
+  useEffect(() => {
+    setVideoErrored(false);
+    setBriefOpen(false);
+  }, [item?.id]);
+
+  if (!item) return null;
 
   const brief = (item.creativeBrief ?? null) as Record<string, unknown> | null;
   const qa = (item.qaResults ?? null) as QAResults | null;
   const scriptChars = item.script?.length ?? 0;
   const scriptWords = wordCount(item.script);
-  const canGenerateVideo =
-    !item.videoUrl &&
-    (item.type === "heygen_video" || item.type === "higgsfield_video");
-  const generateAction: EmberAction =
-    item.type === "higgsfield_video"
-      ? "generate_higgsfield_video"
-      : "generate_heygen_video";
+  const isVideoType = VIDEO_TYPES.has(item.type);
+  const isSocialType = item.type === "social";
+  const canGenerateScriptOrCaption =
+    !item.script && !item.caption && (isVideoType || isSocialType);
+  const canGenerateVideo = isVideoType && !!item.script && !item.videoUrl;
   const canApprove = item.status !== "published" && item.status !== "approved";
   const canPublish =
     item.status === "approved" &&
@@ -829,72 +1194,109 @@ function ContentPreviewModal({
           <DialogTitle className="sr-only">Content preview</DialogTitle>
         </DialogHeader>
 
-        {/* Section 1 — Video */}
-        <section className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Video
-          </div>
-          {item.videoUrl ? (
-            <>
-              <video
-                src={item.videoUrl}
-                controls
-                className="w-full rounded-lg max-h-96 bg-black"
-                poster={item.thumbnailUrl ?? undefined}
-              />
-              <a
-                href={item.videoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-              >
-                <ExternalLink className="w-3 h-3" />
-                Open full size
-              </a>
-            </>
-          ) : (
-            <div className="rounded-lg border border-dashed bg-muted/40 py-8 px-4 text-center space-y-3">
-              <div className="text-3xl">🎬</div>
-              <div className="text-sm text-muted-foreground">
-                Video not yet generated
-              </div>
-              {canGenerateVideo && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={triggerPending}
-                  onClick={() => onTrigger(generateAction, item.id)}
-                >
-                  {item.type === "higgsfield_video" ? (
-                    <Video className="w-3.5 h-3.5 mr-1.5" />
-                  ) : (
-                    <Film className="w-3.5 h-3.5 mr-1.5" />
-                  )}
-                  Generate Video
-                </Button>
-              )}
+        {/* Video */}
+        {isVideoType && (
+          <section className="space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Video
             </div>
-          )}
-        </section>
+            {item.videoUrl && !videoErrored ? (
+              <>
+                <video
+                  src={item.videoUrl}
+                  controls
+                  className="w-full rounded-lg max-h-96 bg-black"
+                  poster={item.thumbnailUrl ?? undefined}
+                  onError={() => setVideoErrored(true)}
+                />
+                <a
+                  href={item.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open full size
+                </a>
+              </>
+            ) : item.videoUrl && videoErrored ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 py-4 px-4 text-center space-y-2">
+                <div className="text-sm text-amber-800">
+                  Inline playback failed — the provider URL may require a new tab.
+                </div>
+                <a
+                  href={item.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-amber-900 underline inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open video in new tab
+                </a>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed bg-muted/40 py-8 px-4 text-center space-y-3">
+                <div className="text-3xl">🎬</div>
+                <div className="text-sm text-muted-foreground">
+                  {item.script ? "Video not yet generated" : "Script needed before video"}
+                </div>
+                {canGenerateVideo && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={triggerPending}
+                    onClick={() => onGenerateVideo(item)}
+                  >
+                    {item.type === "higgsfield_video" ? (
+                      <Video className="w-3.5 h-3.5 mr-1.5" />
+                    ) : (
+                      <Film className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    Generate Video
+                  </Button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
-        {/* Section 2 — Script */}
-        {item.script && (
+        {/* Script */}
+        {item.script ? (
           <section className="space-y-1.5">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Script
               </div>
               <div className="text-xs text-muted-foreground">
-                {scriptWords} words · {scriptChars} chars
+                {pluralize(scriptWords, "word")} · {scriptChars} chars
               </div>
             </div>
             <div className="rounded-md border bg-muted/30 p-3 max-h-64 overflow-y-auto font-mono text-xs whitespace-pre-wrap">
               {item.script}
             </div>
           </section>
+        ) : (
+          canGenerateScriptOrCaption && (
+            <section className="rounded-md border border-dashed bg-muted/20 p-4 flex items-center justify-between gap-3">
+              <div className="text-sm text-muted-foreground">
+                {isVideoType
+                  ? "No script yet — needed before the video can be generated."
+                  : "No caption yet."}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={triggerPending}
+                onClick={() => onGenerateScript(item)}
+              >
+                <Type className="w-3.5 h-3.5 mr-1.5" />
+                {isVideoType ? "Generate Script" : "Generate Caption"}
+              </Button>
+            </section>
+          )
         )}
 
-        {/* Section 3 — Caption */}
+        {/* Caption */}
         {item.caption && (
           <section className="space-y-1.5">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -907,7 +1309,7 @@ function ContentPreviewModal({
           </section>
         )}
 
-        {/* Section 4 — Hashtags + CTA */}
+        {/* Hashtags + CTA */}
         {(!!(item.hashtags && item.hashtags.length) || !!item.cta) && (
           <section className="space-y-2">
             {item.hashtags && item.hashtags.length > 0 && (
@@ -935,7 +1337,7 @@ function ContentPreviewModal({
           </section>
         )}
 
-        {/* Section 5 — QA */}
+        {/* QA */}
         {qa && (
           <section className="space-y-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -957,7 +1359,7 @@ function ContentPreviewModal({
           </section>
         )}
 
-        {/* Section 6 — Creative brief */}
+        {/* Creative brief */}
         {brief && Object.keys(brief).length > 0 && (
           <Collapsible open={briefOpen} onOpenChange={setBriefOpen}>
             <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
@@ -990,7 +1392,7 @@ function ContentPreviewModal({
               size="sm"
               variant="outline"
               disabled={triggerPending}
-              onClick={() => onTrigger("publish_to_social", item.id)}
+              onClick={() => onPublish(item)}
             >
               <Send className="w-3.5 h-3.5 mr-1.5" />
               Publish now
