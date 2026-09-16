@@ -1,8 +1,8 @@
 /**
- * Higgsfield provider — Soul v2 (standard) cinematic video generation.
+ * Higgsfield provider — Kling Video v3.0 (standard) text-to-video.
  *
- * Create:  POST https://api.higgsfield.ai/higgsfield-ai/soul/v2/standard
- *          Body: { prompt }
+ * Create:  POST https://api.higgsfield.ai/kling-video/v3.0/standard/text-to-video
+ *          Body: { prompt, duration, aspect_ratio, sound, cfg_scale }
  *          Response: { status, request_id, status_url, cancel_url }
  *
  * Status:  GET  ${status_url}   (defaults to
@@ -29,13 +29,13 @@ export interface GenerationJob {
   jobId: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
-  imageUrl?: string;
+  thumbnailUrl?: string;
   error?: string;
 }
 
 class HiggsfieldProvider {
   private apiKey: string;
-  private createUrl = 'https://api.higgsfield.ai/higgsfield-ai/soul/v2/standard';
+  private createUrl = 'https://api.higgsfield.ai/kling-video/v3.0/standard/text-to-video';
   private statusUrls = new Map<string, string>();
 
   constructor() {
@@ -67,14 +67,7 @@ class HiggsfieldProvider {
   }
 
   private extractVideoUrl(data: any): string | undefined {
-    return (
-      data?.video_url ??
-      data?.output_url ??
-      data?.result?.video_url ??
-      data?.result?.url ??
-      data?.results?.[0]?.url ??
-      data?.output?.[0]?.url
-    );
+    return data?.video?.url ?? data?.images?.[0]?.url;
   }
 
   async createVideo(input: VideoGenerationRequest): Promise<GenerationJob> {
@@ -95,7 +88,13 @@ class HiggsfieldProvider {
         Authorization: this.authHeader(),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt: input.prompt }),
+      body: JSON.stringify({
+        prompt: input.prompt,
+        duration: input.duration ?? 5,
+        aspect_ratio: input.aspectRatio ?? '9:16',
+        sound: 'on',
+        cfg_scale: 0.5,
+      }),
     });
 
     const data: any = await response.json().catch(() => ({}));
@@ -158,7 +157,7 @@ class HiggsfieldProvider {
       jobId,
       status: this.mapStatus(data?.status),
       videoUrl: this.extractVideoUrl(data),
-      imageUrl: data?.image_url,
+      thumbnailUrl: undefined,
       error: data?.error,
     };
   }
