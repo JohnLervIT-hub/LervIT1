@@ -1,13 +1,17 @@
 /**
- * Higgsfield provider — cinematic / lifestyle AI video generation.
+ * Higgsfield provider — Soul v2 (standard) cinematic video generation.
  *
- * API base and endpoints are per spec (https://api.higgsfield.ai/v1/video/*).
- * First live call may need field-name adjustments — Higgsfield's public API
- * shape isn't as broadly documented as HeyGen's.
+ * Create:  POST https://api.higgsfield.ai/higgsfield-ai/soul/v2/standard
+ *          Body: { prompt }
+ *          Response: { status, request_id, status_url, cancel_url }
+ *
+ * Status:  GET  ${status_url}   (defaults to
+ *          https://platform.higgsfield.ai/requests/${request_id}/status)
+ *
+ * Auth:    Authorization: Key ${HIGGSFIELD_API_KEY}   (literal "Key" prefix)
  *
  * Env vars (set on Railway LervIT1 service):
  *   - HIGGSFIELD_API_KEY (required)
- *   - HIGGSFIELD_SECRET  (optional; some tenants require it)
  */
 
 import { logger } from '../logger';
@@ -31,12 +35,11 @@ export interface GenerationJob {
 
 class HiggsfieldProvider {
   private apiKey: string;
-  private secret: string;
-  private baseUrl = 'https://api.higgsfield.ai';
+  private createUrl = 'https://api.higgsfield.ai/higgsfield-ai/soul/v2/standard';
+  private statusUrls = new Map<string, string>();
 
   constructor() {
     this.apiKey = process.env.HIGGSFIELD_API_KEY ?? '';
-    this.secret = process.env.HIGGSFIELD_SECRET ?? '';
   }
 
   private assertConfigured() {
@@ -45,11 +48,33 @@ class HiggsfieldProvider {
     }
   }
 
-  // Higgsfield accepts the full "client_id:secret" pair as a Bearer token —
-  // Basic-auth encoding was rejected by their live API, so we send the raw
-  // key (colon and all) as Bearer regardless of shape.
   private authHeader(): string {
-    return `Bearer ${this.apiKey}`;
+    return `Key ${this.apiKey}`;
+  }
+
+  private mapStatus(raw: unknown): GenerationJob['status'] {
+    switch (raw) {
+      case 'completed':
+        return 'completed';
+      case 'failed':
+        return 'failed';
+      case 'processing':
+        return 'processing';
+      case 'queued':
+      default:
+        return 'pending';
+    }
+  }
+
+  private extractVideoUrl(data: any): string | undefined {
+    return (
+      data?.video_url ??
+      data?.output_url ??
+      data?.result?.video_url ??
+      data?.result?.url ??
+      data?.results?.[0]?.url ??
+      data?.output?.[0]?.url
+    );
   }
 
   async createVideo(input: VideoGenerationRequest): Promise<GenerationJob> {
@@ -57,28 +82,20 @@ class HiggsfieldProvider {
 
     logger.info(
       {
-        url: `${this.baseUrl}/v1/video/generate`,
-        apiKeyFirst8: process.env.HIGGSFIELD_API_KEY?.slice(0, 8),
-        authScheme: 'bearer',
+        url: this.createUrl,
+        apiKeyFirst8: this.apiKey.slice(0, 8),
+        authScheme: 'key',
       },
       '[Higgsfield] Request details',
     );
 
-    const response = await fetch(`${this.baseUrl}/v1/video/generate`, {
+    const response = await fetch(this.createUrl, {
       method: 'POST',
       headers: {
         Authorization: this.authHeader(),
         'Content-Type': 'application/json',
-        ...(this.secret ? { 'X-Api-Secret': this.secret } : {}),
       },
-      body: JSON.stringify({
-        prompt: input.prompt,
-        aspect_ratio: input.aspectRatio ?? '9:16',
-        duration: input.duration ?? 5,
-        style: input.style,
-        reference_image_url: input.referenceImageUrl,
-        motion: input.motion,
-      }),
+      body: JSON.stringify({ prompt: input.prompt }),
     });
 
     const data: any = await response.json().catch(() => ({}));
@@ -91,33 +108,56 @@ class HiggsfieldProvider {
       );
     }
 
+    const requestId: string | undefined = data?.request_id;
+    if (!requestId) {
+      throw new Error(
+        `Higgsfield error: missing request_id in response ${JSON.stringify(data)}`,
+      );
+    }
+
+    if (typeof data?.status_url === 'string') {
+      this.statusUrls.set(requestId, data.status_url);
+    }
+
     return {
-      jobId: data?.id ?? data?.job_id,
-      status: 'pending',
+      jobId: requestId,
+      status: this.mapStatus(data?.status ?? 'queued'),
     };
   }
 
-  async getJobStatus(jobId: string): Promise<GenerationJob> {
+  async getJobStatus(jobIdOrStatusUrl: string): Promise<GenerationJob> {
     this.assertConfigured();
 
-    const response = await fetch(`${this.baseUrl}/v1/video/${encodeURIComponent(jobId)}`, {
-      headers: {
-        Authorization: this.authHeader(),
-        ...(this.secret ? { 'X-Api-Secret': this.secret } : {}),
-      },
+    const isUrl = /^https?:\/\//i.test(jobIdOrStatusUrl);
+    const jobId = isUrl
+      ? jobIdOrStatusUrl.match(/requests\/([^/]+)\/status/)?.[1] ?? jobIdOrStatusUrl
+      : jobIdOrStatusUrl;
+
+    const url = isUrl
+      ? jobIdOrStatusUrl
+      : this.statusUrls.get(jobIdOrStatusUrl) ??
+        `https://platform.higgsfield.ai/requests/${encodeURIComponent(jobIdOrStatusUrl)}/status`;
+
+    const response = await fetch(url, {
+      headers: { Authorization: this.authHeader() },
     });
 
     const data: any = await response.json().catch(() => ({}));
 
+    if (!response.ok) {
+      return {
+        jobId,
+        status: 'failed',
+        error: `status=${response.status} ${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`,
+      };
+    }
+
     return {
       jobId,
-      status:
-        data?.status === 'completed'
-          ? 'completed'
-          : data?.status === 'failed'
-            ? 'failed'
-            : 'processing',
-      videoUrl: data?.video_url ?? data?.output_url,
+      status: this.mapStatus(data?.status),
+      videoUrl: this.extractVideoUrl(data),
       imageUrl: data?.image_url,
       error: data?.error,
     };
