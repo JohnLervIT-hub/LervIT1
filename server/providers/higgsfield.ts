@@ -45,14 +45,11 @@ class HiggsfieldProvider {
     }
   }
 
-  // Higgsfield issues credentials in one of two formats:
-  //   - "client_id:secret" pair → HTTP Basic Auth (base64 of the whole pair)
-  //   - single token           → Bearer
-  // Detect by the presence of a colon in the key.
+  // Higgsfield accepts the full "client_id:secret" pair as a Bearer token —
+  // Basic-auth encoding was rejected by their live API, so we send the raw
+  // key (colon and all) as Bearer regardless of shape.
   private authHeader(): string {
-    return this.apiKey.includes(':')
-      ? `Basic ${Buffer.from(this.apiKey).toString('base64')}`
-      : `Bearer ${this.apiKey}`;
+    return `Bearer ${this.apiKey}`;
   }
 
   async createVideo(input: VideoGenerationRequest): Promise<GenerationJob> {
@@ -62,7 +59,7 @@ class HiggsfieldProvider {
       {
         url: `${this.baseUrl}/v1/video/generate`,
         apiKeyFirst8: process.env.HIGGSFIELD_API_KEY?.slice(0, 8),
-        authScheme: this.apiKey.includes(':') ? 'basic' : 'bearer',
+        authScheme: 'bearer',
       },
       '[Higgsfield] Request details',
     );

@@ -1,7 +1,12 @@
 /**
  * HeyGen provider — talking-avatar / presenter video generation.
  *
- * Docs: https://docs.heygen.com/reference/generate-video (v2)
+ * Docs: https://developers.heygen.com/avatar-iv  (v3 — POST /v3/videos)
+ *
+ * Migrated off the legacy v2 endpoint (/v2/video/generate) which HeyGen has
+ * deprecated with removal scheduled 2026-10-31. v3 requires the newer Avatar
+ * IV / Avatar V engines and uses a much flatter body shape; avatar_style,
+ * per-input background, and aspect_ratio are no longer request parameters.
  *
  * Env vars (set on Railway LervIT1 service):
  *   - HEYGEN_API_KEY     (required)
@@ -9,9 +14,10 @@
  *   - HEYGEN_VOICE_ID    (default voice for LervIT presenter videos)
  *
  * Notes:
- *   - Request/response shapes are per spec — first live call may need field
- *     tweaks if HeyGen's payload keys differ from what's coded here.
  *   - Module import is safe without env vars set; the first API call throws.
+ *   - Request/response shapes may need field tweaks once we exercise the
+ *     real endpoint — response parser tolerates both `data.video_id` and
+ *     top-level `video_id` for the create response.
  */
 
 import { logger } from '../logger';
@@ -59,50 +65,29 @@ class HeyGenProvider {
   async createVideo(input: AvatarVideoRequest): Promise<VideoJob> {
     this.assertConfigured();
 
+    const url = `${this.baseUrl}/v3/videos`;
+
     logger.info(
       {
-        url: `${this.baseUrl}/v2/video/generate`,
+        url,
         apiKeyFirst8: process.env.HEYGEN_API_KEY?.slice(0, 8),
         hasScript: !!input.script,
       },
       '[HeyGen] Request details',
     );
 
-    const response = await fetch(`${this.baseUrl}/v2/video/generate`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'X-Api-Key': this.apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        video_inputs: [
-          {
-            character: {
-              type: 'avatar',
-              avatar_id: input.avatarId ?? this.defaultAvatarId,
-              avatar_style: 'expressive',
-            },
-            voice: {
-              type: 'text',
-              input_text: input.script,
-              voice_id: input.voiceId ?? this.defaultVoiceId,
-              speed: 0.9,
-              emotion: 'Friendly',
-            },
-            background:
-              input.background ?? {
-                type: 'color',
-                value: '#1e3a5f',
-              },
-          },
-        ],
-        dimension: {
-          width: 1080,
-          height: 1920,
-        },
-        aspect_ratio: input.aspectRatio ?? '9:16',
-        caption: input.caption ?? true,
-        title: input.title ?? 'LervIT Video',
+        type: 'avatar',
+        avatar_id: input.avatarId ?? this.defaultAvatarId,
+        voice_id: input.voiceId ?? this.defaultVoiceId,
+        script: input.script,
+        resolution: '1080p',
       }),
     });
 
@@ -115,7 +100,7 @@ class HeyGenProvider {
     }
 
     return {
-      jobId: data?.data?.video_id ?? data?.video_id,
+      jobId: data?.data?.video_id ?? data?.video_id ?? data?.data?.id ?? data?.id,
       status: 'pending',
     };
   }
@@ -124,12 +109,12 @@ class HeyGenProvider {
     this.assertConfigured();
 
     const response = await fetch(
-      `${this.baseUrl}/v1/video_status.get?video_id=${encodeURIComponent(jobId)}`,
+      `${this.baseUrl}/v3/videos/${encodeURIComponent(jobId)}`,
       { headers: { 'X-Api-Key': this.apiKey } },
     );
 
     const data: any = await response.json().catch(() => ({}));
-    const video = data?.data ?? {};
+    const video = data?.data ?? data ?? {};
 
     return {
       jobId,
@@ -139,8 +124,8 @@ class HeyGenProvider {
           : video.status === 'failed'
             ? 'failed'
             : 'processing',
-      videoUrl: video.video_url,
-      thumbnailUrl: video.thumbnail_url,
+      videoUrl: video.video_url ?? video.videoUrl,
+      thumbnailUrl: video.thumbnail_url ?? video.thumbnailUrl,
       duration: video.duration,
       error: video.error,
     };
