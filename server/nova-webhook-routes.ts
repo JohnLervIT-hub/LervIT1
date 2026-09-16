@@ -1274,6 +1274,40 @@ async function handleMessengerMessage(input: {
         return;
       }
 
+      // Explicit callback/human intent — short-circuit before Tier 2 reasoning
+      // so phrases like "call me", "talk to a human", or "I'm available now"
+      // never get routed into a booking/quote reply.
+      const wantsCallback =
+        /call\s*(me|back)|call\s*back|talk\s*to\s*(a\s*)?(human|person|someone|agent|team)|need\s*a\s*call|speak\s*to\s*(someone|a\s*person)|phone\s*(call|me)|i('m| am)\s*available|available\s*now|call\s*me\s*now/i.test(
+          message,
+        );
+
+      if (wantsCallback) {
+        logger.info(
+          { senderId, message },
+          '[Nova Messenger] Callback intent detected → handoff',
+        );
+        await runDMHumanHandoff({
+          channel: 'messenger',
+          senderId,
+          identity,
+          history,
+        });
+        await emitEvent(
+          'nova.messenger_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'callback_intent',
+            action: 'escalate_human',
+          },
+          'agent',
+        );
+        return;
+      }
+
       const context = await buildCustomerContext({
         userId: identity?.userId,
         phone: identity?.phone,
@@ -1560,6 +1594,40 @@ async function handleInstagramMessage(input: {
             senderId,
             messageLength: message.length,
             source: 'callback_context',
+            action: 'escalate_human',
+          },
+          'agent',
+        );
+        return;
+      }
+
+      // Explicit callback/human intent — short-circuit before Tier 2 reasoning
+      // so phrases like "call me", "talk to a human", or "I'm available now"
+      // never get routed into a booking/quote reply.
+      const wantsCallback =
+        /call\s*(me|back)|call\s*back|talk\s*to\s*(a\s*)?(human|person|someone|agent|team)|need\s*a\s*call|speak\s*to\s*(someone|a\s*person)|phone\s*(call|me)|i('m| am)\s*available|available\s*now|call\s*me\s*now/i.test(
+          message,
+        );
+
+      if (wantsCallback) {
+        logger.info(
+          { senderId, message },
+          '[Nova Instagram] Callback intent detected → handoff',
+        );
+        await runDMHumanHandoff({
+          channel: 'instagram',
+          senderId,
+          identity,
+          history,
+        });
+        await emitEvent(
+          'nova.instagram_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'callback_intent',
             action: 'escalate_human',
           },
           'agent',
