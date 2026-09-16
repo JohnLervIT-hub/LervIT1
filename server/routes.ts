@@ -531,7 +531,7 @@ async function approveVerificationItem(
                 subject: built.subject,
                 html: built.html,
                 text: built.text,
-                listUnsubscribeUrl: `${process.env.APP_BASE_URL ?? 'https://app.lervit.com'}/mover/preferences`,
+                listUnsubscribeUrl: `${(process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim()}/mover/preferences`,
               });
               await emitEvent(
                 `reid.email_sent.${emailType}`,
