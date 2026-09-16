@@ -20,6 +20,7 @@ import { bookings, leads, movers, users, voiceCalls } from '@shared/schema';
 import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { wasContactedToday } from './dedupe';
+import { novaCallContextStore } from '../nova-webhook-routes';
 
 const NOVA_PHONE = process.env.TELNYX_PHONE_NUMBER ?? '+18889820885';
 const TELNYX_CONNECTION_ID = process.env.TELNYX_CONNECTION_ID;
@@ -123,6 +124,28 @@ export class NovaAgent extends BaseAgent {
 
       const callControlId = call.data?.call_control_id;
       const callLegId = call.data?.call_leg_id;
+
+      // Seed the bridge with rich per-call context so its greeting can name
+      // the customer and its prompt can reflect the callType goal. Keyed by
+      // callControlId — the WS upgrade handler in routes.ts reads it back.
+      if (callControlId) {
+        const meta = opts.metadata as Record<string, unknown>;
+        const rawName = meta.customerName ?? meta.moverName;
+        const rawPrice = meta.quoteAmount ?? meta.earnings;
+        novaCallContextStore.set(callControlId, {
+          callType: opts.callType,
+          customerName: typeof rawName === 'string' ? rawName : undefined,
+          pickupAddress:
+            typeof meta.pickupArea === 'string' ? meta.pickupArea : undefined,
+          dropoffAddress:
+            typeof meta.dropoffArea === 'string' ? meta.dropoffArea : undefined,
+          price:
+            typeof rawPrice === 'number' || typeof rawPrice === 'string'
+              ? String(rawPrice)
+              : undefined,
+          leadId: typeof meta.leadId === 'string' ? meta.leadId : undefined,
+        });
+      }
 
       const metadataBookingId =
         typeof opts.metadata.bookingId === 'string' ? opts.metadata.bookingId : null;

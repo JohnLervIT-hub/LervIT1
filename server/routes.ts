@@ -43,6 +43,7 @@ import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
 import { WebSocketServer } from "ws";
 import { createNovaBridge } from "./lib/novaBridge";
+import { novaCallContextStore } from "./nova-webhook-routes";
 import { registerVoiceRoutes } from "./voice-routes";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, campaigns, contentItems } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
@@ -16528,8 +16529,9 @@ Respond with VALID JSON only:
 
     novaBridgeWss.on('connection', (ws, req) => {
       const callControlId = req.url?.split('/').pop() ?? 'unknown';
-      logger.info({ callControlId }, '[Bridge] Telnyx connected');
-      createNovaBridge(ws, callControlId);
+      const context = novaCallContextStore.get(callControlId);
+      logger.info({ callControlId, hasContext: !!context }, '[Bridge] Telnyx connected');
+      createNovaBridge(ws, callControlId, context);
     });
 
     httpServer.on('upgrade', (req, socket, head) => {

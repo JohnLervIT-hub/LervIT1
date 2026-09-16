@@ -38,6 +38,7 @@ import { decideNextDMResponse } from './lib/novaReasoning';
 import { resolveIdentity, linkIdentityFromContact, type ResolvedIdentity } from './lib/identityResolver';
 import { agentEventBus } from './lib/agentEventBus';
 import { JAILBREAK_PREAMBLE } from './lib/promptSanitizer';
+import type { NovaCallContext } from './lib/novaBridge';
 
 // Regexes used to auto-extract contact info from customer DMs so anonymous
 // senderIds can be linked to a users row mid-conversation. Kept loose — a
@@ -64,6 +65,12 @@ const CALL_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 // both trigger startStreaming on the same call. In-process only; entries are
 // cleared on call.hangup.
 const streamingStarted = new Set<string>();
+
+// Per-call context handed to the Nova bridge when Telnyx opens its WebSocket.
+// The bridge reads this by callControlId to greet the customer by name and
+// steer the prompt/goal per callType. Seeded by nova.ts on outbound dial and
+// (as a fallback) here on call.initiated; cleared on call.hangup.
+export const novaCallContextStore = new Map<string, NovaCallContext>();
 
 // Lazy Telnyx client — matches the pattern in voice-routes.ts so we don't
 // crash boot when TELNYX_API_KEY is missing in local/dev.
@@ -127,6 +134,60 @@ router.post(
           },
           '[Nova] Call initiated webhook received',
         );
+
+        // Fallback context seed for the bridge. nova.ts already seeds richer
+        // context when it originated the dial; this fills in anything that
+        // path missed (e.g. inbound calls) so the bridge greeting/prompt isn't
+        // generic. Skip if the store already has an entry.
+        if (callControlId && !novaCallContextStore.has(callControlId)) {
+          const ctx: NovaCallContext = { callType };
+          try {
+            if (callType === 'lead_conversion' && entityId) {
+              const [row] = await db
+                .select({
+                  contactName: leads.contactName,
+                  pickupAddress: quotes.pickupAddress,
+                  dropoffAddress: quotes.dropoffAddress,
+                  totalPrice: quotes.totalPrice,
+                })
+                .from(leads)
+                .leftJoin(quotes, eq(quotes.id, leads.quoteId))
+                .where(eq(leads.id, entityId))
+                .limit(1);
+              if (row) {
+                ctx.customerName = row.contactName ?? undefined;
+                ctx.pickupAddress = row.pickupAddress ?? undefined;
+                ctx.dropoffAddress = row.dropoffAddress ?? undefined;
+                ctx.price = row.totalPrice ? String(row.totalPrice) : undefined;
+                ctx.leadId = entityId;
+              }
+            } else if (
+              (callType === 'payment_recovery' || callType === 'review_request') &&
+              entityId
+            ) {
+              const [booking] = await db
+                .select({
+                  customerName: users.name,
+                  pickupAddress: bookings.pickupAddress,
+                  dropoffAddress: bookings.dropoffAddress,
+                  price: bookings.price,
+                })
+                .from(bookings)
+                .innerJoin(users, eq(users.id, bookings.customerId))
+                .where(eq(bookings.id, entityId))
+                .limit(1);
+              if (booking) {
+                ctx.customerName = booking.customerName ?? undefined;
+                ctx.pickupAddress = booking.pickupAddress ?? undefined;
+                ctx.dropoffAddress = booking.dropoffAddress ?? undefined;
+                ctx.price = booking.price ? String(booking.price) : undefined;
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, callControlId }, '[Nova] context hydrate failed');
+          }
+          novaCallContextStore.set(callControlId, ctx);
+        }
 
         // For outbound calls, answer immediately and start ElevenLabs streaming
         // instead of waiting for call.answered — Telnyx sometimes never fires
@@ -285,6 +346,7 @@ router.post(
 
       case 'call.hangup':
         streamingStarted.delete(callControlId);
+        novaCallContextStore.delete(callControlId);
 
         await db
           .update(voiceCalls)

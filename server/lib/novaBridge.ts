@@ -3,16 +3,26 @@ import { logger } from '../logger';
 
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
+export interface NovaCallContext {
+  callType?: string;
+  customerName?: string;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  price?: string;
+  leadId?: string;
+}
+
 export function createNovaBridge(
   telnyxWs: WebSocket,
   callControlId: string,
+  context?: NovaCallContext,
 ): void {
   if (!ELEVENLABS_AGENT_ID) {
     logger.error('[Bridge] No agent ID');
     return;
   }
 
-  logger.info({ callControlId }, '[Bridge] Connecting to ElevenLabs');
+  logger.info({ callControlId, callType: context?.callType }, '[Bridge] Connecting to ElevenLabs');
 
   const elevenWs = new WebSocket(
     `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
@@ -21,24 +31,55 @@ export function createNovaBridge(
   elevenWs.on('open', () => {
     logger.info({ callControlId }, '[Bridge] ElevenLabs connected');
 
+    const greeting = context?.customerName
+      ? `Hey ${context.customerName}! Nova here from LervIT Moving Calgary.`
+      : `Hey! Nova here from LervIT Moving Calgary.`;
+
+    const contextInfo = [
+      context?.pickupAddress ? `Moving from: ${context.pickupAddress}` : '',
+      context?.dropoffAddress ? `Moving to: ${context.dropoffAddress}` : '',
+      context?.price ? `Quote: $${context.price}` : '',
+    ]
+      .filter(Boolean)
+      .join('. ');
+
+    const firstMessage =
+      context?.callType === 'lead_conversion'
+        ? `${greeting} You reached out about a move${contextInfo ? ' — ' + contextInfo : ''}. Still planning that move?`
+        : context?.callType === 'payment_recovery'
+        ? `${greeting} You started booking a move but didn't complete payment. Want me to send the link again?`
+        : `${greeting} You wanted to chat about your move. How can I help?`;
+
+    const goal =
+      context?.callType === 'lead_conversion'
+        ? 'Book the move live on this call. Offer LERVIT10 if they hesitate.'
+        : context?.callType === 'payment_recovery'
+        ? 'Get customer to complete payment at lervit.com'
+        : 'Help customer with their move. Get pickup and dropoff addresses.';
+
+    const prompt =
+      `You are Nova from LervIT Moving Calgary.\n` +
+      `Be warm, casual, local. Max 2 sentences per response.\n` +
+      `Never spell out words. Say "LervIT" as "LER-vit".\n` +
+      `Say "lervit.com" as "lervit dot com".\n` +
+      `Goal: ${goal}`;
+
     elevenWs.send(
       JSON.stringify({
         type: 'conversation_initiation_client_data',
         conversation_config_override: {
           agent: {
-            prompt: {
-              prompt:
-                'You are Nova from LervIT Moving Calgary. ' +
-                'Be warm, brief, and help book moves.',
-            },
-            first_message:
-              'Hey! Nova from LervIT — ' +
-              'you wanted to chat about a move. ' +
-              'How can I help?',
+            prompt: { prompt },
+            first_message: firstMessage,
             language: 'en',
           },
           tts: {
-            voiceId: process.env.ELEVENLABS_VOICE_ID ?? undefined,
+            stability: 0.3,
+            similarity_boost: 0.75,
+            style: 0.0,
+            use_speaker_boost: true,
+            optimize_streaming_latency: 4,
+            model_id: 'eleven_flash_v2_5',
           },
         },
       }),
