@@ -110,6 +110,9 @@ router.post(
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
               stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
               stream_track: 'both_tracks',
+              stream_bidirectional_mode: 'rtp',
+              stream_bidirectional_codec: 'PCMU',
+              stream_bidirectional_sampling_rate: 8000,
               enable_dialogflow: false,
             });
 
@@ -885,6 +888,21 @@ router.post(
 const DM_ADDRESS_FROM_REGEX = /(?:from|pickup(?:\s+at)?|moving from)\s+([^\n]+?)(?=\s+to\s+|[.,\n]|$)/i;
 const DM_ADDRESS_TO_REGEX = /(?:^|\s)(?:to|dropoff(?:\s+at)?|deliver(?:ed)?(?:\s+to)?)\s+([^\n]+?)(?=[.,\n]|$)/i;
 
+// True when Nova's most recent turn asked the customer for a callback phone
+// number (either the runDMHumanHandoff "what's the best number" prompt or the
+// reasoning path's escalate variant). When the customer's next turn contains
+// a phone, we should treat it as answering the callback prompt and short-
+// circuit into runDMHumanHandoff instead of running another reasoning turn.
+function isCallbackContext(
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+): boolean {
+  const lastAssistant = [...history].reverse().find((h) => h.role === 'assistant');
+  if (!lastAssistant) return false;
+  return /best number|number to reach|call you at|what(?:'s| is) the best (?:number|way to reach)|reach you on/i.test(
+    lastAssistant.content,
+  );
+}
+
 async function runDMHumanHandoff(input: {
   channel: 'messenger' | 'instagram';
   senderId: string;
@@ -917,9 +935,15 @@ async function runDMHumanHandoff(input: {
   const conversationText = history
     .map((h) => `${h.role === 'user' ? 'Customer' : 'Nova'}: ${h.content}`)
     .join('\n');
-  const combinedTurns = history.map((h) => h.content).join('\n');
-  const addressMatch = combinedTurns.match(DM_ADDRESS_FROM_REGEX);
-  const dropoffMatch = combinedTurns.match(DM_ADDRESS_TO_REGEX);
+  // Only scan customer turns for pickup/dropoff — otherwise Nova's own
+  // paraphrases ("so you're moving from Beltline to Kensington?") would
+  // echo bad or hallucinated addresses back into the handoff payload.
+  const customerTurns = history
+    .filter((h) => h.role === 'user')
+    .map((h) => h.content)
+    .join('\n');
+  const addressMatch = customerTurns.match(DM_ADDRESS_FROM_REGEX);
+  const dropoffMatch = customerTurns.match(DM_ADDRESS_TO_REGEX);
 
   let leadId: string | undefined;
 
@@ -1074,25 +1098,51 @@ async function handleMessengerMessage(input: {
         '[Nova Messenger] Identity resolved',
       );
 
-      if (identity && !identity.isKnown) {
-        const phoneMatch = message.match(DM_PHONE_REGEX);
-        const emailMatch = message.match(DM_EMAIL_REGEX);
-        if (phoneMatch || emailMatch) {
-          const linked = await linkIdentityFromContact('messenger', senderId, {
-            phone: phoneMatch?.[0],
-            email: emailMatch?.[0],
-          }).catch((err) => {
-            logger.warn({ err, senderId }, '[Nova Messenger] Auto-link failed');
-            return null;
-          });
-          if (linked?.isKnown) {
-            identity = linked;
-            logger.info(
-              { senderId, userId: linked.userId, resolvedBy: linked.resolvedBy },
-              '[Nova Messenger] Identity auto-linked',
-            );
-          }
+      const phoneMatch = message.match(DM_PHONE_REGEX);
+      const emailMatch = message.match(DM_EMAIL_REGEX);
+
+      if (identity && !identity.isKnown && (phoneMatch || emailMatch)) {
+        const linked = await linkIdentityFromContact('messenger', senderId, {
+          phone: phoneMatch?.[0],
+          email: emailMatch?.[0],
+        }).catch((err) => {
+          logger.warn({ err, senderId }, '[Nova Messenger] Auto-link failed');
+          return null;
+        });
+        if (linked?.isKnown) {
+          identity = linked;
+          logger.info(
+            { senderId, userId: linked.userId, resolvedBy: linked.resolvedBy },
+            '[Nova Messenger] Identity auto-linked',
+          );
         }
+      }
+
+      if (phoneMatch && isCallbackContext(history)) {
+        const callbackIdentity: ResolvedIdentity | null = identity
+          ? identity.phone
+            ? identity
+            : { ...identity, phone: phoneMatch[0] }
+          : null;
+        await runDMHumanHandoff({
+          channel: 'messenger',
+          senderId,
+          identity: callbackIdentity,
+          history,
+        });
+        await emitEvent(
+          'nova.messenger_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'callback_context',
+            action: 'escalate_human',
+          },
+          'agent',
+        );
+        return;
       }
 
       const context = await buildCustomerContext({
@@ -1341,25 +1391,51 @@ async function handleInstagramMessage(input: {
         '[Nova Instagram] Identity resolved',
       );
 
-      if (identity && !identity.isKnown) {
-        const phoneMatch = message.match(DM_PHONE_REGEX);
-        const emailMatch = message.match(DM_EMAIL_REGEX);
-        if (phoneMatch || emailMatch) {
-          const linked = await linkIdentityFromContact('instagram', senderId, {
-            phone: phoneMatch?.[0],
-            email: emailMatch?.[0],
-          }).catch((err) => {
-            logger.warn({ err, senderId }, '[Nova Instagram] Auto-link failed');
-            return null;
-          });
-          if (linked?.isKnown) {
-            identity = linked;
-            logger.info(
-              { senderId, userId: linked.userId, resolvedBy: linked.resolvedBy },
-              '[Nova Instagram] Identity auto-linked',
-            );
-          }
+      const phoneMatch = message.match(DM_PHONE_REGEX);
+      const emailMatch = message.match(DM_EMAIL_REGEX);
+
+      if (identity && !identity.isKnown && (phoneMatch || emailMatch)) {
+        const linked = await linkIdentityFromContact('instagram', senderId, {
+          phone: phoneMatch?.[0],
+          email: emailMatch?.[0],
+        }).catch((err) => {
+          logger.warn({ err, senderId }, '[Nova Instagram] Auto-link failed');
+          return null;
+        });
+        if (linked?.isKnown) {
+          identity = linked;
+          logger.info(
+            { senderId, userId: linked.userId, resolvedBy: linked.resolvedBy },
+            '[Nova Instagram] Identity auto-linked',
+          );
         }
+      }
+
+      if (phoneMatch && isCallbackContext(history)) {
+        const callbackIdentity: ResolvedIdentity | null = identity
+          ? identity.phone
+            ? identity
+            : { ...identity, phone: phoneMatch[0] }
+          : null;
+        await runDMHumanHandoff({
+          channel: 'instagram',
+          senderId,
+          identity: callbackIdentity,
+          history,
+        });
+        await emitEvent(
+          'nova.instagram_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'callback_context',
+            action: 'escalate_human',
+          },
+          'agent',
+        );
+        return;
       }
 
       const context = await buildCustomerContext({
