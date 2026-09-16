@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, inAppNotifications, quotes, leads } from '@shared/schema';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, inAppNotifications, quotes, leads, contentItems } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
@@ -24,6 +24,7 @@ import { reid } from './agents/reid';
 import { gt } from 'drizzle-orm';
 import { paymentRecoverySweep } from './lib/paymentRecovery';
 import { agentEventBus } from './lib/agentEventBus';
+import { higgsfieldProvider } from './providers/higgsfield';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -416,6 +417,67 @@ export function initBackgroundJobs() {
         logger.info({ event: 'ember_newsletter', subject: (result as any)?.subject }, 'Ember newsletter drafted');
       } catch (err) {
         logger.error({ err, event: 'ember_newsletter' }, 'Ember newsletter failed');
+      }
+    });
+  }, TZ);
+
+  // Every 30 sec — advance Higgsfield jobs (submit-only in Ember). Poll the
+  // status URL for items still in `generating` with a Higgsfield jobId and
+  // write videoUrl → status='qa' when the render completes.
+  cron.schedule('*/30 * * * * *', async () => {
+    await withJobLock('higgsfield-poll', async () => {
+      const pending = await db
+        .select()
+        .from(contentItems)
+        .where(
+          and(
+            eq(contentItems.status, 'generating'),
+            isNotNull(contentItems.providerJobId),
+            eq(contentItems.generator, 'higgsfield'),
+          ),
+        )
+        .limit(10);
+
+      for (const item of pending) {
+        try {
+          const result = await higgsfieldProvider.getJobStatus(item.providerJobId!);
+
+          if (result.status === 'completed' && result.videoUrl) {
+            await db
+              .update(contentItems)
+              .set({
+                videoUrl: result.videoUrl,
+                status: 'qa',
+                updatedAt: new Date(),
+              })
+              .where(eq(contentItems.id, item.id));
+
+            await emitEvent(
+              'ember.higgsfield_video_complete',
+              'content_item',
+              item.id,
+              { videoUrl: result.videoUrl, jobId: item.providerJobId },
+              'system',
+            );
+
+            logger.info(
+              { itemId: item.id, videoUrl: result.videoUrl },
+              '[Jobs] Higgsfield video complete',
+            );
+          } else if (result.status === 'failed') {
+            await db
+              .update(contentItems)
+              .set({ status: 'failed', updatedAt: new Date() })
+              .where(eq(contentItems.id, item.id));
+
+            logger.error(
+              { itemId: item.id, error: result.error },
+              '[Jobs] Higgsfield video failed',
+            );
+          }
+        } catch (err) {
+          logger.error({ err, itemId: item.id }, '[Jobs] Higgsfield poll error');
+        }
       }
     });
   }, TZ);
