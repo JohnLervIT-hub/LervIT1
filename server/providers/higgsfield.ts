@@ -1,7 +1,7 @@
 /**
- * Higgsfield provider — Kling Video v3.0 (4k) text-to-video.
+ * Higgsfield provider — Kling Video v3.0 (pro) text-to-video.
  *
- * Create:  POST https://api.higgsfield.ai/kling-video/v3.0/4k/text-to-video
+ * Create:  POST https://api.higgsfield.ai/kling-video/v3.0/pro/text-to-video
  *          Body: { prompt, duration, aspect_ratio, sound, cfg_scale }
  *          Response: { status, request_id, status_url, cancel_url }
  *
@@ -35,7 +35,7 @@ export interface GenerationJob {
 
 class HiggsfieldProvider {
   private apiKey: string;
-  private createUrl = 'https://api.higgsfield.ai/kling-video/v3.0/4k/text-to-video';
+  private createUrl = 'https://api.higgsfield.ai/kling-video/v3.0/pro/text-to-video';
   private statusUrls = new Map<string, string>();
 
   constructor() {

@@ -1135,10 +1135,12 @@ Type: ${item.type}`;
       .set({ status: 'generating', updatedAt: new Date() })
       .where(eq(contentItems.id, input.contentItemId));
 
+    const aspectRatio = item.platform === 'instagram' ? '9:16' : '16:9';
+
     try {
       const job = await heygenProvider.createVideo({
         script,
-        aspectRatio: (item.aspectRatio as any) ?? '9:16',
+        aspectRatio,
         caption: true,
         title: `LervIT - ${item.id}`,
       });
@@ -1213,10 +1215,12 @@ Type: ${item.type}`;
       .set({ status: 'generating', updatedAt: new Date() })
       .where(eq(contentItems.id, input.contentItemId));
 
+    const aspectRatio = item.platform === 'instagram' ? '9:16' : '16:9';
+
     try {
       const job = await higgsfieldProvider.createVideo({
         prompt: `${prompt}. Cinematic, premium, urban Calgary. Professional lighting.`,
-        aspectRatio: (item.aspectRatio as any) ?? '9:16',
+        aspectRatio,
         duration: input.duration ?? 5,
         style: input.style ?? 'cinematic',
       });
@@ -1416,12 +1420,16 @@ Platform: ${item.platform ?? 'N/A'}`;
 
     const caption = item.caption ?? item.script?.slice(0, 200) ?? '';
 
+    const mediaUrl = item.videoUrl ?? item.assetUrl ?? undefined;
+    const isVideo = !!item.videoUrl;
+    const isPhoto = !item.videoUrl && !!item.assetUrl;
+
     let results: Array<{ postId: string; platform: string; url?: string; error?: string }>;
 
     if (platform === 'linkedin') {
       const result = await linkedInProvider.post({
         text: caption,
-        url: item.videoUrl ?? undefined,
+        url: mediaUrl,
         title: 'LervIT Moving Calgary',
         description: caption.slice(0, 200),
       });
@@ -1434,9 +1442,28 @@ Platform: ${item.platform ?? 'N/A'}`;
         },
       ];
     } else {
+      if (platform === 'instagram') {
+        if (!mediaUrl) {
+          throw new Error('Instagram requires photo or video');
+        }
+        if (item.aspectRatio && item.aspectRatio !== '9:16') {
+          logger.warn(
+            { itemId: item.id, aspectRatio: item.aspectRatio },
+            '[Ember] IG content may not be 9:16 — Reels requires 9:16',
+          );
+        }
+      }
+
+      if (platform === 'facebook') {
+        if (!mediaUrl && !item.caption) {
+          throw new Error('Facebook requires media or caption');
+        }
+      }
+
       results = await metaProvider.publish({
         message: caption,
-        videoUrl: item.videoUrl ?? undefined,
+        videoUrl: isVideo ? mediaUrl : undefined,
+        photoUrl: isPhoto ? mediaUrl : undefined,
         hashtags: item.hashtags ?? [],
         platform,
       });

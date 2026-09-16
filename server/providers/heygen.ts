@@ -88,6 +88,7 @@ class HeyGenProvider {
         voice_id: input.voiceId ?? this.defaultVoiceId,
         script: input.script,
         resolution: '1080p',
+        aspect_ratio: input.aspectRatio ?? '9:16',
       }),
     });
 
