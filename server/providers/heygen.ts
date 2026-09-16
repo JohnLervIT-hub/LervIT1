@@ -14,6 +14,8 @@
  *   - Module import is safe without env vars set; the first API call throws.
  */
 
+import { logger } from '../logger';
+
 export interface AvatarVideoRequest {
   script: string;
   avatarId?: string;
@@ -57,6 +59,15 @@ class HeyGenProvider {
   async createVideo(input: AvatarVideoRequest): Promise<VideoJob> {
     this.assertConfigured();
 
+    logger.info(
+      {
+        url: `${this.baseUrl}/v2/video/generate`,
+        apiKeyFirst8: process.env.HEYGEN_API_KEY?.slice(0, 8),
+        hasScript: !!input.script,
+      },
+      '[HeyGen] Request details',
+    );
+
     const response = await fetch(`${this.baseUrl}/v2/video/generate`, {
       method: 'POST',
       headers: {
@@ -98,8 +109,9 @@ class HeyGenProvider {
     const data: any = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const msg = data?.message ?? data?.error ?? `status=${response.status}`;
-      throw new Error(`HeyGen error: ${msg}`);
+      throw new Error(
+        `HeyGen error: status=${response.status} ${JSON.stringify(data)}`,
+      );
     }
 
     return {

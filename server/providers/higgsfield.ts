@@ -10,6 +10,8 @@
  *   - HIGGSFIELD_SECRET  (optional; some tenants require it)
  */
 
+import { logger } from '../logger';
+
 export interface VideoGenerationRequest {
   prompt: string;
   aspectRatio?: '9:16' | '16:9' | '1:1';
@@ -46,6 +48,14 @@ class HiggsfieldProvider {
   async createVideo(input: VideoGenerationRequest): Promise<GenerationJob> {
     this.assertConfigured();
 
+    logger.info(
+      {
+        url: `${this.baseUrl}/v1/video/generate`,
+        apiKeyFirst8: process.env.HIGGSFIELD_API_KEY?.slice(0, 8),
+      },
+      '[Higgsfield] Request details',
+    );
+
     const response = await fetch(`${this.baseUrl}/v1/video/generate`, {
       method: 'POST',
       headers: {
@@ -66,7 +76,11 @@ class HiggsfieldProvider {
     const data: any = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(`Higgsfield error: ${JSON.stringify(data)}`);
+      throw new Error(
+        `Higgsfield error: status=${response.status} ${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`,
+      );
     }
 
     return {
