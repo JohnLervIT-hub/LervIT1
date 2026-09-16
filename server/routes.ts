@@ -14600,7 +14600,7 @@ Respond with VALID JSON only:
         db
           .select({ count: sql<number>`count(*)::int` })
           .from(blogPosts)
-          .where(eq(blogPosts.status, 'published')),
+          .where(inArray(blogPosts.status, ['published', 'posted'])),
         db
           .select({ count: sql<number>`count(*)::int` })
           .from(blogPosts)
@@ -14631,7 +14631,7 @@ Respond with VALID JSON only:
         db
           .select({ count: sql<number>`count(*)::int` })
           .from(contentItems)
-          .where(inArray(contentItems.status, ['approved', 'published', 'qa'])),
+          .where(inArray(contentItems.status, ['approved', 'published', 'posted', 'qa'])),
       ]);
 
       const socialDraftsByPlatform: Record<string, number> = {
