@@ -33,6 +33,7 @@ export interface AvatarVideoRequest {
     value: string;
   };
   title?: string;
+  engine?: 'avatar_iii' | 'avatar_iv' | 'avatar_v' | 'auto';
 }
 
 export interface VideoJob {
@@ -87,8 +88,9 @@ class HeyGenProvider {
         avatar_id: input.avatarId ?? this.defaultAvatarId,
         voice_id: input.voiceId ?? this.defaultVoiceId,
         script: input.script,
-        resolution: '1080p',
+        resolution: '720p',
         aspect_ratio: input.aspectRatio ?? '9:16',
+        engine: input.engine ?? 'avatar_iii',
       }),
     });
 
