@@ -51,6 +51,14 @@ const router = express.Router();
 const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://app.lervit.com';
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
+// Per-phone dedupe for DM → voice handoffs. Same phone hitting handoff
+// multiple times inside CALL_COOLDOWN_MS (e.g. IG + Messenger both
+// escalating, or a rapid-fire follow-up DM) collapses to a single
+// nova.call_dm_handoff emit. In-process only — fine for the pilot
+// single-instance deploy; move to Redis if we ever go multi-node.
+const recentCalls = new Map<string, number>(); // phone → last emit timestamp (ms)
+const CALL_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
 // Lazy Telnyx client — matches the pattern in voice-routes.ts so we don't
 // crash boot when TELNYX_API_KEY is missing in local/dev.
 function telnyxSdk() {
@@ -91,6 +99,18 @@ router.post(
         break;
 
       case 'call.answered':
+        logger.info(
+          {
+            callControlId,
+            from: callPayload?.from,
+            to: callPayload?.to,
+            agentId: ELEVENLABS_AGENT_ID,
+            hasAgentId: !!ELEVENLABS_AGENT_ID,
+            callType,
+          },
+          '[Nova] Call answered — starting stream',
+        );
+
         await db
           .update(voiceCalls)
           .set({ status: 'answered' })
@@ -107,6 +127,11 @@ router.post(
 
         if (ELEVENLABS_AGENT_ID && callControlId) {
           try {
+            logger.info(
+              { callControlId },
+              '[Nova] Calling startStreaming...',
+            );
+
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
               stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
               stream_track: 'both_tracks',
@@ -115,6 +140,11 @@ router.post(
               stream_bidirectional_sampling_rate: 8000,
               enable_dialogflow: false,
             });
+
+            logger.info(
+              { callControlId },
+              '[Nova] startStreaming called ✅',
+            );
 
             logger.info(
               { callControlId, agentId: ELEVENLABS_AGENT_ID, callType },
@@ -986,6 +1016,20 @@ async function runDMHumanHandoff(input: {
   }
 
   if (customerPhone) {
+    const lastCall = recentCalls.get(customerPhone);
+    if (lastCall && Date.now() - lastCall < CALL_COOLDOWN_MS) {
+      logger.info(
+        { phone: customerPhone, msSinceLast: Date.now() - lastCall },
+        '[Nova] Call cooldown active — skip',
+      );
+      await send(
+        senderId,
+        `Our team is already on their way to call you! Should be any moment 📞`,
+      );
+      return;
+    }
+    recentCalls.set(customerPhone, Date.now());
+
     await agentEventBus.emit(
       'nova.call_dm_handoff',
       {
