@@ -15111,8 +15111,12 @@ Respond with VALID JSON only:
       // Auto-publish to social after approval. Text/caption-only posts should
       // ship too — the old videoUrl gate silently dropped copy-only items.
       // TikTok is excluded here because publishToSocial rejects it as
-      // unsupported_platform.
-      const publishablePlatforms = ['facebook', 'instagram', 'linkedin'];
+      // unsupported_platform. Instagram requires media (video/image) — the
+      // Graph API rejects text-only posts — so drop it when there's no asset.
+      const hasMedia = !!(item.videoUrl || item.thumbnailUrl || item.assetUrl);
+      const publishablePlatforms = hasMedia
+        ? ['facebook', 'instagram', 'linkedin']
+        : ['facebook', 'linkedin'];
 
       const hasContent = !!(item.videoUrl || item.caption || item.script);
 
