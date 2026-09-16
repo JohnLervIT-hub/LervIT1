@@ -16,7 +16,7 @@
  *     - `generate_creative_brief`    : write directorial brief onto a content_items row
  *     - `generate_video_script`      : write a video script onto a content_items row
  *     - `generate_heygen_video`      : submit script to HeyGen, wait, save video_url
- *     - `generate_higgsfield_video`  : submit prompt to Higgsfield, wait, save video_url
+ *     - `generate_higgsfield_video`  : submit prompt to Higgsfield (async — APEX polls status)
  *     - `run_qa`                     : brand/claims/product QA over content_items row
  *     - `get_campaign_status`        : campaign + item aggregates for the admin UI
  *
@@ -1215,14 +1215,11 @@ Type: ${item.type}`;
       .set({ status: 'generating', updatedAt: new Date() })
       .where(eq(contentItems.id, input.contentItemId));
 
-    const aspectRatio = item.platform === 'instagram' ? '9:16' : '16:9';
-
     try {
       const job = await higgsfieldProvider.createVideo({
         prompt: `${prompt}. Cinematic, premium, urban Calgary. Professional lighting.`,
-        aspectRatio,
         duration: input.duration ?? 5,
-        style: input.style ?? 'cinematic',
+        platform: item.platform ?? undefined,
       });
 
       await db
@@ -1230,42 +1227,26 @@ Type: ${item.type}`;
         .set({ providerJobId: job.jobId, generator: 'higgsfield', updatedAt: new Date() })
         .where(eq(contentItems.id, input.contentItemId));
 
-      const result = await higgsfieldProvider.waitForCompletion(job.jobId);
-
-      await db
-        .update(contentItems)
-        .set({
-          status: result.status === 'completed' ? 'qa' : 'failed',
-          videoUrl: result.videoUrl ?? null,
-          updatedAt: new Date(),
-        })
-        .where(eq(contentItems.id, input.contentItemId));
-
       await emitEvent(
-        'ember.higgsfield_video_complete',
+        'ember.higgsfield_video_submitted',
         'agent',
         'ember',
-        {
-          contentItemId: input.contentItemId,
-          videoUrl: result.videoUrl,
-          status: result.status,
-        },
+        { contentItemId: input.contentItemId, jobId: job.jobId },
         'agent',
       );
 
       return {
-        generated: result.status === 'completed',
+        submitted: true,
         contentItemId: input.contentItemId,
         jobId: job.jobId,
-        videoUrl: result.videoUrl,
-        status: result.status,
+        status: 'processing' as const,
       };
     } catch (err: any) {
       await db
         .update(contentItems)
         .set({ status: 'failed', updatedAt: new Date() })
         .where(eq(contentItems.id, input.contentItemId));
-      logger.error({ err }, '[Ember] Higgsfield video failed');
+      logger.error({ err }, '[Ember] Higgsfield submit failed');
       return { error: true, message: err?.message ?? String(err) };
     }
   }

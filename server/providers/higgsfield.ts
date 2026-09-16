@@ -1,174 +1,129 @@
 /**
- * Higgsfield provider — Kling Video v3.0 (pro) text-to-video.
+ * Higgsfield provider — Bytedance Seedance 2.0 text-to-video.
  *
- * Create:  POST https://api.higgsfield.ai/kling-video/v3.0/pro/text-to-video
- *          Body: { prompt, duration, aspect_ratio, sound, cfg_scale }
- *          Response: { status, request_id, status_url, cancel_url }
- *
+ * Create:  POST https://api.higgsfield.ai/bytedance/seedance-2.0/text-to-video
+ *          Response: { status, request_id, status_url }
  * Status:  GET  ${status_url}   (defaults to
  *          https://platform.higgsfield.ai/requests/${request_id}/status)
+ * Auth:    Authorization: Key ${HIGGSFIELD_API_KEY}
  *
- * Auth:    Authorization: Key ${HIGGSFIELD_API_KEY}   (literal "Key" prefix)
- *
- * Env vars (set on Railway LervIT1 service):
- *   - HIGGSFIELD_API_KEY (required)
+ * The SDK is configured at module load so future calls into
+ * @higgsfield/client share credentials; the createVideo/getJobStatus
+ * pair here submits async and returns immediately — pollers advance
+ * the job separately.
  */
 
+import { config } from '@higgsfield/client/v2';
 import { logger } from '../logger';
 
-export interface VideoGenerationRequest {
+config({
+  credentials: process.env.HIGGSFIELD_API_KEY ?? '',
+});
+
+export interface HiggsfieldVideoInput {
   prompt: string;
-  aspectRatio?: '9:16' | '16:9' | '1:1';
   duration?: number;
-  style?: string;
-  referenceImageUrl?: string;
-  motion?: string;
+  resolution?: '480p' | '720p' | '1080p' | '4k';
+  aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+  generateAudio?: boolean;
+  platform?: string;
 }
 
-export interface GenerationJob {
-  jobId: string;
+export interface HiggsfieldVideoResult {
+  requestId: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
-  thumbnailUrl?: string;
   error?: string;
 }
 
-class HiggsfieldProvider {
-  private apiKey: string;
-  private createUrl = 'https://api.higgsfield.ai/kling-video/v3.0/pro/text-to-video';
-  private statusUrls = new Map<string, string>();
+const statusUrlCache = new Map<string, string>();
 
-  constructor() {
-    this.apiKey = process.env.HIGGSFIELD_API_KEY ?? '';
-  }
+export class HiggsfieldProvider {
+  async createVideo(input: HiggsfieldVideoInput): Promise<{ jobId: string }> {
+    const aspectRatio =
+      input.platform === 'instagram'
+        ? '9:16'
+        : input.platform === 'facebook'
+          ? '16:9'
+          : (input.aspectRatio ?? '9:16');
 
-  private assertConfigured() {
-    if (!this.apiKey) {
-      throw new Error('Higgsfield not configured: HIGGSFIELD_API_KEY missing');
+    logger.info(
+      {
+        prompt: input.prompt.slice(0, 50),
+        aspectRatio,
+        duration: input.duration ?? 5,
+        resolution: '720p',
+      },
+      '[Higgsfield] Submitting Seedance 2.0',
+    );
+
+    const response = await fetch(
+      'https://api.higgsfield.ai/bytedance/seedance-2.0/text-to-video',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Key ${process.env.HIGGSFIELD_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: input.prompt,
+          duration: input.duration ?? 5,
+          resolution: '720p',
+          aspect_ratio: aspectRatio,
+          generate_audio: true,
+        }),
+      },
+    );
+
+    const data: any = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        `Higgsfield error: status=${response.status} ${JSON.stringify(data)}`,
+      );
     }
+
+    if (typeof data?.status_url === 'string') {
+      statusUrlCache.set(data.request_id, data.status_url);
+    }
+
+    logger.info(
+      { requestId: data.request_id, status: data.status },
+      '[Higgsfield] Video queued',
+    );
+
+    return { jobId: data.request_id };
   }
 
-  private authHeader(): string {
-    return `Key ${this.apiKey}`;
-  }
+  async getJobStatus(jobId: string): Promise<HiggsfieldVideoResult> {
+    const statusUrl =
+      statusUrlCache.get(jobId) ??
+      `https://platform.higgsfield.ai/requests/${jobId}/status`;
 
-  private mapStatus(raw: unknown): GenerationJob['status'] {
-    const statusMap: Record<string, GenerationJob['status']> = {
+    const response = await fetch(statusUrl, {
+      headers: {
+        Authorization: `Key ${process.env.HIGGSFIELD_API_KEY}`,
+      },
+    });
+
+    const data: any = await response.json().catch(() => ({}));
+
+    const statusMap: Record<string, HiggsfieldVideoResult['status']> = {
       queued: 'pending',
       in_progress: 'processing',
       processing: 'processing',
       completed: 'completed',
       failed: 'failed',
+      nsfw: 'failed',
+      canceled: 'failed',
     };
-    return (typeof raw === 'string' && statusMap[raw]) || 'pending';
-  }
-
-  private extractVideoUrl(data: any): string | undefined {
-    return data?.video?.url ?? data?.images?.[0]?.url;
-  }
-
-  async createVideo(input: VideoGenerationRequest): Promise<GenerationJob> {
-    this.assertConfigured();
-
-    logger.info(
-      {
-        url: this.createUrl,
-        apiKeyFirst8: this.apiKey.slice(0, 8),
-        authScheme: 'key',
-      },
-      '[Higgsfield] Request details',
-    );
-
-    const response = await fetch(this.createUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: this.authHeader(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt: input.prompt,
-        duration: input.duration ?? 5,
-        aspect_ratio: input.aspectRatio ?? '9:16',
-        sound: 'on',
-        cfg_scale: 0.5,
-      }),
-    });
-
-    const data: any = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(
-        `Higgsfield error: status=${response.status} ${
-          typeof data === 'string' ? data : JSON.stringify(data)
-        }`,
-      );
-    }
-
-    const requestId: string | undefined = data?.request_id;
-    if (!requestId) {
-      throw new Error(
-        `Higgsfield error: missing request_id in response ${JSON.stringify(data)}`,
-      );
-    }
-
-    if (typeof data?.status_url === 'string') {
-      this.statusUrls.set(requestId, data.status_url);
-    }
 
     return {
-      jobId: requestId,
-      status: this.mapStatus(data?.status ?? 'queued'),
+      requestId: jobId,
+      status: statusMap[data.status] ?? 'pending',
+      videoUrl: data.video?.url,
+      error: data.error,
     };
-  }
-
-  async getJobStatus(jobIdOrStatusUrl: string): Promise<GenerationJob> {
-    this.assertConfigured();
-
-    const isUrl = /^https?:\/\//i.test(jobIdOrStatusUrl);
-    const jobId = isUrl
-      ? jobIdOrStatusUrl.match(/requests\/([^/]+)\/status/)?.[1] ?? jobIdOrStatusUrl
-      : jobIdOrStatusUrl;
-
-    const url = isUrl
-      ? jobIdOrStatusUrl
-      : this.statusUrls.get(jobIdOrStatusUrl) ??
-        `https://platform.higgsfield.ai/requests/${encodeURIComponent(jobIdOrStatusUrl)}/status`;
-
-    const response = await fetch(url, {
-      headers: { Authorization: this.authHeader() },
-    });
-
-    const data: any = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      return {
-        jobId,
-        status: 'failed',
-        error: `status=${response.status} ${
-          typeof data === 'string' ? data : JSON.stringify(data)
-        }`,
-      };
-    }
-
-    return {
-      jobId,
-      status: this.mapStatus(data?.status),
-      videoUrl: this.extractVideoUrl(data),
-      thumbnailUrl: undefined,
-      error: data?.error,
-    };
-  }
-
-  async waitForCompletion(jobId: string, maxWaitMs = 600_000): Promise<GenerationJob> {
-    const start = Date.now();
-    while (Date.now() - start < maxWaitMs) {
-      const status = await this.getJobStatus(jobId);
-      if (status.status === 'completed' || status.status === 'failed') {
-        return status;
-      }
-      await new Promise((r) => setTimeout(r, 15_000));
-    }
-    return { jobId, status: 'failed', error: 'timeout' };
   }
 }
 
