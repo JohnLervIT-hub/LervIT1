@@ -45,6 +45,16 @@ class HiggsfieldProvider {
     }
   }
 
+  // Higgsfield issues credentials in one of two formats:
+  //   - "client_id:secret" pair → HTTP Basic Auth (base64 of the whole pair)
+  //   - single token           → Bearer
+  // Detect by the presence of a colon in the key.
+  private authHeader(): string {
+    return this.apiKey.includes(':')
+      ? `Basic ${Buffer.from(this.apiKey).toString('base64')}`
+      : `Bearer ${this.apiKey}`;
+  }
+
   async createVideo(input: VideoGenerationRequest): Promise<GenerationJob> {
     this.assertConfigured();
 
@@ -52,6 +62,7 @@ class HiggsfieldProvider {
       {
         url: `${this.baseUrl}/v1/video/generate`,
         apiKeyFirst8: process.env.HIGGSFIELD_API_KEY?.slice(0, 8),
+        authScheme: this.apiKey.includes(':') ? 'basic' : 'bearer',
       },
       '[Higgsfield] Request details',
     );
@@ -59,7 +70,7 @@ class HiggsfieldProvider {
     const response = await fetch(`${this.baseUrl}/v1/video/generate`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: this.authHeader(),
         'Content-Type': 'application/json',
         ...(this.secret ? { 'X-Api-Secret': this.secret } : {}),
       },
@@ -94,7 +105,7 @@ class HiggsfieldProvider {
 
     const response = await fetch(`${this.baseUrl}/v1/video/${encodeURIComponent(jobId)}`, {
       headers: {
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: this.authHeader(),
         ...(this.secret ? { 'X-Api-Secret': this.secret } : {}),
       },
     });
