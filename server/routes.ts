@@ -41,6 +41,8 @@ import type { Socket } from "net";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { moverWebSocket, customerWebSocket, adminVoiceWebSocket, generateWebSocketToken, generateCustomerWebSocketToken } from "./websocket";
+import { WebSocketServer } from "ws";
+import { createNovaBridge } from "./lib/novaBridge";
 import { registerVoiceRoutes } from "./voice-routes";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, campaigns, contentItems } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
@@ -16515,6 +16517,32 @@ Respond with VALID JSON only:
     logger.info('Admin voice WebSocket initialized');
   } catch (err) {
     logger.error({ err }, 'Admin voice WebSocket init FAILED — continuing without it');
+  }
+
+  // Nova ↔ ElevenLabs audio bridge. Telnyx bidirectional-stream WebSocket
+  // connects here; the bridge translates between Telnyx media frames and
+  // ElevenLabs Convai's audio protocol. Path is dynamic (per callControlId),
+  // so we use noServer:true + manual upgrade routing.
+  try {
+    const novaBridgeWss = new WebSocketServer({ noServer: true });
+
+    novaBridgeWss.on('connection', (ws, req) => {
+      const callControlId = req.url?.split('/').pop() ?? 'unknown';
+      logger.info({ callControlId }, '[Bridge] Telnyx connected');
+      createNovaBridge(ws, callControlId);
+    });
+
+    httpServer.on('upgrade', (req, socket, head) => {
+      if (req.url?.startsWith('/api/nova/stream/')) {
+        novaBridgeWss.handleUpgrade(req, socket, head, (ws) => {
+          novaBridgeWss.emit('connection', ws, req);
+        });
+      }
+    });
+
+    logger.info('Nova bridge WebSocket initialized');
+  } catch (err) {
+    logger.error({ err }, 'Nova bridge WebSocket init FAILED — continuing without it');
   }
 
   return httpServer;
