@@ -53,17 +53,14 @@ class HiggsfieldProvider {
   }
 
   private mapStatus(raw: unknown): GenerationJob['status'] {
-    switch (raw) {
-      case 'completed':
-        return 'completed';
-      case 'failed':
-        return 'failed';
-      case 'processing':
-        return 'processing';
-      case 'queued':
-      default:
-        return 'pending';
-    }
+    const statusMap: Record<string, GenerationJob['status']> = {
+      queued: 'pending',
+      in_progress: 'processing',
+      processing: 'processing',
+      completed: 'completed',
+      failed: 'failed',
+    };
+    return (typeof raw === 'string' && statusMap[raw]) || 'pending';
   }
 
   private extractVideoUrl(data: any): string | undefined {
