@@ -69,13 +69,17 @@ function telnyxSdk() {
 
 router.post(
   '/api/nova/webhook',
-  express.raw({ type: '*/*' }),
   async (req: Request, res: Response) => {
     res.json({ received: true });
 
+    // Global express.json() in server/index.ts has already parsed req.body
+    // into an object by the time this handler runs, so we don't (and can't)
+    // re-parse. Kept the string-branch defensively in case a future path
+    // change routes here before json parsing.
     let payload: any;
     try {
-      payload = JSON.parse(req.body.toString());
+      payload =
+        typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     } catch {
       return;
     }
