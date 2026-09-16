@@ -89,7 +89,7 @@ export const generalApiLimiter = rateLimit({
   skip: (req) => {
     // Skip rate limiting for health checks and session check (called on every page load/navigation)
     // Note: when mounted at /api, req.path is /auth/me (prefix stripped by Express)
-    return req.path === '/health' || req.path === '/auth/me';
+    return req.path === '/health' || req.path === '/auth/me' || req.path === '/nova/webhook';
   },
   handler: (req, res) => {
     logger.warn({ 

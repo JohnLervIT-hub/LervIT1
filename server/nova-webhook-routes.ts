@@ -78,6 +78,12 @@ router.post(
   async (req: Request, res: Response) => {
     res.json({ received: true });
 
+    logger.info({
+      contentType: req.headers['content-type'],
+      bodyType: typeof req.body,
+      hasData: !!req.body?.data,
+    }, '[Nova Webhook] Request received');
+
     // Global express.json() in server/index.ts has already parsed req.body
     // into an object by the time this handler runs, so we don't (and can't)
     // re-parse. Kept the string-branch defensively in case a future path
@@ -86,7 +92,12 @@ router.post(
     try {
       payload =
         typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    } catch {
+    } catch (err) {
+      logger.error({
+        err,
+        bodyType: typeof req.body,
+        body: JSON.stringify(req.body)?.slice(0, 200),
+      }, '[Nova Webhook] Parse/handler error');
       return;
     }
 
@@ -120,7 +131,7 @@ router.post(
         // For outbound calls, answer immediately and start ElevenLabs streaming
         // instead of waiting for call.answered — Telnyx sometimes never fires
         // .answered for outbound legs even after the callee picks up.
-        if (direction === 'outbound' && callControlId) {
+        if ((direction === 'outgoing' || direction === 'outbound') && callControlId) {
           try {
             await telnyxSdk().calls.actions.answer(callControlId, {});
 
