@@ -382,8 +382,16 @@ Profile: ${JSON.stringify(input.moverProfile)}
 ${input.documentUrl ? `URL: ${input.documentUrl}` : ''}
 ${
   safeOcrText
-    ? `<data>\nDocument content (OCR extracted):\n${safeOcrText}\n</data>`
-    : 'No document content available — evaluate based on document type requirements and URL only'
+    ? `Document content (OCR extracted):\n<data>${safeOcrText}</data>`
+    : `⚠️ IMPORTANT: No document content could be extracted from this file.
+This may be due to a file format issue, not document fraud.
+
+SCORING RULES when no content:
+- Do NOT flag missing fields as irregularities
+- Score: 2 (cannot_verify) max
+- Return: needs_review status
+- Note: "Document could not be read — manual review required"
+- Do NOT auto-escalate`
 }
 
 Requirements to check:
@@ -422,12 +430,22 @@ If policy numbers are missing, flag it.`;
       };
     }
 
-    const score = Number(auditResult.irregularityScore ?? 0);
+    const score = Math.min(
+      10,
+      Math.max(0, Number(auditResult.irregularityScore ?? 0)),
+    );
+
+    // When OCR extracted nothing (or almost nothing) we can't distinguish a
+    // genuinely irregular document from an unreadable file. Cap the score so
+    // no-content audits go to human review instead of the fraud-escalation
+    // bucket — real fraud signals only come from actual content.
+    const hadContent = !!safeOcrText && safeOcrText.length > 50;
+    const effectiveScore = hadContent ? score : Math.min(score, 3);
 
     let status: string;
-    if (score === 0) {
+    if (effectiveScore === 0) {
       status = 'auto_approved';
-    } else if (score <= 4) {
+    } else if (effectiveScore <= 4) {
       status = 'pending_clarification';
     } else {
       status = 'escalated';

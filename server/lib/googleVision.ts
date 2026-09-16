@@ -99,6 +99,25 @@ export async function extractTextFromDocument(documentUrl: string): Promise<Visi
 }
 
 export function isImageUrl(url: string): boolean {
+  if (!url) return false;
+
   const lower = url.toLowerCase();
-  return /\.(jpg|jpeg|png|gif|webp|bmp|tiff|pdf)(\?|$)/.test(lower);
+
+  if (/\.(jpg|jpeg|png|gif|webp|bmp|tiff|pdf)(\?|$)/.test(lower)) {
+    return true;
+  }
+
+  // Storage paths that are likely images even without extension (signed URLs,
+  // opaque object handles). Vision API returns no_text_found for unsupported
+  // formats, which the caller treats as a soft failure — safer than skipping.
+  if (
+    lower.includes('/objects/') ||
+    lower.includes('/uploads/') ||
+    lower.includes('/storage/') ||
+    lower.includes('/files/')
+  ) {
+    return true;
+  }
+
+  return true;
 }
