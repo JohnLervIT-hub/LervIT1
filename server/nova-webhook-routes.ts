@@ -59,6 +59,12 @@ const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 const recentCalls = new Map<string, number>(); // phone → last emit timestamp (ms)
 const CALL_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
+// Tracks call_control_ids that have already had ElevenLabs streaming started
+// so call.initiated (outbound) and call.answered (inbound / fallback) don't
+// both trigger startStreaming on the same call. In-process only; entries are
+// cleared on call.hangup.
+const streamingStarted = new Set<string>();
+
 // Lazy Telnyx client — matches the pattern in voice-routes.ts so we don't
 // crash boot when TELNYX_API_KEY is missing in local/dev.
 function telnyxSdk() {
@@ -99,8 +105,57 @@ router.post(
     logger.info({ eventType, callType }, '[Nova Webhook] Event received');
 
     switch (eventType) {
-      case 'call.initiated':
+      case 'call.initiated': {
+        const direction = callPayload?.direction;
+
+        logger.info(
+          {
+            callControlId,
+            direction,
+            to: callPayload?.to,
+          },
+          '[Nova] Call initiated webhook received',
+        );
+
+        // For outbound calls, answer immediately and start ElevenLabs streaming
+        // instead of waiting for call.answered — Telnyx sometimes never fires
+        // .answered for outbound legs even after the callee picks up.
+        if (direction === 'outbound' && callControlId) {
+          try {
+            await telnyxSdk().calls.actions.answer(callControlId, {});
+
+            logger.info(
+              { callControlId },
+              '[Nova] Call answered via initiate',
+            );
+
+            // Small delay so Telnyx has time to fully set up the media leg
+            // before we ask it to open the bidirectional stream.
+            await new Promise((r) => setTimeout(r, 500));
+
+            if (ELEVENLABS_AGENT_ID) {
+              await telnyxSdk().calls.actions.startStreaming(callControlId, {
+                stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
+                stream_track: 'both_tracks',
+                stream_bidirectional_mode: 'rtp',
+                stream_bidirectional_codec: 'PCMU',
+                stream_bidirectional_sampling_rate: 8000,
+              });
+              streamingStarted.add(callControlId);
+              logger.info(
+                { callControlId },
+                '[Nova] ElevenLabs stream started on initiate ✅',
+              );
+            }
+          } catch (err: any) {
+            logger.error(
+              { err, callControlId },
+              '[Nova] Initiate stream failed',
+            );
+          }
+        }
         break;
+      }
 
       case 'call.answered':
         logger.info(
@@ -111,8 +166,9 @@ router.post(
             agentId: ELEVENLABS_AGENT_ID,
             hasAgentId: !!ELEVENLABS_AGENT_ID,
             callType,
+            alreadyStreaming: streamingStarted.has(callControlId),
           },
-          '[Nova] Call answered — starting stream',
+          '[Nova] call.answered received',
         );
 
         await db
@@ -129,6 +185,17 @@ router.post(
           'agent',
         );
 
+        // Skip startStreaming if call.initiated already kicked it off for this
+        // call — call.answered acts as a fallback for inbound or edge cases
+        // where the initiate-path stream setup failed silently.
+        if (streamingStarted.has(callControlId)) {
+          logger.info(
+            { callControlId },
+            '[Nova] Stream already started on initiate — skipping',
+          );
+          break;
+        }
+
         if (ELEVENLABS_AGENT_ID && callControlId) {
           try {
             logger.info(
@@ -144,6 +211,7 @@ router.post(
               stream_bidirectional_sampling_rate: 8000,
               enable_dialogflow: false,
             });
+            streamingStarted.add(callControlId);
 
             logger.info(
               { callControlId },
@@ -197,6 +265,8 @@ router.post(
       }
 
       case 'call.hangup':
+        streamingStarted.delete(callControlId);
+
         await db
           .update(voiceCalls)
           .set({ status: 'completed' })
