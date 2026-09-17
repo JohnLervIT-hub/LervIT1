@@ -135,6 +135,35 @@ router.post(
           '[Nova] Call initiated webhook received',
         );
 
+        // Inbound: answer BEFORE any DB / context work. Telnyx drops the leg
+        // if we take too long, and it sometimes 422s if we answer a hair
+        // early — retry once after 500ms.
+        if (direction === 'incoming' && callControlId) {
+          const answerResult = await telnyxSdk()
+            .calls.actions.answer(callControlId, {})
+            .catch(async (err: any) => {
+              if (err?.status === 422) {
+                await new Promise((r) => setTimeout(r, 500));
+                return telnyxSdk()
+                  .calls.actions.answer(callControlId, {})
+                  .catch(() => null);
+              }
+              return null;
+            });
+
+          if (answerResult) {
+            logger.info(
+              { callControlId },
+              '[Nova] Inbound call answered ✅',
+            );
+          } else {
+            logger.error(
+              { callControlId },
+              '[Nova] Inbound answer failed',
+            );
+          }
+        }
+
         // Fallback context seed for the bridge. nova.ts already seeds richer
         // context when it originated the dial; this fills in anything that
         // path missed (e.g. inbound calls) so the bridge greeting/prompt isn't
@@ -232,22 +261,6 @@ router.post(
           }
         }
 
-        // Inbound: answer the call so Telnyx fires call.answered, which then
-        // triggers startStreaming → ElevenLabs connect in the handler below.
-        if (direction === 'incoming' && callControlId) {
-          try {
-            await telnyxSdk().calls.actions.answer(callControlId, {});
-            logger.info(
-              { callControlId },
-              '[Nova] Inbound call answered ✅',
-            );
-          } catch (err: any) {
-            logger.error(
-              { err, callControlId },
-              '[Nova] Inbound answer failed',
-            );
-          }
-        }
         break;
       }
 
