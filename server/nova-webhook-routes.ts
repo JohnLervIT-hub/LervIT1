@@ -84,6 +84,7 @@ router.post(
   '/api/nova/webhook',
   async (req: Request, res: Response) => {
     res.json({ received: true });
+    const webhookReceived = Date.now();
 
     logger.info({
       contentType: req.headers['content-type'],
@@ -139,6 +140,11 @@ router.post(
         // if we take too long, and it sometimes 422s if we answer a hair
         // early — retry once after 500ms.
         if (direction === 'incoming' && callControlId) {
+          logger.info({
+            callControlId,
+            msToAnswer: Date.now() - webhookReceived,
+          }, '[Nova] Answering inbound call');
+
           const answerResult = await telnyxSdk()
             .calls.actions.answer(callControlId, {})
             .catch(async (err: any) => {
@@ -152,10 +158,10 @@ router.post(
             });
 
           if (answerResult) {
-            logger.info(
-              { callControlId },
-              '[Nova] Inbound call answered ✅',
-            );
+            logger.info({
+              callControlId,
+              msTotalToAnswer: Date.now() - webhookReceived,
+            }, '[Nova] Inbound answered ✅');
           } else {
             logger.error(
               { callControlId },
