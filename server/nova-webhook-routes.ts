@@ -286,43 +286,24 @@ router.post(
           break;
         }
 
-        if (ELEVENLABS_AGENT_ID && callControlId) {
+        if (callControlId) {
           try {
-            logger.info(
-              { callControlId },
-              '[Nova] Calling startStreaming...',
-            );
-
-            await telnyxSdk().calls.actions.startStreaming(callControlId, {
-              stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
-              stream_track: 'both_tracks',
-              stream_bidirectional_mode: 'mp3',
-              stream_bidirectional_sampling_rate: 16000,
+            await telnyxSdk().calls.actions.speak(callControlId, {
+              payload: 'Hello! This is Nova from LervIT. The call is working. Goodbye!',
+              voice: 'female',
+              language: 'en-US',
             });
-            streamingStarted.add(callControlId);
 
             logger.info(
               { callControlId },
-              '[Nova] startStreaming called ✅',
-            );
-
-            logger.info(
-              { callControlId, agentId: ELEVENLABS_AGENT_ID, callType },
-              '[Nova] ElevenLabs stream started',
+              '[Nova] Telnyx TTS test ✅',
             );
           } catch (err: any) {
             logger.error(
               { err, callControlId },
-              '[Nova] ElevenLabs stream failed',
+              '[Nova] Telnyx TTS test failed',
             );
-            // No fallback — let call stay silent
-            // Better than robotic TTS message
           }
-        } else if (!ELEVENLABS_AGENT_ID) {
-          logger.warn(
-            { callControlId },
-            '[Nova] ELEVENLABS_AGENT_ID not set — call will stay silent',
-          );
         }
         break;
 
