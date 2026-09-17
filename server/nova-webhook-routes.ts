@@ -206,11 +206,10 @@ router.post(
             await new Promise((r) => setTimeout(r, 500));
 
             if (ELEVENLABS_AGENT_ID) {
-              const bridgeHost = APP_BASE_URL
-                .replace(/^https?:\/\//, '')
-                .replace(/\/$/, '');
+              const elevenLabsUrl =
+                `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`;
               await telnyxSdk().calls.actions.startStreaming(callControlId, {
-                stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
+                stream_url: elevenLabsUrl,
                 stream_track: 'both_tracks',
                 stream_bidirectional_mode: 'rtp',
                 stream_bidirectional_codec: 'PCMU',
@@ -281,17 +280,15 @@ router.post(
               '[Nova] Calling startStreaming...',
             );
 
-            const bridgeHost = APP_BASE_URL
-              .replace(/^https?:\/\//, '')
-              .replace(/\/$/, '');
+            const elevenLabsUrl =
+              `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`;
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
-              stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
+              stream_url: elevenLabsUrl,
               stream_track: 'both_tracks',
               stream_bidirectional_mode: 'rtp',
               stream_bidirectional_codec: 'PCMU',
               stream_bidirectional_sampling_rate: 8000,
               stream_bidirectional_target_legs: 'self',
-              enable_dialogflow: false,
             });
             streamingStarted.add(callControlId);
 
