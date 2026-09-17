@@ -206,15 +206,15 @@ router.post(
             await new Promise((r) => setTimeout(r, 500));
 
             if (ELEVENLABS_AGENT_ID) {
-              const elevenLabsUrl =
-                `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`;
+              const bridgeHost = (
+                process.env.APP_BASE_URL ?? 'https://app.lervit.com'
+              )
+                .trim()
+                .replace(/^https?:\/\//, '')
+                .replace(/\/$/, '');
               await telnyxSdk().calls.actions.startStreaming(callControlId, {
-                stream_url: elevenLabsUrl,
+                stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
                 stream_track: 'both_tracks',
-                stream_bidirectional_mode: 'rtp',
-                stream_bidirectional_codec: 'PCMU',
-                stream_bidirectional_sampling_rate: 8000,
-                stream_bidirectional_target_legs: 'self',
               });
               streamingStarted.add(callControlId);
               logger.info(
@@ -229,6 +229,23 @@ router.post(
             );
             // No fallback — let call stay silent
             // Better than robotic TTS message
+          }
+        }
+
+        // Inbound: answer the call so Telnyx fires call.answered, which then
+        // triggers startStreaming → ElevenLabs connect in the handler below.
+        if (direction === 'incoming' && callControlId) {
+          try {
+            await telnyxSdk().calls.actions.answer(callControlId, {});
+            logger.info(
+              { callControlId },
+              '[Nova] Inbound call answered ✅',
+            );
+          } catch (err: any) {
+            logger.error(
+              { err, callControlId },
+              '[Nova] Inbound answer failed',
+            );
           }
         }
         break;
@@ -280,15 +297,15 @@ router.post(
               '[Nova] Calling startStreaming...',
             );
 
-            const elevenLabsUrl =
-              `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`;
+            const bridgeHost = (
+              process.env.APP_BASE_URL ?? 'https://app.lervit.com'
+            )
+              .trim()
+              .replace(/^https?:\/\//, '')
+              .replace(/\/$/, '');
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
-              stream_url: elevenLabsUrl,
+              stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
               stream_track: 'both_tracks',
-              stream_bidirectional_mode: 'rtp',
-              stream_bidirectional_codec: 'PCMU',
-              stream_bidirectional_sampling_rate: 8000,
-              stream_bidirectional_target_legs: 'self',
             });
             streamingStarted.add(callControlId);
 
