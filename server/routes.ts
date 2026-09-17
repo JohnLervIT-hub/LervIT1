@@ -16532,7 +16532,8 @@ Respond with VALID JSON only:
     const novaBridgeWss = new WebSocketServer({ noServer: true });
 
     novaBridgeWss.on('connection', (ws, req) => {
-      const callControlId = req.url?.split('/').pop() ?? 'unknown';
+      const rawId = req.url?.split('/api/nova/stream/')?.[1] ?? 'unknown';
+      const callControlId = decodeURIComponent(rawId);
       const context = novaCallContextStore.get(callControlId);
       logger.info({ callControlId, hasContext: !!context }, '[Bridge] Telnyx connected');
       createNovaBridge(ws, callControlId, context);

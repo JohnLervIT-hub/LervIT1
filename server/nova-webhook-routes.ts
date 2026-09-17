@@ -210,7 +210,7 @@ router.post(
                 .replace(/^https?:\/\//, '')
                 .replace(/\/$/, '');
               await telnyxSdk().calls.actions.startStreaming(callControlId, {
-                stream_url: `wss://${bridgeHost}/api/nova/stream/${callControlId}`,
+                stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
                 stream_track: 'both_tracks',
                 stream_bidirectional_mode: 'rtp',
                 stream_bidirectional_codec: 'PCMU',
@@ -283,7 +283,7 @@ router.post(
               .replace(/^https?:\/\//, '')
               .replace(/\/$/, '');
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
-              stream_url: `wss://${bridgeHost}/api/nova/stream/${callControlId}`,
+              stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
               stream_track: 'both_tracks',
               stream_bidirectional_mode: 'rtp',
               stream_bidirectional_codec: 'PCMU',
