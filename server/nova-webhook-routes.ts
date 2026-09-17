@@ -241,14 +241,8 @@ router.post(
             await new Promise((r) => setTimeout(r, 500));
 
             if (ELEVENLABS_AGENT_ID) {
-              const bridgeHost = (
-                process.env.APP_BASE_URL ?? 'https://app.lervit.com'
-              )
-                .trim()
-                .replace(/^https?:\/\//, '')
-                .replace(/\/$/, '');
               await telnyxSdk().calls.actions.startStreaming(callControlId, {
-                stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
+                stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
                 stream_track: 'both_tracks',
               });
               streamingStarted.add(callControlId);
@@ -315,14 +309,8 @@ router.post(
           !streamingStarted.has(callControlId)
         ) {
           try {
-            const bridgeHost = (
-              process.env.APP_BASE_URL ?? 'https://app.lervit.com'
-            )
-              .trim()
-              .replace(/^https?:\/\//, '')
-              .replace(/\/$/, '');
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
-              stream_url: `wss://${bridgeHost}/api/nova/stream/${encodeURIComponent(callControlId)}`,
+              stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
               stream_track: 'both_tracks',
             });
 
