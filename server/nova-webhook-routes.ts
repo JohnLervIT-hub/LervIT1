@@ -209,6 +209,8 @@ router.post(
               await telnyxSdk().calls.actions.startStreaming(callControlId, {
                 stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
                 stream_track: 'both_tracks',
+                stream_bidirectional_mode: 'mp3',
+                stream_bidirectional_sampling_rate: 16000,
               });
               streamingStarted.add(callControlId);
               logger.info(
@@ -294,6 +296,8 @@ router.post(
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
               stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
               stream_track: 'both_tracks',
+              stream_bidirectional_mode: 'mp3',
+              stream_bidirectional_sampling_rate: 16000,
             });
             streamingStarted.add(callControlId);
 
