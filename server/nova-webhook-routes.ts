@@ -226,8 +226,10 @@ router.post(
           } catch (err: any) {
             logger.error(
               { err, callControlId },
-              '[Nova] Initiate stream failed',
+              '[Nova] ElevenLabs stream failed',
             );
+            // No fallback — let call stay silent
+            // Better than robotic TTS message
           }
         }
         break;
@@ -305,19 +307,10 @@ router.post(
           } catch (err: any) {
             logger.error(
               { err, callControlId },
-              '[Nova] ElevenLabs stream failed — falling back to speak',
+              '[Nova] ElevenLabs stream failed',
             );
-
-            await telnyxSdk()
-              .calls.actions.speak(callControlId, {
-                payload:
-                  'Hi! This is Nova from LervIT. ' +
-                  'Please visit lervit.com to complete your booking. ' +
-                  'Have a great day!',
-                voice: 'female',
-                language: 'en-US',
-              })
-              .catch(() => {});
+            // No fallback — let call stay silent
+            // Better than robotic TTS message
           }
         } else if (!ELEVENLABS_AGENT_ID) {
           logger.warn(
