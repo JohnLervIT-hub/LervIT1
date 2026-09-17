@@ -16491,14 +16491,6 @@ Respond with VALID JSON only:
 
   const httpServer = createServer(app);
 
-  // Diagnostic: log every HTTP upgrade the process receives, before any
-  // WebSocketServer attaches. If this fires but the per-channel
-  // "connection opened" log doesn't, ws is dropping the socket between
-  // handshake and connection event.
-  httpServer.on('upgrade', (req, socket) => {
-    console.log('[http] upgrade request:', req.url, 'from', (socket as Socket).remoteAddress);
-  });
-
   // Each WebSocket init is wrapped independently — a failure in one
   // subsystem (mover, customer, admin-voice) previously threw synchronously
   // through the registerRoutes → server.listen chain and, on Railway, the
@@ -16540,10 +16532,18 @@ Respond with VALID JSON only:
     });
 
     httpServer.on('upgrade', (req, socket, head) => {
+      logger.info({
+        url: req.url,
+        from: (socket as any).remoteAddress,
+      }, '[http] upgrade request');
+
       if (req.url?.startsWith('/api/nova/stream/')) {
         novaBridgeWss.handleUpgrade(req, socket, head, (ws) => {
           novaBridgeWss.emit('connection', ws, req);
         });
+      } else {
+        // Don't destroy — let other WS servers handle it
+        // (socket.io, mover, customer, etc.)
       }
     });
 
