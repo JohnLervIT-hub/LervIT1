@@ -35,7 +35,8 @@
  * ============================================================================
  */
 
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
+import { getBaseUrl } from "./utils/urls";
 import { createServer, type Server } from "http";
 import type { Socket } from "net";
 import { storage } from "./storage";
@@ -223,6 +224,33 @@ const storage_multer = multer.diskStorage({
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
+});
+
+// Campaign static creatives land in their own folder under the same served
+// root (/uploads), so an uploaded image gets a public URL Meta and LinkedIn
+// can fetch server-side.
+const assetUploadDir = path.join(uploadDir, "assets");
+if (!fs.existsSync(assetUploadDir)) {
+  fs.mkdirSync(assetUploadDir, { recursive: true });
+}
+
+const contentAssetUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, assetUploadDir),
+    filename: (_req, file, cb) => {
+      const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      cb(null, `asset-${unique}${path.extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    // Meta rejects anything it cannot fetch as a still image, so keep this
+    // tighter than the mover-document filter — no HEIC/HEIF here.
+    const okExt = /\.(jpe?g|png|webp)$/i.test(file.originalname);
+    const okMime = /^image\/(jpeg|jpg|png|webp)$/i.test(file.mimetype);
+    if (okExt && okMime) return cb(null, true);
+    cb(new Error('Only JPEG, PNG or WebP images are allowed'));
+  },
 });
 
 const upload = multer({
@@ -15080,6 +15108,62 @@ Respond with VALID JSON only:
       res.status(500).json({ error: 'Failed to reset content item' });
     }
   });
+
+  // Upload a static creative for a campaign item. content_items.assetUrl had
+  // no writer anywhere, so the photo path in publish_to_social and the Meta
+  // provider was unreachable — an Instagram item with no video could never
+  // publish.
+  app.post(
+    "/api/admin/content-items/:id/asset",
+    (req: Request, res: Response, next: NextFunction) => {
+      if (!requireAdmin(req, res)) return;
+      contentAssetUpload.single('asset')(req, res, (err: any) => {
+        if (err) {
+          logger.warn({ err, itemId: req.params.id }, '[Admin] asset upload rejected');
+          return res.status(400).json({ error: err.message ?? 'Upload failed' });
+        }
+        next();
+      });
+    },
+    async (req: Request, res: Response) => {
+      try {
+        const file = (req as any).file as Express.Multer.File | undefined;
+        if (!file) return res.status(400).json({ error: 'No file uploaded (field name: asset)' });
+
+        const [item] = await db
+          .select({ id: contentItems.id })
+          .from(contentItems)
+          .where(eq(contentItems.id, req.params.id))
+          .limit(1);
+
+        if (!item) {
+          // Nothing to attach it to — do not leave the file behind.
+          fs.unlink(file.path, () => {});
+          return res.status(404).json({ error: 'Content item not found' });
+        }
+
+        // Absolute: Meta and LinkedIn fetch this URL from their own servers,
+        // so a relative path would not resolve.
+        const assetUrl = `${getBaseUrl().replace(/\/$/, '')}/uploads/assets/${file.filename}`;
+
+        const [updated] = await db
+          .update(contentItems)
+          .set({ assetUrl, updatedAt: new Date() })
+          .where(eq(contentItems.id, req.params.id))
+          .returning();
+
+        logger.info(
+          { itemId: req.params.id, assetUrl, bytes: file.size },
+          '[Admin] content item asset uploaded',
+        );
+
+        res.json({ assetUrl, contentItem: updated });
+      } catch (err) {
+        logger.error({ err, itemId: req.params.id }, '[Admin] asset upload failed');
+        res.status(500).json({ error: 'Failed to save asset' });
+      }
+    },
+  );
 
   app.post("/api/admin/campaigns/:id/approve/:itemId", async (req: Request, res: Response) => {
     try {
