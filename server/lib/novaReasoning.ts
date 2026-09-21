@@ -217,8 +217,9 @@ CONTEXT RULES (apply to the CONTEXT block above):
 - If a name is known, use it ONCE in the opening only — never again${
         goal === 'book'
           ? `
-- Customer has already given pickup + dropoff addresses
-- Send direct booking link: lervit.com/request-move?pickup=...&dropoff=... (fill in the addresses from the conversation)
+- Customer may have shared an address — ask for the other location if you
+  do not have both yet, and do NOT invent the missing one
+- Once you have both, send a direct booking link: lervit.com/request-move?pickup=...&dropoff=... (fill in the addresses from the conversation)
 - Give a rough price estimate, e.g. "$65-85 for a single item move in Calgary"
 - Offer to send an SMS with the link
 - Do NOT just say "go to website" — give the direct link

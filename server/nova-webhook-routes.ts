@@ -1096,6 +1096,13 @@ router.post(
 const DM_ADDRESS_FROM_REGEX = /(?:from|pickup(?:\s+at)?|moving from)\s+([^\n]+?)(?=\s+to\s+|[.,\n]|$)/i;
 const DM_ADDRESS_TO_REGEX = /(?:^|\s)(?:to|dropoff(?:\s+at)?|deliver(?:ed)?(?:\s+to)?)\s+([^\n]+?)(?=[.,\n]|$)/i;
 
+// Street-suffix match used to decide the conversation goal on both DM
+// channels. Deliberately stricter than DM_ADDRESS_FROM_REGEX: a bare "from"
+// or "to" fires on ordinary chat ("moving from a 2 bedroom"), which pushed
+// conversations into the booking branch before any address existed.
+const DM_STREET_ADDRESS_REGEX =
+  /\d+.*(?:ave|avenue|street|st|drive|dr|way|blvd|rd|road|close|crescent|cres|place|pl|court|ct|nw|ne|sw|se)\b/i;
+
 // True when Nova's most recent turn asked the customer for a callback phone
 // number (either the runDMHumanHandoff "what's the best number" prompt or the
 // reasoning path's escalate variant). When the customer's next turn contains
@@ -1406,10 +1413,7 @@ async function handleMessengerMessage(input: {
         phone: identity?.phone,
         email: identity?.email,
       });
-      const hasAddress =
-        /\d+.*(?:ave|avenue|street|st|drive|dr|way|blvd|rd|road|close|crescent|cres|place|pl|court|ct|nw|ne|sw|se)\b/i.test(
-          message,
-        );
+      const hasAddress = DM_STREET_ADDRESS_REGEX.test(message);
       const conversationGoal: 'book' | 'quote' | 'general' = hasAddress
         ? 'book'
         : message.toLowerCase().includes('quote')
@@ -1749,9 +1753,9 @@ async function handleInstagramMessage(input: {
         email: identity?.email,
       });
 
-      const hasAddresses =
-        /from|pickup|moving from|at\s+\d/i.test(message) ||
-        history.some((h) => /to\s+\w|dropoff|deliver/i.test(h.content));
+      const hasAddresses = history.some(
+        (h) => h.role === 'user' && DM_STREET_ADDRESS_REGEX.test(h.content),
+      );
       const conversationGoal: 'book' | 'quote' = hasAddresses ? 'book' : 'quote';
 
       const decision = await decideNextDMResponse(context, history, 'instagram', conversationGoal);
