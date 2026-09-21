@@ -2321,3 +2321,15 @@ export const messengerIdentities = pgTable("messenger_identities", {
 
 export type MessengerIdentity = typeof messengerIdentities.$inferSelect;
 export type InsertMessengerIdentity = typeof messengerIdentities.$inferInsert;
+
+// Server-side key/value settings that must survive a deploy and cannot live
+// in env vars because they change at runtime — rotating OAuth credentials,
+// chiefly. Values are opaque strings; each reader owns its own encoding.
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = typeof appSettings.$inferInsert;

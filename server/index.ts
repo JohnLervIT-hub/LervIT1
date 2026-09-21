@@ -120,6 +120,13 @@ declare module 'express-session' {
   interface SessionData {
     userId: string;
     userRole: string;
+    // Canva Connect OAuth (PKCE). Written by /api/canva/auth, consumed and
+    // cleared by /api/canva/callback — it ties the callback to the browser
+    // that started the flow and carries the verifier Canva requires.
+    canvaOauth?: {
+      state: string;
+      codeVerifier: string;
+    };
   }
 }
 

@@ -49,6 +49,7 @@ import { createNovaBridge } from "./lib/novaBridge";
 import { novaCallContextStore } from "./nova-webhook-routes";
 import { registerVoiceRoutes } from "./voice-routes";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, newsletters, campaigns, contentItems } from "@shared/schema";
+import { canvaProvider } from "./providers/canva";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -15230,6 +15231,97 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] approve content item failed');
       res.status(500).json({ error: 'Failed to approve content item' });
+    }
+  });
+
+  // ── Canva Connect OAuth ────────────────────────────────────────────────
+  // Canva mandates authorization_code + PKCE (S256); an /authorize call with
+  // no code_challenge is rejected. The verifier and a one-time state live in
+  // the admin's session between the two legs, so the callback can only be
+  // completed by the browser that started the flow. Tokens are written to
+  // app_settings by the provider and refresh themselves from there — nothing
+  // has to be pasted into Railway.
+
+  // Step 1 — redirect to Canva login.
+  app.get('/api/canva/auth', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+
+    try {
+      const codeVerifier = canvaProvider.createCodeVerifier();
+      const state = randomUUID();
+      const authorizeUrl = canvaProvider.buildAuthorizeUrl(state, codeVerifier);
+
+      req.session.canvaOauth = { state, codeVerifier };
+
+      // Flush the session before handing control to Canva. Without this the
+      // store write can lose the race against the redirect and the callback
+      // comes back to a session with no state to match.
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+
+      res.redirect(authorizeUrl);
+    } catch (err) {
+      logger.error({ err }, '[Canva] could not start OAuth flow');
+      res.redirect('/admin?error=canva_auth_failed');
+    }
+  });
+
+  // Step 2 — handle the callback and exchange the code for tokens.
+  app.get('/api/canva/callback', async (req: Request, res: Response) => {
+    const { code, error, state } = req.query;
+    const pending = req.session.canvaOauth;
+
+    // Single use: clear it before anything else so a replayed callback cannot
+    // spend the same verifier twice.
+    delete req.session.canvaOauth;
+
+    if (error) {
+      logger.warn({ error }, '[Canva] authorization denied');
+      return res.redirect('/admin?error=canva_auth_failed');
+    }
+
+    if (!pending || typeof state !== 'string' || state !== pending.state) {
+      logger.warn('[Canva] callback state mismatch — replayed, forged, or the session expired');
+      return res.redirect('/admin?error=canva_state_mismatch');
+    }
+
+    if (typeof code !== 'string' || !code) {
+      logger.warn('[Canva] callback carried no authorization code');
+      return res.redirect('/admin?error=canva_auth_failed');
+    }
+
+    try {
+      const result = await canvaProvider.exchangeCodeForToken(code, pending.codeVerifier);
+
+      // Token values are deliberately absent from this log line. Railway logs
+      // are retained and searchable, and a leaked Canva access token is a live
+      // session on the brand account.
+      logger.info(
+        {
+          expiresIn: result.expiresIn,
+          scope: result.scope,
+          hasRefreshToken: result.hasRefreshToken,
+        },
+        '[Canva] ✅ connected — tokens stored in app_settings',
+      );
+
+      res.redirect('/admin?success=canva_connected');
+    } catch (err) {
+      logger.error({ err }, '[Canva] token exchange failed');
+      res.redirect('/admin?error=canva_token_failed');
+    }
+  });
+
+  // Whether Canva is connected, for the admin button. Never returns a token.
+  app.get('/api/canva/status', async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+
+    try {
+      res.json(await canvaProvider.getConnectionStatus());
+    } catch (err) {
+      logger.error({ err }, '[Canva] status check failed');
+      res.status(500).json({ error: 'Failed to read Canva connection status' });
     }
   });
 

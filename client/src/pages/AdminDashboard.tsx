@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
 const OperationsDashboard = lazy(() => import("@/pages/OperationsDashboard"));
@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, ChevronLeft, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter, Building2, FileText, BookOpen, Download, ZoomIn, Images, Heart, RefreshCw } from "lucide-react";
+import { Users, Truck, Calendar, DollarSign, TrendingUp, Shield, Clock, CheckCircle, ChevronRight, ChevronDown, ChevronLeft, Check, MapPin, Package, User as UserIcon, Phone, Mail, ArrowRight, Eye, Box, AlertCircle, Trash2, Loader2, MessageSquare, ShieldCheck, Send, Activity, BarChart3, Target, Percent, Radio, Route, Filter, Building2, FileText, BookOpen, Download, ZoomIn, Images, Heart, RefreshCw, Palette } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
@@ -851,6 +851,43 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const { dial } = useVoice();
 
+  const { data: canvaStatus } = useQuery<{ connected: boolean; expiresAt: string | null }>({
+    queryKey: ["/api/canva/status"],
+  });
+
+  // The Canva OAuth callback redirects back here with ?success/?error — see
+  // /api/canva/callback. Report it, then strip the param so a refresh does
+  // not replay the toast.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("success");
+    const error = params.get("error");
+    if (!success && !error) return;
+
+    const canvaErrors: Record<string, string> = {
+      canva_auth_failed: "Canva did not authorize the connection. Try again.",
+      canva_state_mismatch: "That Canva link expired. Start the connection again.",
+      canva_token_failed:
+        "Canva rejected the token exchange. Check CANVA_CLIENT_ID and CANVA_CLIENT_SECRET.",
+    };
+
+    if (success === "canva_connected") {
+      queryClient.invalidateQueries({ queryKey: ["/api/canva/status"] });
+      toast({
+        title: "Canva connected",
+        description: "The token is stored and refreshes itself — nothing to paste into Railway.",
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (error && canvaErrors[error]) {
+      toast({
+        title: "Canva connection failed",
+        description: canvaErrors[error],
+        variant: "destructive",
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [toast]);
+
   const { data: usersResponse, isLoading: usersLoading, error: usersError } = useQuery<{ data: User[], total: number }>({
     queryKey: ["/api/users?limit=200&offset=0"],
   });
@@ -1192,6 +1229,18 @@ export default function AdminDashboard() {
                 Partners
               </Button>
             </Link>
+            {/* Off-origin OAuth redirect — a real navigation, not a wouter Link. */}
+            <a href="/api/canva/auth" data-testid="link-connect-canva">
+              <Button variant="outline" size="sm" className="gap-2">
+                <Palette className="w-3.5 h-3.5 text-cyan-500" />
+                {canvaStatus?.connected ? "Reconnect Canva" : "Connect Canva"}
+                {canvaStatus?.connected && (
+                  <Badge variant="secondary" className="text-xs py-0 px-1.5 ml-0.5">
+                    Connected
+                  </Badge>
+                )}
+              </Button>
+            </a>
           </div>
         </div>
 

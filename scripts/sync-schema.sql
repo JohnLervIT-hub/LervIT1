@@ -1642,3 +1642,10 @@ ALTER TABLE "voice_calls"
   ADD COLUMN IF NOT EXISTS "lead_id" varchar;
 
 CREATE INDEX IF NOT EXISTS "voice_calls_lead_id_idx" ON "voice_calls" ("lead_id");
+
+-- Server-side key/value settings (see migrations/0023_app_settings.sql).
+CREATE TABLE IF NOT EXISTS "app_settings" (
+  "key"        text      PRIMARY KEY,
+  "value"      text,
+  "updated_at" timestamp NOT NULL DEFAULT now()
+);
