@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { API_BASE_URL } from "@/lib/native";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -49,6 +50,7 @@ import {
   Loader2,
   Megaphone,
   Film,
+  Image as ImageIcon,
   Video,
   Send,
   ExternalLink,
@@ -646,6 +648,37 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
     },
   });
 
+  const uploadAsset = useMutation({
+    mutationFn: async ({ itemId, file }: { itemId: string; file: File }) => {
+      const body = new FormData();
+      body.append("asset", file);
+
+      // Not apiRequest: that JSON-stringifies the body. Base URL and
+      // credentials still have to match it or the admin check 403s.
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/content-items/${itemId}/asset`,
+        { method: "POST", body, credentials: "include" },
+      );
+
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail?.error ?? `Upload failed (${res.status})`);
+      }
+      return res.json() as Promise<{ assetUrl: string }>;
+    },
+    onSuccess: () => {
+      toast({ title: "Image uploaded" });
+      invalidate();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Upload failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
   const generateScript = (item: ContentItem) => {
     // Higgsfield is text-to-video — it never reads a spoken script, so the
     // equivalent action for those items is the visual brief.
@@ -817,9 +850,11 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
                   trigger.mutate({ action: "publish_to_social", contentItemId: item.id })
                 }
                 onReset={() => reset.mutate(item.id)}
+                onUploadAsset={(file) => uploadAsset.mutate({ itemId: item.id, file })}
                 approvePending={approve.isPending}
                 triggerPending={trigger.isPending}
                 resetPending={reset.isPending}
+                uploadPending={uploadAsset.isPending}
               />
             ))}
           </div>
@@ -929,9 +964,11 @@ function ContentItemCard({
   onGenerateVideo,
   onPublish,
   onReset,
+  onUploadAsset,
   approvePending,
   triggerPending,
   resetPending,
+  uploadPending,
 }: {
   item: ContentItem;
   previewed: boolean;
@@ -944,7 +981,10 @@ function ContentItemCard({
   approvePending: boolean;
   triggerPending: boolean;
   resetPending: boolean;
+  onUploadAsset: (file: File) => void;
+  uploadPending: boolean;
 }) {
+  const assetInputRef = useRef<HTMLInputElement>(null);
   const isVideoType = VIDEO_TYPES.has(item.type);
   const isSocialType = item.type === "social";
   const isGenerating = item.status === "generating";
@@ -970,6 +1010,9 @@ function ContentItemCard({
     !!item.videoUrl &&
     item.platform !== null &&
     SOCIAL_PLATFORMS.has(item.platform);
+  // A still is the media for anything that is not a video. Instagram in
+  // particular cannot publish without one.
+  const canUploadAsset = !isVideoType && !item.videoUrl && !isGenerating;
 
   const brief = item.creativeBrief as { concept?: string } | null;
   const scriptWords = wordCount(item.script);
@@ -1087,6 +1130,31 @@ function ContentItemCard({
                     ? "Generate Script"
                     : "Generate Caption"}
               </Button>
+            )}
+            {canUploadAsset && (
+              <>
+                <input
+                  ref={assetInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    // Reset so picking the same file twice still fires change.
+                    e.target.value = "";
+                    if (file) onUploadAsset(file);
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={uploadPending}
+                  onClick={stop(() => assetInputRef.current?.click())}
+                >
+                  <ImageIcon className="w-3.5 h-3.5 mr-1.5" />
+                  {item.assetUrl ? "Replace Image" : "Upload Image"}
+                </Button>
+              </>
             )}
             {canGenerateVideo && (
               <Button
