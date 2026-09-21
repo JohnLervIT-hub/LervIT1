@@ -77,6 +77,7 @@ type ItemStatus =
   | "failed";
 type EmberAction =
   | "generate_video_script"
+  | "generate_creative_brief"
   | "generate_social_content"
   | "generate_heygen_video"
   | "generate_higgsfield_video"
@@ -203,6 +204,18 @@ function pluralize(n: number | null | undefined, singular: string, plural?: stri
 }
 
 const SOCIAL_PLATFORMS = new Set(["facebook", "instagram", "tiktok", "linkedin"]);
+
+/**
+ * One-line visual summary of a brief-driven item, standing in for the script
+ * line a HeyGen item shows. Higgsfield renders from these fields.
+ */
+function briefVisuals(item: ContentItem): string | null {
+  const brief = (item.creativeBrief ?? null) as Record<string, unknown> | null;
+  if (!brief) return null;
+  const parts = [brief.visualStyle, brief.mood]
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  return parts.length ? parts.join(" · ") : null;
+}
 const VIDEO_TYPES = new Set(["heygen_video", "higgsfield_video"]);
 const AVAILABLE_PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin"] as const;
 const OBJECTIVES = ["awareness", "conversion", "retention"] as const;
@@ -591,13 +604,15 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
       const label =
         action === "generate_video_script"
           ? "Script"
-          : action === "generate_social_content"
-            ? "Caption"
-            : action === "generate_heygen_video"
-              ? "HeyGen video"
-              : action === "generate_higgsfield_video"
-                ? "Higgsfield video"
-                : "Publish";
+          : action === "generate_creative_brief"
+            ? "Creative brief"
+            : action === "generate_social_content"
+              ? "Caption"
+              : action === "generate_heygen_video"
+                ? "HeyGen video"
+                : action === "generate_higgsfield_video"
+                  ? "Higgsfield video"
+                  : "Publish";
       toast({
         title: `${label} generating…`,
         description: "Watching for updates.",
@@ -632,9 +647,14 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
   });
 
   const generateScript = (item: ContentItem) => {
-    const action: EmberAction = VIDEO_TYPES.has(item.type)
-      ? "generate_video_script"
-      : "generate_social_content";
+    // Higgsfield is text-to-video — it never reads a spoken script, so the
+    // equivalent action for those items is the visual brief.
+    const action: EmberAction =
+      item.type === "higgsfield_video"
+        ? "generate_creative_brief"
+        : VIDEO_TYPES.has(item.type)
+          ? "generate_video_script"
+          : "generate_social_content";
     trigger.mutate({ action, contentItemId: item.id });
   };
 
@@ -929,6 +949,8 @@ function ContentItemCard({
   const isSocialType = item.type === "social";
   const isGenerating = item.status === "generating";
   const isFailed = item.status === "failed";
+  // Higgsfield renders from a visual brief; only HeyGen reads a spoken script.
+  const isBriefDriven = item.type === "higgsfield_video";
 
   const canApprove = item.status !== "published" && item.status !== "approved" && !isGenerating;
   const canGenerateScriptOrCaption =
@@ -936,7 +958,13 @@ function ContentItemCard({
     !item.caption &&
     !isGenerating &&
     (isVideoType || isSocialType);
-  const canGenerateVideo = isVideoType && !!item.script && !item.videoUrl && !isGenerating;
+  // Gate the video button on what that generator actually consumes — a
+  // Higgsfield item has no script, so requiring one would strand it.
+  const canGenerateVideo =
+    isVideoType &&
+    (isBriefDriven ? !!briefVisuals(item) : !!item.script) &&
+    !item.videoUrl &&
+    !isGenerating;
   const canPublish =
     item.status === "approved" &&
     !!item.videoUrl &&
@@ -991,9 +1019,14 @@ function ContentItemCard({
             {brief?.concept && (
               <div className="text-sm mt-1.5">{brief.concept}</div>
             )}
-            {item.script && (
+            {!isBriefDriven && item.script && (
               <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                 {item.script}
+              </p>
+            )}
+            {isBriefDriven && briefVisuals(item) && (
+              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                {briefVisuals(item)}
               </p>
             )}
             {item.caption && (
@@ -1003,7 +1036,7 @@ function ContentItemCard({
             )}
 
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              {scriptWords > 0 && (
+              {!isBriefDriven && scriptWords > 0 && (
                 <span className="inline-flex items-center gap-1">
                   <FileText className="w-3 h-3" />
                   {pluralize(scriptWords, "word")}
@@ -1048,7 +1081,11 @@ function ContentItemCard({
                 onClick={stop(onGenerateScript)}
               >
                 <Type className="w-3.5 h-3.5 mr-1.5" />
-                {isVideoType ? "Generate Script" : "Generate Caption"}
+                {isBriefDriven
+                  ? "Generate Brief"
+                  : isVideoType
+                    ? "Generate Script"
+                    : "Generate Caption"}
               </Button>
             )}
             {canGenerateVideo && (
@@ -1168,9 +1205,11 @@ function ContentPreviewModal({
   const scriptWords = wordCount(item.script);
   const isVideoType = VIDEO_TYPES.has(item.type);
   const isSocialType = item.type === "social";
+  const isBriefDriven = item.type === "higgsfield_video";
   const canGenerateScriptOrCaption =
     !item.script && !item.caption && (isVideoType || isSocialType);
-  const canGenerateVideo = isVideoType && !!item.script && !item.videoUrl;
+  const canGenerateVideo =
+    isVideoType && (isBriefDriven ? !!briefVisuals(item) : !!item.script) && !item.videoUrl;
   const canApprove = item.status !== "published" && item.status !== "approved";
   const canPublish =
     item.status === "approved" &&
@@ -1238,8 +1277,25 @@ function ContentPreviewModal({
               <div className="rounded-lg border border-dashed bg-muted/40 py-8 px-4 text-center space-y-3">
                 <div className="text-3xl">🎬</div>
                 <div className="text-sm text-muted-foreground">
-                  {item.script ? "Video not yet generated" : "Script needed before video"}
+                  {isBriefDriven
+                    ? briefVisuals(item)
+                      ? "Video not yet generated"
+                      : "Creative brief needed before video"
+                    : item.script
+                      ? "Video not yet generated"
+                      : "Script needed before video"}
                 </div>
+                {isBriefDriven && !briefVisuals(item) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={triggerPending}
+                    onClick={() => onGenerateScript(item)}
+                  >
+                    <Type className="w-3.5 h-3.5 mr-1.5" />
+                    Generate Brief
+                  </Button>
+                )}
                 {canGenerateVideo && (
                   <Button
                     size="sm"
@@ -1260,8 +1316,8 @@ function ContentPreviewModal({
           </section>
         )}
 
-        {/* Script */}
-        {item.script ? (
+        {/* Script — HeyGen only; Higgsfield renders from the brief above. */}
+        {isBriefDriven ? null : item.script ? (
           <section className="space-y-1.5">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
