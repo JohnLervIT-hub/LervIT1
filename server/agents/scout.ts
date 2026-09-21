@@ -23,6 +23,7 @@ import { leads } from '@shared/schema';
 import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { agentEventBus } from '../lib/agentEventBus';
 import { fetchWithScrapingBee } from '../scraping-bee';
 import { searchPlacesText, getPlaceDetails } from './places-crawl';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
@@ -239,7 +240,21 @@ export class ScoutAgent extends BaseAgent {
         if (alexQueue) {
           await alexQueue.add('convert_lead', { leadId: lead.id });
         } else {
-          logger.warn({ leadId: lead.id }, 'Scout: alex queue unavailable — routing skipped');
+          // No Redis → no Bull job. This used to log and mark the lead
+          // assigned anyway, which orphaned it: never touched, and excluded
+          // from the next sweep by the assignedAgent filter. Hand it to Alex
+          // over the bus instead ('scout.lead_found' is subscribed in
+          // subscriptions.ts and calls the same convert_lead action).
+          await agentEventBus.emit(
+            'scout.lead_found',
+            {
+              leadId: lead.id,
+              source: lead.sourceChannel,
+              intentScore: lead.intentScore,
+              leadType: lead.leadType,
+            },
+            'scout',
+          );
         }
         await db
           .update(leads)

@@ -14,6 +14,8 @@ import { aegis } from './aegis';
 import { victor } from './victor';
 import { mark } from './mark';
 import { nova } from './nova';
+import { alex } from './alex';
+import { sam } from './sam';
 import { kai } from './kai';
 import { ember } from './ember';
 import { xavier } from './xavier';
@@ -361,6 +363,67 @@ export function registerAgentSubscriptions(): void {
         );
     },
     'Nova Clarke',
+  );
+
+  // Scout finds a high-intent demand lead → Alex opens the conversation.
+  // Only fires when Scout's Bull route is unavailable; the queue path is
+  // still primary, so this never double-touches a lead.
+  agentEventBus.subscribe(
+    'scout.lead_found',
+    async (data) => {
+      if (!data.leadId) return;
+
+      // Scout's sweep already filters to b2c at or above the high-intent
+      // threshold; re-checked here so a future caller cannot pitch a move
+      // quote to a mover candidate or a partner prospect.
+      if (data.leadType && data.leadType !== 'b2c') {
+        logger.info(
+          { leadId: data.leadId, leadType: data.leadType },
+          '[EventBus] scout→alex skipped — not a demand lead',
+        );
+        return;
+      }
+
+      if (typeof data.intentScore === 'number' && data.intentScore < 70) {
+        // Alex has no nurture action today — convert_lead / send_touch /
+        // recover_abandoned only. Low-intent leads stay for the next sweep.
+        logger.info(
+          { leadId: data.leadId, intentScore: data.intentScore },
+          '[EventBus] scout→alex skipped — below conversion threshold',
+        );
+        return;
+      }
+
+      logger.info({ leadId: data.leadId }, '[EventBus] scout→alex: convert');
+
+      await alex
+        .run('convert_lead', { leadId: data.leadId }, { dryRun: false })
+        .catch((err) =>
+          logger.error({ err, leadId: data.leadId }, '[EventBus] alex convert failed'),
+        );
+    },
+    'Alex Morgan',
+  );
+
+  // Sam creates a B2B prospect → first touch. Same shape as above: only the
+  // queue-unavailable path emits, so T1 is never sent twice.
+  agentEventBus.subscribe(
+    'sam.prospect_found',
+    async (data) => {
+      if (!data.leadId) return;
+
+      logger.info(
+        { leadId: data.leadId, companyName: data.companyName },
+        '[EventBus] sam prospect → T1 touch',
+      );
+
+      await sam
+        .run('send_b2b_touch', { leadId: data.leadId, touchNumber: 1 }, { dryRun: false })
+        .catch((err) =>
+          logger.error({ err, leadId: data.leadId }, '[EventBus] sam T1 touch failed'),
+        );
+    },
+    'Sam Carter',
   );
 
   // ═══════════════════════════════

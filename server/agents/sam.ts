@@ -51,6 +51,7 @@ import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { agentEventBus } from '../lib/agentEventBus';
 import { searchPlacesText, getPlaceContactDetails } from './places-crawl';
 import { xavier } from './xavier';
 import { wasContactedToday } from './dedupe';
@@ -219,10 +220,12 @@ export class SamAgent extends BaseAgent {
       byIndustry: {},
     };
 
+    // Without Redis the scan used to bail out entirely — no prospecting at
+    // all. It now runs and hands each new prospect to the bus instead, where
+    // 'sam.prospect_found' triggers the same T1 touch.
     const queue = createAgentQueue(QUEUE_NAMES.SALES);
     if (!queue) {
-      logger.warn('Sam: SALES queue unavailable — prospect scan cannot enqueue');
-      return result;
+      logger.warn('Sam: SALES queue unavailable — routing prospects via event bus');
     }
 
     // Collect + dedupe across the five queries by place_id.
@@ -360,7 +363,19 @@ export class SamAgent extends BaseAgent {
 
       // Enqueue T1 immediately.
       try {
-        await queue.add('send_b2b_touch', { leadId: inserted.id, touchNumber: 1 });
+        if (queue) {
+          await queue.add('send_b2b_touch', { leadId: inserted.id, touchNumber: 1 });
+        } else {
+          await agentEventBus.emit(
+            'sam.prospect_found',
+            {
+              leadId: inserted.id,
+              companyName: c.name,
+              industry: c.industry,
+            },
+            'sam',
+          );
+        }
       } catch (err) {
         logger.error({ err, leadId: inserted.id }, 'Sam: failed to queue B2B T1');
       }
