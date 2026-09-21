@@ -22,6 +22,7 @@ import { db } from '../db';
 import { leads } from '@shared/schema';
 import { emitEvent } from '../events';
 import { logger } from '../logger';
+import { agentEventBus } from '../lib/agentEventBus';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { fetchWithScrapingBee } from '../scraping-bee';
 import { parseListingTitles, parseCraigslistDatedItems } from './scout';
@@ -209,10 +210,38 @@ export class RyanAgent extends BaseAgent {
 
     const queue = createAgentQueue(QUEUE_NAMES.VETTER);
     if (!queue) {
+      // No Redis → no Bull job. Hand the candidates to Jordan over the event
+      // bus instead of dropping them; 'ryan.lead_found' is subscribed in
+      // subscriptions.ts and calls the same onboard_candidate action.
       logger.warn(
         { candidates: routable.length },
-        'Ryan: vetter queue unavailable (REDIS_URL unset) — candidates left unrouted',
+        'Ryan: vetter queue unavailable (REDIS_URL unset) — routing via event bus',
       );
+
+      for (const candidate of routable) {
+        try {
+          await agentEventBus.emit(
+            'ryan.lead_found',
+            {
+              leadId: candidate.id,
+              source: candidate.sourceChannel,
+              phone: candidate.contactPhone,
+              email: candidate.contactEmail,
+            },
+            'ryan',
+          );
+          await db
+            .update(leads)
+            .set({ assignedAgent: 'jordan-hayes', updatedAt: new Date() })
+            .where(eq(leads.id, candidate.id));
+          results.leadsRouted++;
+        } catch (err) {
+          logger.error(
+            { err, leadId: candidate.id },
+            'Ryan: bus route to Jordan failed',
+          );
+        }
+      }
     } else {
       for (const candidate of routable) {
         try {
