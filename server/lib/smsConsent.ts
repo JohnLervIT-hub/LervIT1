@@ -30,9 +30,9 @@ export function hasSmsConsent(lead: {
   // outright — sourceChannel can be edited or re-classified after the fact,
   // the stamp cannot.
   if (lead.smsConsentAt) return true;
-  return (
-    CONSENTED_SOURCES.includes(lead.sourceChannel ?? '') ||
-    lead.utmSource === 'meta_ads' ||
-    lead.utmSource === 'google_ads'
-  );
+  // UTM-based consent removed — re-add only when ad landing pages include
+  // a CTIA-compliant SMS disclosure. A click on an ad is not consent to be
+  // texted; the consent has to come from the form the click leads to, which
+  // now stamps smsConsentAt above.
+  return CONSENTED_SOURCES.includes(lead.sourceChannel ?? '');
 }
