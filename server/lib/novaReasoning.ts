@@ -15,6 +15,7 @@ import {
   formatContextForPrompt,
 } from './novaContext';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from './promptSanitizer';
+import { findRelevantBlogPost } from './novaBlog';
 import { logger } from '../logger';
 
 const anthropic = new Anthropic();
@@ -172,6 +173,24 @@ export async function decideNextDMResponse(
       conversationHistory.filter((m) => m.role === 'user').pop()?.content ?? '';
     const safeLast = sanitizeForPrompt(lastMessage, 'description');
 
+    // Matched against the customer's own words — the matching is lexical and
+    // local, so nothing but the resulting title and slug reaches Claude.
+    const blogPost = await findRelevantBlogPost(lastMessage);
+
+    // Injected only when there is a real post to offer. Left in
+    // unconditionally, the rule invites Claude to invent a plausible-looking
+    // lervit.com/blog/... URL on turns where nothing matched.
+    const blogContext = blogPost
+      ? `
+
+RELEVANT BLOG POST — the only blog link you may send:
+"${blogPost.title}" -> lervit.com/blog/${blogPost.slug}
+- If this post answers what they asked, share it naturally, e.g.
+  "Here's a quick read on that: lervit.com/blog/${blogPost.slug}"
+- Only send it when it is highly relevant; otherwise ignore it entirely
+- Never invent or guess a different blog URL`
+      : '';
+
     // Sanitize every prior user turn before feeding to Claude; assistant turns
     // are our own output and don't need it.
     const safeHistory = conversationHistory.map((m) =>
@@ -225,7 +244,7 @@ CONTEXT RULES (apply to the CONTEXT block above):
 - Do NOT just say "go to website" — give the direct link
 - Phrase it like: "Here's your direct booking link — takes 2 minutes to confirm"`
           : ''
-      }
+      }${blogContext}
 
 Return ONLY valid JSON:
 {
