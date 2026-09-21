@@ -37,6 +37,7 @@
 
 import type { Express, NextFunction, Request, Response } from "express";
 import { getBaseUrl } from "./utils/urls";
+import { randomUUID } from "crypto";
 import { createServer, type Server } from "http";
 import type { Socket } from "net";
 import { storage } from "./storage";
@@ -226,22 +227,12 @@ const storage_multer = multer.diskStorage({
   }
 });
 
-// Campaign static creatives land in their own folder under the same served
-// root (/uploads), so an uploaded image gets a public URL Meta and LinkedIn
-// can fetch server-side.
-const assetUploadDir = path.join(uploadDir, "assets");
-if (!fs.existsSync(assetUploadDir)) {
-  fs.mkdirSync(assetUploadDir, { recursive: true });
-}
-
+// Campaign static creatives go to R2 via ObjectStorageService, not to
+// public/uploads — Railway's filesystem is ephemeral, so a local file would
+// 404 after the next deploy and Meta would fail to fetch it. Buffered in
+// memory (10MB cap, admin-only) so nothing touches disk in between.
 const contentAssetUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, assetUploadDir),
-    filename: (_req, file, cb) => {
-      const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-      cb(null, `asset-${unique}${path.extname(file.originalname).toLowerCase()}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     // Meta rejects anything it cannot fetch as a still image, so keep this
@@ -15136,15 +15127,19 @@ Respond with VALID JSON only:
           .where(eq(contentItems.id, req.params.id))
           .limit(1);
 
-        if (!item) {
-          // Nothing to attach it to — do not leave the file behind.
-          fs.unlink(file.path, () => {});
-          return res.status(404).json({ error: 'Content item not found' });
-        }
+        // Checked before the upload so a missing item leaves nothing in R2.
+        if (!item) return res.status(404).json({ error: 'Content item not found' });
 
-        // Absolute: Meta and LinkedIn fetch this URL from their own servers,
-        // so a relative path would not resolve.
-        const assetUrl = `${getBaseUrl().replace(/\/$/, '')}/uploads/assets/${file.filename}`;
+        const ext = (path.extname(file.originalname) || '.jpg').toLowerCase();
+        // Random name: the original could carry spaces, slashes or unicode
+        // that would make an awkward (or traversing) object key.
+        const objectKey = `assets/${randomUUID()}${ext}`;
+        await new ObjectStorageService().uploadFile(objectKey, file.buffer, file.mimetype);
+
+        // Absolute, and routed through /objects/* — that GET route resolves
+        // the key back out of R2, and Meta and LinkedIn fetch this URL from
+        // their own servers, so a relative path would not resolve.
+        const assetUrl = `${getBaseUrl().replace(/\/$/, '')}/objects/${objectKey}`;
 
         const [updated] = await db
           .update(contentItems)
@@ -15154,7 +15149,7 @@ Respond with VALID JSON only:
 
         logger.info(
           { itemId: req.params.id, assetUrl, bytes: file.size },
-          '[Admin] content item asset uploaded',
+          '[Admin] content item asset uploaded to R2',
         );
 
         res.json({ assetUrl, contentItem: updated });
