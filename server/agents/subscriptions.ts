@@ -3,7 +3,10 @@
  * cares about. Called once at server startup from server/index.ts.
  */
 
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { agentEventBus } from '../lib/agentEventBus';
+import { db } from '../db';
+import { bookings, jobNotifications } from '@shared/schema';
 import { jordan } from './jordan';
 import { riley } from './riley';
 import { reid } from './reid';
@@ -127,24 +130,102 @@ export function registerAgentSubscriptions(): void {
     'Victor + Mark',
   );
 
-  // No mover accepts in 5min → Nova calls movers
+  // No mover accepted → Nova phones the movers we already notified, closest
+  // first, spaced out, stopping the moment someone takes the job.
+  const NO_ACCEPTANCE_CALL_GAP_MS = 2 * 60 * 1000;
+  const NO_ACCEPTANCE_MAX_CALLS = 3;
+
   agentEventBus.subscribe(
     'booking.no_acceptance',
     async (data) => {
-      logger.info(
-        { bookingId: data.bookingId },
-        '[EventBus] no_accept→nova',
-      );
+      const bookingId: string | undefined = data.bookingId;
+      if (!bookingId) return;
 
-      await nova
-        .run(
-          'call_mover_dispatch',
-          { bookingId: data.bookingId, type: 'urgent_dispatch' },
-          { dryRun: false },
+      logger.info({ bookingId }, '[EventBus] no_accept→nova');
+
+      // Movers already notified who never took it. 'declined' is excluded —
+      // they said no, so calling them back is wasted outreach. By the time
+      // Victor escalates most rows have aged to 'expired'.
+      const candidates = await db
+        .select({
+          moverId: jobNotifications.moverId,
+          estimatedEarnings: jobNotifications.estimatedEarnings,
+        })
+        .from(jobNotifications)
+        .where(
+          and(
+            eq(jobNotifications.bookingId, bookingId),
+            inArray(jobNotifications.status, ['pending', 'expired']),
+          ),
         )
-        .catch((err) =>
-          logger.error({ err }, '[EventBus] nova dispatch failed'),
-        );
+        .orderBy(asc(jobNotifications.distanceToPickup))
+        .limit(NO_ACCEPTANCE_MAX_CALLS);
+
+      if (candidates.length === 0) {
+        logger.info({ bookingId }, '[EventBus] no_accept: no callable movers');
+        return;
+      }
+
+      // Detached on purpose: the bus awaits its handlers and Victor awaits the
+      // emit, so sleeping between calls here would stall his escalation for
+      // minutes. Same restart caveat as the other in-process timers.
+      void (async () => {
+        for (let i = 0; i < candidates.length; i++) {
+          if (i > 0) {
+            await new Promise((r) => setTimeout(r, NO_ACCEPTANCE_CALL_GAP_MS));
+          }
+
+          // Re-check before every dial — if someone accepted in the meantime,
+          // calling the next mover would be selling a job that is already gone.
+          const [booking] = await db
+            .select({ moverId: bookings.moverId, status: bookings.status })
+            .from(bookings)
+            .where(eq(bookings.id, bookingId))
+            .limit(1);
+
+          if (!booking) return;
+          if (booking.moverId) {
+            logger.info(
+              { bookingId, calledSoFar: i },
+              '[EventBus] no_accept: booking assigned — stopping calls',
+            );
+            return;
+          }
+          if (booking.status === 'cancelled') return;
+
+          const candidate = candidates[i];
+          const result = await nova
+            .run(
+              'call_mover_dispatch',
+              {
+                bookingId,
+                moverId: candidate.moverId,
+                earnings: Number(candidate.estimatedEarnings ?? 0),
+                pickupArea: data.pickupArea,
+                dropoffArea: data.dropoffArea,
+                startTime: data.preferredDate,
+              },
+              { dryRun: false },
+            )
+            .catch((err) => {
+              logger.error(
+                { err, bookingId, moverId: candidate.moverId },
+                '[EventBus] nova dispatch failed',
+              );
+              return null;
+            });
+
+          // Out of hours applies to every mover equally — stop rather than
+          // burning the remaining gaps on calls that will all skip.
+          const reason = (result as any)?.reason;
+          if (reason === 'before_8am_mt' || reason === 'after_9pm_mt') {
+            logger.info({ bookingId, reason }, '[EventBus] no_accept: outside call hours');
+            return;
+          }
+        }
+      })().catch((err) =>
+        logger.error({ err, bookingId }, '[EventBus] no_accept call chain crashed'),
+      );
     },
     'Nova Clarke',
   );
