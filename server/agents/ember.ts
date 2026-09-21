@@ -36,6 +36,7 @@ import { and, desc, eq, gte } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { blogPosts, gmbPosts, socialPosts, newsletters, reviews, users, bookings, leads, campaigns, contentItems } from '@shared/schema';
+import { notifySitemapRegenerate } from '../utils/sitemap';
 import { xavier } from './xavier';
 import { logger } from '../logger';
 import { emitEvent } from '../events';
@@ -554,6 +555,7 @@ Category: ${category}.`;
 
     if (!row) throw new Error(`publish_blog_post: post ${input.postId} not found`);
     logger.info({ postId: row.id }, '[Ember] blog post published');
+    notifySitemapRegenerate(`ember_publish:${row.slug}`);
     return { postId: row.id, status: row.status, publishedAt: row.publishedAt };
   }
 

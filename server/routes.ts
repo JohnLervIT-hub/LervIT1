@@ -49,6 +49,7 @@ import { createNovaBridge } from "./lib/novaBridge";
 import { novaCallContextStore } from "./nova-webhook-routes";
 import { registerVoiceRoutes } from "./voice-routes";
 import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, newsletters, campaigns, contentItems } from "@shared/schema";
+import { notifySitemapRegenerate } from "./utils/sitemap";
 import { canvaProvider } from "./providers/canva";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
@@ -15404,6 +15405,13 @@ Respond with VALID JSON only:
 
       const [row] = await db.update(blogPosts).set(patch).where(eq(blogPosts.id, id)).returning();
       if (!row) return res.status(404).json({ error: 'Not found' });
+
+      // A new public URL exists — get it into lervit.com/sitemap.xml now
+      // rather than at the marketing site's next cache expiry.
+      if (patch.status === 'published') {
+        notifySitemapRegenerate(`blog_patch:${row.slug}`);
+      }
+
       res.json(row);
     } catch (err) {
       logger.error({ err }, '[Admin] blog patch failed');
