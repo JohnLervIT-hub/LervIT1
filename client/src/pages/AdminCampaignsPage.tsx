@@ -387,7 +387,7 @@ function CreateCampaignDialog({
   const [objective, setObjective] = useState<(typeof OBJECTIVES)[number]>("awareness");
   const [audience, setAudience] = useState("Calgary residents 25-45");
   const [offer, setOffer] = useState("LERVIT10");
-  const [platforms, setPlatforms] = useState<string[]>(["instagram", "facebook"]);
+  const [platforms, setPlatforms] = useState<string[]>(["instagram", "facebook", "linkedin"]);
   const [durationDays, setDurationDays] = useState(30);
 
   const togglePlatform = (p: string, checked: boolean) => {

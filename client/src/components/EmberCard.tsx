@@ -196,7 +196,12 @@ export function EmberCard() {
                 trigger.mutate({
                   action: "create_campaign",
                   dryRun: false,
-                  input: { name, objective, audience },
+                  input: {
+                    name,
+                    objective,
+                    audience,
+                    platforms: ["instagram", "facebook", "linkedin"],
+                  },
                 });
               }}
               disabled={trigger.isPending}

@@ -242,6 +242,13 @@ interface GenerateSocialInput {
   cta?: string;
 }
 
+interface GenerateGmbInput {
+  // When set, the generated post is also written onto this campaign
+  // content_items row (caption/status) so the item stops being a dead draft.
+  contentItemId?: string;
+  topic?: string;
+}
+
 interface RespondToReviewInput {
   reviewId: string;
 }
@@ -387,7 +394,7 @@ export class EmberAgent extends BaseAgent {
       case 'generate_blog_post':
         return this.generateBlogPost(input as GenerateBlogInput, options);
       case 'generate_gmb_post':
-        return this.generateGmbPost(options);
+        return this.generateGmbPost(input as GenerateGmbInput, options);
       case 'respond_to_review':
         return this.respondToReview(input as RespondToReviewInput, options);
       case 'generate_social_content':
@@ -552,7 +559,11 @@ Category: ${category}.`;
   // ─────────────────────────────────────────────────────────
   // Google Business (GMB) — draft only until API is approved
   // ─────────────────────────────────────────────────────────
-  async generateGmbPost(options?: AgentRunOptions) {
+  async generateGmbPost(input: GenerateGmbInput = {}, options?: AgentRunOptions) {
+    const topic = input.topic?.trim()
+      ? sanitizeForPrompt(input.topic.trim(), 'description')
+      : null;
+
     const systemPrompt = `You are Ember Lane, content lead for LervIT.
 Write a Google Business Profile post — short, useful, locally relevant.
 
@@ -568,10 +579,14 @@ CRITICAL: Return the post body ONLY.
 No markdown. No code fences.
 No backticks. No preface. No JSON.`;
 
-    const userMessage = `Draft this week's LervIT Google Business post. Angle can be a moving tip, a
+    const userMessage = topic
+      ? `Draft a LervIT Google Business post on: ${topic}.`
+      : `Draft this week's LervIT Google Business post. Angle can be a moving tip, a
 neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior weeks.`;
 
-    if (options?.dryRun) return { dryRun: true, would: 'generate_gmb_post' };
+    if (options?.dryRun) {
+      return { dryRun: true, would: 'generate_gmb_post', topic, contentItemId: input.contentItemId ?? null };
+    }
 
     const content = (await this.callAnthropic(systemPrompt, userMessage, 800)).trim();
     if (!content) throw new Error('Ember: GMB content was empty');
@@ -581,8 +596,26 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
       .values({ content, postType: 'STANDARD', status: 'pending' })
       .returning();
 
-    logger.info({ gmbPostId: row.id }, '[Ember] GMB post drafted (pending manual post)');
-    return { gmbPostId: row.id, status: row.status, contentPreview: content.slice(0, 120) };
+    // Campaign branch: mirror the copy onto the content_items row so the
+    // campaign board shows it as ready instead of an empty draft. The
+    // gmb_posts row above stays the record the GMB review UI reads.
+    if (input.contentItemId) {
+      await db
+        .update(contentItems)
+        .set({ caption: content, status: 'ready', updatedAt: new Date() })
+        .where(eq(contentItems.id, input.contentItemId));
+    }
+
+    logger.info(
+      { gmbPostId: row.id, contentItemId: input.contentItemId ?? null },
+      '[Ember] GMB post drafted (pending manual post)',
+    );
+    return {
+      gmbPostId: row.id,
+      status: row.status,
+      contentItemId: input.contentItemId ?? null,
+      contentPreview: content.slice(0, 120),
+    };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1112,7 +1145,11 @@ Start your response with { directly.
       return { dryRun: true, would: 'create_campaign', input };
     }
 
-    const platformsList = input.platforms ?? ['instagram', 'tiktok', 'facebook'];
+    // TikTok is out of the default: it has a voice guide but no publish path
+    // (publish_to_social supports facebook | instagram | linkedin), so TikTok
+    // items strand at 'approved'. LinkedIn is in — it publishes, and it owns
+    // the B2B angle most campaigns target. Callers can still pass any set.
+    const platformsList = input.platforms ?? ['instagram', 'facebook', 'linkedin'];
     const platformCount = platformsList.length;
     const minItems = Math.max(3, platformCount * 3);
     const maxItems = Math.min(12, Math.max(minItems, platformCount * 4));
@@ -1306,8 +1343,16 @@ Duration: ${input.durationDays ?? 30} days
                   tone: 'casual',
                   cta: item.cta ?? 'Book at lervit.com',
                 });
+              } else if (item.type === 'gmb' || item.platform === 'google') {
+                await this.generateGmbPost({
+                  contentItemId: item.id,
+                  topic: brief.concept ?? campaign.objective,
+                });
               }
-              // blog / newsletter / gmb items are handled via their own actions.
+              // blog / newsletter items still have no campaign-aware path —
+              // generate_blog_post / generate_newsletter write their own tables
+              // and take no contentItemId, so those items stay draft until an
+              // admin fills them.
             } catch (err) {
               logger.error(
                 { err, itemId: item.id, type: item.type },

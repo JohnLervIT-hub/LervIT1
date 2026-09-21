@@ -14539,6 +14539,7 @@ Respond with VALID JSON only:
     'generate_gmb_post',
     'respond_to_review',
     'generate_social_content',
+    'generate_trend_post',
     'generate_newsletter',
     'publish_blog_post',
     // Phase 2 — campaigns + video generation
