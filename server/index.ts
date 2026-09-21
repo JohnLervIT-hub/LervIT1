@@ -214,6 +214,20 @@ let serverStarted = false;
   try {
     const server = await registerRoutes(app);
 
+    // Unmatched /api/* must 404 as JSON, not fall through to the SPA catch-all
+    // in serveStatic()/setupVite(). That fallback returns index.html with a
+    // 200, which makes a misrouted API call look like a success to any caller
+    // that only checks the status code — it hid a broken ElevenLabs tool
+    // (GET /api/nova/send-link) for as long as the tool had been live.
+    // Registered after registerRoutes() so every real route matches first, and
+    // before the error handler so error propagation still skips it.
+    app.use('/api/*', (req: Request, res: Response) => {
+      res.status(404).json({
+        error: 'Not found',
+        path: req.originalUrl,
+      });
+    });
+
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";

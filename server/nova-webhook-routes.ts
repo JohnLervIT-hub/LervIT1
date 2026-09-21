@@ -49,6 +49,48 @@ const DM_EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
 
 const router = express.Router();
 
+// ─── ElevenLabs param casing normalization ───────────────────
+//
+// The agent's tool schemas declare PascalCase params (`Phone`) while every
+// handler below reads camelCase (`phone`), so tool calls arrived with the
+// field undefined: lookup_quote answered "no quote" on every call and
+// send_signup_link / create_account 400'd. Rather than re-typing the schemas
+// in the ElevenLabs console (where they can drift again), alias the known
+// PascalCase spellings onto their camelCase counterparts on the way in.
+//
+// Scoped to /api/nova — the router is mounted at the app root, so an unpathed
+// router.use() here would rewrite params for every request in the app. Body
+// parsing already happened in server/index.ts (global express.json), so
+// req.body is populated by the time this runs.
+
+const ELEVENLABS_PARAM_ALIASES: Record<string, string> = {
+  Phone: 'phone',
+  Email: 'email',
+  Name: 'name',
+  LeadId: 'leadId',
+  Lead_id: 'leadId',
+  QuoteId: 'quoteId',
+  Quote_id: 'quoteId',
+  PickupAddress: 'pickupAddress',
+  DropoffAddress: 'dropoffAddress',
+};
+
+function aliasElevenLabsParams(obj: unknown): void {
+  if (!obj || typeof obj !== 'object' || Buffer.isBuffer(obj)) return;
+  const target = obj as Record<string, unknown>;
+  for (const [from, to] of Object.entries(ELEVENLABS_PARAM_ALIASES)) {
+    if (target[from] !== undefined && target[to] === undefined) {
+      target[to] = target[from];
+    }
+  }
+}
+
+router.use('/api/nova', (req: Request, _res: Response, next) => {
+  aliasElevenLabsParams(req.body);
+  aliasElevenLabsParams(req.query);
+  next();
+});
+
 const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
@@ -579,6 +621,35 @@ router.post(
     return res.json({ success: true, message: `Link sent to ${phone}` });
   },
 );
+
+// ─── Tool 3b: send_booking_link (GET) ────────────────────────
+//
+// The agent's send_booking_link tool is configured as GET against this same
+// path. With only the POST above registered, those calls fell past this
+// router into the SPA catch-all and came back as index.html with a 200 —
+// ElevenLabs read that as success, so Nova told callers the link was sent
+// while no SMS ever went out and nothing was logged.
+
+router.get('/api/nova/send-link', async (req: Request, res: Response) => {
+  const phone = typeof req.query.phone === 'string' ? req.query.phone : '';
+
+  if (!phone) return res.status(400).json({ error: 'phone required' });
+
+  try {
+    await notificationService.sendSMS({
+      to: phone,
+      message:
+        `Nova from LervIT. Book your move: ${APP_BASE_URL}/request-move ` +
+        `Use code LERVIT10 for 10% off. Reply STOP to opt out`,
+      type: 'pilot_status',
+    });
+
+    return res.json({ success: true, message: `Booking link sent to ${phone}` });
+  } catch (err) {
+    logger.error({ err, phone }, '[Nova] send-link (GET) failed');
+    return res.status(500).json({ error: 'Failed to send link' });
+  }
+});
 
 // ─── Tool 4: book_move ───────────────────────────────────────
 
