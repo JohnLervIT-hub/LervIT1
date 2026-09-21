@@ -15290,7 +15290,7 @@ Respond with VALID JSON only:
 
   const NEWSLETTER_STATUSES = ['pending_review', 'approved', 'sent'] as const;
 
-  app.get("/api/admin/newsletters", async (req: Request, res: Response) => {
+  app.get("/api/admin/ember/newsletters", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
@@ -15309,7 +15309,7 @@ Respond with VALID JSON only:
     }
   });
 
-  app.get("/api/admin/newsletters/:id", async (req: Request, res: Response) => {
+  app.get("/api/admin/ember/newsletters/:id", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       const [row] = await db
@@ -15326,7 +15326,7 @@ Respond with VALID JSON only:
     }
   });
 
-  app.patch("/api/admin/newsletters/:id", async (req: Request, res: Response) => {
+  app.patch("/api/admin/ember/newsletters/:id", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
       const status = typeof req.body?.status === 'string' ? req.body.status : undefined;
