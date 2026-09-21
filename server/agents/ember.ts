@@ -1322,7 +1322,15 @@ Duration: ${input.durationDays ?? 30} days
           for (const item of savedItems) {
             const brief = (item.creativeBrief ?? {}) as any;
             try {
-              if (item.type === 'heygen_video' || item.type === 'higgsfield_video') {
+              const itemPlatform = ((): SocialPlatform => {
+                const p = (item.platform ?? 'instagram') as string;
+                return (['facebook', 'instagram', 'tiktok', 'linkedin'] as const).includes(p as any)
+                  ? (p as SocialPlatform)
+                  : 'instagram';
+              })();
+
+              if (item.type === 'heygen_video') {
+                // HeyGen is a presenter: the script IS the speech.
                 await this.generateVideoScript({
                   contentItemId: item.id,
                   concept: brief.concept,
@@ -1330,16 +1338,26 @@ Duration: ${input.durationDays ?? 30} days
                   platform: item.platform ?? undefined,
                   duration: 30,
                 });
-              } else if (item.type === 'social') {
-                const p = (item.platform ?? 'instagram') as string;
-                const platform = (['facebook', 'instagram', 'tiktok', 'linkedin'] as const).includes(
-                  p as any,
-                )
-                  ? (p as SocialPlatform)
-                  : ('instagram' as SocialPlatform);
+              } else if (item.type === 'higgsfield_video') {
+                // Higgsfield is text-to-video with its own generated audio, so a
+                // spoken script is never read — it needs visual direction. The
+                // brief supplies that; the caption is generated separately
+                // because the feed post still needs copy.
+                await this.generateCreativeBrief({
+                  contentItemId: item.id,
+                  concept: brief.concept,
+                });
                 await this.generateSocialContent({
                   contentItemId: item.id,
-                  platform,
+                  platform: itemPlatform,
+                  topic: brief.concept,
+                  tone: 'casual',
+                  cta: item.cta ?? 'Book at lervit.com',
+                });
+              } else if (item.type === 'social') {
+                await this.generateSocialContent({
+                  contentItemId: item.id,
+                  platform: itemPlatform,
                   topic: brief.concept,
                   tone: 'casual',
                   cta: item.cta ?? 'Book at lervit.com',
@@ -1662,7 +1680,29 @@ Type: ${item.type}`;
     if (!item) return { error: 'item_not_found' };
 
     const brief = (item.creativeBrief ?? {}) as any;
-    const prompt = input.prompt ?? brief?.concept ?? 'Calgary moving lifestyle scene';
+
+    // Seedance is text-to-video: the prompt describes what the camera SEES.
+    // Compose it from the brief's visual fields rather than the 80-char plan
+    // concept alone. Dialogue and on-screen text are suppressed — the model
+    // renders baked-in captions poorly and generates its own audio.
+    const visualPrompt = [
+      brief?.concept,
+      brief?.visualStyle,
+      brief?.mood,
+      Array.isArray(brief?.palette) && brief.palette.length
+        ? `Colour palette: ${brief.palette.join(', ')}`
+        : null,
+      'Calgary urban environment',
+      'Professional cinematography',
+      'No text overlays',
+      'No dialogue',
+    ]
+      .filter(Boolean)
+      .map((part) => String(part).trim().replace(/\.$/, ''))
+      .join('. ');
+
+    const prompt =
+      input.prompt ?? (visualPrompt || 'Calgary moving lifestyle, cinematic, professional');
 
     await db
       .update(contentItems)
@@ -1671,7 +1711,11 @@ Type: ${item.type}`;
 
     try {
       const job = await higgsfieldProvider.createVideo({
-        prompt: `${prompt}. Cinematic, premium, urban Calgary. Professional lighting.`,
+        // The composed prompt already carries the cinematic/Calgary framing;
+        // only a caller-supplied raw prompt still needs it appended.
+        prompt: input.prompt
+          ? `${prompt}. Cinematic, premium, urban Calgary. Professional lighting.`
+          : prompt,
         duration: input.duration ?? 5,
         platform: item.platform ?? undefined,
       });
@@ -1853,7 +1897,21 @@ Platform: ${item.platform ?? 'N/A'}`;
       };
     }
 
-    const caption = item.caption ?? item.script?.slice(0, 200) ?? '';
+    // Fail closed. This used to fall back to the first 200 chars of the spoken
+    // script — dialogue, truncated mid-sentence, published to a public feed
+    // (and for a Higgsfield item, dialogue no one ever narrated).
+    const caption = item.caption ?? '';
+    if (!caption) {
+      logger.error(
+        { itemId: item.id, platform: item.platform, type: item.type },
+        '[Ember] no caption — refusing to publish',
+      );
+      return {
+        error: 'no_caption',
+        message: 'Caption required before publishing',
+        contentItemId: input.contentItemId,
+      };
+    }
 
     const mediaUrl = item.videoUrl ?? item.assetUrl ?? undefined;
     const isVideo = !!item.videoUrl;
