@@ -858,7 +858,14 @@ router.post(
   '/api/nova/signup',
   express.json(),
   async (req: Request, res: Response) => {
-    const { email, name, phone, account_type, lead_id } = req.body ?? {};
+    const { email, name, phone, account_type } = req.body ?? {};
+
+    // The create_account tool sends `leadId`, older agent configs sent
+    // `LeadId`, and this handler was written against the snake_case spelling —
+    // so the lead row was never updated and nova.signup_initiated was emitted
+    // against the email instead of the lead. Accept every spelling.
+    const leadId: string | undefined =
+      req.body?.lead_id ?? req.body?.leadId ?? req.body?.LeadId;
 
     if (!email || !name || !phone) {
       return res
@@ -903,7 +910,7 @@ router.post(
         type: 'pilot_status',
       });
 
-      if (lead_id) {
+      if (leadId) {
         await db
           .update(leads)
           .set({
@@ -912,13 +919,13 @@ router.post(
             contactPhone: phone,
             status: 'contacted',
           })
-          .where(eq(leads.id, lead_id));
+          .where(eq(leads.id, leadId));
       }
 
       await emitEvent(
         'nova.signup_initiated',
         'lead',
-        lead_id ?? email,
+        leadId ?? email,
         { email, name, phone, account_type },
         'agent',
       );
