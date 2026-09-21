@@ -1621,3 +1621,18 @@ ALTER TABLE "leads"
 ALTER TABLE "leads"
   ADD COLUMN IF NOT EXISTS "sms_consent_at"   timestamp,
   ADD COLUMN IF NOT EXISTS "sms_consent_text" text;
+
+-- Ember newsletter drafts (see migrations/0021_newsletters.sql).
+CREATE TABLE IF NOT EXISTS "newsletters" (
+  "id"           varchar   PRIMARY KEY DEFAULT gen_random_uuid(),
+  "subject"      text      NOT NULL,
+  "preheader"    text,
+  "html"         text      NOT NULL,
+  "status"       text      NOT NULL DEFAULT 'pending_review',
+  "generated_by" text      DEFAULT 'ember',
+  "sent_at"      timestamp,
+  "created_at"   timestamp NOT NULL DEFAULT NOW(),
+  "updated_at"   timestamp NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "newsletters_status_idx" ON "newsletters" ("status");

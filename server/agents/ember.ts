@@ -8,7 +8,7 @@
  *                                       Case: 8-3924000041848 (GMB API pending approval)
  *     - `respond_to_review`          : warm response for 4-5 star; escalate to Xavier for <=3
  *     - `generate_social_content`    : per-platform social copy → social_posts (status='draft')
- *     - `generate_newsletter`        : monthly newsletter draft (subject/preheader/HTML)
+ *     - `generate_newsletter`        : monthly newsletter draft → newsletters (status='pending_review')
  *     - `publish_blog_post`          : flip a pending_review blog post to 'published' (public /blog picks up)
  *
  *   Phase 2 — Campaigns + video (HeyGen presenter, Higgsfield cinematic):
@@ -33,7 +33,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { desc, eq } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { blogPosts, gmbPosts, socialPosts, reviews, users, bookings, campaigns, contentItems } from '@shared/schema';
+import { blogPosts, gmbPosts, socialPosts, newsletters, reviews, users, bookings, campaigns, contentItems } from '@shared/schema';
 import { xavier } from './xavier';
 import { logger } from '../logger';
 import { emitEvent } from '../events';
@@ -223,8 +223,62 @@ function slugify(title: string): string {
     .slice(0, 80);
 }
 
-function pickTopic(): string {
-  return BLOG_TOPICS[Math.floor(Math.random() * BLOG_TOPICS.length)];
+/**
+ * Pick a blog topic that has not been written yet.
+ *
+ * `blog_posts.slug` is UNIQUE, so re-picking a covered topic used to surface
+ * as an insert failure on the Monday cron. Claude rewrites both the title and
+ * the slug ("no stopwords"), so an exact match is not guaranteed — we compare
+ * the slugified topic against every stored slug AND every slugified title, and
+ * generateBlogPost still guards the slug itself before inserting.
+ */
+async function pickTopic(): Promise<string> {
+  let used = new Set<string>();
+
+  try {
+    const existing = await db
+      .select({ slug: blogPosts.slug, title: blogPosts.title })
+      .from(blogPosts);
+
+    used = new Set(
+      existing.flatMap((p) => [p.slug, slugify(p.title)]).filter(Boolean),
+    );
+  } catch (err) {
+    // A read failure should not block the weekly draft — fall back to random.
+    logger.error({ err }, '[Ember] blog topic dedupe query failed');
+  }
+
+  const available = BLOG_TOPICS.filter((t) => !used.has(slugify(t)));
+
+  if (available.length === 0) {
+    logger.warn(
+      { topics: BLOG_TOPICS.length },
+      '[Ember] all blog topics used — reusing the list (add new topics to BLOG_TOPICS)',
+    );
+    return BLOG_TOPICS[Math.floor(Math.random() * BLOG_TOPICS.length)];
+  }
+
+  return available[Math.floor(Math.random() * available.length)];
+}
+
+/**
+ * Return a slug that no blog post holds yet, suffixing -2, -3, ... on collision.
+ * Claude picks the slug, so it can collide even when the topic is fresh.
+ */
+async function uniqueSlug(base: string): Promise<string> {
+  const root = (base || 'lervit-post').slice(0, 76);
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = attempt === 0 ? root : `${root}-${attempt + 1}`;
+    const [clash] = await db
+      .select({ id: blogPosts.id })
+      .from(blogPosts)
+      .where(eq(blogPosts.slug, candidate))
+      .limit(1);
+    if (!clash) return candidate;
+  }
+
+  return `${root}-${Date.now().toString(36)}`;
 }
 
 export class EmberAgent extends BaseAgent {
@@ -281,7 +335,7 @@ export class EmberAgent extends BaseAgent {
   // Blog
   // ─────────────────────────────────────────────────────────
   async generateBlogPost(input: GenerateBlogInput, options?: AgentRunOptions) {
-    const topic = sanitizeForPrompt(input.topic?.trim() || pickTopic(), 'description');
+    const topic = sanitizeForPrompt(input.topic?.trim() || (await pickTopic()), 'description');
     const category = sanitizeForPrompt(input.category?.trim() || 'Moving Tips', 'title');
 
     const systemPrompt = `You are Ember Lane, content & marketing lead for LervIT.
@@ -330,7 +384,9 @@ Category: ${category}.`;
     const parsed = this.parseJson(raw);
 
     const title: string = String(parsed.title ?? topic).slice(0, 200);
-    const slug: string = String(parsed.slug ?? slugify(title)) || slugify(title);
+    const slug: string = await uniqueSlug(
+      String(parsed.slug ?? slugify(title)) || slugify(title),
+    );
     const sections = Array.isArray(parsed.sections)
       ? parsed.sections
           .filter((s: any) => s && typeof s.h2 === 'string' && Array.isArray(s.paragraphs))
@@ -593,8 +649,18 @@ Start your response with { directly.
       ? [input.platform]
       : SOCIAL_PLATFORMS;
 
+    // Event- and admin-triggered calls steer the post (the booking.completed
+    // subscription asks for a celebratory success story, for example). The
+    // weekly cron passes a platform and nothing else, so each of these stays
+    // optional and falls back to the generic Calgary angle.
+    const topic = input.topic?.trim()
+      ? sanitizeForPrompt(input.topic.trim(), 'description')
+      : null;
+    const tone = input.tone?.trim() ? sanitizeForPrompt(input.tone.trim(), 'title') : null;
+    const cta = input.cta?.trim() ? sanitizeForPrompt(input.cta.trim(), 'title') : null;
+
     if (options?.dryRun) {
-      return { dryRun: true, would: 'generate_social_content', platforms };
+      return { dryRun: true, would: 'generate_social_content', platforms, topic, tone, cta };
     }
 
     const results: Array<{ id: string; platform: SocialPlatform; contentPreview: string }> = [];
@@ -606,7 +672,7 @@ Write a ${platform} post following these rules:
 ${SOCIAL_GUIDES[platform]}
 
 ${LERVIT_BRAND}
-
+${tone ? `\nTone: ${tone}.` : ''}${cta ? `\nEnd with this CTA: ${cta}.` : ''}
 CRITICAL: Respond with ONLY raw JSON.
 No markdown. No code fences.
 No backticks. No explanation.
@@ -614,7 +680,9 @@ Start your response with { directly.
 
 { "content": string, "hashtags": string[] }${CREATIVEOS_APPENDIX}`;
 
-      const userMessage = `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
+      const userMessage = topic
+        ? `Draft the ${platform} post. Topic: ${topic}.`
+        : `Draft today's ${platform} post. Angle: helpful moving content that lands with a Calgary audience.`;
 
       const raw = await this.callAnthropic(systemPrompt, userMessage, 1200);
       const parsed = this.parseJson(raw);
@@ -688,8 +756,29 @@ Start your response with { directly.
     const html = String(parsed.html ?? '');
     if (!subject || !html) throw new Error('Ember: newsletter subject or html was empty');
 
-    logger.info({ subject }, '[Ember] newsletter drafted (not sent)');
-    return { subject, preheader, html, sent: false, notice: 'Draft only — John sends via Resend' };
+    // Persist the draft — the monthly cron logs only the subject, so without a
+    // row the generated HTML would exist nowhere John can retrieve it.
+    const [row] = await db
+      .insert(newsletters)
+      .values({
+        subject,
+        preheader: preheader || null,
+        html,
+        status: 'pending_review',
+        generatedBy: 'ember',
+      })
+      .returning();
+
+    logger.info({ newsletterId: row.id, subject }, '[Ember] newsletter drafted (pending_review, not sent)');
+    return {
+      newsletterId: row.id,
+      subject,
+      preheader,
+      html,
+      status: row.status,
+      sent: false,
+      notice: 'Draft only — John sends via Resend',
+    };
   }
 
   // ─────────────────────────────────────────────────────────

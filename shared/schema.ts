@@ -2137,9 +2137,26 @@ export const socialPosts = pgTable("social_posts", {
   platformIdx: index("social_posts_platform_idx").on(table.platform),
 }));
 
+// Monthly newsletter drafts from Ember. Draft-only — John sends via Resend,
+// then the row is marked sent. See migrations/0021_newsletters.sql.
+export const newsletters = pgTable("newsletters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subject: text("subject").notNull(),
+  preheader: text("preheader"),
+  html: text("html").notNull(),
+  status: text("status").notNull().default("pending_review"), // pending_review | approved | sent
+  generatedBy: text("generated_by").default("ember"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("newsletters_status_idx").on(table.status),
+}));
+
 export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertGmbPostSchema = createInsertSchema(gmbPosts).omit({ id: true, createdAt: true });
 export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({ id: true, createdAt: true });
+export const insertNewsletterSchema = createInsertSchema(newsletters).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type BlogPost = typeof blogPosts.$inferSelect;
 export type InsertBlogPost = z.infer<typeof insertBlogPostSchema>;
@@ -2147,6 +2164,8 @@ export type GmbPost = typeof gmbPosts.$inferSelect;
 export type InsertGmbPost = z.infer<typeof insertGmbPostSchema>;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
+export type Newsletter = typeof newsletters.$inferSelect;
+export type InsertNewsletter = z.infer<typeof insertNewsletterSchema>;
 
 // ============================================================
 // EMBER PHASE 2 — campaigns + content items (video, cross-channel)

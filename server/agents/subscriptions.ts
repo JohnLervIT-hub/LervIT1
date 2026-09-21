@@ -288,6 +288,8 @@ export function registerAgentSubscriptions(): void {
     async (_data) => {
       if (Math.random() > 0.2) return;
 
+      // topic/tone/cta are honoured by generateSocialContent's single-post
+      // branch — they used to be dropped, which made this a generic tip post.
       await ember
         .run(
           'generate_social_content',
