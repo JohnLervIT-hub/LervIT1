@@ -21,6 +21,7 @@ import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
+import { hasSmsConsent } from '../lib/smsConsent';
 import { wasContactedToday } from './dedupe';
 
 const ALEX_EMAIL_MODEL = 'claude-sonnet-4-6';
@@ -72,17 +73,6 @@ function bookingLinkFor(baseUrl: string, lead: { quoteId: string | null }, quote
   if (quoteAddresses?.shortId) return `${baseUrl}/q/${quoteAddresses.shortId}`;
   if (lead.quoteId) return `${baseUrl}/quote/${lead.quoteId}`;
   return `${baseUrl}/request-move`;
-}
-
-// SMS consent gate. Leads sourced from web forms have implied consent; leads
-// scraped from public listings (Kijiji/Craigslist/RentFaster/Google Alerts) do not.
-// Explicit SMS channel override in admin UI counts as consent.
-function hasSmsConsent(lead: { sourceChannel: string | null; utmSource: string | null }, channelOverride?: 'email' | 'sms'): boolean {
-  if (channelOverride === 'sms') return true;
-  const consentSources = new Set(['quote_form', 'manual', 'contact_form', 'signup']);
-  if (lead.sourceChannel && consentSources.has(lead.sourceChannel)) return true;
-  if (lead.utmSource && consentSources.has(lead.utmSource)) return true;
-  return false;
 }
 
 // SMS_STOP_SUFFIX kept short (GSM-7) — CTIA A2P 10DLC requires an opt-out

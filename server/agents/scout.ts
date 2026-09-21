@@ -226,6 +226,10 @@ export class ScoutAgent extends BaseAgent {
           eq(leads.status, 'new'),
           gte(leads.intentScore, HIGH_INTENT_THRESHOLD),
           isNull(leads.assignedAgent),
+          // Demand side only. Ryan's mover candidates (b2bm) and Sam's
+          // partner prospects (b2bp) sit unassigned in this same window —
+          // both crawls run at 07:00 — and must not be pitched a move quote.
+          eq(leads.leadType, 'b2c'),
         ),
       );
 

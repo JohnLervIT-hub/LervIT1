@@ -24,6 +24,7 @@ import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { wasContactedToday } from './dedupe';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
+import { hasSmsConsent } from '../lib/smsConsent';
 
 const JORDAN_EMAIL_MODEL = 'claude-sonnet-4-6';
 const JORDAN_SMS_MODEL = 'claude-haiku-4-5-20251001';
@@ -39,28 +40,9 @@ const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-/**
- * CASL: only text candidates whose source channel implies express consent —
- * i.e. they handed us the number themselves. Scraped / cold supply sources
- * (kijiji, craigslist, google_maps*) are email-only.
- */
-const CONSENTED_SOURCES = [
-  'quote_form',
-  'manual',
-  'contact_form',
-  'signup',
-  'instagram_dm',
-  'messenger_dm',
-  'mover_application',
-];
-
 /** Appended to every Jordan SMS; budgeted out of the 160-char single segment. */
 const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
 const SMS_BODY_MAX = 160 - SMS_STOP_SUFFIX.length;
-
-function hasSmsConsent(lead: typeof leads.$inferSelect): boolean {
-  return CONSENTED_SOURCES.includes(lead.sourceChannel ?? '');
-}
 
 interface OnboardCandidateInput {
   leadId: string;

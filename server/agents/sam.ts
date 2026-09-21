@@ -134,9 +134,19 @@ interface B2BTouchInput {
   leadId: string;
   touchNumber: number;
 }
+/**
+ * Partner phone numbers are copied from Google Places listings scraped by
+ * scan_b2b_prospects — there is no CASL consent behind them, so the automated
+ * sweep is email-only. An admin can still force a single SMS by passing
+ * channelOverride: 'sms' through /api/admin/agent/sam/trigger.
+ */
+const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
+const SMS_BODY_MAX = 160 - SMS_STOP_SUFFIX.length;
+
 interface PartnerFollowupInput {
   partnerId: string;
   touchNumber: number;
+  channelOverride?: 'email' | 'sms';
 }
 interface EscalateHotLeadInput {
   leadId: string;
@@ -525,7 +535,7 @@ export class SamAgent extends BaseAgent {
     return result;
   }
 
-  private async sendPartnerFollowup({ partnerId, touchNumber }: PartnerFollowupInput, options: AgentRunOptions = {}) {
+  private async sendPartnerFollowup({ partnerId, touchNumber, channelOverride }: PartnerFollowupInput, options: AgentRunOptions = {}) {
     if (touchNumber < 1 || touchNumber > 3) {
       throw new Error(`Sam.sendPartnerFollowup: invalid touchNumber ${touchNumber}`);
     }
@@ -555,14 +565,25 @@ export class SamAgent extends BaseAgent {
     let emailSent = false;
     let smsSent = false;
 
-    if (touchNumber === 2 && contactPhone) {
-      const text = `Hi ${firstName(opsName)}, Sam from LervIT. Your partner onboarding is only a few steps from live — I can walk you through it in 10 min. Reply here or log in: ${PARTNERS_PORTAL_URL}`;
+    // Touch 2 used to text every partner. Scraped number, no consent — the
+    // sweep now falls through to email unless an admin explicitly asked.
+    const smsRequested = channelOverride === 'sms';
+    if (touchNumber === 2 && contactPhone && !smsRequested) {
+      logger.info(
+        { partnerId, touchNumber },
+        '[Sam] Partner SMS suppressed — no CASL consent on scraped number, using email',
+      );
+    }
+
+    if (touchNumber === 2 && contactPhone && smsRequested) {
+      const body = `Hi ${firstName(opsName)}, Sam from LervIT. Your partner onboarding is only a few steps from live — I can walk you through it in 10 min. Reply here or log in: ${PARTNERS_PORTAL_URL}`;
+      const text = body.slice(0, SMS_BODY_MAX) + SMS_STOP_SUFFIX;
       if (options.dryRun) {
-        return { dryRun: true, wouldContact: [partnerId], preview: { to: contactPhone, channel: 'sms', body: text.slice(0, 160), touchNumber } };
+        return { dryRun: true, wouldContact: [partnerId], preview: { to: contactPhone, channel: 'sms', body: text, touchNumber } };
       }
       smsSent = await notificationService.sendSMS({
         to: contactPhone,
-        message: text.slice(0, 160),
+        message: text,
         type: 'booking_update',
       });
     } else if (contactEmail) {
@@ -572,7 +593,11 @@ export class SamAgent extends BaseAgent {
       }
       emailSent = await sendSamEmail(contactEmail, subject, html);
     } else {
-      return { skipped: true, reason: 'no reachable channel', touchNumber };
+      return {
+        skipped: true,
+        reason: contactPhone ? 'no_email_and_sms_needs_admin_override' : 'no reachable channel',
+        touchNumber,
+      };
     }
 
     // T3 emits sales.partner_stuck so Xavier's daily brief picks it up.
