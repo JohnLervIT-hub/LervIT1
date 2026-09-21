@@ -39,6 +39,29 @@ const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
+/**
+ * CASL: only text candidates whose source channel implies express consent —
+ * i.e. they handed us the number themselves. Scraped / cold supply sources
+ * (kijiji, craigslist, google_maps*) are email-only.
+ */
+const CONSENTED_SOURCES = [
+  'quote_form',
+  'manual',
+  'contact_form',
+  'signup',
+  'instagram_dm',
+  'messenger_dm',
+  'mover_application',
+];
+
+/** Appended to every Jordan SMS; budgeted out of the 160-char single segment. */
+const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
+const SMS_BODY_MAX = 160 - SMS_STOP_SUFFIX.length;
+
+function hasSmsConsent(lead: typeof leads.$inferSelect): boolean {
+  return CONSENTED_SOURCES.includes(lead.sourceChannel ?? '');
+}
+
 interface OnboardCandidateInput {
   leadId: string;
   channelOverride?: 'email' | 'sms';
@@ -227,8 +250,15 @@ Sign up link: ${applyLink}`,
     let delivered = false;
 
     if (touchNumber === 2 && lead.contactPhone) {
+      if (!hasSmsConsent(lead)) {
+        logger.warn(
+          { leadId: lead.id, source: lead.sourceChannel },
+          '[Jordan] Skipping SMS — no CASL consent',
+        );
+        return { skipped: true, reason: 'no_sms_consent', touchNumber };
+      }
       channel = 'sms';
-      const smsBody = await this.callClaude(
+      const rawSms = await this.callClaude(
         `${JAILBREAK_PREAMBLE}
 
 You are Jordan from LervIT, Calgary's moving platform.
@@ -237,7 +267,7 @@ someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
 Then add personalized follow-up based on
 the candidate context. Include sign up link.
-Not pushy. Total under 160 characters.
+Not pushy. Total under 130 characters.
 Return only the SMS text, nothing else.`,
         `<data>
 Follow up for: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
@@ -246,16 +276,17 @@ Sign up link: ${applyLink}`,
         JORDAN_SMS_MODEL,
         120,
       );
+      const smsBody = rawSms.trim().slice(0, SMS_BODY_MAX) + SMS_STOP_SUFFIX;
       if (options.dryRun) {
         return {
           dryRun: true,
           wouldContact: [leadId],
-          preview: { to: lead.contactPhone, channel: 'sms', body: smsBody.trim().slice(0, 160) },
+          preview: { to: lead.contactPhone, channel: 'sms', body: smsBody },
         };
       }
       delivered = await notificationService.sendSMS({
         to: lead.contactPhone,
-        message: smsBody.trim().slice(0, 160),
+        message: smsBody,
         type: 'job_alert',
       });
     } else if (lead.contactEmail) {
@@ -324,6 +355,13 @@ Sign up link: ${applyLink}`,
 
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
     if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
+    if (!hasSmsConsent(lead)) {
+      logger.warn(
+        { leadId: lead.id, source: lead.sourceChannel },
+        '[Jordan] Skipping SMS — no CASL consent',
+      );
+      return { skipped: true, reason: 'no_sms_consent' };
+    }
 
     const dedupe = await wasContactedToday({
       entityId: lead.id,
@@ -343,7 +381,7 @@ You are Jordan from LervIT, Calgary's moving platform.
 Write a brief, friendly SMS to someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
 Personalize from the candidate context. Include the sign up link.
-Not pushy. Total under 160 characters.
+Not pushy. Total under 130 characters.
 Return only the SMS text, nothing else.`,
       `<data>
 Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
@@ -352,7 +390,7 @@ Sign up link: ${applyLink}`,
       JORDAN_SMS_MODEL,
       120,
     );
-    const message = raw.trim().slice(0, 160);
+    const message = raw.trim().slice(0, SMS_BODY_MAX) + SMS_STOP_SUFFIX;
 
     if (options.dryRun) {
       return {
