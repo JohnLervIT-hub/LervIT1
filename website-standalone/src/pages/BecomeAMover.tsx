@@ -203,6 +203,36 @@ function FormSteps({ step, setStep, form, setForm, step1Valid, step2Valid, step3
         </div>
       )}
 
+      {/* CASL/CTIA express consent. This form writes leads with
+          sourceChannel 'mover_application', which Jordan treats as consented
+          for SMS — this is the disclosure that backs that. */}
+      {step === 3 && (
+        <p className="mt-6 text-[11px] leading-relaxed text-muted-foreground" data-testid="text-sms-consent">
+          By submitting this application you agree to receive SMS updates from LervIT at
+          the number provided, including messages sent by an automated system. Consent is
+          not a condition of being accepted as a mover. Message frequency varies; message
+          and data rates may apply. Reply STOP to opt out. See our{' '}
+          <a
+            href="https://app.lervit.com/terms"
+            className="underline underline-offset-2 hover:text-foreground"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Terms
+          </a>{' '}
+          and{' '}
+          <a
+            href="https://app.lervit.com/privacy"
+            className="underline underline-offset-2 hover:text-foreground"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Privacy Policy
+          </a>
+          .
+        </p>
+      )}
+
       <div className="mt-8 flex items-center justify-between gap-3">
         {step > 1 ? (
           <Button

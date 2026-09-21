@@ -592,6 +592,19 @@ function LeadCaptureOverlay({
         )}
       </Button>
 
+      {/* CASL/CTIA express consent. Leads captured here are written with
+          sourceChannel 'quote_form', which server/lib/smsConsent.ts treats as
+          consented — this is the disclosure that backs that. */}
+      <p className="text-[10px] leading-relaxed text-muted-foreground mt-3" data-testid="text-sms-consent">
+        By submitting this form you agree to receive SMS updates from LervIT at the
+        number provided, including messages sent by an automated system. Consent is
+        not a condition of purchase. Message frequency varies; message and data rates
+        may apply. Reply STOP to opt out.{' '}
+        <a href="/terms" className="underline underline-offset-2 hover:text-foreground">Terms</a>
+        {' · '}
+        <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</a>
+      </p>
+
       <div className="mt-3 space-y-1.5">
         <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
           <Shield className="w-3 h-3 text-green-500" />
