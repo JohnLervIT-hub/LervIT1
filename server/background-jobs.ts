@@ -21,6 +21,7 @@ import { riley } from './agents/riley';
 import { aegis } from './agents/aegis';
 import { ember } from './agents/ember';
 import { reid } from './agents/reid';
+import { nova } from './agents/nova';
 import { gt } from 'drizzle-orm';
 import { paymentRecoverySweep } from './lib/paymentRecovery';
 import { agentEventBus } from './lib/agentEventBus';
@@ -585,7 +586,84 @@ export function initBackgroundJobs() {
     void withJobLock('expire_stale_bookings', expireStaleBookings);
     void withJobLock('expire_notifications', expireOldNotifications);
     void withJobLock('orphaned_payments', recoverOrphanedPayments);
+    void withJobLock('rearm_review_calls', rearmMissedReviewCalls);
   }, 5000);
+}
+
+/**
+ * Re-arm Nova review calls lost to a restart.
+ *
+ * booking.completed schedules the review call with an in-process setTimeout
+ * 2h out, so every deploy drops the pending calls for bookings completed in
+ * the preceding window. Nothing records that a call was owed, so the only way
+ * to find them is the absence of a 'nova.call_initiated' event on the booking.
+ *
+ * Looks back 6h rather than 2h so a longer outage is covered too: anything
+ * already past its due time is called now, the rest keep their remaining
+ * delay. Re-running is harmless — the dedupe below skips bookings already
+ * called.
+ */
+async function rearmMissedReviewCalls() {
+  const REVIEW_CALL_DELAY_MS = 2 * 60 * 60 * 1000;
+  const lookback = new Date(Date.now() - 6 * 60 * 60 * 1000);
+
+  try {
+    const recent = await db
+      .select({ id: bookings.id, completedAt: bookings.completedAt })
+      .from(bookings)
+      .where(
+        and(
+          isNotNull(bookings.completedAt),
+          gte(bookings.completedAt, lookback),
+          eq(bookings.status, BOOKING_STATUSES.COMPLETED),
+        ),
+      )
+      .limit(50);
+
+    let rearmed = 0;
+
+    for (const booking of recent) {
+      // Review calls log entityType 'booking' with the booking id; dispatch
+      // calls use the mover id, so this cannot collide with them.
+      const [called] = await db
+        .select({ id: businessEvents.id })
+        .from(businessEvents)
+        .where(
+          and(
+            eq(businessEvents.entityId, booking.id),
+            eq(businessEvents.eventType, 'nova.call_initiated'),
+          ),
+        )
+        .limit(1);
+
+      if (called) continue;
+
+      const dueAt = (booking.completedAt?.getTime() ?? Date.now()) + REVIEW_CALL_DELAY_MS;
+      const delayMs = Math.max(0, dueAt - Date.now());
+
+      logger.info(
+        { bookingId: booking.id, delayMs },
+        '[Boot] re-arming missed Nova review call',
+      );
+
+      // Nova directly, not a booking.completed re-emit: that event also runs
+      // Kai's winback and Ember's content generator, so replaying it would
+      // send the customer a duplicate winback.
+      setTimeout(() => {
+        void nova
+          .run('call_review_request', { bookingId: booking.id }, { dryRun: false })
+          .catch((err) =>
+            logger.error({ err, bookingId: booking.id }, '[Boot] re-armed review call failed'),
+          );
+      }, delayMs);
+
+      rearmed++;
+    }
+
+    logger.info({ scanned: recent.length, rearmed }, '[Boot] review call reconciliation complete');
+  } catch (err) {
+    logger.error({ err }, '[Boot] review call reconciliation failed');
+  }
 }
 
 async function expireOldNotifications() {
