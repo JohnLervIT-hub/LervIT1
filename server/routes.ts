@@ -37,6 +37,7 @@
 
 import type { Express, NextFunction, Request, Response } from "express";
 import { getBaseUrl } from "./utils/urls";
+import { calgaryMonthRangeUtc } from "./utils/calgaryTime";
 import { randomUUID } from "crypto";
 import { createServer, type Server } from "http";
 import type { Socket } from "net";
@@ -16347,51 +16348,56 @@ Respond with VALID JSON only:
 
       const monthParam = req.query.month as string | undefined;
       let monthLabel = 'All Time';
-      let earningsQuery = db
-        .select()
-        .from(moverEarnings)
-        .where(eq(moverEarnings.moverId, mover.id))
-        .$dynamic();
+      const conditions = [eq(moverEarnings.moverId, mover.id)];
 
       if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
         const [year, month] = monthParam.split('-').map(Number);
-        const start = new Date(year, month - 1, 1);
-        const end = new Date(year, month, 1);
-        earningsQuery = db
-          .select()
-          .from(moverEarnings)
-          .where(and(
-            eq(moverEarnings.moverId, mover.id),
-            sql`${moverEarnings.createdAt} >= ${start.toISOString()}`,
-            sql`${moverEarnings.createdAt} < ${end.toISOString()}`
-          ))
-          .$dynamic();
+        // Calgary boundaries, not the server's. new Date(y, m, 1) is midnight
+        // in the process timezone — UTC on Railway — so earnings from the last
+        // 6-7 hours of a Calgary month landed in the following month's
+        // statement and the totals did not reconcile with the dashboard.
+        const { start, end } = calgaryMonthRangeUtc(year, month);
+        conditions.push(
+          sql`${moverEarnings.createdAt} >= ${start.toISOString()}`,
+          sql`${moverEarnings.createdAt} < ${end.toISOString()}`,
+        );
         monthLabel = format(start, 'MMMM yyyy');
       }
 
-      const earningsRows = await earningsQuery.orderBy(moverEarnings.createdAt);
+      // One join, not a getBooking() per row: this loop used to fire N+1
+      // sequential queries, so a mover with 200 jobs cost 201 round trips per
+      // download.
+      const earningsRows = await db
+        .select({
+          createdAt: moverEarnings.createdAt,
+          grossAmount: moverEarnings.grossAmount,
+          platformFeeAmount: moverEarnings.platformFeeAmount,
+          netAmount: moverEarnings.netAmount,
+          status: moverEarnings.status,
+          pickupAddress: bookings.pickupAddress,
+          dropoffAddress: bookings.dropoffAddress,
+        })
+        .from(moverEarnings)
+        .leftJoin(bookings, eq(bookings.id, moverEarnings.bookingId))
+        .where(and(...conditions))
+        .orderBy(moverEarnings.createdAt);
 
-      // Enrich with booking info
-      const rows: { date: string; pickup: string; dropoff: string; gross: string; fee: string; net: string; status: string }[] = [];
-      for (const e of earningsRows) {
-        const booking = await storage.getBooking(e.bookingId);
-        rows.push({
-          date: format(new Date(e.createdAt), 'MMM d, yyyy'),
-          pickup: booking?.pickupAddress?.split(',')[0] ?? '—',
-          dropoff: booking?.dropoffAddress?.split(',')[0] ?? '—',
-          gross: `$${parseFloat(e.grossAmount).toFixed(2)}`,
-          fee: `$${parseFloat(e.platformFeeAmount).toFixed(2)}`,
-          net: `$${parseFloat(e.netAmount).toFixed(2)}`,
-          status: e.status,
-        });
-      }
+      const rows = earningsRows.map((e) => ({
+        date: format(new Date(e.createdAt), 'MMM d, yyyy'),
+        pickup: e.pickupAddress?.split(',')[0] ?? '—',
+        dropoff: e.dropoffAddress?.split(',')[0] ?? '—',
+        gross: `$${parseFloat(e.grossAmount).toFixed(2)}`,
+        fee: `$${parseFloat(e.platformFeeAmount).toFixed(2)}`,
+        net: `$${parseFloat(e.netAmount).toFixed(2)}`,
+        status: e.status,
+      }));
 
       const totalGross = earningsRows.reduce((s, e) => s + parseFloat(e.grossAmount), 0);
       const totalFee = earningsRows.reduce((s, e) => s + parseFloat(e.platformFeeAmount), 0);
       const totalNet = earningsRows.reduce((s, e) => s + parseFloat(e.netAmount), 0);
 
       const PDFDocument = (await import("pdfkit")).default;
-      const doc = new PDFDocument({ margin: 50, size: 'A4' });
+      const doc = new PDFDocument({ margin: 50, size: 'A4', compress: true });
 
       const filename = monthParam ? `earnings-${monthParam}.pdf` : 'earnings-all-time.pdf';
       res.setHeader('Content-Type', 'application/pdf');
@@ -16419,31 +16425,56 @@ Respond with VALID JSON only:
 
       // Table headers
       if (rows.length > 0) {
-        doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
-        doc.moveDown(0.3);
-        const colX = [50, 110, 230, 330, 390, 450, 505];
-        doc.fontSize(8).font('Helvetica-Bold').fillColor('#6B7280');
-        doc.text('Date', colX[0], doc.y, { width: 55, continued: true });
-        doc.text('Pickup', colX[1] - doc.x + colX[1], doc.y, { width: 115, continued: true });
-        doc.text('Dropoff', { width: 95, continued: true });
-        doc.text('Gross', { width: 55, continued: true });
-        doc.text('Fee', { width: 55, continued: true });
-        doc.text('Net', { width: 50, continued: true });
-        doc.text('Status', { width: 50 });
-        doc.moveDown(0.3);
-        doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.4).strokeColor('#D1D5DB').stroke();
-        doc.moveDown(0.2);
+        const COLUMNS = [
+          { key: 'date' as const, label: 'Date', x: 50, width: 55 },
+          { key: 'pickup' as const, label: 'Pickup', x: 110, width: 115 },
+          { key: 'dropoff' as const, label: 'Dropoff', x: 230, width: 95 },
+          { key: 'gross' as const, label: 'Gross', x: 330, width: 55 },
+          { key: 'fee' as const, label: 'Fee', x: 390, width: 55 },
+          { key: 'net' as const, label: 'Net', x: 450, width: 50 },
+          { key: 'status' as const, label: 'Status', x: 505, width: 50 },
+        ];
+        // Leaves room for the totals line and the footer.
+        const BOTTOM_LIMIT = doc.page.height - 90;
+
+        // Headers were positioned with `continued: true` against an arithmetic
+        // expression (colX[1] - doc.x + colX[1]) while the rows below used
+        // fixed coordinates, so the two never lined up. Both now draw from the
+        // same column definitions.
+        const drawTableHeader = () => {
+          doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y)
+            .lineWidth(0.5).strokeColor('#E5E7EB').stroke();
+          doc.moveDown(0.3);
+
+          const headerY = doc.y;
+          doc.fontSize(8).font('Helvetica-Bold').fillColor('#6B7280');
+          for (const col of COLUMNS) {
+            doc.text(col.label, col.x, headerY, { width: col.width, lineBreak: false });
+          }
+
+          doc.y = headerY;
+          doc.moveDown(0.3);
+          doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y)
+            .lineWidth(0.4).strokeColor('#D1D5DB').stroke();
+          doc.moveDown(0.2);
+        };
+
+        drawTableHeader();
 
         for (const row of rows) {
+          // Start a fresh page before the row rather than letting PDFKit
+          // overflow into continuation pages with no column headers.
+          if (doc.y > BOTTOM_LIMIT) {
+            doc.addPage();
+            drawTableHeader();
+          }
+
           doc.fontSize(8).font('Helvetica').fillColor('#111827');
           const y = doc.y;
-          doc.text(row.date, colX[0], y, { width: 55, lineBreak: false });
-          doc.text(row.pickup, colX[1], y, { width: 115, lineBreak: false });
-          doc.text(row.dropoff, colX[2], y, { width: 95, lineBreak: false });
-          doc.text(row.gross, colX[3], y, { width: 55, lineBreak: false });
-          doc.text(row.fee, colX[4], y, { width: 55, lineBreak: false });
-          doc.text(row.net, colX[5], y, { width: 50, lineBreak: false });
-          doc.text(row.status, colX[6], y, { width: 50, lineBreak: false });
+          for (const col of COLUMNS) {
+            doc.text(row[col.key], col.x, y, { width: col.width, lineBreak: false });
+          }
+          doc.y = y;
           doc.moveDown(0.8);
         }
 
