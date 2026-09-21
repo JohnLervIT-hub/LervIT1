@@ -19,6 +19,12 @@
 
 import { logger } from '../logger';
 
+// Appended to the body of every outbound LinkedIn post. This is plain text,
+// not a page mention: posts are authored as urn:li:person, so LinkedIn will
+// render this as literal characters — it does not link or notify the company
+// page. A real tag needs an organization author + a mention entity.
+const LERVIT_SIGNOFF = '\n\n📍 LervIT Moving Calgary\nlervit.com';
+
 interface LinkedInPostRequest {
   text: string;
   url?: string;
@@ -79,8 +85,15 @@ class LinkedInProvider {
       const authorId = await this.getAuthorId();
       const author = `urn:li:person:${authorId}`;
 
+      // Brand sign-off appended to every post. Plain text, not a LinkedIn
+      // mention — see LERVIT_SIGNOFF above. Skipped when the copy already
+      // carries it so a re-post does not stack two sign-offs.
+      const textWithTag = input.text.includes(LERVIT_SIGNOFF.trim())
+        ? input.text
+        : `${input.text}${LERVIT_SIGNOFF}`;
+
       const shareContent: any = {
-        shareCommentary: { text: input.text },
+        shareCommentary: { text: textWithTag },
         shareMediaCategory: 'NONE',
       };
 

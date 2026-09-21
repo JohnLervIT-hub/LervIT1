@@ -86,6 +86,7 @@ Key facts:
 - Website: lervit.com
 - Phone: 1-888-982-0885
 - Blog: lervit.com/blog
+- LinkedIn: linkedin.com/company/lervit-technologies
 `.trim();
 
 const BLOG_TOPICS = [
