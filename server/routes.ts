@@ -613,6 +613,14 @@ async function approveVerificationItem(
           { moverId: item.moverId, source: 'verification_pipeline' },
           'agent',
         );
+
+        // The audit row alone reaches no handler — fire the bus so Riley
+        // welcomes the mover and Aegis makes them dispatch-eligible.
+        await agentEventBus.emit(
+          'reid.all_documents_approved',
+          { moverId: item.moverId, source: 'verification_pipeline' },
+          'verification-pipeline',
+        );
       }
     } catch (gateErr) {
       logger.warn({ err: gateErr, moverId: item.moverId }, '[Verification] Reid gate check failed');

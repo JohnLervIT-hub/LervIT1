@@ -46,6 +46,7 @@ import { extractTextFromDocument, isImageUrl } from '../lib/googleVision';
 import { logger } from '../logger';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { xavier } from './xavier';
+import { agentEventBus } from '../lib/agentEventBus';
 
 const REID_MODEL = 'claude-sonnet-4-6';
 const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
@@ -711,6 +712,15 @@ If policy numbers are missing, flag it.`;
         { moverId: audit.moverId },
         'agent',
       );
+
+      // emitEvent only writes business_events — it never reaches the bus, so
+      // Riley's welcome and Aegis's dispatch-eligibility scan never ran off
+      // the audit row alone. Fire the bus too.
+      await agentEventBus
+        .emit('reid.all_documents_approved', { moverId: audit.moverId }, 'reid')
+        .catch((err) =>
+          logger.error({ err, moverId: audit.moverId }, '[Reid] bus emit failed'),
+        );
     }
 
     return { approved: true, auditId: input.auditId, moverId: audit.moverId };
