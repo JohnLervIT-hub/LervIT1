@@ -7,3 +7,5 @@ vite.config.ts.*
 .env
 .env.local
 .env.*.local
+# served by LervIT-Marketing repo (separate checkout)
+website-standalone/
