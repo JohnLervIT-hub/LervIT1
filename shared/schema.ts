@@ -1920,6 +1920,12 @@ export const leads = pgTable("leads", {
   convertedBookingId: varchar("converted_booking_id").references(() => bookings.id),
   assignedAgent: text("assigned_agent"),
   notes: text("notes"),
+  // CASL/CTIA evidence of express SMS consent. Stamped by the capture
+  // handlers when the lead submits a form that showed the disclosure, with a
+  // verbatim copy of the language they saw — the wording changes over time,
+  // so the source list alone can't prove what was agreed to.
+  smsConsentAt: timestamp("sms_consent_at"),
+  smsConsentText: text("sms_consent_text"),
   // B2B sales pipeline (Sam Carter — SALES). All nullable so existing rows
   // stay valid; leadType defaults to 'b2c' to keep existing rows classified.
   companyName: text("company_name"),

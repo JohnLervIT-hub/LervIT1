@@ -15500,6 +15500,11 @@ Respond with VALID JSON only:
                 intentScore: 85,
                 status: 'new',
                 quoteId: quote.id,
+                // Same overlay, same disclosure as /api/leads/capture.
+                smsConsentAt: phone ? new Date() : null,
+                smsConsentText: phone
+                  ? 'By submitting this form you agree to receive SMS updates from LervIT. Reply STOP to opt out.'
+                  : null,
                 notes:
                   `Auto-captured from quote.\n` +
                   `Pickup: ${quote.pickupAddress}\n` +
@@ -15643,6 +15648,12 @@ Respond with VALID JSON only:
         status: 'new',
         notes: finalNotes,
         quoteId,
+        // Only stamp consent when a number was actually given — an
+        // email-only lead never agreed to be texted at any number.
+        smsConsentAt: phone ? new Date() : null,
+        smsConsentText: phone
+          ? 'By submitting this form you agree to receive SMS updates from LervIT. Reply STOP to opt out.'
+          : null,
       }).returning({ id: leads.id });
 
       if (quoteId) {
@@ -15720,6 +15731,10 @@ Respond with VALID JSON only:
         intentScore: 90,
         status: 'new',
         notes,
+        smsConsentAt: phone ? new Date() : null,
+        smsConsentText: phone
+          ? 'By submitting this form you agree to receive SMS from LervIT about mover opportunities. Reply STOP to opt out.'
+          : null,
       }).returning({ id: leads.id });
 
       const jordanQueue = createAgentQueue(QUEUE_NAMES.VETTER);

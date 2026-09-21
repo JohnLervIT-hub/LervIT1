@@ -1616,3 +1616,8 @@ CREATE INDEX IF NOT EXISTS "quotes_created_at_idx"  ON "quotes" ("created_at");
 
 ALTER TABLE "leads"
   ADD COLUMN IF NOT EXISTS "quote_id" varchar REFERENCES "quotes" ("id");
+
+-- CASL/CTIA SMS consent evidence (see migrations/0020_sms_consent.sql).
+ALTER TABLE "leads"
+  ADD COLUMN IF NOT EXISTS "sms_consent_at"   timestamp,
+  ADD COLUMN IF NOT EXISTS "sms_consent_text" text;

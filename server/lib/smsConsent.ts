@@ -24,7 +24,12 @@ export const CONSENTED_SOURCES = [
 export function hasSmsConsent(lead: {
   sourceChannel?: string | null;
   utmSource?: string | null;
+  smsConsentAt?: Date | null;
 }): boolean {
+  // A recorded consent timestamp is the strongest evidence we have and wins
+  // outright — sourceChannel can be edited or re-classified after the fact,
+  // the stamp cannot.
+  if (lead.smsConsentAt) return true;
   return (
     CONSENTED_SOURCES.includes(lead.sourceChannel ?? '') ||
     lead.utmSource === 'meta_ads' ||
