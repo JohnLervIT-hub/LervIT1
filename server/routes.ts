@@ -45,7 +45,7 @@ import { WebSocketServer } from "ws";
 import { createNovaBridge } from "./lib/novaBridge";
 import { novaCallContextStore } from "./nova-webhook-routes";
 import { registerVoiceRoutes } from "./voice-routes";
-import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, campaigns, contentItems } from "@shared/schema";
+import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessageSchema, insertReviewSchema, jobNotifications, insertSupportTicketSchema, insertSupportTicketReplySchema, supportTickets, supportTicketReplies, bookings, users as usersTable, movers as moversTable, verificationItems, insertVerificationItemSchema, identifiedItems, messages, reviews, aiRuns, aiSupportInsights, User, moverStripeAccounts, moverEarnings, moverPayouts, BOOKING_STATUSES, ACTIVE_STATUSES, isValidStatusTransition, getNextValidStatuses, BOOKING_STATUS_INFO, bookingMetrics as bookingMetricsTable, itemFeedback as itemFeedbackTable, moverPerformance as moverPerformanceTable, moverTermsAcceptance, emailCampaigns, insertEmailCampaignSchema, inAppNotifications, abandonedBookings, insertAbandonedBookingSchema, analyticsEvents, insertAnalyticsEventSchema, bookingAssignments, partnerTeamMembers, partners, partnerUsers, bookingStatusEvents, savedAddresses, feedbackSurveys, moverAvailability, referrals, partnerEarnings, stripeWebhookEvents, businessEvents, kpiTargets, moverActivityLog, leads, partnerIncidents, adminAuditLog, quotes, voiceCalls, blogPosts, gmbPosts, socialPosts, newsletters, campaigns, contentItems } from "@shared/schema";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
@@ -15281,6 +15281,77 @@ Respond with VALID JSON only:
     } catch (err) {
       logger.error({ err }, '[Admin] gmb list failed');
       res.status(500).json({ error: 'Failed to load GMB posts' });
+    }
+  });
+
+  // ─── Newsletters ───────────────────────────────────────
+  // Ember writes monthly drafts as pending_review; John reviews here, then
+  // sends via Resend and marks the row sent.
+
+  const NEWSLETTER_STATUSES = ['pending_review', 'approved', 'sent'] as const;
+
+  app.get("/api/admin/newsletters", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+
+      const rows = await db
+        .select()
+        .from(newsletters)
+        .where(status ? eq(newsletters.status, status) : undefined)
+        .orderBy(desc(newsletters.createdAt))
+        .limit(50);
+
+      res.json({ newsletters: rows });
+    } catch (err) {
+      logger.error({ err }, '[Admin] newsletter list failed');
+      res.status(500).json({ error: 'Failed to load newsletters' });
+    }
+  });
+
+  app.get("/api/admin/newsletters/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const [row] = await db
+        .select()
+        .from(newsletters)
+        .where(eq(newsletters.id, req.params.id))
+        .limit(1);
+
+      if (!row) return res.status(404).json({ error: 'Newsletter not found' });
+      res.json({ newsletter: row });
+    } catch (err) {
+      logger.error({ err }, '[Admin] newsletter fetch failed');
+      res.status(500).json({ error: 'Failed to load newsletter' });
+    }
+  });
+
+  app.patch("/api/admin/newsletters/:id", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const status = typeof req.body?.status === 'string' ? req.body.status : undefined;
+
+      if (status && !(NEWSLETTER_STATUSES as readonly string[]).includes(status)) {
+        return res.status(400).json({
+          error: `status must be one of: ${NEWSLETTER_STATUSES.join(', ')}`,
+        });
+      }
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (status) updates.status = status;
+      if (status === 'sent') updates.sentAt = new Date();
+
+      const [row] = await db
+        .update(newsletters)
+        .set(updates)
+        .where(eq(newsletters.id, req.params.id))
+        .returning();
+
+      if (!row) return res.status(404).json({ error: 'Newsletter not found' });
+      res.json({ success: true, newsletter: row });
+    } catch (err) {
+      logger.error({ err }, '[Admin] newsletter patch failed');
+      res.status(500).json({ error: 'Failed to update newsletter' });
     }
   });
 
