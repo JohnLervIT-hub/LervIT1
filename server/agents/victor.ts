@@ -30,6 +30,7 @@ import { dispatchBooking } from '../dispatch';
 import { emitEvent } from '../events';
 import { xavier } from './xavier';
 import { logger } from '../logger';
+import { agentEventBus } from '../lib/agentEventBus';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 
 interface DispatchInput {
@@ -198,6 +199,29 @@ export class VictorAgent extends BaseAgent {
       notificationCount: notificationCount ?? null,
       xavierSmsSent: !!xavierResult?.smsSent,
     });
+
+    // Wake the voice path too. NOTE: the 'booking.no_acceptance' subscriber
+    // calls Nova's call_mover_dispatch, which needs a moverId/earnings to dial
+    // anyone — it cannot pick a mover itself, so today this only carries the
+    // booking context. See the 6h dedupe above: this fires at most once per
+    // booking per 6 hours.
+    await agentEventBus
+      .emit(
+        'booking.no_acceptance',
+        {
+          bookingId,
+          customerId: booking.customerId,
+          pickupArea: booking.pickupAddress,
+          dropoffArea: booking.dropoffAddress,
+          loadSize: booking.loadSize,
+          preferredDate: booking.preferredDate,
+          notificationCount: notificationCount ?? null,
+        },
+        'victor',
+      )
+      .catch((err) =>
+        logger.error({ err, bookingId }, 'Victor: no_acceptance bus emit failed'),
+      );
 
     return { success: true, bookingId, xavierResult };
   }
