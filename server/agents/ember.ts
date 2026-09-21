@@ -1925,6 +1925,7 @@ Platform: ${item.platform ?? 'N/A'}`;
         url: mediaUrl,
         title: 'LervIT Moving Calgary',
         description: caption.slice(0, 200),
+        hashtags: item.hashtags ?? [],
       });
       results = [
         {

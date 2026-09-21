@@ -32,6 +32,8 @@ interface LinkedInPostRequest {
   videoUrl?: string;
   title?: string;
   description?: string;
+  /** Bare tags (no leading '#') — matches how content_items stores them. */
+  hashtags?: string[];
 }
 
 interface LinkedInPostResult {
@@ -85,12 +87,31 @@ class LinkedInProvider {
       const authorId = await this.getAuthorId();
       const author = `urn:li:person:${authorId}`;
 
+      // Hashtags are stored on the content item as bare words and were being
+      // dropped here — generated, saved, shown in the admin, never posted.
+      // Tags the copy already carries inline are skipped rather than repeated.
+      const hashtagStr = (input.hashtags ?? [])
+        .map((h) => h.trim().replace(/^#+/, ''))
+        .filter((h) => h.length > 0)
+        // Escape before building the probe — a tag like "c++" would otherwise
+        // compile to an invalid regex and throw.
+        .filter(
+          (h) =>
+            !new RegExp(`#${h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(
+              input.text,
+            ),
+        )
+        .map((h) => `#${h}`)
+        .join(' ');
+
+      const fullText = hashtagStr ? `${input.text}\n\n${hashtagStr}` : input.text;
+
       // Brand sign-off appended to every post. Plain text, not a LinkedIn
       // mention — see LERVIT_SIGNOFF above. Skipped when the copy already
       // carries it so a re-post does not stack two sign-offs.
-      const textWithTag = input.text.includes(LERVIT_SIGNOFF.trim())
-        ? input.text
-        : `${input.text}${LERVIT_SIGNOFF}`;
+      const textWithTag = fullText.includes(LERVIT_SIGNOFF.trim())
+        ? fullText
+        : `${fullText}${LERVIT_SIGNOFF}`;
 
       const shareContent: any = {
         shareCommentary: { text: textWithTag },
