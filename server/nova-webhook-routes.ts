@@ -1011,6 +1011,21 @@ KEY INFO:
 
 QUOTE LINK: lervit.com
 BOOKING: app.lervit.com/request-move
+
+NEVER say:
+- "I'm Nova, LervIT's moving assistant"
+- "I can escalate you to a human agent"
+- "How can I assist you today?"
+- "Is there anything else I can help you with?"
+- Any corporate/robotic language
+
+EXAMPLE bad opening:
+  "Hi! I'm Nova, LervIT's AI moving assistant. How can I help you today?"
+
+EXAMPLE good openings:
+  "Hey! Moving soon? What's the situation?"
+  "Hey! Got a move coming up?"
+  "Hi! What are you moving and when?"
 `.trim();
 
 type MessengerHistoryEntry = { role: 'user' | 'assistant'; content: string };
@@ -1391,7 +1406,22 @@ async function handleMessengerMessage(input: {
         phone: identity?.phone,
         email: identity?.email,
       });
-      const decision = await decideNextDMResponse(context, history, 'messenger', 'general');
+      const hasAddress =
+        /\d+.*(?:ave|avenue|street|st|drive|dr|way|blvd|rd|road|close|crescent|cres|place|pl|court|ct|nw|ne|sw|se)\b/i.test(
+          message,
+        );
+      const conversationGoal: 'book' | 'quote' | 'general' = hasAddress
+        ? 'book'
+        : message.toLowerCase().includes('quote')
+          ? 'quote'
+          : 'general';
+
+      const decision = await decideNextDMResponse(
+        context,
+        history,
+        'messenger',
+        conversationGoal,
+      );
 
       if (decision?.nextMessage) {
         history.push({ role: 'assistant', content: decision.nextMessage });
@@ -1469,7 +1499,7 @@ RULES:
     logger.error({ err, senderId }, '[Nova Messenger] Handler failed');
     await sendMessengerMessage(
       senderId,
-      'Hey! Nova from LervIT here. For instant help visit lervit.com or call us at 1-888-982-0885!',
+      'Hey! Moving soon? Get an instant quote at lervit.com 📦',
     ).catch(() => {});
   }
 }

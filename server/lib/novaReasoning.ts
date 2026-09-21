@@ -183,7 +183,9 @@ export async function decideNextDMResponse(
     const response = await anthropic.messages.create({
       model: NOVA_MODEL,
       max_tokens: 300,
-      temperature: 0,
+      // Conversational copy, not a routing decision — a little sampling keeps
+      // Nova's openings from being word-for-word identical to every customer.
+      temperature: 0.7,
       system: `${JAILBREAK_PREAMBLE}
 
 You are Nova Clarke, LervIT's AI moving assistant in Calgary.
@@ -204,7 +206,15 @@ RULES:
 - If customer wants quote → collect pickup + dropoff
 - If ready to book → send lervit.com link
 - If complaint → empathize first, then offer solution
-- If confused → simplify${
+- If confused → simplify
+
+CONTEXT RULES (apply to the CONTEXT block above):
+- Return customer: greet by name and reference their history naturally,
+  e.g. "Hey Sarah! Back for another move?"
+- New customer: skip the pleasantries — ask what they're moving and when,
+  never "how can I help you today?"
+- Evening hours or outside the call window: keep it short, they may be busy
+- If a name is known, use it ONCE in the opening only — never again${
         goal === 'book'
           ? `
 - Customer has already given pickup + dropoff addresses
