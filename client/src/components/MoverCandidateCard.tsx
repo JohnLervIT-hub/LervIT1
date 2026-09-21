@@ -137,18 +137,24 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
           title: 'Skipped',
           description: data.result.reason === 'already_contacted_today'
             ? 'Already contacted today'
-            : data.result.reason ?? (channel === 'sms' ? 'No phone available' : 'No email available'),
+            : data.result.reason === 'no_sms_consent_no_email'
+              ? 'No SMS consent on file and no email address'
+              : data.result.reason ?? (channel === 'sms' ? 'No phone available' : 'No email available'),
           variant: 'destructive',
         });
         return;
       }
-      const label = channel === 'sms' ? 'SMS' : 'Email';
-      const target = channel === 'sms'
-        ? (lead.contactPhone ?? 'candidate')
-        : (lead.contactName ?? lead.contactEmail ?? 'candidate');
+      // SMS can be downgraded to email by the CASL consent gate.
+      const sentEmail = channel !== 'sms' || data?.result?.fallback === 'email';
+      const label = sentEmail ? 'Email' : 'SMS';
+      const target = sentEmail
+        ? (lead.contactName ?? lead.contactEmail ?? 'candidate')
+        : (lead.contactPhone ?? 'candidate');
       toast({
         title: 'Jordan Hayes',
-        description: `${label} queued for ${target}`,
+        description: data?.result?.fallback === 'email'
+          ? `No SMS consent — email queued for ${target} instead`
+          : `${label} queued for ${target}`,
       });
       onRefresh();
     },
@@ -172,14 +178,18 @@ export function MoverCandidateCard({ lead, onRefresh }: MoverCandidateCardProps)
           title: 'Skipped',
           description: data.result.reason === 'already_contacted_today'
             ? 'Already contacted today'
-            : data.result.reason ?? 'No phone available',
+            : data.result.reason === 'no_sms_consent_no_email'
+              ? 'No SMS consent on file and no email address'
+              : data.result.reason ?? 'No phone available',
           variant: 'destructive',
         });
         return;
       }
       toast({
         title: 'Jordan Hayes',
-        description: 'SMS queued for ' + (lead.contactPhone ?? 'candidate'),
+        description: data?.result?.fallback === 'email'
+          ? 'No SMS consent — email queued for ' + (lead.contactEmail ?? 'candidate') + ' instead'
+          : 'SMS queued for ' + (lead.contactPhone ?? 'candidate'),
       });
       onRefresh();
     },

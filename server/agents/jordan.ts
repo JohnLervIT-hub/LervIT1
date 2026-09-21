@@ -101,11 +101,21 @@ export class JordanAgent extends BaseAgent {
       return { skipped: true, reason: 'no_contact_details' };
     }
 
+    // CASL: an explicit SMS override still needs consent. Without it, fall
+    // through to the email flow below when we have an address to write to.
+    let smsBlockedNoConsent = false;
     if (channelOverride === 'sms') {
       if (!lead.contactPhone) {
         return { skipped: true, reason: 'no_phone_for_sms_override' };
       }
-      return this.sendManualSms(lead, options);
+      if (hasSmsConsent(lead) || !lead.contactEmail) {
+        return this.sendManualSms(lead, options);
+      }
+      smsBlockedNoConsent = true;
+      logger.warn(
+        { leadId, source: lead.sourceChannel },
+        '[Jordan] SMS blocked — no CASL consent, trying email fallback',
+      );
     }
     if (channelOverride === 'email' && !lead.contactEmail) {
       return { skipped: true, reason: 'no_email_for_email_override' };
@@ -177,6 +187,7 @@ Sign up link: ${applyLink}`,
         dryRun: true,
         wouldContact: [leadId],
         preview: { to: lead.contactEmail ?? null, subject, body },
+        ...(smsBlockedNoConsent ? { fallback: 'email' as const } : {}),
       };
     }
 
@@ -220,9 +231,18 @@ Sign up link: ${applyLink}`,
       channel: 'email',
       emailSent,
       agentName: this.name,
+      ...(smsBlockedNoConsent ? { smsSkipped: true, fallbackReason: 'no_sms_consent' } : {}),
     });
 
-    return { success: true, touchNumber: 1, channel: 'email', emailSent };
+    return {
+      success: true,
+      touchNumber: 1,
+      channel: 'email',
+      emailSent,
+      ...(smsBlockedNoConsent
+        ? { smsSkipped: true, fallback: 'email' as const, fallbackReason: 'no_sms_consent' }
+        : {}),
+    };
   }
 
   private async sendTouch({ leadId, touchNumber }: SendTouchInput, options: AgentRunOptions = {}) {
@@ -249,14 +269,17 @@ Sign up link: ${applyLink}`,
     let channel: 'email' | 'sms' = 'email';
     let delivered = false;
 
-    if (touchNumber === 2 && lead.contactPhone) {
-      if (!hasSmsConsent(lead)) {
-        logger.warn(
-          { leadId: lead.id, source: lead.sourceChannel },
-          '[Jordan] Skipping SMS — no CASL consent',
-        );
-        return { skipped: true, reason: 'no_sms_consent', touchNumber };
-      }
+    // CASL: touch 2 texts only leads whose source implies express consent.
+    // Everything else drops through to the email branch below.
+    const smsBlockedNoConsent = touchNumber === 2 && !!lead.contactPhone && !hasSmsConsent(lead);
+    if (smsBlockedNoConsent) {
+      logger.warn(
+        { leadId: lead.id, source: lead.sourceChannel },
+        '[Jordan] SMS blocked — no CASL consent, trying email fallback',
+      );
+    }
+
+    if (touchNumber === 2 && lead.contactPhone && !smsBlockedNoConsent) {
       channel = 'sms';
       const rawSms = await this.callClaude(
         `${JAILBREAK_PREAMBLE}
@@ -329,7 +352,11 @@ Sign up link: ${applyLink}`,
       }
       delivered = await sendJordanEmail(lead.contactEmail, subject, body);
     } else {
-      return { skipped: true, reason: 'no reachable channel', touchNumber };
+      return {
+        skipped: true,
+        reason: smsBlockedNoConsent ? 'no_sms_consent_no_email' : 'no reachable channel',
+        touchNumber,
+      };
     }
 
     const nextStatus = touchNumber >= 4 ? 'cold' : 'contacted';
@@ -348,9 +375,18 @@ Sign up link: ${applyLink}`,
       channel,
       delivered,
       agentName: this.name,
+      ...(smsBlockedNoConsent ? { smsSkipped: true, fallbackReason: 'no_sms_consent' } : {}),
     });
 
-    return { success: true, touchNumber, channel, delivered };
+    return {
+      success: true,
+      touchNumber,
+      channel,
+      delivered,
+      ...(smsBlockedNoConsent
+        ? { smsSkipped: true, fallback: 'email' as const, fallbackReason: 'no_sms_consent' }
+        : {}),
+    };
   }
 
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
@@ -358,9 +394,9 @@ Sign up link: ${applyLink}`,
     if (!hasSmsConsent(lead)) {
       logger.warn(
         { leadId: lead.id, source: lead.sourceChannel },
-        '[Jordan] Skipping SMS — no CASL consent',
+        '[Jordan] Skipping SMS — no CASL consent and no email to fall back to',
       );
-      return { skipped: true, reason: 'no_sms_consent' };
+      return { skipped: true, reason: 'no_sms_consent_no_email' };
     }
 
     const dedupe = await wasContactedToday({
