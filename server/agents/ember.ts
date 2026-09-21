@@ -8,6 +8,8 @@
  *                                       Case: 8-3924000041848 (GMB API pending approval)
  *     - `respond_to_review`          : warm response for 4-5 star; escalate to Xavier for <=3
  *     - `generate_social_content`    : per-platform social copy → social_posts (status='draft')
+ *     - `generate_trend_post`        : social copy grounded in the last 7 days of
+ *                                       real leads/bookings → social_posts (status='draft')
  *     - `generate_newsletter`        : monthly newsletter draft → newsletters (status='pending_review')
  *     - `publish_blog_post`          : flip a pending_review blog post to 'published' (public /blog picks up)
  *
@@ -30,10 +32,10 @@
 import fs from 'fs';
 import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { blogPosts, gmbPosts, socialPosts, newsletters, reviews, users, bookings, campaigns, contentItems } from '@shared/schema';
+import { blogPosts, gmbPosts, socialPosts, newsletters, reviews, users, bookings, leads, campaigns, contentItems } from '@shared/schema';
 import { xavier } from './xavier';
 import { logger } from '../logger';
 import { emitEvent } from '../events';
@@ -140,6 +142,90 @@ const SOCIAL_GUIDES: Record<SocialPlatform, string> = {
 - No emojis
 `.trim(),
 };
+
+// ─── Trend posts (grounded in real LervIT activity) ──────────
+// generate_trend_post is the only content action that reads live operational
+// data. Everything it can cite has to survive the brand QA rule "never invent
+// statistics", so the numbers are computed here and the model is told it may
+// only repeat figures present in the payload.
+
+const TREND_WINDOW_DAYS = 7;
+
+// Below this many bookings in the window, a weekly average is noise — the
+// snapshot ships without figures and the prompt forbids citing any.
+const TREND_MIN_BOOKINGS_FOR_STATS = 5;
+
+// Pickup addresses are free text. Bucketing against a fixed list (rather than
+// parsing whatever the customer typed) keeps customer-supplied strings out of
+// the prompt entirely — an area only appears if it matches one of these.
+const CALGARY_AREAS = [
+  'Beltline', 'Downtown', 'Bridgeland', 'Kensington', 'Mahogany', 'Cranston',
+  'Sunnyside', 'Mission', 'Inglewood', 'Marda Loop', 'Altadore', 'Tuscany',
+  'Evanston', 'Auburn Bay', 'Seton', 'Sage Hill', 'Airdrie', 'Cochrane',
+  'Okotoks', 'Chestermere',
+] as const;
+
+const CALGARY_QUADRANTS = ['NW', 'NE', 'SW', 'SE'] as const;
+
+interface TrendSnapshot {
+  windowDays: number;
+  leadCount: number;
+  leadSources: Array<{ label: string; count: number }>;
+  bookingCount: number;
+  topAreas: Array<{ label: string; count: number }>;
+  loadSizes: Array<{ label: string; count: number }>;
+  busiestDays: Array<{ label: string; count: number }>;
+  averagePrice: number | null;
+  /** False when the window is too thin to quote figures honestly. */
+  hasStats: boolean;
+}
+
+interface GenerateTrendInput {
+  platforms?: SocialPlatform[];
+}
+
+// Extra framing layered on top of SOCIAL_GUIDES for the trend angle.
+const TREND_ANGLES: Record<SocialPlatform, string> = {
+  linkedin: `Write about trends in the local Calgary moving market.
+B2B angle for property managers, HR teams, and corporate relocation leads.
+Cover neighbourhood trends, demand patterns, and one genuine insight.`,
+  instagram: `Write about moving trends in Calgary this week.
+Helpful, local angle — what neighbours are actually doing right now.`,
+  facebook: `Write about what moving looked like across Calgary this week.
+Community angle — helpful and neighbourly, not a sales pitch.`,
+  tiktok: `Open on the most surprising thing in this week's Calgary moving data.
+Punchy and specific.`,
+};
+
+function topCounts(values: Array<string | null | undefined>, limit: number) {
+  const tally = new Map<string, number>();
+  for (const value of values) {
+    const key = value?.trim();
+    if (!key) continue;
+    tally.set(key, (tally.get(key) ?? 0) + 1);
+  }
+  return Array.from(tally.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, count]) => ({ label, count }));
+}
+
+/** Bucket a free-text pickup address to a known area, or a Calgary quadrant. */
+function bucketArea(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const haystack = address.toLowerCase();
+
+  for (const area of CALGARY_AREAS) {
+    if (haystack.includes(area.toLowerCase())) return area;
+  }
+
+  const quadrant = address.match(/\b(NW|NE|SW|SE)\b/i)?.[1]?.toUpperCase();
+  if (quadrant && (CALGARY_QUADRANTS as readonly string[]).includes(quadrant)) {
+    return `Calgary ${quadrant}`;
+  }
+
+  return null;
+}
 
 interface GenerateBlogInput {
   topic?: string;
@@ -306,6 +392,8 @@ export class EmberAgent extends BaseAgent {
         return this.respondToReview(input as RespondToReviewInput, options);
       case 'generate_social_content':
         return this.generateSocialContent(input as GenerateSocialInput, options);
+      case 'generate_trend_post':
+        return this.generateTrendPost(input as GenerateTrendInput, options);
       case 'generate_newsletter':
         return this.generateNewsletter(options);
       case 'publish_blog_post':
@@ -716,6 +804,237 @@ Start your response with { directly.
 
     logger.info({ count: results.length, platforms }, '[Ember] social posts drafted');
     return { count: results.length, posts: results };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Trend posts — social copy grounded in real LervIT activity
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * Aggregate the last 7 days of demand into publishable buckets.
+   *
+   * Only derived counts leave this method: addresses are bucketed against
+   * CALGARY_AREAS, and names, phones and emails are never selected. `leads`
+   * carries no address or price column, so neighbourhoods and values come
+   * from `bookings`.
+   */
+  private async gatherTrendData(): Promise<TrendSnapshot> {
+    const since = new Date(Date.now() - TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+    const recentLeads = await db
+      .select({ sourceChannel: leads.sourceChannel })
+      .from(leads)
+      .where(and(gte(leads.createdAt, since), eq(leads.leadType, 'b2c')))
+      .limit(500);
+
+    const recentBookings = await db
+      .select({
+        pickupAddress: bookings.pickupAddress,
+        loadSize: bookings.loadSize,
+        preferredDate: bookings.preferredDate,
+        price: bookings.price,
+        status: bookings.status,
+      })
+      .from(bookings)
+      .where(gte(bookings.createdAt, since))
+      .limit(500);
+
+    const live = recentBookings.filter((b) => b.status !== 'cancelled');
+
+    const prices = live
+      .map((b) => Number(b.price))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    const averagePrice = prices.length
+      ? Math.round(prices.reduce((sum, n) => sum + n, 0) / prices.length)
+      : null;
+
+    const busiestDays = topCounts(
+      live.map((b) =>
+        b.preferredDate
+          ? b.preferredDate.toLocaleDateString('en-US', {
+              weekday: 'long',
+              timeZone: 'America/Edmonton',
+            })
+          : null,
+      ),
+      2,
+    );
+
+    const hasStats = live.length >= TREND_MIN_BOOKINGS_FOR_STATS;
+
+    return {
+      windowDays: TREND_WINDOW_DAYS,
+      leadCount: recentLeads.length,
+      leadSources: topCounts(recentLeads.map((l) => l.sourceChannel), 3),
+      bookingCount: live.length,
+      topAreas: topCounts(live.map((b) => bucketArea(b.pickupAddress)), 3),
+      loadSizes: topCounts(live.map((b) => b.loadSize), 3),
+      busiestDays,
+      averagePrice: hasStats ? averagePrice : null,
+      hasStats,
+    };
+  }
+
+  /** Render the snapshot as prompt-safe lines; omits anything we cannot back. */
+  private formatTrendData(snapshot: TrendSnapshot): string {
+    const lines: string[] = [`Window: last ${snapshot.windowDays} days in Calgary`];
+
+    if (snapshot.topAreas.length) {
+      lines.push(
+        `Most active pickup areas: ${snapshot.topAreas
+          .map((a) => `${a.label} (${a.count} moves)`)
+          .join(', ')}`,
+      );
+    }
+
+    if (snapshot.hasStats) {
+      lines.push(`Moves booked: ${snapshot.bookingCount}`);
+      lines.push(`New customer enquiries: ${snapshot.leadCount}`);
+
+      if (snapshot.averagePrice !== null) {
+        lines.push(`Average booked move: $${snapshot.averagePrice} CAD`);
+      }
+      if (snapshot.busiestDays.length) {
+        lines.push(
+          `Busiest requested move days: ${snapshot.busiestDays
+            .map((d) => `${d.label} (${d.count})`)
+            .join(', ')}`,
+        );
+      }
+      if (snapshot.loadSizes.length) {
+        lines.push(
+          `Most common load sizes: ${snapshot.loadSizes
+            .map((l) => sanitizeForPrompt(l.label, 'title'))
+            .join(', ')}`,
+        );
+      }
+      if (snapshot.leadSources.length) {
+        lines.push(
+          `Where enquiries came from: ${snapshot.leadSources
+            .map((l) => sanitizeForPrompt(l.label, 'title'))
+            .join(', ')}`,
+        );
+      }
+    } else {
+      lines.push(
+        'Volume this week is too low to quote figures — describe the pattern qualitatively only.',
+      );
+    }
+
+    return lines.join('\n');
+  }
+
+  async generateTrendPost(input: GenerateTrendInput, options?: AgentRunOptions) {
+    const requested = Array.isArray(input.platforms) && input.platforms.length
+      ? input.platforms
+      : (['linkedin', 'instagram'] as SocialPlatform[]);
+
+    const platforms = requested.filter((p): p is SocialPlatform =>
+      SOCIAL_PLATFORMS.includes(p),
+    );
+
+    if (platforms.length === 0) {
+      throw new Error(
+        `generate_trend_post: no supported platform in [${requested.join(', ')}]`,
+      );
+    }
+
+    const snapshot = await this.gatherTrendData();
+
+    // Nothing happened this week — a "trend" post off an empty window would be
+    // fabrication, so skip rather than draft.
+    if (snapshot.bookingCount === 0 && snapshot.leadCount === 0) {
+      logger.warn({ windowDays: snapshot.windowDays }, '[Ember] trend post skipped — no activity');
+      return { skipped: true, reason: 'no_activity', snapshot };
+    }
+
+    if (options?.dryRun) {
+      return { dryRun: true, would: 'generate_trend_post', platforms, snapshot };
+    }
+
+    const dataBlock = this.formatTrendData(snapshot);
+    const results: Array<{ id: string; platform: SocialPlatform; contentPreview: string }> = [];
+
+    for (const platform of platforms) {
+      const systemPrompt = `You are Ember Lane, social lead for LervIT.
+Write a ${platform} post about this week's Calgary moving activity, using the
+real LervIT data supplied by the user message.
+
+${TREND_ANGLES[platform]}
+
+${SOCIAL_GUIDES[platform]}
+
+${LERVIT_BRAND}
+
+DATA RULES — these override everything else:
+- Only cite figures that appear in the data block. Never invent or round up a number.
+- If the data block says volume is too low to quote figures, cite NO numbers at all.
+- Never name an individual customer, address, or mover.
+- Do not imply market-wide statistics — this is LervIT's own booking activity, and
+  it must read that way (e.g. "moves we handled this week", not "Calgary moved X%").
+
+CRITICAL: Respond with ONLY raw JSON.
+No markdown. No code fences.
+No backticks. No explanation.
+Start your response with { directly.
+
+{ "content": string, "hashtags": string[] }${CREATIVEOS_APPENDIX}`;
+
+      const userMessage = `This week's LervIT activity:
+<data>
+${dataBlock}
+</data>
+
+Draft the ${platform} post.`;
+
+      const raw = await this.callAnthropic(systemPrompt, userMessage, 1200);
+      const parsed = this.parseJson(raw);
+
+      const content = String(parsed.content ?? '').trim();
+      if (!content) {
+        logger.error({ platform }, '[Ember] trend post content was empty');
+        continue;
+      }
+
+      const hashtags = Array.isArray(parsed.hashtags)
+        ? parsed.hashtags.map((h: any) => String(h).replace(/^#/, '').trim()).filter(Boolean)
+        : null;
+
+      const [row] = await db
+        .insert(socialPosts)
+        .values({ platform, content, hashtags, status: 'draft' })
+        .returning();
+
+      results.push({ id: row.id, platform, contentPreview: content.slice(0, 100) });
+    }
+
+    if (results.length === 0) {
+      throw new Error('Ember: trend post generation produced no content');
+    }
+
+    // Trend posts quote real figures, so flag them for review explicitly.
+    try {
+      await xavier.run('escalate', {
+        issue: `Ember: ${results.length} data-backed trend post${results.length === 1 ? '' : 's'} ready for review (cites real booking figures)`,
+        severity: 'low',
+        agentName: 'Ember Lane',
+        data: {
+          platforms: results.map((r) => r.platform),
+          bookingCount: snapshot.bookingCount,
+          citedFigures: snapshot.hasStats,
+        },
+      });
+    } catch (err) {
+      logger.error({ err }, '[Ember] xavier trend nudge failed');
+    }
+
+    logger.info(
+      { count: results.length, platforms, bookingCount: snapshot.bookingCount, hasStats: snapshot.hasStats },
+      '[Ember] trend posts drafted',
+    );
+
+    return { count: results.length, posts: results, snapshot };
   }
 
   // ─────────────────────────────────────────────────────────

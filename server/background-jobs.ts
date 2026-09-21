@@ -395,6 +395,21 @@ export function initBackgroundJobs() {
     });
   }, TZ);
 
+  // Tuesday — trend post drafts grounded in the last 7 days of real activity.
+  // Skips itself when the window is empty; withholds figures under 5 bookings.
+  cron.schedule('0 7 * * 2', async () => {
+    await withJobLock('ember_trend_post', async () => {
+      try {
+        const result = await ember.run('generate_trend_post', {
+          platforms: ['linkedin', 'instagram'],
+        });
+        logger.info({ event: 'ember_trend_post', result }, 'Ember trend posts drafted');
+      } catch (err) {
+        logger.error({ err, event: 'ember_trend_post' }, 'Ember trend post failed');
+      }
+    });
+  }, TZ);
+
   // Friday — social drafts for all 4 platforms
   cron.schedule('0 7 * * 5', async () => {
     await withJobLock('ember_social_content', async () => {
