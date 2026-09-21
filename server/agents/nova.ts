@@ -21,6 +21,7 @@ import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { wasContactedToday } from './dedupe';
 import { novaCallContextStore } from '../nova-webhook-routes';
+import { agentEventBus } from '../lib/agentEventBus';
 
 const NOVA_PHONE = process.env.TELNYX_PHONE_NUMBER ?? '+18889820885';
 const TELNYX_CONNECTION_ID = process.env.TELNYX_CONNECTION_ID;
@@ -51,6 +52,32 @@ interface InitiateCallOpts {
 interface InitiateCallResult {
   callControlId?: string;
   error?: string;
+}
+
+// Hour (MT) a rescheduled call is retried at — inside CALL_HOURS_START..END.
+const RESCHEDULE_HOUR_MT = 9;
+
+/**
+ * Next instant at which it is RESCHEDULE_HOUR_MT in Calgary.
+ *
+ * Naively doing `new Date(now.toLocaleString(..., {timeZone}))` then
+ * `.getTime()` returns Calgary wall-clock reinterpreted as the server's zone
+ * (UTC in prod), which is off by the MT offset — a 9pm reschedule would fire
+ * at 3am MT and bounce out of hours again, forever. So we measure that shift
+ * and add it back.
+ */
+function nextCallWindowStart(now = new Date()): Date {
+  const mtNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
+  const zoneShiftMs = now.getTime() - mtNow.getTime();
+
+  const target = new Date(mtNow);
+  // Past the window → tomorrow morning. Before it → later the same morning.
+  if (mtNow.getHours() >= CALL_HOURS_END) {
+    target.setDate(target.getDate() + 1);
+  }
+  target.setHours(RESCHEDULE_HOUR_MT, 0, 0, 0);
+
+  return new Date(target.getTime() + zoneShiftMs);
 }
 
 export class NovaAgent extends BaseAgent {
@@ -150,6 +177,13 @@ export class NovaAgent extends BaseAgent {
       const metadataBookingId =
         typeof opts.metadata.bookingId === 'string' ? opts.metadata.bookingId : null;
 
+      const leadId =
+        opts.entityType === 'lead'
+          ? opts.entityId
+          : typeof opts.metadata.leadId === 'string'
+            ? opts.metadata.leadId
+            : null;
+
       await db
         .insert(voiceCalls)
         .values({
@@ -160,6 +194,7 @@ export class NovaAgent extends BaseAgent {
           direction: 'outbound',
           status: 'initiated',
           bookingId: metadataBookingId,
+          leadId,
         })
         .catch((err) => logger.warn({ err }, '[Nova] Failed to log call'));
 
@@ -240,14 +275,49 @@ export class NovaAgent extends BaseAgent {
   async callLeadConversion(
     input: {
       leadId: string;
-      quoteAmount?: number;
+      // Callers that already hold a verified number (the DM handoff, the
+      // abandoned-quote sweep) pass it rather than relying on the lead row.
+      phone?: string;
+      name?: string;
+      quoteAmount?: number | string;
       pickupArea?: string;
       dropoffArea?: string;
+      // Set when this run is itself a retry, so an out-of-hours retry gives up
+      // instead of rescheduling forever.
+      rescheduled?: boolean;
     },
     options?: AgentRunOptions,
   ) {
     const { allowed, reason } = this.checkCallHours();
-    if (!allowed) return { skipped: true, reason };
+    if (!allowed) {
+      // Out of hours used to drop the lead silently with no retry.
+      if (options?.dryRun || input.rescheduled) {
+        return { skipped: true, reason };
+      }
+
+      const fireAt = nextCallWindowStart();
+      const delayMs = Math.max(0, fireAt.getTime() - Date.now());
+
+      // TODO: same restart-safety caveat as the rest of the chain — an
+      // in-process timer does not survive a deploy. Bull queue in Sprint 5.
+      setTimeout(() => {
+        this.callLeadConversion({ ...input, rescheduled: true }, options).catch((err) =>
+          logger.error({ err, leadId: input.leadId }, '[Nova] rescheduled call failed'),
+        );
+      }, delayMs);
+
+      logger.info(
+        { leadId: input.leadId, reason, scheduledFor: fireAt.toISOString() },
+        '[Nova] call_lead_conversion rescheduled to next call window',
+      );
+
+      return {
+        skipped: true,
+        reason: 'rescheduled',
+        outOfHoursReason: reason,
+        scheduledFor: fireAt.toISOString(),
+      };
+    }
 
     if (options?.dryRun) return { dryRun: true, leadId: input.leadId };
 
@@ -257,7 +327,10 @@ export class NovaAgent extends BaseAgent {
       .where(eq(leads.id, input.leadId))
       .limit(1);
 
-    if (!lead[0]?.contactPhone) return { skipped: true, reason: 'no_phone' };
+    // Prefer the caller's number: a DM can capture a phone the lead row does
+    // not carry yet, which used to skip the call as 'no_phone'.
+    const phone = input.phone?.trim() || lead[0]?.contactPhone;
+    if (!phone) return { skipped: true, reason: 'no_phone' };
 
     // Consent-by-inbound-contact: every channel below represents the
     // customer initiating contact (form submit, DM, voice, SMS reply), so
@@ -282,19 +355,50 @@ export class NovaAgent extends BaseAgent {
       return { skipped: true, reason: 'no_consent' };
     }
 
-    return this.initiateCall({
-      to: lead[0].contactPhone,
+    const result = await this.initiateCall({
+      to: phone,
       entityId: input.leadId,
       entityType: 'lead',
       callType: 'lead_conversion',
       metadata: {
         leadId: input.leadId,
-        customerName: lead[0].contactName ?? 'there',
+        customerName: input.name ?? lead[0].contactName ?? 'there',
         quoteAmount: input.quoteAmount,
         pickupArea: input.pickupArea,
         dropoffArea: input.dropoffArea,
       },
     });
+
+    // A failed dial returns {error} rather than throwing, so the caller's
+    // .catch() never fires and the lead was dropped with nothing but a log.
+    if (result.error) {
+      await this.escalateCallFailure(input.leadId, phone, result.error);
+    }
+
+    return result;
+  }
+
+  /** Page Xavier when a lead call could not be placed. */
+  private async escalateCallFailure(leadId: string, phone: string, error: string) {
+    logger.error({ leadId, error }, '[Nova] lead call failed — escalating to Xavier');
+
+    // agentEventBus, not emitEvent: the 'agent.escalation_needed' handler that
+    // reaches Xavier is a bus subscriber. emitEvent only writes business_events,
+    // which would file an audit row that pages nobody.
+    await agentEventBus
+      .emit(
+        'agent.escalation_needed',
+        {
+          agentName: 'Nova Clarke',
+          severity: 'medium',
+          issue: `Nova could not place a lead conversion call (${error})`,
+          reason: 'call_failed',
+          leadId,
+          phone,
+        },
+        'nova',
+      )
+      .catch((err) => logger.error({ err, leadId }, '[Nova] escalation emit failed'));
   }
 
   async callMoverCold(

@@ -253,27 +253,31 @@ export function registerAgentSubscriptions(): void {
     'Nova Clarke',
   );
 
-  // Quote abandoned 48hrs → Nova call
+  // Quote abandoned >48hrs (sweep-enforced) → Nova call now
   agentEventBus.subscribe(
     'lead.quote_abandoned',
     async (data) => {
       logger.info({ leadId: data.leadId }, '[EventBus] abandoned→nova');
 
-      // TODO Sprint 5: replace with Bull queue delayed job for restart-safe delays
-      setTimeout(
-        async () => {
-          await nova
-            .run(
-              'call_lead_conversion',
-              { leadId: data.leadId },
-              { dryRun: false },
-            )
-            .catch((err) =>
-              logger.error({ err }, '[EventBus] nova conversion failed'),
-            );
-        },
-        48 * 60 * 60 * 1000,
-      );
+      // No delay here: the hourly sweep only emits for quotes already older
+      // than 48h, so waiting again made the real delay 96h — and the dedupe
+      // marker is written up front, so a restart inside that window dropped
+      // the call permanently with no retry.
+      await nova
+        .run(
+          'call_lead_conversion',
+          {
+            leadId: data.leadId,
+            phone: data.phone,
+            name: data.name,
+            quoteAmount: data.price,
+            pickupArea: data.pickupAddress,
+          },
+          { dryRun: false },
+        )
+        .catch((err) =>
+          logger.error({ err }, '[EventBus] nova conversion failed'),
+        );
     },
     'Nova Clarke',
   );

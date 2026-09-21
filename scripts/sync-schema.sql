@@ -1636,3 +1636,9 @@ CREATE TABLE IF NOT EXISTS "newsletters" (
 );
 
 CREATE INDEX IF NOT EXISTS "newsletters_status_idx" ON "newsletters" ("status");
+
+-- Nova lead-call traceability (see migrations/0022_voice_calls_lead_id.sql).
+ALTER TABLE "voice_calls"
+  ADD COLUMN IF NOT EXISTS "lead_id" varchar;
+
+CREATE INDEX IF NOT EXISTS "voice_calls_lead_id_idx" ON "voice_calls" ("lead_id");

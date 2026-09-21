@@ -1743,6 +1743,9 @@ export const voiceCalls = pgTable("voice_calls", {
   adminId: varchar("admin_id").references(() => users.id),
   matchedUserId: varchar("matched_user_id").references(() => users.id),
   bookingId: varchar("booking_id").references(() => bookings.id),
+  // Lead-conversion / cold calls have no booking. Without this the row could
+  // not be traced back to the lead it was placed for.
+  leadId: varchar("lead_id"),
   startedAt: timestamp("started_at"),
   answeredAt: timestamp("answered_at"),
   endedAt: timestamp("ended_at"),
