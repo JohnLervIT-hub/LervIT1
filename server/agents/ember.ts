@@ -1922,7 +1922,11 @@ Platform: ${item.platform ?? 'N/A'}`;
     if (platform === 'linkedin') {
       const result = await linkedInProvider.post({
         text: caption,
-        url: mediaUrl,
+        // A video still goes out as a link preview — native video needs the
+        // multipart Assets API, which the provider does not implement. A
+        // still is uploaded and posted natively via imageUrl.
+        url: item.videoUrl ? mediaUrl : undefined,
+        imageUrl: item.assetUrl ?? undefined,
         title: 'LervIT Moving Calgary',
         description: caption.slice(0, 200),
         hashtags: item.hashtags ?? [],

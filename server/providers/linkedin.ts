@@ -79,6 +79,89 @@ class LinkedInProvider {
     return data.sub;
   }
 
+  /**
+   * Upload an image to LinkedIn and return its asset URN.
+   *
+   * Three legs, per the Share Media API: register the upload, PUT the bytes
+   * to the URL it hands back, then reference the returned URN in ugcPosts.
+   * Posting the image URL as an ARTICLE instead would render a link card,
+   * not a native image.
+   */
+  private async uploadImage(imageUrl: string, authorUrn: string): Promise<string> {
+    const registerRes = await fetch(
+      `${this.baseUrl}/assets?action=registerUpload`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+        body: JSON.stringify({
+          registerUploadRequest: {
+            recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+            // Full URN, not the bare member id — registerUpload rejects the id.
+            owner: authorUrn,
+            serviceRelationships: [
+              {
+                relationshipType: 'OWNER',
+                identifier: 'urn:li:userGeneratedContent',
+              },
+            ],
+          },
+        }),
+      },
+    );
+
+    const registerData = (await registerRes.json().catch(() => ({}))) as any;
+    if (!registerRes.ok) {
+      throw new Error(
+        `LinkedIn registerUpload failed: ${registerData?.message ?? registerRes.status}`,
+      );
+    }
+
+    const uploadUrl =
+      registerData?.value?.uploadMechanism?.[
+        'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+      ]?.uploadUrl;
+    const assetUrn = registerData?.value?.asset;
+
+    if (!uploadUrl || !assetUrn) {
+      throw new Error('LinkedIn registerUpload returned no uploadUrl/asset');
+    }
+
+    const imageRes = await fetch(imageUrl);
+    if (!imageRes.ok) {
+      throw new Error(`Could not fetch image for upload: ${imageRes.status} ${imageUrl}`);
+    }
+
+    // LinkedIn's feedshare-image recipe accepts PNG, JPEG and GIF. WebP is
+    // not supported — surface that here rather than letting it fail as an
+    // opaque upload error.
+    const contentType = imageRes.headers.get('content-type') ?? 'application/octet-stream';
+    if (/webp/i.test(contentType)) {
+      throw new Error('LinkedIn does not accept WebP images — upload a JPEG or PNG');
+    }
+
+    const bytes = new Uint8Array(await imageRes.arrayBuffer());
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': contentType,
+      },
+      body: bytes,
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error(`LinkedIn image upload failed: ${uploadRes.status}`);
+    }
+
+    logger.info({ assetUrn, bytes: bytes.byteLength }, '[LinkedIn] image uploaded');
+    return assetUrn as string;
+  }
+
   // Post text content to LinkedIn
   async post(input: LinkedInPostRequest): Promise<LinkedInPostResult> {
     try {
@@ -118,9 +201,24 @@ class LinkedInProvider {
         shareMediaCategory: 'NONE',
       };
 
-      // Attach as ARTICLE (link preview) when a URL is provided.
-      const mediaUrl = input.url ?? input.videoUrl ?? input.imageUrl;
-      if (mediaUrl) {
+      // A still becomes a native IMAGE share; a link or video URL stays an
+      // ARTICLE preview card. IMAGE wins when both are present.
+      const mediaUrl = input.url ?? input.videoUrl;
+      if (input.imageUrl) {
+        const assetUrn = await this.uploadImage(input.imageUrl, author);
+        shareContent.shareMediaCategory = 'IMAGE';
+        shareContent.media = [
+          {
+            status: 'READY',
+            // IMAGE references the uploaded asset; only ARTICLE uses originalUrl.
+            media: assetUrn,
+            title: { text: input.title ?? 'LervIT Moving Calgary' },
+            description: {
+              text: input.description ?? input.text.slice(0, 200),
+            },
+          },
+        ];
+      } else if (mediaUrl) {
         shareContent.shareMediaCategory = 'ARTICLE';
         shareContent.media = [
           {
