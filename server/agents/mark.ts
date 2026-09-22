@@ -20,6 +20,11 @@
  *                           customer about a delay in the past 60min. Mark sends
  *                           the customer SMS himself and emits an event so a
  *                           later scan won't repeat.
+ *   - geofence_missed_pickup : the booking reached 'loading' with no
+ *                           pulse.mover_arrived_pickup on file, i.e. the mover
+ *                           tapped "Arrived" but their GPS never came within
+ *                           the 200m radius. Usually means location sharing was
+ *                           not running. Dedups forever, like the check below.
  *   - mover_arriving_soon : the live ETA to the pickup is <= 10 min while the
  *                           mover is en route. Texts the customer once so they
  *                           can be at the door. Unlike the four checks above
@@ -101,7 +106,8 @@ type CheckType =
   | 'overtime'
   | 'no_start'
   | 'customer_uninformed'
-  | 'mover_arriving_soon';
+  | 'mover_arriving_soon'
+  | 'geofence_missed_pickup';
 
 interface CheckBookingInput {
   bookingId: string;
@@ -114,6 +120,7 @@ interface ScanSummary {
   noStart: number;
   customerUninformed: number;
   arrivingSoon: number;
+  geofenceMissed: number;
   skipped: number;
 }
 
@@ -145,6 +152,7 @@ export class MarkAgent extends BaseAgent {
       noStart: 0,
       customerUninformed: 0,
       arrivingSoon: 0,
+      geofenceMissed: 0,
       skipped: 0,
     };
 
@@ -156,6 +164,7 @@ export class MarkAgent extends BaseAgent {
         if (result.noStart) summary.noStart++;
         if (result.customerUninformed) summary.customerUninformed++;
         if (result.arrivingSoon) summary.arrivingSoon++;
+        if (result.geofenceMissed) summary.geofenceMissed++;
         if (result.skipped) summary.skipped++;
       } catch (err) {
         logger.error({ err, bookingId: booking.id }, 'Mark: booking eval failed');
@@ -258,9 +267,78 @@ export class MarkAgent extends BaseAgent {
       arrivingSoon = await this.notifyArrivingSoon(booking);
     }
 
+    // 6. Geofence miss — the mover tapped "Arrived - Start Loading" but their
+    //    GPS never came within the arrival radius, so we have no measured
+    //    arrival for this booking. Almost always means location sharing was not
+    //    running: the trip is proceeding blind and the customer's map is frozen.
+    //    Records only; the trip itself is fine, so no escalation.
+    let geofenceMissed = false;
+    if (booking.status === BOOKING_STATUSES.LOADING) {
+      geofenceMissed = await this.flagMissedPickupGeofence(booking);
+    }
+
     const skipped =
-      !gpsSilent && !overtime && !noStart && !customerUninformed && !arrivingSoon;
-    return { gpsSilent, overtime, noStart, customerUninformed, arrivingSoon, skipped };
+      !gpsSilent &&
+      !overtime &&
+      !noStart &&
+      !customerUninformed &&
+      !arrivingSoon &&
+      !geofenceMissed;
+    return {
+      gpsSilent,
+      overtime,
+      noStart,
+      customerUninformed,
+      arrivingSoon,
+      geofenceMissed,
+      skipped,
+    };
+  }
+
+  /**
+   * One-shot record that a booking reached 'loading' with no geofenced arrival.
+   *
+   * Dedups forever rather than through shouldFire()'s hourly window: the
+   * condition is permanent once the status has moved on, so an hourly window
+   * would re-emit for the whole loading phase.
+   *
+   * Skipped when the booking's coordinates came from the mock geocoder — the
+   * geofence deliberately does not run on those, so its absence says nothing
+   * about whether GPS was working.
+   */
+  private async flagMissedPickupGeofence(
+    booking: typeof bookings.$inferSelect,
+  ): Promise<boolean> {
+    if (booking.geocodeMock) return false;
+    if (await this.hasEverFired(booking.id, 'geofence_missed_pickup')) return false;
+
+    const [arrived] = await db
+      .select({ id: businessEvents.id })
+      .from(businessEvents)
+      .where(
+        and(
+          eq(businessEvents.eventType, 'pulse.mover_arrived_pickup'),
+          eq(businessEvents.entityId, booking.id),
+        ),
+      )
+      .limit(1);
+
+    if (arrived) return false;
+
+    await emitEvent('pulse.geofence_missed_pickup', 'booking', booking.id, {
+      agentName: this.name,
+      severity: 'low',
+      reason: 'no_gps_ping_in_radius',
+      moverId: booking.moverId,
+      lastLocationUpdate: booking.locationUpdatedAt ?? null,
+      arrivedAtPickupAt: booking.arrivedAtPickupAt ?? null,
+    });
+
+    logger.info(
+      { bookingId: booking.id, moverId: booking.moverId },
+      '[Mark] Booking reached loading with no geofenced arrival',
+    );
+    return true;
   }
 
   /**
