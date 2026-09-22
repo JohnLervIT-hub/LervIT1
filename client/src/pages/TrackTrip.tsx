@@ -32,6 +32,14 @@ interface LocationData {
     longitude: number;
     updatedAt: string;
   } | null;
+  // Server-side ETA (Distance Matrix, cached per booking). `accurate` is false
+  // when it fell back to a straight-line estimate — do not render that as an ETA.
+  eta?: {
+    minutes: number | null;
+    arrivalTime: number | null;
+    destination: "pickup" | "dropoff" | null;
+    accurate: boolean;
+  };
   mover?: {
     name: string;
     phone: string;
@@ -695,6 +703,22 @@ export default function TrackTrip() {
                 </div>
               )}
             </div>
+
+            {/* Server ETA. Rendered only when Distance Matrix actually answered —
+                a Haversine fallback is a straight line over a flat 40km/h and
+                would understate a real drive badly. */}
+            {locationData.eta?.accurate && locationData.eta.minutes !== null && (
+              <div
+                className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium text-foreground"
+                data-testid="badge-server-eta"
+              >
+                <Truck className="h-4 w-4 shrink-0" />
+                <span>
+                  Arriving in ~{locationData.eta.minutes} min at{" "}
+                  {locationData.eta.destination === "pickup" ? "pickup" : "dropoff"}
+                </span>
+              </div>
+            )}
 
             {/* Mover card */}
             {locationData.mover && (

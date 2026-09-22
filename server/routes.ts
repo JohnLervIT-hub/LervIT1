@@ -90,6 +90,7 @@ import { ember } from "./agents/ember";
 import { reid } from "./agents/reid";
 import { documentAudits, documentIrregularities } from "@shared/schema";
 import { novaWebhookRouter } from "./nova-webhook-routes";
+import { resolveTripEta, NO_ETA } from "./lib/tripEta";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -10741,6 +10742,24 @@ Respond with VALID JSON only:
         }
       }
 
+      // Cached per booking inside resolveTripEta — this endpoint is polled
+      // every 3s per viewer, so an uncached Distance Matrix call here would be
+      // billed once per viewer per poll. Never fails the response: a lookup
+      // problem degrades to NO_ETA and the map still renders.
+      const eta = await resolveTripEta({
+        bookingId: booking.id,
+        status: booking.status,
+        moverLat: booking.currentLatitude,
+        moverLng: booking.currentLongitude,
+        pickupLat: booking.pickupLatitude,
+        pickupLng: booking.pickupLongitude,
+        dropoffLat: booking.dropoffLatitude,
+        dropoffLng: booking.dropoffLongitude,
+      }).catch((err) => {
+        logger.warn({ err, bookingId: booking.id }, '[Location] ETA resolution failed');
+        return NO_ETA;
+      });
+
       res.json({
         bookingId: booking.id,
         status: booking.status,
@@ -10759,6 +10778,7 @@ Respond with VALID JSON only:
           longitude: booking.currentLongitude,
           updatedAt: booking.locationUpdatedAt
         } : null,
+        eta,
         mover: moverData,
       });
     } catch (error) {
