@@ -219,6 +219,16 @@ function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
   );
 }
 
+// Statuses that mean the mover is physically mid-trip. `in_transit` is the
+// legacy spelling of en_route_to_pickup and is still honoured server-side.
+const IN_PROGRESS_STATUSES: string[] = [
+  "in_transit",
+  BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+  BOOKING_STATUSES.LOADING,
+  BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
+  BOOKING_STATUSES.UNLOADING,
+];
+
 export default function MoverDashboard() {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
@@ -231,6 +241,9 @@ export default function MoverDashboard() {
   const { coords: geoCoords, permissionState: geoPermissionState, requestLocation: requestGeoLocation, refreshLocation, isRequesting: isRequestingGeo } = useGeoLocation();
   const [isLiveGpsActive, setIsLiveGpsActive] = useState(false);
   const pendingOnlineToggle = useRef(false);
+  // Bookings whose GPS watch was refused by the OS/browser this session, so the
+  // re-arm effect does not fight the permission prompt on every refetch.
+  const gpsDeniedFor = useRef<Set<string>>(new Set());
   
   // Track URL search params for tab sync (wouter's location only tracks pathname)
   const [searchParams, setSearchParams] = useState(window.location.search);
@@ -426,9 +439,23 @@ export default function MoverDashboard() {
   // Check if mover already has a trip in progress (to block starting multiple trips)
   // Only true when the mover is physically mid-trip (heading to pickup or beyond).
   // A "confirmed" booking just means assigned — not yet a trip in progress.
-  const hasActiveTrip = bookings.some((b) => 
-    ["in_transit", "en_route_to_pickup", "loading", "en_route_to_dropoff", "unloading"].includes(b.status)
-  );
+  const hasActiveTrip = bookings.some((b) => IN_PROGRESS_STATUSES.includes(b.status));
+
+  // The booking that should be streaming GPS right now, if any.
+  const inProgressBooking = bookings.find((b) => IN_PROGRESS_STATUSES.includes(b.status));
+
+  // G1 — locationSharing is component state set only by the start/advance
+  // mutations, so a reload, a tab discard or an app restart mid-trip killed
+  // watchPosition for good: the mover could not re-arm it either, because the
+  // "Head to Pickup" button is disabled while a trip is in progress. Re-arm
+  // from the booking list instead, so tracking survives a remount.
+  useEffect(() => {
+    if (!inProgressBooking) return;
+    // A booking whose watch already failed (permission denied) must not be
+    // re-armed on every 30s refetch — that would re-toast the mover forever.
+    if (gpsDeniedFor.current.has(inProgressBooking.id)) return;
+    setLocationSharing((current) => current ?? inProgressBooking.id);
+  }, [inProgressBooking?.id]);
   
   const shouldKeepScreenAwake = hasActiveTrip || (!!mover?.isAvailable && isLiveGpsActive && geoPermissionState === 'granted');
   const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(shouldKeepScreenAwake);
@@ -824,6 +851,9 @@ export default function MoverDashboard() {
 
     let permissionDeniedShown = false;
     let watchId: number | null = null;
+    let cancelled = false;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
     let lastSentTime = 0;
     const MIN_UPDATE_INTERVAL = 3000; // Send updates at most every 3 seconds
     const MIN_DISTANCE_METERS = 5; // Only send if moved at least 5 meters
@@ -858,16 +888,35 @@ export default function MoverDashboard() {
         }
       }
       
+      await postLocation(latitude, longitude, now);
+    };
+
+    // G6 — a dropped ping used to be console.error'd and forgotten, so a tunnel
+    // or a flaky cell handoff silently blanked the customer's map. apiRequest
+    // throws on a non-2xx as well as on a network error, so both retry here.
+    const postLocation = async (latitude: number, longitude: number, sentAt: number) => {
+      if (cancelled) return;
       try {
         await apiRequest("POST", `/api/bookings/${locationSharing}/location`, {
           latitude,
           longitude,
         });
-        lastSentTime = now;
+        // Only commit the throttle bookkeeping once the ping actually landed,
+        // otherwise a failed send would suppress the next 3s of attempts.
+        lastSentTime = sentAt;
         lastPosition = { lat: latitude, lng: longitude };
+        retryCount = 0;
         console.log("[GPS] Location shared via watchPosition");
       } catch (error) {
-        console.error("Failed to update location:", error);
+        if (retryCount >= MAX_RETRIES) {
+          console.error("[GPS] Location update failed after retries:", error);
+          retryCount = 0;
+          return;
+        }
+        retryCount++;
+        const delay = retryCount * 2000;
+        console.warn(`[GPS] Location update failed — retry ${retryCount}/${MAX_RETRIES} in ${delay}ms`);
+        setTimeout(() => postLocation(latitude, longitude, sentAt), delay);
       }
     };
 
@@ -880,6 +929,7 @@ export default function MoverDashboard() {
               console.error("Geolocation watch error:", err);
               if (!permissionDeniedShown) {
                 permissionDeniedShown = true;
+                if (locationSharing) gpsDeniedFor.current.add(locationSharing);
                 toast({
                   title: "Location permission denied",
                   description: "Please allow location access in Settings, then try starting the trip again.",
@@ -905,6 +955,7 @@ export default function MoverDashboard() {
           console.error("Geolocation watch error:", error.code, error.message);
           if (error.code === 1 && !permissionDeniedShown) {
             permissionDeniedShown = true;
+            if (locationSharing) gpsDeniedFor.current.add(locationSharing);
             toast({
               title: "Location permission denied",
               description: "Please allow location access in your browser settings, then try starting the trip again.",
@@ -926,6 +977,7 @@ export default function MoverDashboard() {
     }
 
     return () => {
+      cancelled = true;
       if (watchId !== null) {
         if (Capacitor.isNativePlatform()) {
           import("@capacitor/geolocation").then(({ Geolocation }) => {
@@ -1590,6 +1642,15 @@ export default function MoverDashboard() {
                 <Badge variant="default" className="flex items-center gap-1" data-testid={`badge-sharing-location-${booking.id}`}>
                   <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                   Sharing Location
+                </Badge>
+              )}
+
+              {/* Trip is running but nothing is streaming — the customer's map
+                  is frozen and, before this, nothing said so. */}
+              {locationSharing !== booking.id && IN_PROGRESS_STATUSES.includes(booking.status) && (
+                <Badge variant="destructive" className="flex items-center gap-1" data-testid={`badge-location-off-${booking.id}`}>
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                  Location off — customer can't track you
                 </Badge>
               )}
               

@@ -2596,6 +2596,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // the mover uses. Without this, Mark false-positives gps_silent when the
       // mover only pings /movers/me/location.
       try {
+        // `confirmed` is deliberately absent: a booking that is merely assigned
+        // is not a trip, and stamping it made a future job look like it had a
+        // live mover to the auto-cancel/auto-complete guards in
+        // background-jobs.ts. When a mover holds more than one live trip, take
+        // the one furthest along rather than whichever row the planner returned.
         const [activeBooking] = await db
           .select({ id: bookings.id })
           .from(bookings)
@@ -2607,16 +2612,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 'loading',
                 'en_route_to_dropoff',
                 'unloading',
-                'confirmed',
+                'in_transit',
               ]),
             ),
+          )
+          .orderBy(
+            sql`CASE
+              WHEN ${bookings.status} = 'unloading' THEN 1
+              WHEN ${bookings.status} = 'en_route_to_dropoff' THEN 2
+              WHEN ${bookings.status} = 'loading' THEN 3
+              WHEN ${bookings.status} = 'en_route_to_pickup' THEN 4
+              ELSE 5
+            END`,
+            bookings.preferredDate,
           )
           .limit(1);
 
         if (activeBooking) {
+          // Write the coordinates too. Stamping only the timestamp told Mark
+          // (and the customer's freshness dot) that tracking was healthy while
+          // bookings.currentLatitude/Longitude stayed frozen at the last
+          // watchPosition ping.
           await db
             .update(bookings)
-            .set({ locationUpdatedAt: new Date(), updatedAt: new Date() })
+            .set({
+              currentLatitude: latitude,
+              currentLongitude: longitude,
+              locationUpdatedAt: new Date(),
+              updatedAt: new Date(),
+            })
             .where(eq(bookings.id, activeBooking.id));
         }
       } catch (bookingSyncErr) {
