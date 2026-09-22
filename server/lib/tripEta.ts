@@ -108,11 +108,14 @@ export async function resolveTripEta(input: ResolveTripEtaInput): Promise<TripEt
   const { bookingId, status, moverLat, moverLng } = input;
 
   // `in_transit` is the legacy spelling of en_route_to_pickup, still accepted
-  // by PATCH /api/bookings/:id.
+  // by PATCH /api/bookings/:id. `loading` means the mover is standing at the
+  // pickup, so the next thing they are travelling to is the dropoff; quoting
+  // an ETA to where they already are would read as "arriving in ~1 min".
+  // `unloading` has no leg left at all.
   const heading: EtaDestination | null =
-    status === 'en_route_to_pickup' || status === 'in_transit' || status === 'loading'
+    status === 'en_route_to_pickup' || status === 'in_transit'
       ? 'pickup'
-      : status === 'en_route_to_dropoff' || status === 'unloading'
+      : status === 'loading' || status === 'en_route_to_dropoff'
         ? 'dropoff'
         : null;
 
