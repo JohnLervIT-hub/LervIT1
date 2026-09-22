@@ -42,6 +42,7 @@ import { emitEvent } from '../events';
 import { xavier } from './xavier';
 import { notificationService } from '../notifications';
 import { resolveTripEta } from '../lib/tripEta';
+import { haversineMeters } from '../utils/distance';
 import { getBaseUrl } from '../utils/urls';
 import { logger } from '../logger';
 
@@ -70,6 +71,14 @@ const DEDUP_WINDOW_MS = 60 * 60 * 1000;
 
 // How close the mover has to be before the customer is told to get ready.
 const ARRIVING_SOON_MINUTES = 10;
+
+// Straight-line pre-filter, checked before anything that costs money. Ten
+// minutes of Calgary driving covers roughly 5-8km of road, and road distance is
+// always >= the straight line, so a mover more than this far away cannot be
+// within ARRIVING_SOON_MINUTES and does not need a Distance Matrix lookup.
+// Generous on purpose: this only has to be a cheap upper bound, and the real
+// decision is still made on the routed ETA.
+const ARRIVING_SOON_PREFILTER_M = 8000;
 
 const CUSTOMER_DELAY_SMS =
   'Hi! Your mover is running a bit late. We apologize for the delay and will keep you updated. — LervIT Team';
@@ -257,20 +266,42 @@ export class MarkAgent extends BaseAgent {
   /**
    * One-shot "your mover is ~N minutes away" text.
    *
-   * resolveTripEta shares its cache with GET /api/bookings/:id/location, so a
-   * scan usually costs nothing extra: whichever of the two asks first pays for
-   * the Distance Matrix call and the other reads the result.
+   * Three gates, cheapest first, because Mark scans every 5 minutes and the
+   * ETA cache TTL is also 5 minutes — without the first gate every in-flight
+   * pickup would spend a billed Distance Matrix call on every scan for the
+   * whole leg, most of them on movers still half an hour out:
+   *
+   *   1. straight-line distance  — free, in memory
+   *   2. "already texted?"       — one indexed business_events lookup
+   *   3. routed ETA              — may spend a Distance Matrix call
+   *
+   * resolveTripEta shares its cache with GET /api/bookings/:id/location, so
+   * step 3 often reads a result the customer's own polling already paid for.
    *
    * Only fires on an `accurate` ETA. When Distance Matrix is unavailable that
    * function returns a straight line over a flat 40km/h, and texting someone to
    * come to the door on the strength of that is worse than staying quiet.
    */
   private async notifyArrivingSoon(booking: typeof bookings.$inferSelect): Promise<boolean> {
-    // Deliberately not shouldFire(): that window is an hour, and this text must
-    // never arrive twice for one booking. Checked first because it is an indexed
-    // lookup, where resolveTripEta may spend a Distance Matrix call.
+    const { currentLatitude: moverLat, currentLongitude: moverLng } = booking;
+    const { pickupLatitude: pickupLat, pickupLongitude: pickupLng } = booking;
+
+    // pickup coords are notNull().default(0), so 0 means "never geocoded"
+    // rather than "on the prime meridian".
+    if (moverLat == null || moverLng == null || moverLat === 0 || moverLng === 0) return false;
+    if (pickupLat === 0 || pickupLng === 0) return false;
+
+    // 1. Free gate. Road distance is never shorter than the straight line, so
+    //    anything beyond the pre-filter cannot be ~10 minutes out.
+    if (haversineMeters(moverLat, moverLng, pickupLat, pickupLng) > ARRIVING_SOON_PREFILTER_M) {
+      return false;
+    }
+
+    // 2. Deliberately not shouldFire(): that window is an hour, and this text
+    //    must never arrive twice for one booking.
     if (await this.hasEverFired(booking.id, 'mover_arriving_soon')) return false;
 
+    // 3. The only step that can cost a Distance Matrix call.
     const eta = await resolveTripEta({
       bookingId: booking.id,
       status: booking.status,
