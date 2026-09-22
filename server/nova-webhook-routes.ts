@@ -1190,11 +1190,12 @@ const DM_ADDRESS_TO_REGEX = /(?:^|\s)(?:to|dropoff(?:\s+at)?|deliver(?:ed)?(?:\s
 const DM_STREET_ADDRESS_REGEX =
   /\d+.*(?:ave|avenue|street|st|drive|dr|way|blvd|rd|road|close|crescent|cres|place|pl|court|ct|nw|ne|sw|se)\b/i;
 
-// Inbound mover applicants. Tested only AFTER the callback regex, which owns
-// the overlapping "i'm available" phrasing — a customer free on Saturday must
-// not be filed as a job candidate.
+// Inbound mover applicants. Every alternative has to name the job: an earlier
+// bare `available (to )?move` / `hiring` caught customers ("movers available
+// to move my piano friday") and mailed them Jordan's recruitment pitch.
+// Still tested after the callback regex, which owns "i'm available".
 const MOVER_INTENT_REGEX =
-  /\b(become\s+a\s+mover|join\s+(as\s+)?a?\s*mover|apply\s+(to\s+)?(be|as)\s+a?\s*mover|drive\s+(for|with)\s+lervit|sign\s+up\s+as\s+(a\s+)?mover|mover\s+(job|application|apply|sign|join)|looking\s+for\s+(a\s+)?(moving\s+)?job|i\s+(have|got)\s+a\s+truck|available\s+(to\s+)?move|earn\s+(money|cash|extra)\s+(moving|with\s+lervit)|hiring|work\s+(for|with)\s+lervit)\b/i;
+  /\b(become\s+a\s+mover|join\s+(as\s+)?a?\s*mover|apply\s+(to\s+)?(be|as)\s+a?\s*mover|drive\s+(for|with)\s+lervit|sign\s+up\s+as\s+(a\s+)?mover|mover\s+(job|application|apply|sign|join)|looking\s+for\s+(a\s+)?(moving\s+)?job|i\s+(have|got)\s+a\s+truck|i(?:'m| am)?\s+available\s+to\s+(?:work|drive|start)|earn\s+(money|cash|extra)\s+(moving|with\s+lervit)|(?:you\s+)?hiring\s+(?:movers?|drivers?|people)|work\s+(for|with)\s+lervit)\b/i;
 
 // One b2bm lead per sender. A candidate who rephrases the question still gets
 // the link every time, but Jordan is only handed the candidate once.
@@ -1414,10 +1415,11 @@ async function runDMHumanHandoff(input: {
       channel === 'instagram' ? 'nova-instagram' : 'nova-messenger',
     );
 
-    await send(
-      senderId,
-      `Perfect! One of our team will call you at ${customerPhone} within 5 minutes to get you booked 🚛`,
-    );
+    const handoffReply = isMoverCandidate
+      ? `Our team will reach out shortly about joining LervIT as a mover! 🚛`
+      : `Perfect! One of our team will call you at ${customerPhone} within 5 minutes to get you booked 🚛`;
+
+    await send(senderId, handoffReply);
   } else {
     await send(
       senderId,
