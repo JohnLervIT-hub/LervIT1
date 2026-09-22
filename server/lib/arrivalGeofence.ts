@@ -42,7 +42,8 @@ interface LegPlan {
   destLat: number | null;
   destLng: number | null;
   eventType: string;
-  customerSms: string;
+  /** null when the leg should not text the customer. */
+  customerSms: string | null;
   moverPrompt: string;
 }
 
@@ -80,7 +81,10 @@ function planFor(booking: typeof bookings.$inferSelect): LegPlan | null {
       destLat: booking.dropoffLatitude,
       destLng: booking.dropoffLongitude,
       eventType: 'pulse.mover_arrived_dropoff',
-      customerSms: `Your LervIT mover has arrived at the dropoff! 🚛`,
+      // No customer SMS on this leg: they are almost always standing at the
+      // dropoff watching the truck pull in, so the text is noise. The event and
+      // the timestamp are still recorded for ops.
+      customerSms: null,
       moverPrompt: `You're at the dropoff! Tap "Arrived - Start Unloading" when ready.`,
     };
   }
@@ -160,13 +164,15 @@ export async function checkArrivalGeofence(input: {
       status: booking.status,
     });
 
-    const [customer] = await db
-      .select({ phone: users.phone })
-      .from(users)
-      .where(eq(users.id, booking.customerId))
-      .limit(1);
+    const [customer] = plan.customerSms
+      ? await db
+          .select({ phone: users.phone })
+          .from(users)
+          .where(eq(users.id, booking.customerId))
+          .limit(1)
+      : [];
 
-    if (customer?.phone) {
+    if (plan.customerSms && customer?.phone) {
       // 'arrival_notification' is outside RATE_LIMITED_TYPES on purpose: the
       // shared 1-SMS-per-hour budget for 'booking_update' is normally already
       // spent by the arriving-soon text ~10 minutes earlier, which would drop
