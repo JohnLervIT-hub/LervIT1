@@ -1660,3 +1660,9 @@ ALTER TABLE "bookings"
 ALTER TABLE "bookings"
   ADD COLUMN IF NOT EXISTS "arrived_at_pickup_at"  timestamp,
   ADD COLUMN IF NOT EXISTS "arrived_at_dropoff_at" timestamp;
+
+-- Geocode provenance (see migrations/0026_bookings_geocode_provenance.sql).
+ALTER TABLE "bookings"
+  ADD COLUMN IF NOT EXISTS "pickup_geocoded_at"  timestamp,
+  ADD COLUMN IF NOT EXISTS "dropoff_geocoded_at" timestamp,
+  ADD COLUMN IF NOT EXISTS "geocode_mock"        boolean DEFAULT false;

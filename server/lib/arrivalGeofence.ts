@@ -115,6 +115,11 @@ export async function checkArrivalGeofence(input: {
   const { booking, moverUserId, latitude, longitude } = input;
 
   try {
+    // Coordinates from the deterministic mock geocoder are not a place. A
+    // geofence against them fires on the wrong street or never fires at all,
+    // and either way it would write an arrival timestamp nobody can trust.
+    if (booking.geocodeMock) return;
+
     const plan = planFor(booking);
     if (!plan) return;
 

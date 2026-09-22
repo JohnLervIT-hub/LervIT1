@@ -233,6 +233,16 @@ export const bookings = pgTable("bookings", {
   // fall back to preferredDate.
   startedAt: timestamp("started_at"),
 
+  // Geocode provenance. geocodeAddress() falls back to a deterministic mock
+  // when the Google API is unavailable and returns success:false, which every
+  // call site used to discard — leaving a mock-geocoded booking indistinguishable
+  // from a real one. Each *GeocodedAt is set only when the API really answered
+  // for the address currently stored; geocodeMock is the derived "do not trust
+  // these coordinates" flag that arrivalGeofence.ts reads.
+  pickupGeocodedAt: timestamp("pickup_geocoded_at"),
+  dropoffGeocodedAt: timestamp("dropoff_geocoded_at"),
+  geocodeMock: boolean("geocode_mock").default(false),
+
   // Geofence-measured arrival (server/lib/arrivalGeofence.ts), stamped when the
   // mover's GPS first comes within 200m. Deliberately separate from
   // moverPerformance.arrivedAtPickupAt / arrivedAtDropoffAt, which are stamped

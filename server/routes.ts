@@ -4459,6 +4459,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
         ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
+        // Provenance for the coordinates written just below. Without it a
+        // mock-geocoded booking looks identical to a real one, and anything
+        // measuring against these points (the arrival geofence, the ETA) quietly
+        // measures against a guess.
+        pickupGeocodedAt: pickupGeo.success ? new Date() : null,
+        dropoffGeocodedAt: dropoffGeo.success ? new Date() : null,
+        geocodeMock: !pickupGeo.success || !dropoffGeo.success,
         pickupLatitude: pickupGeo.coordinates.lat,
         pickupLongitude: pickupGeo.coordinates.lng,
         dropoffLatitude: dropoffGeo.coordinates.lat,
@@ -5801,6 +5808,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Build update object with geocoding for changed addresses
       const updateData: any = {};
       
+      // Provenance follows the address, not the coordinates. When a re-geocode
+      // fails the old coordinates are kept (below) but they now describe the
+      // PREVIOUS address, so the leg is marked ungeocoded and the arrival
+      // geofence stops trusting it.
+      let pickupGeocodedAt = existingBooking.pickupGeocodedAt;
+      let dropoffGeocodedAt = existingBooking.dropoffGeocodedAt;
+
       if (updates.pickupAddress) {
         updateData.pickupAddress = updates.pickupAddress;
         // Re-geocode pickup address
@@ -5808,6 +5822,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (pickupGeo.success) {
           updateData.pickupLatitude = pickupGeo.coordinates.lat;
           updateData.pickupLongitude = pickupGeo.coordinates.lng;
+          pickupGeocodedAt = new Date();
+        } else {
+          pickupGeocodedAt = null;
         }
       }
       
@@ -5818,8 +5835,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (dropoffGeo.success) {
           updateData.dropoffLatitude = dropoffGeo.coordinates.lat;
           updateData.dropoffLongitude = dropoffGeo.coordinates.lng;
+          dropoffGeocodedAt = new Date();
+        } else {
+          dropoffGeocodedAt = null;
         }
       }
+
+      updateData.pickupGeocodedAt = pickupGeocodedAt;
+      updateData.dropoffGeocodedAt = dropoffGeocodedAt;
+      updateData.geocodeMock = !pickupGeocodedAt || !dropoffGeocodedAt;
       
       // Recalculate distance if both addresses are available
       const finalPickup = updates.pickupAddress || existingBooking.pickupAddress;
