@@ -20,6 +20,11 @@
  *                           customer about a delay in the past 60min. Mark sends
  *                           the customer SMS himself and emits an event so a
  *                           later scan won't repeat.
+ *   - mover_arriving_soon : the live ETA to the pickup is <= 10 min while the
+ *                           mover is en route. Texts the customer once so they
+ *                           can be at the door. Unlike the four checks above
+ *                           this one dedups FOREVER, not hourly — "they're 10
+ *                           minutes away" is only true once per booking.
  *
  * Actions:
  *   - `scan_active_trips` : sweep every active booking; run all four checks.
@@ -36,6 +41,8 @@ import { bookings, users, businessEvents, bookingMetrics, BOOKING_STATUSES } fro
 import { emitEvent } from '../events';
 import { xavier } from './xavier';
 import { notificationService } from '../notifications';
+import { resolveTripEta } from '../lib/tripEta';
+import { getBaseUrl } from '../utils/urls';
 import { logger } from '../logger';
 
 const IN_PROGRESS_STATUSES = [
@@ -61,6 +68,9 @@ const NO_START_GRACE_MS = 15 * 60 * 1000;
 const OVERTIME_GRACE_MS = 30 * 60 * 1000;
 const DEDUP_WINDOW_MS = 60 * 60 * 1000;
 
+// How close the mover has to be before the customer is told to get ready.
+const ARRIVING_SOON_MINUTES = 10;
+
 const CUSTOMER_DELAY_SMS =
   'Hi! Your mover is running a bit late. We apologize for the delay and will keep you updated. — LervIT Team';
 
@@ -77,7 +87,12 @@ function estimateDurationFromLoadSize(loadSize: string | null): number {
   return estimates[loadSize ?? 'medium'] ?? 90;
 }
 
-type CheckType = 'gps_silent' | 'overtime' | 'no_start' | 'customer_uninformed';
+type CheckType =
+  | 'gps_silent'
+  | 'overtime'
+  | 'no_start'
+  | 'customer_uninformed'
+  | 'mover_arriving_soon';
 
 interface CheckBookingInput {
   bookingId: string;
@@ -89,6 +104,7 @@ interface ScanSummary {
   overtime: number;
   noStart: number;
   customerUninformed: number;
+  arrivingSoon: number;
   skipped: number;
 }
 
@@ -119,6 +135,7 @@ export class MarkAgent extends BaseAgent {
       overtime: 0,
       noStart: 0,
       customerUninformed: 0,
+      arrivingSoon: 0,
       skipped: 0,
     };
 
@@ -129,6 +146,7 @@ export class MarkAgent extends BaseAgent {
         if (result.overtime) summary.overtime++;
         if (result.noStart) summary.noStart++;
         if (result.customerUninformed) summary.customerUninformed++;
+        if (result.arrivingSoon) summary.arrivingSoon++;
         if (result.skipped) summary.skipped++;
       } catch (err) {
         logger.error({ err, bookingId: booking.id }, 'Mark: booking eval failed');
@@ -223,8 +241,102 @@ export class MarkAgent extends BaseAgent {
       customerUninformed = await this.notifyCustomerOfDelay(booking);
     }
 
-    const skipped = !gpsSilent && !overtime && !noStart && !customerUninformed;
-    return { gpsSilent, overtime, noStart, customerUninformed, skipped };
+    // 5. Arriving soon — heads-up to the customer once the mover is within
+    //    ARRIVING_SOON_MINUTES of the pickup. Runs after the delay checks so a
+    //    late trip leads with the apology rather than a cheerful "get ready".
+    let arrivingSoon = false;
+    if (booking.status === BOOKING_STATUSES.EN_ROUTE_TO_PICKUP || booking.status === 'in_transit') {
+      arrivingSoon = await this.notifyArrivingSoon(booking);
+    }
+
+    const skipped =
+      !gpsSilent && !overtime && !noStart && !customerUninformed && !arrivingSoon;
+    return { gpsSilent, overtime, noStart, customerUninformed, arrivingSoon, skipped };
+  }
+
+  /**
+   * One-shot "your mover is ~N minutes away" text.
+   *
+   * resolveTripEta shares its cache with GET /api/bookings/:id/location, so a
+   * scan usually costs nothing extra: whichever of the two asks first pays for
+   * the Distance Matrix call and the other reads the result.
+   *
+   * Only fires on an `accurate` ETA. When Distance Matrix is unavailable that
+   * function returns a straight line over a flat 40km/h, and texting someone to
+   * come to the door on the strength of that is worse than staying quiet.
+   */
+  private async notifyArrivingSoon(booking: typeof bookings.$inferSelect): Promise<boolean> {
+    // Deliberately not shouldFire(): that window is an hour, and this text must
+    // never arrive twice for one booking. Checked first because it is an indexed
+    // lookup, where resolveTripEta may spend a Distance Matrix call.
+    if (await this.hasEverFired(booking.id, 'mover_arriving_soon')) return false;
+
+    const eta = await resolveTripEta({
+      bookingId: booking.id,
+      status: booking.status,
+      moverLat: booking.currentLatitude,
+      moverLng: booking.currentLongitude,
+      pickupLat: booking.pickupLatitude,
+      pickupLng: booking.pickupLongitude,
+      dropoffLat: booking.dropoffLatitude,
+      dropoffLng: booking.dropoffLongitude,
+    }).catch((err) => {
+      logger.warn({ err, bookingId: booking.id }, '[Mark] Arriving-soon ETA lookup failed');
+      return null;
+    });
+
+    if (!eta?.accurate || eta.destination !== 'pickup') return false;
+    if (eta.minutes === null || eta.minutes > ARRIVING_SOON_MINUTES || eta.minutes <= 0) {
+      return false;
+    }
+
+    const [customer] = await db
+      .select({ phone: users.phone })
+      .from(users)
+      .where(eq(users.id, booking.customerId))
+      .limit(1);
+
+    if (!customer?.phone) {
+      logger.info(
+        { bookingId: booking.id },
+        '[Mark] Arriving-soon SMS skipped — no customer phone on file',
+      );
+      return false;
+    }
+
+    let smsSent = false;
+    try {
+      smsSent = await notificationService.sendSMS({
+        to: customer.phone,
+        message:
+          `Your LervIT mover is ~${eta.minutes} min away! ` +
+          `Get ready — they'll be there soon. 🚛\n\n` +
+          `Track live: ${getBaseUrl()}/track-trip/${booking.id}`,
+        type: 'booking_update',
+      });
+    } catch (err) {
+      logger.error({ err, bookingId: booking.id }, '[Mark] Arriving-soon SMS failed');
+    }
+
+    // Emit only on a successful send, so a failed attempt is retried on the
+    // next scan rather than being permanently marked as delivered.
+    if (!smsSent) {
+      logger.warn(
+        { bookingId: booking.id },
+        '[Mark] Arriving-soon SMS not sent — will retry next scan',
+      );
+      return false;
+    }
+
+    await emitEvent('pulse.mover_arriving_soon', 'booking', booking.id, {
+      agentName: this.name,
+      severity: 'info',
+      etaMinutes: eta.minutes,
+      arrivalTime: eta.arrivalTime,
+      customerPhone: customer.phone,
+    });
+
+    return true;
   }
 
   private async shouldFire(bookingId: string, checkType: CheckType): Promise<boolean> {
@@ -241,6 +353,21 @@ export class MarkAgent extends BaseAgent {
       )
       .limit(1);
     return prior.length === 0;
+  }
+
+  /** Like shouldFire() but with no time window — true if it ever fired. */
+  private async hasEverFired(bookingId: string, checkType: CheckType): Promise<boolean> {
+    const prior = await db
+      .select({ id: businessEvents.id })
+      .from(businessEvents)
+      .where(
+        and(
+          eq(businessEvents.eventType, `pulse.${checkType}`),
+          eq(businessEvents.entityId, bookingId),
+        ),
+      )
+      .limit(1);
+    return prior.length > 0;
   }
 
   private async fireHighSeverity(
