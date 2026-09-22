@@ -91,6 +91,7 @@ import { reid } from "./agents/reid";
 import { documentAudits, documentIrregularities } from "@shared/schema";
 import { novaWebhookRouter } from "./nova-webhook-routes";
 import { resolveTripEta, NO_ETA } from "./lib/tripEta";
+import { checkArrivalGeofence } from "./lib/arrivalGeofence";
 
 // Middleware to parse JSON
 function jsonMiddleware(req: Request, res: Response, next: Function) {
@@ -10690,7 +10691,17 @@ Respond with VALID JSON only:
         currentLongitude: longitude,
         locationUpdatedAt: new Date()
       });
-      
+
+      // Arrival detection. Swallows its own errors, so a geofence problem can
+      // never fail the ping that carries the customer's live map. req.body is
+      // unvalidated here, so coerce before doing trigonometry on it.
+      await checkArrivalGeofence({
+        booking,
+        moverUserId: mover.userId,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+      });
+
       res.json({
         success: true,
         location: {

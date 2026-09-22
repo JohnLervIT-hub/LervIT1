@@ -97,7 +97,18 @@ export interface EmailNotification {
 export interface SMSNotification {
   to: string;
   message: string;
-  type: 'job_alert' | 'booking_update' | 'payment_confirmation' | 'pilot_status' | 'phone_verification';
+  type:
+    | 'job_alert'
+    | 'booking_update'
+    | 'payment_confirmation'
+    | 'pilot_status'
+    | 'phone_verification'
+    // Geofenced "your mover is outside". Its own type so it sits outside
+    // RATE_LIMITED_TYPES: the shared 1/hr 'booking_update' budget is normally
+    // already spent by the arriving-soon text ~10 minutes earlier, which would
+    // drop this one silently. Bounded by a once-per-(booking, leg) dedup in
+    // server/lib/arrivalGeofence.ts.
+    | 'arrival_notification';
 }
 
 // Helper function to extract first name from full name

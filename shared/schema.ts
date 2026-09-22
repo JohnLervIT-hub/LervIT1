@@ -233,6 +233,14 @@ export const bookings = pgTable("bookings", {
   // fall back to preferredDate.
   startedAt: timestamp("started_at"),
 
+  // Geofence-measured arrival (server/lib/arrivalGeofence.ts), stamped when the
+  // mover's GPS first comes within 200m. Deliberately separate from
+  // moverPerformance.arrivedAtPickupAt / arrivedAtDropoffAt, which are stamped
+  // from the mover tapping "Arrived" and so record when they SAID they were
+  // there. Null when GPS never got close enough, or was never streaming.
+  arrivedAtPickupAt: timestamp("arrived_at_pickup_at"),
+  arrivedAtDropoffAt: timestamp("arrived_at_dropoff_at"),
+
   // Actual completion timestamp — authoritative for RETAIN dormancy scans and
   // any analytics that need "when did the move end" rather than "when was the
   // row last touched" (updatedAt bumps on review-related mutations).

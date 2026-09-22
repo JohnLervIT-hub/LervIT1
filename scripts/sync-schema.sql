@@ -1655,3 +1655,8 @@ CREATE TABLE IF NOT EXISTS "app_settings" (
 -- measure from preferred_date, which is when the customer ASKED for the move.
 ALTER TABLE "bookings"
   ADD COLUMN IF NOT EXISTS "started_at" timestamp;
+
+-- Geofence-measured arrival times (see migrations/0025_bookings_arrival_times.sql).
+ALTER TABLE "bookings"
+  ADD COLUMN IF NOT EXISTS "arrived_at_pickup_at"  timestamp,
+  ADD COLUMN IF NOT EXISTS "arrived_at_dropoff_at" timestamp;
