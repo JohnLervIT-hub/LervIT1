@@ -225,6 +225,14 @@ export const bookings = pgTable("bookings", {
   expectedCompletionAt: timestamp("expected_completion_at"),
   slaDeadlineAt: timestamp("sla_deadline_at"),
 
+  // Actual trip start — stamped on the first flip into en_route_to_pickup.
+  // preferredDate is only when the customer ASKED for the move, so anything
+  // reasoning about elapsed trip time (Mark's overtime check, the
+  // auto-complete/auto-cancel guards) was measuring from the wrong instant.
+  // Null on every booking that started before this column existed; callers
+  // fall back to preferredDate.
+  startedAt: timestamp("started_at"),
+
   // Actual completion timestamp — authoritative for RETAIN dormancy scans and
   // any analytics that need "when did the move end" rather than "when was the
   // row last touched" (updatedAt bumps on review-related mutations).

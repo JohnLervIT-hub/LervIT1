@@ -1649,3 +1649,9 @@ CREATE TABLE IF NOT EXISTS "app_settings" (
   "value"      text,
   "updated_at" timestamp NOT NULL DEFAULT now()
 );
+
+-- Actual trip start time (see migrations/0024_bookings_started_at.sql).
+-- Mark's overtime check and the auto-complete/auto-cancel guards used to
+-- measure from preferred_date, which is when the customer ASKED for the move.
+ALTER TABLE "bookings"
+  ADD COLUMN IF NOT EXISTS "started_at" timestamp;

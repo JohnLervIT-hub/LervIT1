@@ -5600,6 +5600,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
         }
+
+        // First flip into en_route_to_pickup is the only moment we learn when
+        // the trip actually began; the transition table allows it exactly once,
+        // and the null check keeps a replay from moving the goalposts.
+        if (newStatus === BOOKING_STATUSES.EN_ROUTE_TO_PICKUP && !booking.startedAt) {
+          (updates as any).startedAt = new Date();
+        }
       }
       
       const booking = await storage.updateBooking(req.params.id, updates as any);

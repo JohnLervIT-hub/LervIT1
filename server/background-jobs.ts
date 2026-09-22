@@ -1144,6 +1144,11 @@ async function autoCompletePastPaidBookings() {
     
     // Threshold for "active" location updates - if mover updated location within 2 hours, they're still traveling
     const activeThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
+    // A trip that started recently is still running even if its GPS has gone
+    // quiet (dead phone, denied permission, tunnel). Without this the sweep
+    // treated "no location on file" as "nobody is driving" and closed the
+    // booking out from under an in-flight move.
+    const startThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000); // 8 hours ago
     
     // Find paid bookings that are past-dated and still in active states
     const paidStatuses = ['paid', 'succeeded'];
@@ -1163,9 +1168,17 @@ async function autoCompletePastPaidBookings() {
           lt(bookings.preferredDate, today),
           // CRITICAL FIX: Only auto-complete if mover has NOT updated location recently
           // This prevents completing bookings while mover is still actively traveling
-          or(
-            isNull(bookings.locationUpdatedAt),
-            lt(bookings.locationUpdatedAt, activeThreshold)
+          // Not moving recently AND not recently started — either one alone
+          // means the mover is still out there.
+          and(
+            or(
+              isNull(bookings.locationUpdatedAt),
+              lt(bookings.locationUpdatedAt, activeThreshold)
+            ),
+            or(
+              isNull(bookings.startedAt),
+              lt(bookings.startedAt, startThreshold)
+            )
           )
         )
       )
@@ -1265,6 +1278,11 @@ async function cancelPastDatedBookings() {
     
     // Threshold for "active" location updates - if mover updated location within 2 hours, they're still traveling
     const activeThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
+    // A trip that started recently is still running even if its GPS has gone
+    // quiet (dead phone, denied permission, tunnel). Without this the sweep
+    // treated "no location on file" as "nobody is driving" and closed the
+    // booking out from under an in-flight move.
+    const startThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000); // 8 hours ago
     
     // All statuses that should be auto-cancelled if past-dated
     // Includes pending, confirmed, payment states, AND in-progress move states
@@ -1291,9 +1309,17 @@ async function cancelPastDatedBookings() {
           lt(bookings.preferredDate, today),
           // CRITICAL FIX: Only auto-cancel if mover has NOT updated location recently
           // This prevents cancelling bookings while mover is still actively traveling
-          or(
-            isNull(bookings.locationUpdatedAt),
-            lt(bookings.locationUpdatedAt, activeThreshold)
+          // Not moving recently AND not recently started — either one alone
+          // means the mover is still out there.
+          and(
+            or(
+              isNull(bookings.locationUpdatedAt),
+              lt(bookings.locationUpdatedAt, activeThreshold)
+            ),
+            or(
+              isNull(bookings.startedAt),
+              lt(bookings.startedAt, startThreshold)
+            )
           )
         )
       )

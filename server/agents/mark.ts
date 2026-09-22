@@ -9,7 +9,9 @@
  *   - gps_silent          : bookings.locationUpdatedAt is >10 min stale
  *                           while the trip is in progress. High severity —
  *                           Xavier SMS to John.
- *   - overtime            : now > preferredDate + estimatedDurationMinutes + 30min.
+ *   - overtime            : now > tripStart + estimatedDurationMinutes + 30min,
+ *                           where tripStart is bookings.startedAt and falls back
+ *                           to preferredDate on pre-startedAt bookings.
  *                           Medium severity — dashboard flag only.
  *   - no_start            : status is 'confirmed' or 'en_route_to_pickup' and
  *                           now > preferredDate + 15min. High severity —
@@ -171,7 +173,12 @@ export class MarkAgent extends BaseAgent {
 
     // 2. Overtime — prefer bookingMetrics.estimatedDurationMinutes, fall back
     //    to a load-size proxy so we still fire when metrics are missing.
-    if (inProgress && scheduled !== null) {
+    //    Measured from when the mover actually rolled: preferredDate is when
+    //    the customer asked for the move, so a trip that started 45min late
+    //    used to burn its whole estimate before the first wheel turned.
+    const startedAtMs = booking.startedAt ? new Date(booking.startedAt).getTime() : null;
+    const tripStart = startedAtMs ?? scheduled;
+    if (inProgress && tripStart !== null) {
       const [metrics] = await db
         .select({ estimatedDurationMinutes: bookingMetrics.estimatedDurationMinutes })
         .from(bookingMetrics)
@@ -180,15 +187,17 @@ export class MarkAgent extends BaseAgent {
       const estMinutes =
         metrics?.estimatedDurationMinutes ?? estimateDurationFromLoadSize(booking.loadSize);
       const durationSource = metrics?.estimatedDurationMinutes ? 'booking_metrics' : 'load_size_fallback';
-      if (now > scheduled + estMinutes * 60000 + OVERTIME_GRACE_MS) {
+      if (now > tripStart + estMinutes * 60000 + OVERTIME_GRACE_MS) {
         if (await this.shouldFire(booking.id, 'overtime')) {
-          const overMinutes = Math.round((now - scheduled - estMinutes * 60000) / 60000);
+          const overMinutes = Math.round((now - tripStart - estMinutes * 60000) / 60000);
           overtime = true;
           await this.fireMediumSeverity(booking, 'overtime', {
             estimatedDurationMinutes: estMinutes,
             durationSource,
             overMinutes,
             preferredDate: booking.preferredDate,
+            startedAt: booking.startedAt ?? null,
+            startSource: startedAtMs !== null ? 'actual_start' : 'preferred_date',
           });
         }
       }
