@@ -73,6 +73,10 @@ const ELEVENLABS_PARAM_ALIASES: Record<string, string> = {
   Quote_id: 'quoteId',
   PickupAddress: 'pickupAddress',
   DropoffAddress: 'dropoffAddress',
+  // Without this the voice agent's `Type` arrived unaliased and collect-email
+  // / send-link fell back to type='customer', silently handing a mover
+  // candidate the customer signup link.
+  Type: 'type',
 };
 
 function aliasElevenLabsParams(obj: unknown): void {
@@ -92,6 +96,11 @@ router.use('/api/nova', (req: Request, _res: Response, next) => {
 });
 
 const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
+
+// The mover application page is a marketing-site route (lervit.com/become-a-mover)
+// served from the website-standalone repo — the app SPA has no such route, so
+// APP_BASE_URL would 404. Same env var and default as utils/sitemap.ts.
+const MARKETING_SITE_URL = (process.env.MARKETING_SITE_URL ?? 'https://lervit.com').trim();
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
 // Per-phone dedupe for DM → voice handoffs. Same phone hitting handoff
@@ -1181,6 +1190,16 @@ const DM_ADDRESS_TO_REGEX = /(?:^|\s)(?:to|dropoff(?:\s+at)?|deliver(?:ed)?(?:\s
 const DM_STREET_ADDRESS_REGEX =
   /\d+.*(?:ave|avenue|street|st|drive|dr|way|blvd|rd|road|close|crescent|cres|place|pl|court|ct|nw|ne|sw|se)\b/i;
 
+// Inbound mover applicants. Tested only AFTER the callback regex, which owns
+// the overlapping "i'm available" phrasing — a customer free on Saturday must
+// not be filed as a job candidate.
+const MOVER_INTENT_REGEX =
+  /\b(become\s+a\s+mover|join\s+(as\s+)?a?\s*mover|apply\s+(to\s+)?(be|as)\s+a?\s*mover|drive\s+(for|with)\s+lervit|sign\s+up\s+as\s+(a\s+)?mover|mover\s+(job|application|apply|sign|join)|looking\s+for\s+(a\s+)?(moving\s+)?job|i\s+(have|got)\s+a\s+truck|available\s+(to\s+)?move|earn\s+(money|cash|extra)\s+(moving|with\s+lervit)|hiring|work\s+(for|with)\s+lervit)\b/i;
+
+// One b2bm lead per sender. A candidate who rephrases the question still gets
+// the link every time, but Jordan is only handed the candidate once.
+const moverIntentHandled = new Set<string>();
+
 // True when Nova's most recent turn asked the customer for a callback phone
 // number (either the runDMHumanHandoff "what's the best number" prompt or the
 // reasoning path's escalate variant). When the customer's next turn contains
@@ -1196,11 +1215,92 @@ function isCallbackContext(
   );
 }
 
+// Mover applicants used to fall through to the customer reasoning path, where
+// Nova answered a job question with a moving quote and — only if they later
+// escalated — filed them b2c. Send them to the application page and open a
+// b2bm lead so Jordan (VETTER) picks them up.
+async function runDMMoverIntake(input: {
+  channel: 'messenger' | 'instagram';
+  senderId: string;
+  identity?: ResolvedIdentity | null;
+  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): Promise<void> {
+  const { channel, senderId, identity, history } = input;
+  const send = channel === 'instagram' ? sendInstagramMessage : sendMessengerMessage;
+  const channelLabel = channel === 'instagram' ? 'Instagram' : 'Messenger';
+  const sourceChannel = channel === 'instagram' ? 'instagram_dm' : 'messenger_dm';
+
+  const reply =
+    `Hey! 👋 We're always looking for reliable movers in Calgary. ` +
+    `Apply here and we'll be in touch: ${MARKETING_SITE_URL}/become-a-mover`;
+
+  const dedupeKey = `${channel}:${senderId}`;
+  if (!moverIntentHandled.has(dedupeKey)) {
+    moverIntentHandled.add(dedupeKey);
+
+    // Lead work first, and swallowing its own errors: the caller's catch falls
+    // back to a second Claude reply, so a DB hiccup after the send would put
+    // two messages on the thread.
+    try {
+      const conversationText = history
+        .map((h) => `${h.role === 'user' ? 'Candidate' : 'Nova'}: ${h.content}`)
+        .join('\n');
+
+      const [lead] = await db
+        .insert(leads)
+        .values({
+          contactPhone: identity?.phone ?? null,
+          contactEmail: identity?.email ?? null,
+          contactName: identity?.name ?? undefined,
+          sourceChannel,
+          utmCampaign: 'nova-clarke',
+          leadType: 'b2bm',
+          intentScore: 80,
+          status: 'new',
+          assignedAgent: null,
+          notes: `${channelLabel} DM — mover intent detected.\nConversation:\n${conversationText}`,
+        })
+        .returning({ id: leads.id });
+
+      // subscriptions.ts reads data.leadId and runs Jordan's onboard_candidate
+      // against it; without the id Jordan would look up `undefined`. Jordan
+      // skips contactless leads anyway, so only emit once we can reach them.
+      if (lead?.id && (identity?.phone || identity?.email)) {
+        await agentEventBus.emit(
+          'ryan.lead_found',
+          {
+            leadId: lead.id,
+            source: sourceChannel,
+            phone: identity?.phone,
+            email: identity?.email,
+          },
+          channel === 'instagram' ? 'nova-instagram' : 'nova-messenger',
+        );
+      } else {
+        logger.info(
+          { senderId, channel, leadId: lead?.id },
+          '[Nova DM] Mover lead has no contact details — captured without Jordan handoff',
+        );
+      }
+    } catch (err) {
+      logger.error({ err, senderId, channel }, '[Nova DM] Mover lead capture failed');
+    }
+  }
+
+  history.push({ role: 'assistant', content: reply });
+  (channel === 'instagram' ? igConversationHistory : conversationHistory).set(
+    senderId,
+    history,
+  );
+  await send(senderId, reply);
+}
+
 async function runDMHumanHandoff(input: {
   channel: 'messenger' | 'instagram';
   senderId: string;
   identity?: ResolvedIdentity | null;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  isMoverCandidate?: boolean;
 }): Promise<void> {
   const { channel, senderId } = input;
   const send = channel === 'instagram' ? sendInstagramMessage : sendMessengerMessage;
@@ -1220,6 +1320,12 @@ async function runDMHumanHandoff(input: {
       ? igConversationHistory.get(senderId)
       : conversationHistory.get(senderId)) ??
     [];
+
+  // Escalation can arrive a turn or more after the job question ("...actually
+  // just call me"), so fall back to the thread rather than the current message.
+  const isMoverCandidate =
+    input.isMoverCandidate ??
+    history.some((h) => h.role === 'user' && MOVER_INTENT_REGEX.test(h.content));
 
   const customerPhone = identity?.phone;
   const customerEmail = identity?.email;
@@ -1268,7 +1374,7 @@ async function runDMHumanHandoff(input: {
           contactName: customerName,
           sourceChannel: channel === 'instagram' ? 'instagram_dm' : 'messenger_dm',
           utmCampaign: 'nova-clarke',
-          leadType: 'b2c',
+          leadType: isMoverCandidate ? 'b2bm' : 'b2c',
           intentScore: 90,
           status: 'new',
           notes: `${channelLabel} DM handoff.\nConversation:\n${conversationText}`,
@@ -1480,6 +1586,36 @@ async function handleMessengerMessage(input: {
             messageLength: message.length,
             source: 'callback_intent',
             action: 'escalate_human',
+          },
+          'agent',
+        );
+        return;
+      }
+
+      // Mover intent — short-circuit before Tier 2 reasoning, which has no
+      // recruitment goal and would answer a job question with a moving quote.
+      const wantsToBeMover = MOVER_INTENT_REGEX.test(message);
+
+      if (wantsToBeMover) {
+        logger.info(
+          { senderId, message },
+          '[Nova Messenger] Mover intent detected → recruitment',
+        );
+        await runDMMoverIntake({
+          channel: 'messenger',
+          senderId,
+          identity,
+          history,
+        });
+        await emitEvent(
+          'nova.messenger_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'mover_intent',
+            action: 'mover_recruit',
           },
           'agent',
         );
@@ -1819,6 +1955,36 @@ async function handleInstagramMessage(input: {
             messageLength: message.length,
             source: 'callback_intent',
             action: 'escalate_human',
+          },
+          'agent',
+        );
+        return;
+      }
+
+      // Mover intent — short-circuit before Tier 2 reasoning, which on this
+      // channel can only pick goal 'book' or 'quote'.
+      const wantsToBeMover = MOVER_INTENT_REGEX.test(message);
+
+      if (wantsToBeMover) {
+        logger.info(
+          { senderId, message },
+          '[Nova Instagram] Mover intent detected → recruitment',
+        );
+        await runDMMoverIntake({
+          channel: 'instagram',
+          senderId,
+          identity,
+          history,
+        });
+        await emitEvent(
+          'nova.instagram_message_handled',
+          'agent',
+          'nova',
+          {
+            senderId,
+            messageLength: message.length,
+            source: 'mover_intent',
+            action: 'mover_recruit',
           },
           'agent',
         );
