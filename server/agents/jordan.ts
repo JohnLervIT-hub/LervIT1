@@ -42,7 +42,43 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 /** Appended to every Jordan SMS; budgeted out of the 160-char single segment. */
 const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
-const SMS_BODY_MAX = 160 - SMS_STOP_SUFFIX.length;
+const SMS_SIGNUP_LABEL = '\n\nSign up here: ';
+
+/**
+ * Compose a Jordan SMS from the Claude-written body plus a deterministic signup
+ * link and the opt-out suffix, inside the 160-char GSM-7 single segment.
+ *
+ * The link is appended here instead of being left to the model so truncation can
+ * never eat it: reserving both the URL line and the suffix up front is the whole
+ * point. Non-GSM characters are stripped so a smart quote or emoji can't silently
+ * force UCS-2 (and a 70-char segment). Mirrors buildAlexSms in ./alex.
+ */
+export function buildJordanSms(claudeBody: string): string {
+  const signupUrl = `${(process.env.MARKETING_SITE_URL ?? 'https://lervit.com').trim()}/become-a-mover`;
+  const urlLine = `${SMS_SIGNUP_LABEL}${signupUrl}`;
+
+  const cleanBody = claudeBody
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/[^\x00-\x7F]/g, '')
+    // The model still inlines a link now and then; drop it so we don't send two.
+    // A labelled one goes with its label, or the body ends "...sign up here".
+    .replace(/[\s-]*(?:sign\s*up|apply|register|join)[^:]{0,12}:\s*https?:\/\/\S+/gi, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    // Tidies the "Sign up here:" the model leaves behind once its URL is gone.
+    .replace(/[\s:;,.-]+$/, '');
+
+  const bodyBudget = Math.max(0, 160 - urlLine.length - SMS_STOP_SUFFIX.length);
+  const body =
+    cleanBody.length > bodyBudget
+      ? cleanBody.slice(0, bodyBudget).replace(/\s+\S*$/, '').trimEnd()
+      : cleanBody;
+
+  return `${body}${urlLine}${SMS_STOP_SUFFIX}`;
+}
 
 interface OnboardCandidateInput {
   leadId: string;
@@ -271,17 +307,17 @@ Write a brief, friendly SMS follow-up to
 someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
 Then add personalized follow-up based on
-the candidate context. Include sign up link.
-Not pushy. Total under 130 characters.
+the candidate context.
+Do not include a link or an opt-out line — both are appended for you.
+Not pushy. Total under 80 characters.
 Return only the SMS text, nothing else.`,
         `<data>
 Follow up for: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
-</data>
-Sign up link: ${applyLink}`,
+</data>`,
         JORDAN_SMS_MODEL,
         120,
       );
-      const smsBody = rawSms.trim().slice(0, SMS_BODY_MAX) + SMS_STOP_SUFFIX;
+      const smsBody = buildJordanSms(rawSms);
       if (options.dryRun) {
         return {
           dryRun: true,
@@ -391,24 +427,23 @@ Sign up link: ${applyLink}`,
       return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
-    const applyLink = 'https://app.lervit.com/signup';
     const raw = await this.callClaude(
       `${JAILBREAK_PREAMBLE}
 
 You are Jordan from LervIT, Calgary's moving platform.
 Write a brief, friendly SMS to someone who might want to earn money moving.
 Start with: 'Hi, Jordan from LervIT here! '
-Personalize from the candidate context. Include the sign up link.
-Not pushy. Total under 130 characters.
+Personalize from the candidate context.
+Do not include a link or an opt-out line — both are appended for you.
+Not pushy. Total under 80 characters.
 Return only the SMS text, nothing else.`,
       `<data>
 Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
-</data>
-Sign up link: ${applyLink}`,
+</data>`,
       JORDAN_SMS_MODEL,
       120,
     );
-    const message = raw.trim().slice(0, SMS_BODY_MAX) + SMS_STOP_SUFFIX;
+    const message = buildJordanSms(raw);
 
     if (options.dryRun) {
       return {
