@@ -641,21 +641,46 @@ router.post(
 
 router.get('/api/nova/send-link', async (req: Request, res: Response) => {
   const phone = typeof req.query.phone === 'string' ? req.query.phone : '';
+  const type = typeof req.query.type === 'string' ? req.query.type : 'customer';
+  const leadId = typeof req.query.leadId === 'string' ? req.query.leadId : null;
 
   if (!phone) return res.status(400).json({ error: 'phone required' });
+
+  // Mover applications live on the marketing site; customers book in the app.
+  const isMover = type === 'mover';
+  const link = isMover
+    ? `${MARKETING_SITE_URL}/become-a-mover`
+    : `${APP_BASE_URL}/request-move`;
 
   try {
     await notificationService.sendSMS({
       to: phone,
-      message:
-        `Nova from LervIT. Book your move: ${APP_BASE_URL}/request-move ` +
-        `Use code LERVIT10 for 10% off. Reply STOP to opt out`,
+      message: isMover
+        ? `Ready to join LervIT? Apply here: ${link} Reply STOP to opt out`
+        : `Nova from LervIT. Book your Calgary move: ${link} ` +
+          `Use code LERVIT10 for 10% off. Reply STOP to opt out`,
       type: 'pilot_status',
     });
 
-    return res.json({ success: true, message: `Booking link sent to ${phone}` });
+    // Previously missing on the GET path, so voice-originated link sends
+    // never showed up in business_events alongside the POST ones.
+    if (leadId) {
+      await emitEvent(
+        'nova.signup_link_sent',
+        'lead',
+        leadId,
+        { phone, type, channel: 'voice' },
+        'agent',
+      ).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      linkSent: link,
+      message: `Booking link sent to ${phone}`,
+    });
   } catch (err) {
-    logger.error({ err, phone }, '[Nova] send-link (GET) failed');
+    logger.error({ err, phone, type }, '[Nova] send-link (GET) failed');
     return res.status(500).json({ error: 'Failed to send link' });
   }
 });
@@ -819,11 +844,13 @@ router.post(
       // will emit the standard `booking.created` bus event (dispatch + Mark
       // monitor) once payment lands. Skipping the bus emit here avoids firing
       // Victor before the customer has paid.
+      const paymentUrl = `${APP_BASE_URL}/pay/${bookingId}`;
+
       if (customer.phone) {
         await notificationService.sendSMS({
           to: customer.phone,
           message:
-            `LervIT booking reserved! Complete payment: ${APP_BASE_URL}/pay/${bookingId} ` +
+            `LervIT booking reserved! Complete payment: ${paymentUrl} ` +
             `Your mover will be assigned once payment is confirmed.`,
           type: 'booking_update',
         });
@@ -852,11 +879,68 @@ router.post(
         success: true,
         bookingId,
         action: 'payment_required',
-        message: `Your booking is reserved! I've sent a payment link to your phone. Once payment is confirmed, we'll assign your mover immediately.`,
+        // Only claim the SMS went out when there was a phone to send it to —
+        // otherwise Nova told callers to check a text that was never sent.
+        message: customer.phone
+          ? `Your booking is reserved! I've sent a payment link to your phone. Once payment is confirmed, we'll assign your mover immediately.`
+          : `Your booking is reserved! You can pay at: ${paymentUrl} Once payment is confirmed, we'll assign your mover immediately.`,
       });
     } catch (err) {
       logger.error({ err }, '[Nova] book-move failed');
       return res.status(500).json({ error: 'Booking failed' });
+    }
+  },
+);
+
+// ─── Tool 4b: send_booking_confirmation ───────────────
+//
+// Nova had no way to text a confirmation once a booking existed, so callers
+// hung up with nothing in writing. Exposed as an ElevenLabs tool so the agent
+// can send it at the end of the call.
+
+router.post(
+  '/api/nova/send-confirmation',
+  express.json(),
+  async (req: Request, res: Response) => {
+    const { phone, bookingId } = req.body ?? {};
+
+    if (!phone || !bookingId) {
+      return res.status(400).json({ error: 'phone and bookingId required' });
+    }
+
+    try {
+      const booking = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, bookingId))
+        .limit(1);
+
+      if (!booking.length) {
+        return res.status(404).json({ error: 'Booking not found' });
+      }
+
+      await notificationService.sendSMS({
+        to: phone,
+        message:
+          `Your LervIT move is confirmed! 🎉\n` +
+          `Move #${String(bookingId).slice(0, 8).toUpperCase()}\n` +
+          `View details: ${APP_BASE_URL}/bookings/${bookingId}\n` +
+          `Questions? Call 1-888-982-0885`,
+        type: 'booking_update',
+      });
+
+      await emitEvent(
+        'nova.booking_confirmation_sent',
+        'booking',
+        bookingId,
+        { phone, channel: 'voice' },
+        'agent',
+      ).catch(() => {});
+
+      return res.json({ success: true });
+    } catch (err) {
+      logger.error({ err, bookingId }, '[Nova] send-confirmation failed');
+      return res.status(500).json({ error: 'Failed to send confirmation' });
     }
   },
 );
@@ -1086,7 +1170,7 @@ const MESSENGER_GRAPH_URL = 'https://graph.facebook.com/v19.0/me/messages';
 const NOVA_MESSENGER_CONTEXT = `
 KEY INFO:
 - Company: LervIT Moving Calgary
-- Website: lervit.com
+- Website: ${MARKETING_SITE_URL}
 - Phone: 1-888-982-0885
 - Promo: LERVIT10 (10% off first move)
 - Pay in 4 via Afterpay
@@ -1096,8 +1180,8 @@ KEY INFO:
 - Instant AI quote in 30 seconds
 - Snap a photo → get price → book
 
-QUOTE LINK: lervit.com
-BOOKING: app.lervit.com/request-move
+QUOTE LINK: ${MARKETING_SITE_URL}
+BOOKING: ${APP_BASE_URL}/request-move
 
 NEVER say:
 - "I'm Nova, LervIT's moving assistant"
@@ -1458,7 +1542,7 @@ async function handleMessengerMessage(input: {
   if (postback === 'GET_QUOTE') {
     await sendMessengerMessage(
       senderId,
-      "Here's your instant quote link! 👉 lervit.com — takes 30 seconds. Use code LERVIT10 for 10% off! 🎉",
+      `Here's your instant quote link! 👉 ${MARKETING_SITE_URL} — takes 30 seconds. Use code LERVIT10 for 10% off! 🎉`,
     );
     await emitEvent(
       'nova.messenger_postback',
@@ -1722,7 +1806,7 @@ RULES:
     logger.error({ err, senderId }, '[Nova Messenger] Handler failed');
     await sendMessengerMessage(
       senderId,
-      'Hey! Moving soon? Get an instant quote at lervit.com 📦',
+      `Hey! Moving soon? Get an instant quote at ${MARKETING_SITE_URL} 📦`,
     ).catch(() => {});
   }
 }
@@ -1833,7 +1917,7 @@ async function handleInstagramMessage(input: {
   if (postback === 'GET_QUOTE') {
     await sendInstagramMessage(
       senderId,
-      "Here's your instant quote link 👉 lervit.com — takes 30 seconds. Use code LERVIT10 for 10% off! 🎉",
+      `Here's your instant quote link 👉 ${MARKETING_SITE_URL} — takes 30 seconds. Use code LERVIT10 for 10% off! 🎉`,
     );
     await emitEvent(
       'nova.instagram_postback',
@@ -2065,7 +2149,7 @@ ALWAYS:
 - Get straight to helping
 - Ask for pickup + dropoff if not given
 - Give price estimate when you have both addresses ($65-85 single item, $150-300 full apartment)
-- Send direct booking link when ready: lervit.com/request-move?pickup=X&dropoff=Y
+- Send direct booking link when ready: ${APP_BASE_URL}/request-move?pickup=X&dropoff=Y
 - Keep replies to 2-3 sentences max
 - 1 emoji max, casual tone
 
@@ -2100,7 +2184,7 @@ EXAMPLE bad opening:
     logger.error({ err, senderId }, '[Nova Instagram] Handler failed');
     await sendInstagramMessage(
       senderId,
-      'Hey! For instant help visit lervit.com or call 1-888-982-0885 📞',
+      `Hey! For instant help visit ${MARKETING_SITE_URL} or call 1-888-982-0885 📞`,
     ).catch(() => {});
   }
 }
