@@ -45,6 +45,15 @@ const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
 const SMS_SIGNUP_LABEL = '\n\nSign up here: ';
 
 /**
+ * The mover application page. It's a marketing-site route, not an app route, so
+ * it tracks MARKETING_SITE_URL rather than APP_BASE_URL — same page Nova hands
+ * DM candidates. Read at call time so env load order can't freeze a stale value.
+ */
+function moverApplyLink(): string {
+  return `${(process.env.MARKETING_SITE_URL ?? 'https://lervit.com').trim()}/become-a-mover`;
+}
+
+/**
  * Compose a Jordan SMS from the Claude-written body plus a deterministic signup
  * link and the opt-out suffix, inside the 160-char GSM-7 single segment.
  *
@@ -54,7 +63,7 @@ const SMS_SIGNUP_LABEL = '\n\nSign up here: ';
  * force UCS-2 (and a 70-char segment). Mirrors buildAlexSms in ./alex.
  */
 export function buildJordanSms(claudeBody: string): string {
-  const signupUrl = `${(process.env.MARKETING_SITE_URL ?? 'https://lervit.com').trim()}/become-a-mover`;
+  const signupUrl = moverApplyLink();
   const urlLine = `${SMS_SIGNUP_LABEL}${signupUrl}`;
 
   const cleanBody = claudeBody
@@ -150,7 +159,7 @@ export class JordanAgent extends BaseAgent {
       return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
-    const applyLink = 'https://app.lervit.com/signup';
+    const applyLink = moverApplyLink();
 
     const safeNotes = sanitizeForPrompt(lead.notes ?? '', 'notes');
     const raw = await this.callClaude(
@@ -172,7 +181,7 @@ LervIT mover benefits to weave in (pick the ones that fit the signal):
 - Calgary's fastest-growing move platform
 - No experience needed — just a vehicle
 
-Include this sign up link so they can create their mover account: ${applyLink}
+Include this link so they can apply to move with LervIT: ${applyLink}
 
 Subject: keep generic, no vehicle type unless explicitly mentioned in lead notes.
 Never use emoji in subject line.
@@ -190,7 +199,7 @@ Notes: ${safeNotes}
 Intent score: ${lead.intentScore}
 
 Write recruitment email with CTA "Apply to become a LervIT mover".
-Sign up link: ${applyLink}`,
+Application link: ${applyLink}`,
       JORDAN_EMAIL_MODEL,
       600,
     );
@@ -283,7 +292,7 @@ Sign up link: ${applyLink}`,
       return { skipped: true, reason: 'already_contacted_today', lastEvent: dedupe.lastEvent };
     }
 
-    const applyLink = 'https://app.lervit.com/signup';
+    const applyLink = moverApplyLink();
     let channel: 'email' | 'sms' = 'email';
     let delivered = false;
 
@@ -353,7 +362,7 @@ Format: first line "SUBJECT: <subject>", blank line, then the body.`,
 Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
 </data>
 Touch number: ${touchNumber} of 4
-Sign up link: ${applyLink}`,
+Application link: ${applyLink}`,
         JORDAN_EMAIL_MODEL,
         500,
       );
