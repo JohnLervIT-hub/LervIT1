@@ -232,6 +232,10 @@ function bucketArea(address: string | null | undefined): string | null {
 interface GenerateBlogInput {
   topic?: string;
   category?: string;
+  // When set, mirror the drafted post's excerpt/first paragraph onto this
+  // campaign content_items row so the item stops reading as empty in admin.
+  // The post itself still lands in blog_posts as the source of truth.
+  contentItemId?: string;
 }
 
 interface GenerateSocialInput {
@@ -539,8 +543,35 @@ Category: ${category}.`;
       })
       .returning();
 
+    // A campaign blog item is otherwise left blank forever: nothing else writes
+    // caption/script for type='blog', so admin shows it with no body text and no
+    // generate button (that button is gated to video/social types).
+    if (input.contentItemId) {
+      const excerpt = row.excerpt ?? title;
+      await db
+        .update(contentItems)
+        .set({
+          caption: excerpt,
+          script: sections[0]?.paragraphs?.[0] ?? excerpt,
+          status: 'ready',
+          updatedAt: new Date(),
+        })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      logger.info(
+        { contentItemId: input.contentItemId, postId: row.id },
+        '[Ember] campaign blog item populated',
+      );
+    }
+
     logger.info({ postId: row.id, title, sections: sections.length, faq: faq.length }, '[Ember] blog post drafted (pending_review)');
-    return { postId: row.id, title, slug: row.slug, status: row.status };
+    return {
+      postId: row.id,
+      title,
+      slug: row.slug,
+      status: row.status,
+      contentItemId: input.contentItemId ?? null,
+    };
   }
 
   async publishBlogPost(input: PublishBlogInput, options?: AgentRunOptions) {
@@ -1435,11 +1466,15 @@ Duration: ${input.durationDays ?? 30} days
                   contentItemId: item.id,
                   topic: brief.concept ?? campaign.objective,
                 });
+              } else if (item.type === 'blog') {
+                await this.generateBlogPost({
+                  contentItemId: item.id,
+                  topic: brief.concept ?? campaign.objective ?? undefined,
+                });
               }
-              // blog / newsletter items still have no campaign-aware path —
-              // generate_blog_post / generate_newsletter write their own tables
-              // and take no contentItemId, so those items stay draft until an
-              // admin fills them.
+              // newsletter items still have no campaign-aware path —
+              // generate_newsletter writes its own table and takes no
+              // contentItemId, so those stay draft until an admin fills them.
             } catch (err) {
               logger.error(
                 { err, itemId: item.id, type: item.type },

@@ -218,6 +218,18 @@ function briefVisuals(item: ContentItem): string | null {
     .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
   return parts.length ? parts.join(" · ") : null;
 }
+
+/**
+ * The quoted line under an item. Blog items drafted before generate_blog_post
+ * mirrored onto the campaign row carry no caption, so fall back to their body
+ * text instead of rendering the item as blank.
+ */
+function captionLine(item: ContentItem): string | null {
+  if (item.caption) return item.caption;
+  if (item.type === "blog") return item.script?.slice(0, 100) ?? "Blog post";
+  return null;
+}
+
 const VIDEO_TYPES = new Set(["heygen_video", "higgsfield_video"]);
 const AVAILABLE_PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin"] as const;
 const OBJECTIVES = ["awareness", "conversion", "retention"] as const;
@@ -1017,6 +1029,7 @@ function ContentItemCard({
   const brief = item.creativeBrief as { concept?: string } | null;
   const scriptWords = wordCount(item.script);
   const hashtagCount = item.hashtags?.length ?? 0;
+  const caption = captionLine(item);
 
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1072,9 +1085,9 @@ function ContentItemCard({
                 {briefVisuals(item)}
               </p>
             )}
-            {item.caption && (
+            {caption && (
               <p className="text-xs text-muted-foreground italic line-clamp-1 mt-1">
-                “{item.caption}”
+                “{caption}”
               </p>
             )}
 
@@ -1271,6 +1284,7 @@ function ContentPreviewModal({
   const qa = (item.qaResults ?? null) as QAResults | null;
   const scriptChars = item.script?.length ?? 0;
   const scriptWords = wordCount(item.script);
+  const detailCaption = captionLine(item);
   const isVideoType = VIDEO_TYPES.has(item.type);
   const isSocialType = item.type === "social";
   const isBriefDriven = item.type === "higgsfield_video";
@@ -1421,14 +1435,14 @@ function ContentPreviewModal({
         )}
 
         {/* Caption */}
-        {item.caption && (
+        {detailCaption && (
           <section className="space-y-1.5">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
               <MessageSquare className="w-3 h-3" />
               Caption
             </div>
             <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
-              {item.caption}
+              {detailCaption}
             </div>
           </section>
         )}
