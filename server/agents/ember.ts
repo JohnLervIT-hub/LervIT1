@@ -990,7 +990,12 @@ Start your response with { directly.
     }
 
     const dataBlock = this.formatTrendData(snapshot);
-    const results: Array<{ id: string; platform: SocialPlatform; contentPreview: string }> = [];
+    const results: Array<{
+      id: string;
+      platform: SocialPlatform;
+      contentPreview: string;
+      videoContentItemId?: string;
+    }> = [];
 
     for (const platform of platforms) {
       const systemPrompt = `You are Ember Lane, social lead for LervIT.
@@ -1042,7 +1047,62 @@ Draft the ${platform} post.`;
         .values({ platform, content, hashtags, status: 'draft' })
         .returning();
 
-      results.push({ id: row.id, platform, contentPreview: content.slice(0, 100) });
+      const result: (typeof results)[number] = {
+        id: row.id,
+        platform,
+        contentPreview: content.slice(0, 100),
+      };
+
+      // Instagram trend posts get cinematic B-roll to go with the copy. The video
+      // has to hang off its own content_items row: social_posts has no videoUrl
+      // column, and the 30s Higgsfield poller in background-jobs only ever looks
+      // at content_items (status='generating' + generator='higgsfield'). Passing a
+      // social_posts id straight to generateHiggsfieldVideo would just return
+      // item_not_found.
+      if (platform === 'instagram') {
+        try {
+          const [videoItem] = await db
+            .insert(contentItems)
+            .values({
+              type: 'higgsfield_video',
+              platform,
+              status: 'draft',
+              caption: content,
+              hashtags,
+              generator: 'higgsfield',
+              aspectRatio: '9:16',
+            })
+            .returning();
+
+          const submission = await this.generateHiggsfieldVideo(
+            {
+              contentItemId: videoItem.id,
+              prompt: `Calgary moving lifestyle, urban energy, professional movers, cinematic. ${content.slice(0, 50)}`,
+            },
+            options,
+          );
+
+          if ('submitted' in submission && submission.submitted) {
+            result.videoContentItemId = videoItem.id;
+            logger.info(
+              { postId: row.id, contentItemId: videoItem.id, jobId: submission.jobId },
+              '[Ember] trend post video queued',
+            );
+          } else {
+            // generateHiggsfieldVideo already marked the item failed and logged
+            // the cause; the post itself still stands as a draft.
+            logger.error(
+              { postId: row.id, contentItemId: videoItem.id, submission },
+              '[Ember] trend post video submit did not take',
+            );
+          }
+        } catch (err) {
+          // A video is an enhancement — never lose the drafted post over it.
+          logger.error({ err, postId: row.id }, '[Ember] trend post video trigger failed');
+        }
+      }
+
+      results.push(result);
     }
 
     if (results.length === 0) {
@@ -1066,7 +1126,13 @@ Draft the ${platform} post.`;
     }
 
     logger.info(
-      { count: results.length, platforms, bookingCount: snapshot.bookingCount, hasStats: snapshot.hasStats },
+      {
+        count: results.length,
+        platforms,
+        bookingCount: snapshot.bookingCount,
+        hasStats: snapshot.hasStats,
+        videosQueued: results.filter((r) => r.videoContentItemId).length,
+      },
       '[Ember] trend posts drafted',
     );
 
