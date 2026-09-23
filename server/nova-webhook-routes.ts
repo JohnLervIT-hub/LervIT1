@@ -601,9 +601,11 @@ router.post(
 
     if (!phone) return res.status(400).json({ error: 'phone required' });
 
+    // Mover applications live on the marketing site (the app SPA has no
+    // /signup?role=mover route); customers book in the app.
     const signupUrl =
       type === 'mover'
-        ? `${APP_BASE_URL}/signup?role=mover`
+        ? `${MARKETING_SITE_URL}/become-a-mover`
         : `${APP_BASE_URL}/request-move`;
 
     await notificationService.sendSMS({
