@@ -146,9 +146,7 @@ export default function Signup() {
     
     switch (field) {
       case 'name':
-        if (name.trim().length < 2) return 'Name must be at least 2 characters';
-        if (!name.trim().includes(' ')) return 'Please enter your full name (first and last name)';
-        return undefined;
+        return name.trim().length < 2 ? 'Name must be at least 2 characters' : undefined;
       case 'email':
         return !validateEmail(email) ? 'Please enter a valid email address' : undefined;
       case 'password':
@@ -158,6 +156,12 @@ export default function Signup() {
     }
   };
   
+  // Soft nudge: we ask for a last name but never block signup on it.
+  const getNameHint = (): string | undefined => {
+    if (!touched.name || getFieldError('name')) return undefined;
+    return name.trim().includes(' ') ? undefined : 'Tip: adding a last name helps movers recognise you.';
+  };
+
   const handleBlur = (field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
   };
@@ -342,10 +346,6 @@ export default function Signup() {
     // Validate before submitting
     if (name.trim().length < 2) {
       toast({ variant: "destructive", title: "Invalid name", description: "Name must be at least 2 characters." });
-      return;
-    }
-    if (!name.trim().includes(' ')) {
-      toast({ variant: "destructive", title: "Full name required", description: "Please enter your first and last name." });
       return;
     }
     if (!validateEmail(email)) {
@@ -669,9 +669,14 @@ export default function Signup() {
                 className={`h-11 ${getFieldError('name') ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                 data-testid="input-name"
                 aria-invalid={!!getFieldError('name')}
-                aria-describedby={getFieldError('name') ? 'name-error' : undefined}
+                aria-describedby={[getFieldError('name') && 'name-error', getNameHint() && 'name-hint'].filter(Boolean).join(' ') || undefined}
               />
               <FormFieldError id="name-error" message={getFieldError('name')} />
+              {getNameHint() && (
+                <p id="name-hint" className="text-sm text-muted-foreground mt-1.5" aria-live="polite">
+                  {getNameHint()}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
