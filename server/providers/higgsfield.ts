@@ -1,24 +1,54 @@
 /**
  * Higgsfield provider — Bytedance Seedance 2.0 text-to-video.
  *
+ * Verified against https://docs.higgsfield.ai (2026-09-24):
+ *
  * Create:  POST https://api.higgsfield.ai/bytedance/seedance-2.0/text-to-video
  *          Response: { status, request_id, status_url }
  * Status:  GET  ${status_url}   (defaults to
- *          https://platform.higgsfield.ai/requests/${request_id}/status)
- * Auth:    Authorization: Key ${HIGGSFIELD_API_KEY}
+ *          https://api.higgsfield.ai/requests/${request_id}/status)
+ *          Response: { status, request_id, error, video: { url }, ... }
+ *          status ∈ queued | in_progress | completed | failed | nsfw | canceled
+ * Auth:    Authorization: Key ${key_id}:${key_secret}
  *
- * The SDK is configured at module load so future calls into
- * @higgsfield/client share credentials; the createVideo/getJobStatus
- * pair here submits async and returns immediately — pollers advance
- * the job separately.
+ * Credentials are a PAIR, not a single token. Supply them either as
+ * HIGGSFIELD_API_KEY="<key_id>:<key_secret>" or as the separate
+ * HIGGSFIELD_API_KEY_ID / HIGGSFIELD_API_KEY_SECRET.
+ *
+ * They are resolved per call, not at module load. This file used to run the
+ * SDK's config() at import time, which throws BadInputError on a key without
+ * a colon — and since server/index.ts imports background-jobs, which imports
+ * this file, that took down the whole process at boot rather than failing one
+ * video. The SDK was never actually called; every request here is raw fetch.
+ *
+ * createVideo/getJobStatus submit async and return immediately — the 30s
+ * poller in background-jobs advances the job.
  */
 
-import { config } from '@higgsfield/client/v2';
 import { logger } from '../logger';
 
-config({
-  credentials: process.env.HIGGSFIELD_API_KEY ?? '',
-});
+/**
+ * Builds the `key_id:key_secret` pair the Authorization header needs.
+ * Throws at call time (recoverable — the item is marked failed) rather than
+ * at import time (fatal — the server never boots).
+ */
+function higgsfieldCredentials(): string {
+  const id = process.env.HIGGSFIELD_API_KEY_ID?.trim();
+  const secret = process.env.HIGGSFIELD_API_KEY_SECRET?.trim();
+  if (id && secret) return `${id}:${secret}`;
+
+  const combined = process.env.HIGGSFIELD_API_KEY?.trim() ?? '';
+  const parts = combined.split(':');
+  if (parts.length === 2 && parts[0] && parts[1]) return combined;
+
+  throw new Error(
+    'Higgsfield not configured: set HIGGSFIELD_API_KEY to "<key_id>:<key_secret>", ' +
+      'or set HIGGSFIELD_API_KEY_ID and HIGGSFIELD_API_KEY_SECRET. ' +
+      (combined
+        ? 'The current HIGGSFIELD_API_KEY is not a colon-separated pair.'
+        : 'No credentials are set.'),
+  );
+}
 
 export interface HiggsfieldVideoInput {
   prompt: string;
@@ -81,7 +111,7 @@ export class HiggsfieldProvider {
       {
         method: 'POST',
         headers: {
-          Authorization: `Key ${process.env.HIGGSFIELD_API_KEY}`,
+          Authorization: `Key ${higgsfieldCredentials()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -116,13 +146,17 @@ export class HiggsfieldProvider {
   }
 
   async getJobStatus(jobId: string): Promise<HiggsfieldVideoResult> {
+    // The create response's status_url is authoritative; the fallback is the
+    // documented shape and is what a process restart falls back to, since the
+    // cache is in memory. This used to point at platform.higgsfield.ai, which
+    // is the SDK's internal base URL, not the public API host.
     const statusUrl =
       statusUrlCache.get(jobId) ??
-      `https://platform.higgsfield.ai/requests/${jobId}/status`;
+      `https://api.higgsfield.ai/requests/${jobId}/status`;
 
     const response = await fetch(statusUrl, {
       headers: {
-        Authorization: `Key ${process.env.HIGGSFIELD_API_KEY}`,
+        Authorization: `Key ${higgsfieldCredentials()}`,
       },
     });
 
@@ -141,11 +175,13 @@ export class HiggsfieldProvider {
     const statusMap: Record<string, HiggsfieldVideoResult['status']> = {
       queued: 'pending',
       in_progress: 'processing',
-      processing: 'processing',
       completed: 'completed',
       failed: 'failed',
       nsfw: 'failed',
       canceled: 'failed',
+      // Not in the documented enum. Kept as a defensive alias so a synonym
+      // would not trip the unknown-status fail-fast below.
+      processing: 'processing',
     };
 
     return {
