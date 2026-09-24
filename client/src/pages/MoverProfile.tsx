@@ -110,6 +110,9 @@ function AvailabilityCalendarCard() {
   const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
 
   const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  // Compare cells as YYYY-MM-DD strings: a bare date-only string parses as UTC midnight,
+  // which lands on the previous local day west of UTC and greys out today.
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   return (
     <Card>
@@ -134,7 +137,7 @@ function AvailabilityCalendarCard() {
             if (!day) return <div key={i} />;
             const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isAvailable = availableSet.has(dateStr);
-            const isPast = new Date(dateStr) < new Date(new Date().toDateString());
+            const isPast = dateStr < todayStr;
             return (
               <button
                 key={dateStr}
