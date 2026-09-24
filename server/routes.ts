@@ -3127,6 +3127,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/admin/movers/:moverId/availability - Admin view of mover calendar
+  app.get("/api/admin/movers/:moverId/availability", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { moverId } = req.params;
+      const month = req.query.month as string | undefined; // YYYY-MM
+      const [mover] = await db.select({ userId: moversTable.userId })
+        .from(moversTable)
+        .where(eq(moversTable.id, moverId))
+        .limit(1);
+      if (!mover) return res.status(404).json({ error: "Mover not found" });
+      let rows;
+      if (month && /^\d{4}-\d{2}$/.test(month)) {
+        const startDate = `${month}-01`;
+        const [year, mon] = month.split("-").map(Number);
+        // Date.UTC so the last-day rollover isn't shifted back a day by the server's local offset
+        const endDate = new Date(Date.UTC(year, mon, 0)).toISOString().slice(0, 10);
+        rows = await db.select().from(moverAvailability)
+          .where(and(
+            eq(moverAvailability.userId, mover.userId),
+            sql`${moverAvailability.availableDate} >= ${startDate}`,
+            sql`${moverAvailability.availableDate} <= ${endDate}`
+          ))
+          .orderBy(moverAvailability.availableDate);
+      } else {
+        rows = await db.select().from(moverAvailability)
+          .where(eq(moverAvailability.userId, mover.userId))
+          .orderBy(moverAvailability.availableDate);
+      }
+      res.json(rows);
+    } catch (error) {
+      logEvent.error('admin_mover_availability', error, { moverId: req.params.moverId });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ===== EARLY ACCESS MOVER TERMS ACCEPTANCE =====
   
   // GET /api/movers/terms/status - Check if mover has accepted current terms
@@ -16799,7 +16835,8 @@ Respond with VALID JSON only:
       if (month && /^\d{4}-\d{2}$/.test(month)) {
         const startDate = `${month}-01`;
         const [year, mon] = month.split('-').map(Number);
-        const endDate = new Date(year, mon, 0).toISOString().slice(0, 10); // last day of month
+        // Date.UTC so the last-day rollover isn't shifted back a day by the server's local offset
+        const endDate = new Date(Date.UTC(year, mon, 0)).toISOString().slice(0, 10); // last day of month
         rows = await db.select().from(moverAvailability)
           .where(and(
             eq(moverAvailability.userId, user.id),

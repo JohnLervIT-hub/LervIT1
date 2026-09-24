@@ -30,7 +30,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck, CreditCard, Power } from "lucide-react";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck, CreditCard, Power, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { useState, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -72,12 +72,22 @@ export default function AdminMoversPage() {
   const [selectedMover, setSelectedMover] = useState<Mover | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: moversData, isLoading, error } = useQuery<Mover[]>({
     queryKey: ["/api/movers"],
   });
   const movers = Array.isArray(moversData) ? moversData : [];
+
+  const { data: moverCalendar = [] } = useQuery<{ availableDate: string; startTime?: string | null; endTime?: string | null }[]>({
+    queryKey: ["/api/admin/movers", selectedMover?.id, "availability", calendarMonth],
+    queryFn: () => apiRequest("GET", `/api/admin/movers/${selectedMover!.id}/availability?month=${calendarMonth}`).then(r => r.json()),
+    enabled: !!selectedMover,
+  });
 
   const syncMutation = useMutation({
     mutationFn: async () => {
@@ -565,6 +575,49 @@ export default function AdminMoversPage() {
                       Override
                     </Button>
                   </div>
+                </div>
+              )}
+
+              {/* Availability Calendar */}
+              {selectedMover && (
+                <div className="p-3 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Availability Calendar</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" data-testid="button-calendar-prev" onClick={() => {
+                        const [y, m] = calendarMonth.split('-').map(Number);
+                        const prev = new Date(y, m - 2, 1);
+                        setCalendarMonth(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                      }}>
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </Button>
+                      <span className="text-xs text-muted-foreground w-20 text-center">
+                        {new Date(calendarMonth + '-01T00:00:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' })}
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" data-testid="button-calendar-next" onClick={() => {
+                        const [y, m] = calendarMonth.split('-').map(Number);
+                        const next = new Date(y, m, 1);
+                        setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                      }}>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  {moverCalendar.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-2">No availability set for this month</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {moverCalendar.map(row => (
+                        <div key={row.availableDate} className="flex items-center gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded px-2 py-0.5 text-xs">
+                          <span>{new Date(row.availableDate + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', day: 'numeric' })}</span>
+                          {row.startTime && <span className="text-muted-foreground">{row.startTime.slice(0,5)}–{row.endTime?.slice(0,5) ?? '?'}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
