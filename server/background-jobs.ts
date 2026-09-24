@@ -7,7 +7,7 @@ import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
 import { moverWebSocket } from './websocket';
-import { dispatchBooking, dispatchJobToMovers } from './dispatch';
+import { dispatchBooking, dispatchJobToMovers, releaseMoversForBookings } from './dispatch';
 import { emitEvent } from './events';
 import { xavier } from './agents/xavier';
 import { scout } from './agents/scout';
@@ -1213,6 +1213,8 @@ async function autoCompletePastPaidBookings() {
       )
       .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
     
+    await releaseMoversForBookings(completedBookings.map(b => b.id));
+
     if (completedBookings.length > 0) {
       logEvent.cleanup('auto_complete_paid_bookings', {
         completedCount: completedBookings.length,
@@ -1572,6 +1574,8 @@ async function cancelPastDatedBookings() {
       )
       .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
     
+    await releaseMoversForBookings(pastBookings.map(b => b.id));
+
     if (pastBookings.length > 0) {
       logEvent.cleanup('cancel_past_dated_bookings', { 
         cancelledCount: pastBookings.length,

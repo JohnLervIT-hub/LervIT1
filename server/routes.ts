@@ -72,7 +72,7 @@ import { buildIntelligenceSummary } from "./intelligence";
 import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
 import { GOOGLE_PLACE_ID } from "./config/google";
-import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover } from "./dispatch";
+import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover, reserveMoverForBooking, releaseMoverFromBooking, releaseMoversForBookings } from "./dispatch";
 import { victor } from "./agents/victor";
 import { autoDispatchToPartner } from "./partner-dispatch";
 import { registerPartnerRoutes } from "./partnerRoutes";
@@ -2497,6 +2497,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const updates = validateBody(updateSchema, req.body);
 
+      // VERIFICATION GATE: going online puts a mover in front of customers and
+      // into the dispatch pool, so it requires the same two flags dispatch and
+      // Aegis already treat as the verification verdict. Those flags are set
+      // only by the verification approval flow, never here.
+      //
+      // Admins are exempt so support can put a mover back online by hand.
+      if (updates.isAvailable === true && !mover.isAvailable && user.role !== "admin") {
+        if (!mover.isVerified || !mover.documentsVerified) {
+          // The flags say "not approved"; the per-document rows say which ones,
+          // which is what the dashboard's alert lists. Read them only on the
+          // blocking path so the normal toggle stays a single write.
+          const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
+          const items = await db.select().from(verificationItems).where(eq(verificationItems.moverId, req.params.id));
+
+          const now = new Date();
+          const missingItems: string[] = [];
+          const incompleteItems: { type: string; status: string; reason?: string }[] = [];
+
+          for (const type of requiredTypes) {
+            const item = items.find(i => i.type === type);
+
+            if (!item) {
+              missingItems.push(type);
+              incompleteItems.push({ type, status: 'missing' });
+            } else if (item.expiryDate && item.expiryDate < now) {
+              incompleteItems.push({ type, status: 'expired', reason: 'Document has expired' });
+            } else if (item.status.toLowerCase() !== 'approved') {
+              incompleteItems.push({ type, status: item.status, reason: item.rejectionReason || undefined });
+            }
+          }
+
+          return res.status(400).json({
+            error: "VERIFICATION_INCOMPLETE",
+            message: "You must complete all verification requirements before going online.",
+            missingItems,
+            incompleteItems,
+          });
+        }
+      }
+      
+      // An explicit toggle hands ownership of the flag back to whoever set it:
+      // drop any hold the dispatch pipeline is holding, so the booking ending
+      // later cannot override this choice.
+      if (updates.isAvailable !== undefined && mover.autoOfflineBookingId) {
+        (updates as any).autoOfflineBookingId = null;
+      }
+
       // Auto-geocode so mover pins render on the customer map even without an
       // active GPS ping. Triggers (all respect an explicitly-provided lat/lng
       // in the same request):
@@ -2534,39 +2581,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // VERIFICATION CHECK: If trying to go online, verify all requirements are met
-      // TEMPORARILY DISABLED FOR TESTING - Re-enable verification check for production
-      // if (updates.isAvailable === true && user.role !== "admin") {
-      //   const requiredTypes = ['ID', 'DRIVERS_LICENSE', 'VEHICLE_REGISTRATION', 'VEHICLE_PHOTOS', 'INSURANCE', 'BACKGROUND_CHECK', 'PAYOUT_SETUP'];
-      //   const items = await db.select().from(verificationItems).where(eq(verificationItems.moverId, req.params.id));
-      //   
-      //   const now = new Date();
-      //   const missingItems: string[] = [];
-      //   const incompleteItems: { type: string; status: string }[] = [];
-      //   
-      //   for (const type of requiredTypes) {
-      //     const item = items.find(i => i.type === type);
-      //     
-      //     if (!item) {
-      //       missingItems.push(type);
-      //       incompleteItems.push({ type, status: 'missing' });
-      //     } else if (item.expiryDate && item.expiryDate < now) {
-      //       incompleteItems.push({ type, status: 'expired' });
-      //     } else if (item.status.toLowerCase() !== 'approved') {
-      //       incompleteItems.push({ type, status: item.status });
-      //     }
-      //   }
-      //   
-      //   if (incompleteItems.length > 0) {
-      //     return res.status(400).json({ 
-      //       error: "VERIFICATION_INCOMPLETE",
-      //       message: "You must complete all verification requirements before going online",
-      //       missingItems,
-      //       incompleteItems
-      //     });
-      //   }
-      // }
-      
       const updatedMover = await storage.updateMover(req.params.id, updates);
 
       // Emit mover online/offline transition on actual state change.
@@ -5072,6 +5086,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updatedBooking = claimed;
 
+      // Take the mover out of the dispatch pool for the duration of the job so
+      // later waves do not spend notification slots on someone who can only
+      // 409 at the single-active-job check above.
+      await reserveMoverForBooking(moverId, bookingId);
+
       await emitEvent('booking.assigned', 'booking', bookingId, {
         moverId,
         customerId: booking.customerId,
@@ -5308,6 +5327,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "pending",
         preSelectedMoverId: null,
       });
+
+      // They are no longer on this job, so the hold taken at acceptance goes back.
+      await releaseMoverFromBooking(mover.id, bookingId);
 
       // Mark any active job notifications for this mover+booking as declined
       await db
@@ -5664,6 +5686,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
+
+      // Availability holds — this handler is both a legacy direct-acceptance
+      // path and the main status pipeline, so it can open or close a hold.
+      if (updates.moverId) {
+        await reserveMoverForBooking(updates.moverId, req.params.id);
+      }
+      if (updates.status === BOOKING_STATUSES.COMPLETED || updates.status === BOOKING_STATUSES.CANCELLED) {
+        await releaseMoverFromBooking(booking.moverId, req.params.id);
+      }
       
       // Track performance timestamps on status transitions
       if (updates.status && booking.moverId) {
@@ -5801,6 +5832,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const booking = await storage.updateBooking(bookingId, updates);
+
+      if (updates.status === BOOKING_STATUSES.COMPLETED || updates.status === BOOKING_STATUSES.CANCELLED) {
+        await releaseMoverFromBooking(existingBooking.moverId, bookingId);
+      }
       
       console.log(`[Admin] Force-updated booking ${bookingId}: status=${updates.status || 'unchanged'}, paymentStatus=${updates.paymentStatus || 'unchanged'}`);
       
@@ -10088,6 +10123,9 @@ Respond with VALID JSON only:
       // Update booking status to completed
       await storage.updateBooking(bookingId, { status: 'completed', completedAt: new Date() });
 
+      // Job is over — hand the mover back their availability.
+      await releaseMoverFromBooking(booking.moverId, bookingId);
+
       // Get updated booking with commission data for earnings record
       const updatedBooking = await storage.getBooking(bookingId);
 
@@ -10581,6 +10619,11 @@ Respond with VALID JSON only:
         expectedCompletionAt: adminSla.expectedCompletionAt,
         slaDeadlineAt: adminSla.slaDeadlineAt,
       });
+
+      // Only holds a mover who was online to begin with; assigning someone who
+      // is offline leaves no hold, so finishing the job will not put them back
+      // in the pool against their wishes.
+      await reserveMoverForBooking(moverId, bookingId);
 
       await emitEvent('booking.assigned', 'booking', bookingId, {
         moverId,
@@ -11263,6 +11306,8 @@ Respond with VALID JSON only:
           )
         )
         .returning({ id: bookings.id, preferredDate: bookings.preferredDate, status: bookings.status });
+
+      await releaseMoversForBookings(pastBookings.map(b => b.id));
       
       res.json({ 
         message: `Cancelled ${pastBookings.length} past-dated bookings`,

@@ -44,11 +44,20 @@
  *
  * AC-11 Active trip protection: jobs are not auto-completed or auto-cancelled while a
  *       mover has updated their GPS location within the last 2 hours.
+ *
+ * AC-12 Busy movers leave the pool: accepting a job takes the mover offline, and the
+ *       booking reaching a terminal state (or the mover being detached from it) puts
+ *       them back — but only when the pipeline was the one that took them offline.
+ *       See `reserveMoverForBooking` / `releaseMoverFromBooking`.
+ *
+ * AC-13 Calendar is opt-in: a mover with rows in `mover_availability` is dispatchable
+ *       only on the dates they listed; a mover who never used the calendar is
+ *       unrestricted.
  */
 
 import { db } from './db';
-import { jobNotifications, users, movers as moversTable } from '@shared/schema';
-import { eq, and, isNotNull, isNull, ne, or } from 'drizzle-orm';
+import { jobNotifications, users, movers as moversTable, moverAvailability } from '@shared/schema';
+import { eq, and, isNotNull, isNull, ne, or, inArray, sql, exists, notExists } from 'drizzle-orm';
 import { moverWebSocket } from './websocket';
 import { notificationService } from './notifications';
 import { logEvent, logger } from './logger';
@@ -98,6 +107,8 @@ interface DispatchableBooking {
   dropoffAddress: string | null;
   price: string | null;
   preSelectedMoverId: string | null;
+  /** Used to match against the mover availability calendar. */
+  preferredDate?: Date | string | null;
 }
 
 export interface DispatchResult {
@@ -106,10 +117,126 @@ export interface DispatchResult {
 }
 
 /**
+ * Mover availability holds (AC-12).
+ * ─────────────────────────────────
+ * A mover running a job used to stay in the dispatch pool: `is_available` was
+ * only ever written by the mover's own online switch, so every wave spent
+ * notification slots (5 per dispatch) on movers who could only 409 at accept
+ * time. Acceptance now takes the mover offline and completion puts them back.
+ *
+ * Because that is the same flag the mover controls, the restore needs to know
+ * whether the flip was ours. `auto_offline_booking_id` records exactly that:
+ * `reserveMoverForBooking` only claims a mover who is currently available and
+ * unheld, so a hold means "we turned this mover off for this booking and owe
+ * them a restore". Anything else that sets `is_available = false` — an admin
+ * assigning an already-offline mover, the mover toggling off mid-job, Aegis
+ * pulling them for a compliance violation — leaves no hold, and the release is
+ * then a no-op rather than an unwanted return to the pool.
+ *
+ * Release re-checks eligibility in the same statement, so a mover who lost
+ * verification or was suspended while the job ran is cleared of the hold but
+ * stays offline.
+ *
+ * Both calls are idempotent: the reserve is a no-op once a hold exists, and the
+ * release matches on the booking id, so a replayed webhook or a double
+ * completion cannot restore a mover twice.
+ */
+export async function reserveMoverForBooking(moverId: string, bookingId: string): Promise<boolean> {
+  try {
+    const held = await db
+      .update(moversTable)
+      .set({ isAvailable: false, autoOfflineBookingId: bookingId })
+      .where(and(
+        eq(moversTable.id, moverId),
+        eq(moversTable.isAvailable, true),
+        isNull(moversTable.autoOfflineBookingId),
+      ))
+      .returning({ id: moversTable.id });
+    return held.length > 0;
+  } catch (err) {
+    // Never fail an acceptance over availability bookkeeping — the accept path
+    // enforces one active job on its own, so the worst case here is a busy
+    // mover keeping their slot until the next transition.
+    logEvent.error('dispatch_reserve_mover', err, { moverId, bookingId });
+    return false;
+  }
+}
+
+export async function releaseMoverFromBooking(moverId: string | null | undefined, bookingId: string): Promise<boolean> {
+  if (!moverId) return false;
+  try {
+    const released = await db
+      .update(moversTable)
+      .set({
+        autoOfflineBookingId: null,
+        isAvailable: sql`(
+          ${moversTable.isVerified}
+          AND ${moversTable.documentsVerified}
+          AND (${moversTable.pilotStatus} IS NULL OR ${moversTable.pilotStatus} <> 'suspended')
+        )`,
+      })
+      .where(and(
+        eq(moversTable.id, moverId),
+        eq(moversTable.autoOfflineBookingId, bookingId),
+      ))
+      .returning({ id: moversTable.id, isAvailable: moversTable.isAvailable });
+    return released[0]?.isAvailable === true;
+  } catch (err) {
+    logEvent.error('dispatch_release_mover', err, { moverId, bookingId });
+    return false;
+  }
+}
+
+/**
+ * Release every hold naming one of `bookingIds`. Used by the bulk sweeps that
+ * close past-dated bookings with a single UPDATE and never load the rows.
+ */
+export async function releaseMoversForBookings(bookingIds: string[]): Promise<number> {
+  if (bookingIds.length === 0) return 0;
+  try {
+    const released = await db
+      .update(moversTable)
+      .set({
+        autoOfflineBookingId: null,
+        isAvailable: sql`(
+          ${moversTable.isVerified}
+          AND ${moversTable.documentsVerified}
+          AND (${moversTable.pilotStatus} IS NULL OR ${moversTable.pilotStatus} <> 'suspended')
+        )`,
+      })
+      .where(inArray(moversTable.autoOfflineBookingId, bookingIds))
+      .returning({ id: moversTable.id });
+    return released.length;
+  } catch (err) {
+    logEvent.error('dispatch_release_movers_bulk', err, { count: bookingIds.length });
+    return 0;
+  }
+}
+
+/**
+ * `mover_availability` stores the days a mover marked themselves free, as plain
+ * `date` rows. `bookings.preferred_date` is a `timestamp without time zone` and
+ * the server runs with TZ=America/Edmonton (server/index.ts, server/worker.ts),
+ * so the stored wall-clock is already business-local — the calendar key is just
+ * its local Y-M-D, with no conversion. Doing this in JS rather than SQL keeps
+ * the comparison on the same clock the row was written with.
+ */
+function availabilityDateKey(when: Date | string | null | undefined): string {
+  const d = when == null ? new Date() : new Date(when);
+  const day = isNaN(d.getTime()) ? new Date() : d;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${day.getFullYear()}-${p(day.getMonth() + 1)}-${p(day.getDate())}`;
+}
+
+/**
  * Load all operational movers (online, with GPS location, with a user record).
  * Optionally excludes one mover by profile ID (e.g. the mover who just declined).
+ *
+ * `forDate` (YYYY-MM-DD) filters against the availability calendar (AC-13). The
+ * calendar is opt-in: a mover with no rows at all is unrestricted, while a mover
+ * who has ever marked a day is dispatchable only on the days they marked.
  */
-async function loadOperationalMovers(excludeMoverId?: string): Promise<MoverData[]> {
+async function loadOperationalMovers(excludeMoverId?: string, forDate?: string): Promise<MoverData[]> {
   // Aegis (COMPLIANCE) gate: never dispatch to unverified movers, and never
   // dispatch to anyone on suspended pilot status. `pilotStatus` defaults to
   // 'none' for legacy movers, so we accept NULL or anything not 'suspended'.
@@ -126,6 +253,27 @@ async function loadOperationalMovers(excludeMoverId?: string): Promise<MoverData
   ];
   if (excludeMoverId) {
     conditions.push(ne(moversTable.id, excludeMoverId));
+  }
+
+  // Availability calendar (AC-13). Correlated EXISTS rather than a LEFT JOIN:
+  // the rule is about two different facts — "has the mover ever used the
+  // calendar" and "did they list this day" — and a join would need a GROUP BY
+  // to express the first without also multiplying rows on the second.
+  if (forDate) {
+    const usesCalendar = db
+      .select({ one: sql`1` })
+      .from(moverAvailability)
+      .where(eq(moverAvailability.userId, moversTable.userId));
+
+    const listedForDate = db
+      .select({ one: sql`1` })
+      .from(moverAvailability)
+      .where(and(
+        eq(moverAvailability.userId, moversTable.userId),
+        eq(moverAvailability.availableDate, forDate),
+      ));
+
+    conditions.push(or(notExists(usesCalendar), exists(listedForDate))!);
   }
 
   const rows = await db
@@ -265,7 +413,10 @@ export async function dispatchJobToMovers(
   };
 
   const requiredVehicle = resolveVehicleForBooking(booking.aiRecommendedVehicle, booking.loadSize);
-  const moversWithData = await loadOperationalMovers(options.excludeMoverId);
+  const moversWithData = await loadOperationalMovers(
+    options.excludeMoverId,
+    availabilityDateKey(booking.preferredDate),
+  );
 
   // Resolve raw volume for the class-based capacity filter. Prefer AI-detected
   // volume; fall back to the load-size estimate so class filtering still works

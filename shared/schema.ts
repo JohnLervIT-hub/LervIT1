@@ -94,6 +94,14 @@ export const movers = pgTable("movers", {
   longitude: doublePrecision("longitude"),
   lastLocationUpdate: timestamp("last_location_update"), // When GPS was last updated (for live location priority)
   isAvailable: boolean("is_available").default(true).notNull(),
+  // Set when the dispatch pipeline turned `isAvailable` off because this mover
+  // took a job, and cleared when that job ends. `isAvailable` is the mover's own
+  // online switch, so this records that the flip was ours to undo — a mover who
+  // was already offline when assigned, who went offline mid-job, or who Aegis
+  // took offline is never dragged back online when the booking closes.
+  // Deliberately not a FK: `bookings.mover_id` already points the other way and
+  // a circular constraint buys nothing here.
+  autoOfflineBookingId: varchar("auto_offline_booking_id"),
   // Early Access (Pilot) program fields
   pilotStatus: text("pilot_status").default("none"), // none | pending | approved | rejected | suspended
   pilotApprovedBy: varchar("pilot_approved_by").references(() => users.id),

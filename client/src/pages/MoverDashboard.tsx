@@ -806,15 +806,19 @@ export default function MoverDashboard() {
       return;
     }
     
-    // TEMPORARILY DISABLED FOR TESTING - Re-enable verification check for production
-    // if (checked && !verificationStatus?.isComplete) {
-    //   setShowVerificationAlert(true);
-    //   setVerificationError({
-    //     message: "You must complete all verification requirements before going online.",
-    //     incompleteItems: verificationStatus?.incompleteItems || [],
-    //   });
-    //   return;
-    // }
+    // Verification gate. The server enforces this on PATCH /api/movers/:id and
+    // is the authority; this check only saves a round-trip and shows the same
+    // dialog. Gate on the approval flags rather than verificationStatus so the
+    // two sides agree — `isComplete` counts document rows, which can read as
+    // done before an admin has actually approved the profile.
+    if (checked && !(mover?.isVerified && mover?.documentsVerified)) {
+      setVerificationError({
+        message: "You must complete all verification requirements before going online.",
+        incompleteItems: verificationStatus?.incompleteItems || [],
+      });
+      setShowVerificationAlert(true);
+      return;
+    }
 
     // Soft nudge: going online without a vehicle photo reduces visibility
     if (checked && !mover?.vehiclePhoto) {
