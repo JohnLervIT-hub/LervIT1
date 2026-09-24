@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
 import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, googleReviews, inAppNotifications, quotes, leads, contentItems } from '@shared/schema';
-import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc } from 'drizzle-orm';
+import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc, asc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
@@ -25,7 +25,7 @@ import { nova } from './agents/nova';
 import { gt } from 'drizzle-orm';
 import { paymentRecoverySweep } from './lib/paymentRecovery';
 import { agentEventBus } from './lib/agentEventBus';
-import { higgsfieldProvider } from './providers/higgsfield';
+import { higgsfieldProvider, HiggsfieldApiError } from './providers/higgsfield';
 import { getAccountId, isGmbConfigured, listReviews, starRatingToNumber } from './lib/gmbClient';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
@@ -481,13 +481,30 @@ export function initBackgroundJobs() {
             eq(contentItems.generator, 'higgsfield'),
           ),
         )
+        // Oldest first. Without an order the same arbitrary 10 rows were
+        // re-read every tick; paired with the fail-fast paths below (which
+        // drop dead rows out of `generating`) this now drains as a queue
+        // instead of starving anything submitted later.
+        .orderBy(asc(contentItems.updatedAt))
         .limit(10);
 
       for (const item of pending) {
         try {
           const result = await higgsfieldProvider.getJobStatus(item.providerJobId!);
 
-          if (result.status === 'completed' && result.videoUrl) {
+          if (result.status === 'completed' && !result.videoUrl) {
+            // Terminal, not pending: the render finished and there is nothing
+            // to fetch. Leaving it in `generating` re-polled it forever.
+            await db
+              .update(contentItems)
+              .set({ status: 'failed', updatedAt: new Date() })
+              .where(eq(contentItems.id, item.id));
+
+            logger.error(
+              { itemId: item.id, jobId: item.providerJobId },
+              '[Jobs] Higgsfield completed but no video URL returned',
+            );
+          } else if (result.status === 'completed' && result.videoUrl) {
             await db
               .update(contentItems)
               .set({
@@ -521,7 +538,27 @@ export function initBackgroundJobs() {
             );
           }
         } catch (err) {
-          logger.error({ err, itemId: item.id }, '[Jobs] Higgsfield poll error');
+          // Per-item catch: one bad row must not abandon the rest of the batch.
+          // A 4xx is the provider telling us this job will never resolve (bad
+          // key, unknown request id), so fail the item — otherwise it sits at
+          // the head of the oldest-first queue and blocks everything behind
+          // it. 5xx and network faults are transient; leave those to retry.
+          if (err instanceof HiggsfieldApiError && err.permanent) {
+            await db
+              .update(contentItems)
+              .set({ status: 'failed', updatedAt: new Date() })
+              .where(eq(contentItems.id, item.id))
+              .catch((dbErr) =>
+                logger.error({ dbErr, itemId: item.id }, '[Jobs] Higgsfield fail-write error'),
+              );
+
+            logger.error(
+              { err, itemId: item.id, status: err.status },
+              '[Jobs] Higgsfield poll rejected — item failed',
+            );
+          } else {
+            logger.error({ err, itemId: item.id }, '[Jobs] Higgsfield poll error — will retry');
+          }
         }
       }
     });

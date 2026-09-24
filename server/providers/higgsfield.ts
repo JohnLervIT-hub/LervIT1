@@ -29,6 +29,25 @@ export interface HiggsfieldVideoInput {
   platform?: string;
 }
 
+/**
+ * Carries the HTTP status so a caller can tell a permanent rejection (4xx —
+ * bad key, unknown request id, invalid input) from a transient one (5xx,
+ * network). The poller fails the item on the former and retries the latter.
+ */
+export class HiggsfieldApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'HiggsfieldApiError';
+  }
+
+  get permanent(): boolean {
+    return this.status >= 400 && this.status < 500;
+  }
+}
+
 export interface HiggsfieldVideoResult {
   requestId: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -78,8 +97,9 @@ export class HiggsfieldProvider {
     const data: any = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(
-        `Higgsfield error: status=${response.status} ${JSON.stringify(data)}`,
+      throw new HiggsfieldApiError(
+        `Higgsfield create failed: status=${response.status} ${JSON.stringify(data)}`,
+        response.status,
       );
     }
 
@@ -108,6 +128,16 @@ export class HiggsfieldProvider {
 
     const data: any = await response.json().catch(() => ({}));
 
+    // A non-2xx used to fall through to `?? 'pending'`, which pinned the item
+    // in `generating` and re-polled it every 30s forever. Throw instead and
+    // let the poller decide: 4xx is terminal, 5xx is worth another tick.
+    if (!response.ok) {
+      throw new HiggsfieldApiError(
+        `Higgsfield status failed: status=${response.status} ${JSON.stringify(data)}`,
+        response.status,
+      );
+    }
+
     const statusMap: Record<string, HiggsfieldVideoResult['status']> = {
       queued: 'pending',
       in_progress: 'processing',
@@ -120,9 +150,10 @@ export class HiggsfieldProvider {
 
     return {
       requestId: jobId,
-      status: statusMap[data.status] ?? 'pending',
+      // Unknown or absent status fails fast rather than idling as 'pending'.
+      status: statusMap[data.status] ?? 'failed',
       videoUrl: data.video?.url,
-      error: data.error,
+      error: data.error ?? (statusMap[data.status] ? undefined : `unrecognized status: ${data.status ?? 'none'}`),
     };
   }
 }

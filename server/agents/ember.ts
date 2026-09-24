@@ -1252,6 +1252,15 @@ Draft the ${platform} post.`;
             })
             .returning();
 
+          // No campaignId: AdminCampaignsPage lists items by campaign, so this
+          // row is invisible there. The video still renders and lands in `qa`,
+          // where nobody can reach it to approve. Tracked separately — either
+          // give trend posts a campaign or drop the content_items insert.
+          logger.warn(
+            { contentItemId: videoItem.id, postId: row.id },
+            '[Ember] Instagram trend post created with no campaignId — will not appear in campaign board',
+          );
+
           const submission = await this.generateHiggsfieldVideo(
             {
               contentItemId: videoItem.id,
