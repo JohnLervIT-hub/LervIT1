@@ -26,6 +26,18 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Vite emits hashed bundles as dist/public/assets/[name]-[hash].[ext], so the
+// filename changes whenever the content does and the old URL is never reused.
+// Those are safe to cache forever. index.html is not: it is the document that
+// names the current hashes, so a cached copy pins the browser to the previous
+// deploy's chunks until it expires.
+const HASHED_ASSET = /-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/i;
+
+function isImmutableAsset(filePath: string): boolean {
+  const rel = filePath.split(path.sep).join("/");
+  return rel.includes("/assets/") && HASHED_ASSET.test(rel);
+}
+
 export function serveStatic(app: Express) {
   const distPath = path.resolve(moduleDir, "public");
 
@@ -35,10 +47,26 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === "index.html") {
+          // Not 'no-store': the browser may keep the copy, it just has to
+          // revalidate first. express.static still sends an ETag, so an
+          // unchanged deploy costs a 304 rather than a full re-download.
+          res.setHeader("Cache-Control", "no-cache");
+        } else if (isImmutableAsset(filePath)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    }),
+  );
 
-  // fall through to index.html if the file doesn't exist
+  // Fall through to index.html if the file doesn't exist. This is the path an
+  // SPA navigation actually takes, so it needs the same no-cache treatment —
+  // setHeaders above only fires for files express.static itself matched.
   app.use("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
