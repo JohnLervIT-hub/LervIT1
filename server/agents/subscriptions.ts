@@ -19,6 +19,7 @@ import { sam } from './sam';
 import { kai } from './kai';
 import { ember } from './ember';
 import { xavier } from './xavier';
+import { registerMorganSubscriptions } from './morgan';
 import { logger } from '../logger';
 import { buildCustomerContext } from '../lib/novaContext';
 import { notificationService } from '../notifications';
@@ -269,6 +270,25 @@ export function registerAgentSubscriptions(): void {
     'Kai + Nova',
   );
 
+  // Booking completed → Kai asks for a Google review (delayed 2h)
+  // TODO Sprint 5: replace with Bull queue delayed job for restart-safe delays
+  agentEventBus.subscribe(
+    'booking.completed',
+    async (data) => {
+      setTimeout(
+        () => {
+          kai
+            .sendReviewRequest(data.bookingId)
+            .catch((err) =>
+              logger.error({ err }, '[EventBus] kai review request failed'),
+            );
+        },
+        2 * 60 * 60 * 1000,
+      );
+    },
+    'Kai Bennett',
+  );
+
   // ═══════════════════════════════
   // LEAD CHAIN
   // ═══════════════════════════════
@@ -477,6 +497,10 @@ export function registerAgentSubscriptions(): void {
     },
     'Xavier Cole',
   );
+
+  // Morgan Price registers its own handlers (booking.completed,
+  // morgan.price_check, morgan.daily_report).
+  registerMorganSubscriptions();
 
   const stats = agentEventBus.getStats();
   logger.info(

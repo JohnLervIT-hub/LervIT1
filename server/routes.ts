@@ -1960,6 +1960,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // ===== MORGAN PRICE (admin) =====
+  // requireAdmin here is a guard returning a boolean, not Express middleware —
+  // it must be called inside the handler, matching every other admin route.
+
+  // Trigger the daily pricing report on demand.
+  app.get("/api/admin/morgan/report", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { morganAgent } = await import("./agents/morgan");
+      await morganAgent.runDailyReport();
+      res.json({ ok: true, message: "Report generation triggered" });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Report failed" });
+    }
+  });
+
+  // Demand signal + quote-accuracy audit for one booking.
+  app.post("/api/admin/morgan/price-check", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const { bookingId } = req.body;
+      if (!bookingId) return res.status(400).json({ error: "bookingId required" });
+      const { morganAgent } = await import("./agents/morgan");
+      const demand = await morganAgent.computeDemandSignal();
+      const audit = await morganAgent.analyzeQuoteAccuracy(bookingId);
+      res.json({ demand, audit });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Price check failed" });
+    }
+  });
+
+  // Observed market rates by load size, plus the static Calgary baselines.
+  app.get("/api/admin/morgan/market-rates", async (req: Request, res: Response) => {
+    try {
+      if (!requireAdmin(req, res)) return;
+      const period = req.query.period === "30d" ? "30d" : "7d";
+      const { morganAgent } = await import("./agents/morgan");
+      const rates = await morganAgent.computeMarketRates(period);
+      const demand = await morganAgent.computeDemandSignal();
+      res.json({ rates, demand, baselines: morganAgent.MARKET_BASELINES });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Market rates failed" });
+    }
+  });
+
   // ===== USER ROUTES =====
   // Admin-only: /api/auth/signup is the real user-creation path (validates
   // role, sends verification email, etc). This route accepted an arbitrary

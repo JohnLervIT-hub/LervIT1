@@ -25,7 +25,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { users, movers, bookings } from '@shared/schema';
+import { users, movers, bookings, reviews } from '@shared/schema';
 import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
@@ -54,6 +54,10 @@ const KAI_MOVER_INACTIVE_DAYS_2 = 14;
 const KAI_MOVER_INACTIVE_DAYS_3 = 30;
 const KAI_MAX_CONTACTS_PER_RUN = 5;
 const KAI_PROMO_CODE = 'KAI15';
+
+// LervIT Technologies, Calgary — place id is fixed, do not change.
+const GOOGLE_REVIEW_URL =
+  'https://search.google.com/local/writereview?placeid=ChIJwfu0I0JVUqgR6kpKN2fpsQA';
 
 const KAI_EMAIL = process.env.KAI_EMAIL?.trim() || 'kai.bennett@lervit.com';
 const KAI_FROM = `Kai Bennett | LervIT <${KAI_EMAIL}>`;
@@ -589,6 +593,82 @@ CTA link: ${APP_BASE_URL}/request-move`,
     });
 
     return { success: true, track: 'mover', touchNumber, email: emailSent, sms: smsSent };
+  }
+
+  // ─── GOOGLE REVIEW REQUEST ───────────────────────────────
+
+  /**
+   * Post-move Google review ask over SMS. Public (not an `execute` action)
+   * because subscriptions.ts calls it directly on a delay.
+   *
+   * Not sliced to 160 chars like the winback texts: the review URL is 78
+   * chars and lives at the end, so truncating would break the link. Telnyx
+   * segments the message instead.
+   */
+  async sendReviewRequest(bookingId: string): Promise<void> {
+    try {
+      const [booking] = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, bookingId))
+        .limit(1);
+
+      if (!booking) {
+        logger.warn({ bookingId }, 'Kai: sendReviewRequest — booking not found');
+        return;
+      }
+
+      if (booking.status !== 'completed' || booking.paymentStatus !== 'paid') {
+        logger.info(
+          { bookingId, status: booking.status, paymentStatus: booking.paymentStatus },
+          'Kai: sendReviewRequest — skipping, not completed/paid',
+        );
+        return;
+      }
+
+      // Don't nag a customer who already reviewed during the 2h delay.
+      const [existingReview] = await db
+        .select({ id: reviews.id })
+        .from(reviews)
+        .where(eq(reviews.bookingId, bookingId))
+        .limit(1);
+      if (existingReview) {
+        logger.info({ bookingId }, 'Kai: sendReviewRequest — already reviewed');
+        return;
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, booking.customerId))
+        .limit(1);
+
+      if (!user?.phone) {
+        logger.warn({ bookingId }, 'Kai: sendReviewRequest — no customer phone');
+        return;
+      }
+
+      const firstName = user.name?.split(' ')[0] || 'there';
+      const message =
+        `Hi ${firstName}, thanks for moving with LervIT! ` +
+        `If you have 30 seconds, a Google review means a lot to us: ${GOOGLE_REVIEW_URL}`;
+
+      const smsSent = await notificationService.sendSMS({
+        to: user.phone,
+        message,
+        type: 'booking_update',
+      });
+
+      await emitEvent('kai.review_request_sent', 'booking', bookingId, {
+        agentName: this.name,
+        customerId: booking.customerId,
+        sms: smsSent,
+      });
+
+      logger.info({ bookingId, smsSent }, 'Kai: review request SMS dispatched');
+    } catch (err) {
+      logger.error({ err, bookingId }, 'Kai: sendReviewRequest failed');
+    }
   }
 }
 

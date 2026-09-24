@@ -14,6 +14,8 @@ import { randomBytes } from "crypto";
 import { initBackgroundJobs } from "./background-jobs";
 import { startAgentWorkers } from "./agents/workers";
 import { registerAgentSubscriptions } from "./agents/subscriptions";
+import cron from "node-cron";
+import { agentEventBus } from "./lib/agentEventBus";
 import { 
   corsMiddleware, 
   generalApiLimiter, 
@@ -315,6 +317,22 @@ let serverStarted = false;
         logger.info('[Server] Agent event bus active ✅');
       } catch (busErr) {
         logEvent.error('agent_event_bus_init', busErr);
+      }
+
+      // Morgan Price daily pricing report — 6:00 AM Mountain Time.
+      try {
+        cron.schedule(
+          '0 6 * * *',
+          () => {
+            agentEventBus
+              .emit('morgan.daily_report', {}, 'cron')
+              .catch((err) => logEvent.error('morgan_daily_report_cron', err));
+          },
+          { timezone: 'America/Edmonton' },
+        );
+        logger.info('[Server] Morgan daily report cron scheduled (6am MT)');
+      } catch (cronErr) {
+        logEvent.error('morgan_cron_init', cronErr);
       }
     });
 
