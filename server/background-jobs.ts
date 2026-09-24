@@ -398,6 +398,21 @@ export function initBackgroundJobs() {
     });
   }, TZ);
 
+  // Every 6h at :30 — auto-reply to recent 4-5 star Google reviews.
+  // Offset half an hour behind gmb_review_sync so each run works on rows the
+  // :00 sync just landed. 1-3 star and unrated reviews are deliberately left
+  // alone: ember.respondToReview escalates those to Xavier for John.
+  cron.schedule('30 */6 * * *', async () => {
+    await withJobLock('gmb_auto_reply', async () => {
+      try {
+        const result = await autoReplyToGoogleReviews();
+        logger.info({ event: 'gmb_auto_reply', ...result }, 'GMB auto-reply sweep complete');
+      } catch (err) {
+        logger.error({ err, event: 'gmb_auto_reply' }, 'GMB auto-reply sweep failed');
+      }
+    });
+  }, TZ);
+
   // Wednesday — weekly Google Business post draft
   cron.schedule('0 7 * * 3', async () => {
     await withJobLock('ember_gmb_post', async () => {
@@ -1363,6 +1378,88 @@ async function syncGoogleReviews(): Promise<{
     });
 
   return { fetched: fetched.length, upserted: rows.length };
+}
+
+// Cap per run so one sweep can't burn through the Anthropic rate limit — each
+// reply is its own model call. At 4 runs/day this drains 40 reviews/day, far
+// above real volume, and anything left over is picked up by the next tick.
+const GMB_AUTO_REPLY_BATCH = 10;
+const GMB_AUTO_REPLY_MAX_AGE_DAYS = 30;
+
+/**
+ * Draft and post replies to recent, well-rated Google reviews.
+ *
+ * Scope is deliberately narrow:
+ *  - rating >= 4 only. 1-3 star and unrated reviews stay on the Xavier
+ *    escalation path so John answers them personally (ember.respondToReview
+ *    enforces the same rule, this is just the queue filter).
+ *  - google_created_at within 30 days. This is the review's own date from
+ *    Google, not our row's created_at — see the note in the caller below.
+ *  - response IS NULL, so a reply already posted on Google, drafted by an
+ *    earlier run, or written by hand in the GMB UI is never overwritten.
+ *
+ * No-ops when GMB is unconfigured rather than drafting replies nothing can
+ * post, matching syncGoogleReviews.
+ */
+async function autoReplyToGoogleReviews(): Promise<{
+  skipped?: string;
+  candidates?: number;
+  posted?: number;
+  drafted?: number;
+  failed?: number;
+}> {
+  if (!isGmbConfigured()) {
+    return { skipped: 'gmb_not_configured' };
+  }
+
+  const cutoff = new Date(Date.now() - GMB_AUTO_REPLY_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+
+  // A null google_created_at fails the >= comparison in SQL, so undated
+  // reviews are excluded — we can't prove they're inside the window.
+  const candidates = await db
+    .select({ googleReviewId: googleReviews.googleReviewId, rating: googleReviews.rating })
+    .from(googleReviews)
+    .where(
+      and(
+        isNull(googleReviews.response),
+        gte(googleReviews.rating, 4),
+        gte(googleReviews.googleCreatedAt, cutoff),
+      ),
+    )
+    .orderBy(desc(googleReviews.googleCreatedAt))
+    .limit(GMB_AUTO_REPLY_BATCH);
+
+  if (candidates.length === 0) {
+    return { candidates: 0, posted: 0, drafted: 0, failed: 0 };
+  }
+
+  let posted = 0;
+  let drafted = 0;
+  let failed = 0;
+
+  // Sequential on purpose — 10 concurrent model calls is exactly the burst
+  // the batch cap is meant to prevent.
+  for (const review of candidates) {
+    try {
+      // Via run() rather than the method directly so each reply lands in
+      // agent_logs and emits agent.ember.respond_to_review like every other
+      // Ember action.
+      const result = await ember.run('respond_to_review', {
+        googleReviewId: review.googleReviewId,
+      });
+      // posted=false means the draft was saved but the GMB call didn't land.
+      if (result?.posted) posted++;
+      else drafted++;
+    } catch (err) {
+      failed++;
+      logger.error(
+        { err, event: 'gmb_auto_reply', googleReviewId: review.googleReviewId },
+        'GMB auto-reply failed for review',
+      );
+    }
+  }
+
+  return { candidates: candidates.length, posted, drafted, failed };
 }
 
 // Auto-cancel bookings with past dates that weren't completed
