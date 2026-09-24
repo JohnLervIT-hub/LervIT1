@@ -146,7 +146,9 @@ export default function Signup() {
     
     switch (field) {
       case 'name':
-        return name.length < 2 ? 'Name must be at least 2 characters' : undefined;
+        if (name.trim().length < 2) return 'Name must be at least 2 characters';
+        if (!name.trim().includes(' ')) return 'Please enter your full name (first and last name)';
+        return undefined;
       case 'email':
         return !validateEmail(email) ? 'Please enter a valid email address' : undefined;
       case 'password':
@@ -340,6 +342,10 @@ export default function Signup() {
     // Validate before submitting
     if (name.trim().length < 2) {
       toast({ variant: "destructive", title: "Invalid name", description: "Name must be at least 2 characters." });
+      return;
+    }
+    if (!name.trim().includes(' ')) {
+      toast({ variant: "destructive", title: "Full name required", description: "Please enter your first and last name." });
       return;
     }
     if (!validateEmail(email)) {
