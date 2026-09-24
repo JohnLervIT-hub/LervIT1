@@ -51,7 +51,11 @@ import { optimizeImageBuffer } from "./image-optimizer";
 import { notificationService, formatCalgaryDate } from "./notifications";
 import { getBaseUrl } from "./utils/urls";
 import { calculatePartnerNet } from "@shared/pricing";
-import { autoDispatchToPartner, notifyAdminsOfDispatchFailure } from "./partner-dispatch";
+import {
+  autoDispatchToPartner,
+  notifyAdminsOfDispatchFailure,
+  type MoverFallbackOutcome,
+} from "./partner-dispatch";
 import { dispatchBooking } from "./dispatch";
 
 // ============================================================
@@ -1049,24 +1053,24 @@ export function registerPartnerRoutes(app: Express) {
         .returning();
 
       if (currentAttempts >= MAX_PARTNER_ATTEMPTS) {
+        // Cap reached — skip partner routing entirely and go straight to movers.
+        let moverFallback: MoverFallbackOutcome = "dispatched";
         try {
           await dispatchBooking(reset);
         } catch (e) {
           console.error("[reject] mover fallback dispatch failed:", e);
+          moverFallback = "failed";
         }
-        await notifyAdminsOfDispatchFailure(reset, currentAttempts);
+        await notifyAdminsOfDispatchFailure(reset, currentAttempts, moverFallback);
       } else {
-        const retry = await autoDispatchToPartner(reset, {
+        // autoDispatchToPartner owns the fallback + admin alert. "direct"
+        // because this row is still `confirmed` from the previous auto-dispatch,
+        // which Victor would skip.
+        await autoDispatchToPartner(reset, {
           notifyAdmin: currentAttempts + 1 >= MAX_PARTNER_ATTEMPTS,
+          allowFallbackToMover: true,
+          moverFallback: "direct",
         });
-        if (!retry.dispatched) {
-          try {
-            await dispatchBooking(reset);
-          } catch (e) {
-            console.error("[reject] mover fallback dispatch failed:", e);
-          }
-          await notifyAdminsOfDispatchFailure(reset, currentAttempts);
-        }
       }
 
       res.json(updated);

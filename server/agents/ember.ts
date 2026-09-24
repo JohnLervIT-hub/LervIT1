@@ -35,7 +35,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { and, desc, eq, gte } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
-import { blogPosts, gmbPosts, socialPosts, newsletters, reviews, users, bookings, leads, campaigns, contentItems } from '@shared/schema';
+import { blogPosts, gmbPosts, socialPosts, newsletters, reviews, googleReviews, users, bookings, leads, campaigns, contentItems } from '@shared/schema';
 import { notifySitemapRegenerate } from '../utils/sitemap';
 import { xavier } from './xavier';
 import { logger } from '../logger';
@@ -43,6 +43,7 @@ import { emitEvent } from '../events';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { heygenProvider } from '../providers/heygen';
 import { higgsfieldProvider } from '../providers/higgsfield';
+import { isGmbConfigured, replyToReview } from '../lib/gmbClient';
 import { metaProvider } from '../providers/meta';
 import { linkedInProvider } from '../providers/linkedin';
 
@@ -256,7 +257,13 @@ interface GenerateGmbInput {
 }
 
 interface RespondToReviewInput {
-  reviewId: string;
+  /** In-app review (reviews table). Drafted and stored; not on Google. */
+  reviewId?: string;
+  /**
+   * Synced Google review (google_reviews table). Drafted, posted to Google
+   * via the GMB API, then stored. Exactly one of reviewId/googleReviewId.
+   */
+  googleReviewId?: string;
 }
 
 interface PublishBlogInput {
@@ -656,8 +663,24 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
   // Reviews
   // ─────────────────────────────────────────────────────────
   async respondToReview(input: RespondToReviewInput, options?: AgentRunOptions) {
-    if (!input.reviewId) throw new Error('respond_to_review: reviewId required');
+    if (!input.reviewId && !input.googleReviewId) {
+      throw new Error('respond_to_review: reviewId or googleReviewId required');
+    }
+    if (input.reviewId && input.googleReviewId) {
+      throw new Error('respond_to_review: pass reviewId OR googleReviewId, not both');
+    }
 
+    return input.googleReviewId
+      ? this.respondToGoogleReview(input.googleReviewId, options)
+      : this.respondToAppReview(input.reviewId!, options);
+  }
+
+  /**
+   * In-app review (reviews table). These live only in our DB — there is no
+   * Google review to answer — so the draft is persisted to reviews.response
+   * for John to post or send manually. It used to be returned and discarded.
+   */
+  private async respondToAppReview(reviewId: string, options?: AgentRunOptions) {
     const rows = await db
       .select({
         id: reviews.id,
@@ -669,37 +692,122 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
       .from(reviews)
       .innerJoin(bookings, eq(bookings.id, reviews.bookingId))
       .innerJoin(users, eq(users.id, reviews.customerId))
-      .where(eq(reviews.id, input.reviewId))
+      .where(eq(reviews.id, reviewId))
       .limit(1);
 
     const review = rows[0];
-    if (!review) throw new Error(`respond_to_review: review ${input.reviewId} not found`);
+    if (!review) throw new Error(`respond_to_review: review ${reviewId} not found`);
 
     // Rating <= 3 → escalate to Xavier; John handles personally.
     if (review.rating <= 3) {
       if (options?.dryRun) {
         return { dryRun: true, would: 'escalate_low_rating', reviewId: review.id, rating: review.rating };
       }
-      try {
-        await xavier.run('escalate', {
-          issue: `Low rating (${review.rating}★) needs a personal response from John`,
-          severity: 'high',
-          agentName: 'Ember Lane',
-          data: {
-            reviewId: review.id,
-            rating: review.rating,
-            comment: review.comment,
-            bookingId: review.bookingId,
-            customerName: review.customerName,
-          },
-        });
-      } catch (err) {
-        logger.error({ err, reviewId: review.id }, '[Ember] xavier escalation failed');
-      }
+      await this.escalateLowRating({
+        reviewId: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        bookingId: review.bookingId,
+        customerName: review.customerName,
+        source: 'app',
+      });
       return { escalated: true, reviewId: review.id, rating: review.rating };
     }
 
-    // Rating 4-5 → warm response for admin to post.
+    if (options?.dryRun) {
+      return { dryRun: true, would: 'respond', reviewId: review.id, rating: review.rating };
+    }
+
+    const reply = await this.draftReviewReply(review.customerName, review.rating, review.comment);
+
+    await db
+      .update(reviews)
+      .set({ response: reply, responseAt: new Date() })
+      .where(eq(reviews.id, review.id));
+
+    logger.info({ reviewId: review.id, rating: review.rating }, '[Ember] review response drafted');
+    return { reviewId: review.id, rating: review.rating, reply, posted: false, source: 'app' };
+  }
+
+  /**
+   * Synced Google review (google_reviews table). Drafts the reply and posts it
+   * to Google via the GMB API.
+   *
+   * When GMB is not configured yet (GOOGLE_GMB_REFRESH_TOKEN needs the
+   * one-time OAuth flow — see server/lib/gmbClient.ts), the draft is still
+   * saved and the call is skipped with a warning rather than throwing, so
+   * nothing is lost and the caller does not fail.
+   */
+  private async respondToGoogleReview(googleReviewId: string, options?: AgentRunOptions) {
+    const [review] = await db
+      .select()
+      .from(googleReviews)
+      .where(eq(googleReviews.googleReviewId, googleReviewId))
+      .limit(1);
+
+    if (!review) throw new Error(`respond_to_review: google review ${googleReviewId} not found`);
+
+    if (review.response) {
+      logger.info({ googleReviewId }, '[Ember] google review already answered — skipping');
+      return { googleReviewId, alreadyAnswered: true, reply: review.response };
+    }
+
+    // Same rule as in-app: <= 3 stars is John's to answer, not the model's.
+    // Unrated (STAR_RATING_UNSPECIFIED) is treated as low-confidence and
+    // escalated too rather than guessed at.
+    if (review.rating === null || review.rating <= 3) {
+      if (options?.dryRun) {
+        return { dryRun: true, would: 'escalate_low_rating', googleReviewId, rating: review.rating };
+      }
+      await this.escalateLowRating({
+        reviewId: review.googleReviewId,
+        rating: review.rating,
+        comment: review.comment,
+        bookingId: null,
+        customerName: review.reviewerName,
+        source: 'google',
+      });
+      return { escalated: true, googleReviewId, rating: review.rating };
+    }
+
+    if (options?.dryRun) {
+      return { dryRun: true, would: 'respond_on_google', googleReviewId, rating: review.rating };
+    }
+
+    const reply = await this.draftReviewReply(review.reviewerName, review.rating, review.comment);
+
+    let posted = false;
+    if (isGmbConfigured()) {
+      posted = await replyToReview(review.reviewName, reply);
+    } else {
+      logger.warn(
+        { googleReviewId },
+        '[Ember] GMB not configured (GOOGLE_GMB_REFRESH_TOKEN unset) — reply drafted but not posted',
+      );
+    }
+
+    // Stored either way. On a failed/skipped post the row keeps the draft and
+    // responseAt stays null, so the sync job can retry it later.
+    await db
+      .update(googleReviews)
+      .set({
+        response: reply,
+        responseAt: posted ? new Date() : null,
+        respondedBy: 'ember',
+        updatedAt: new Date(),
+      })
+      .where(eq(googleReviews.id, review.id));
+
+    logger.info({ googleReviewId, rating: review.rating, posted }, '[Ember] google review response drafted');
+    return { googleReviewId, rating: review.rating, reply, posted, source: 'google' };
+  }
+
+  /** Shared Claude call for both review sources. */
+  private async draftReviewReply(
+    customerName: string | null,
+    rating: number,
+    comment: string | null,
+  ): Promise<string> {
     const systemPrompt = `You are the LervIT team responding to a happy customer's Google review.
 Voice: warm, gracious, specific — reference details from THEIR review so it never feels canned.
 Sign off exactly: "— The LervIT Team".
@@ -715,18 +823,34 @@ Rules:
 Return the reply text ONLY.`;
 
     const userMessage = `<data>
-Customer: ${sanitizeForPrompt(review.customerName, 'name')}
-Rating: ${review.rating}★
-Their review: ${sanitizeForPrompt(review.comment ?? '(no comment)', 'review')}
+Customer: ${sanitizeForPrompt(customerName ?? 'a customer', 'name')}
+Rating: ${rating}★
+Their review: ${sanitizeForPrompt(comment ?? '(no comment)', 'review')}
 </data>`;
 
-    if (options?.dryRun) {
-      return { dryRun: true, would: 'respond', reviewId: review.id, rating: review.rating };
-    }
+    return (await this.callAnthropic(systemPrompt, userMessage, 400)).trim();
+  }
 
-    const reply = (await this.callAnthropic(systemPrompt, userMessage, 400)).trim();
-    logger.info({ reviewId: review.id, rating: review.rating }, '[Ember] review response drafted');
-    return { reviewId: review.id, rating: review.rating, reply };
+  /** Shared Xavier escalation for <= 3 star reviews from either source. */
+  private async escalateLowRating(data: {
+    reviewId: string;
+    rating: number | null;
+    comment: string | null;
+    bookingId: string | null;
+    customerName: string | null;
+    source: 'app' | 'google';
+  }): Promise<void> {
+    const where = data.source === 'google' ? 'Google review' : 'review';
+    try {
+      await xavier.run('escalate', {
+        issue: `Low rating (${data.rating ?? 'unrated'}★) on a ${where} needs a personal response from John`,
+        severity: 'high',
+        agentName: 'Ember Lane',
+        data,
+      });
+    } catch (err) {
+      logger.error({ err, reviewId: data.reviewId }, '[Ember] xavier escalation failed');
+    }
   }
 
   // ─────────────────────────────────────────────────────────

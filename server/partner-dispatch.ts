@@ -6,8 +6,9 @@
  * one — mirroring the manual admin routing endpoint exactly (enterprisePartnerId,
  * enterpriseStatus="new", audit trail, email + in-app notifications).
  *
- * Returns { dispatched: false } when no partner qualifies, so callers can fall back
- * to the mover dispatch pipeline.
+ * When no partner qualifies it returns { dispatched: false }. Pass
+ * allowFallbackToMover to have it hand the booking to the mover pipeline itself,
+ * and notifyAdmin to have it raise an admin alert.
  */
 
 import { db } from "./db";
@@ -26,18 +27,55 @@ import {
   users,
 } from "@shared/schema";
 import { notificationService } from "./notifications";
+import { dispatchBooking } from "./dispatch";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Which mover path to use when partner routing fails and fallback is allowed.
+ *
+ *   "victor" — route through the Victor agent pipeline. Victor re-fetches the
+ *              booking and enforces its own guards: it SKIPS unless the row is
+ *              still `pending` with no mover assigned. Correct for the
+ *              post-payment path, where the row is `pending`.
+ *   "direct" — call dispatchBooking() straight away, bypassing those guards.
+ *              Required for the partner-rejection re-route, where the row was
+ *              already flipped to `confirmed` by a previous auto-dispatch and
+ *              Victor would silently skip it.
+ */
+export type MoverFallbackStrategy = "victor" | "direct";
+
+/** What happened on the mover-dispatch fallback, for caller-side logging. */
+export type MoverFallbackOutcome =
+  | "not_attempted" // allowFallbackToMover was false, or the booking is already routed
+  | "dispatched"
+  | "skipped" // Victor declined (wrong status / mover already assigned)
+  | "failed";
+
 export type AutoDispatchResult =
   | { dispatched: true; partnerId: string; partnerName: string }
-  | { dispatched: false; reason: "no_eligible_partners" | "already_routed" | "error"; error?: string };
+  | {
+      dispatched: false;
+      reason: "no_eligible_partners" | "already_routed" | "error";
+      error?: string;
+      moverFallback: MoverFallbackOutcome;
+    };
 
 export type AutoDispatchOptions = {
+  /**
+   * Alert admins when partner routing fails. Not fired for "already_routed" —
+   * that booking has a partner, so nothing failed.
+   */
   notifyAdmin?: boolean;
+  /**
+   * Hand the booking to the mover pipeline when no partner takes it.
+   * Defaults to false: callers opt in, so no caller gets a surprise dispatch.
+   */
   allowFallbackToMover?: boolean;
+  /** Mover path used when allowFallbackToMover is true. Defaults to "victor". */
+  moverFallback?: MoverFallbackStrategy;
 };
 
 type EligiblePartner = {
@@ -198,22 +236,27 @@ export async function findEligiblePartners(
  * routedToPartnerAt, status='confirmed') and also flags the booking as
  * auto-routed for the audit trail.
  *
- * If no partner qualifies, returns { dispatched: false } so the caller can
- * fall back to mover dispatch.
+ * If no partner qualifies, returns { dispatched: false }. When
+ * options.allowFallbackToMover is set the booking is handed to the mover
+ * pipeline first (see MoverFallbackStrategy for which path), and the outcome is
+ * reported back on result.moverFallback. When options.notifyAdmin is set,
+ * admins get an in-app alert describing that outcome.
  */
 export async function autoDispatchToPartner(
   booking: Booking,
-  _options: AutoDispatchOptions = {},
+  options: AutoDispatchOptions = {},
 ): Promise<AutoDispatchResult> {
   try {
     if (booking.enterprisePartnerId) {
-      return { dispatched: false, reason: "already_routed" };
+      // Already has a partner — nothing failed, so no mover fallback and no
+      // admin alert. Dispatching here would double-book the job.
+      return { dispatched: false, reason: "already_routed", moverFallback: "not_attempted" };
     }
 
     const eligible = await findEligiblePartners(booking);
     if (eligible.length === 0) {
       console.log(`[auto-dispatch] no eligible partners for booking ${booking.id}`);
-      return { dispatched: false, reason: "no_eligible_partners" };
+      return await handlePartnerDispatchFailure(booking, options, "no_eligible_partners");
     }
 
     const { partner } = eligible[0];
@@ -269,7 +312,57 @@ export async function autoDispatchToPartner(
     return { dispatched: true, partnerId: partner.id, partnerName: partner.name };
   } catch (err: any) {
     console.error("[auto-dispatch] error:", err);
-    return { dispatched: false, reason: "error", error: err?.message };
+    return await handlePartnerDispatchFailure(booking, options, "error", err?.message);
+  }
+}
+
+/**
+ * Shared tail for every "no partner took it" path: optionally hand the booking
+ * to the mover pipeline, then optionally alert admins. Never throws — a failure
+ * in the fallback must not turn into a failure of the caller (the Stripe
+ * webhook in particular still has to return 200).
+ */
+async function handlePartnerDispatchFailure(
+  booking: Booking,
+  options: AutoDispatchOptions,
+  reason: "no_eligible_partners" | "error",
+  error?: string,
+): Promise<AutoDispatchResult> {
+  const moverFallback = options.allowFallbackToMover
+    ? await runMoverFallback(booking, options.moverFallback ?? "victor")
+    : "not_attempted";
+
+  if (options.notifyAdmin) {
+    await notifyAdminsOfDispatchFailure(booking, booking.routingAttempts ?? 0, moverFallback);
+  }
+
+  return { dispatched: false, reason, error, moverFallback };
+}
+
+async function runMoverFallback(
+  booking: Booking,
+  strategy: MoverFallbackStrategy,
+): Promise<MoverFallbackOutcome> {
+  try {
+    if (strategy === "direct") {
+      await dispatchBooking(booking as any);
+      console.log(`[auto-dispatch] booking ${booking.id} → mover dispatch (direct)`);
+      return "dispatched";
+    }
+
+    // Imported lazily: server/agents/victor pulls in the whole agent stack
+    // (queue, SDK clients), and partner-dispatch is loaded on the request path.
+    const { victor } = await import("./agents/victor");
+    const result: any = await victor.run("dispatch", { bookingId: booking.id });
+    if (result?.skipped) {
+      console.log(`[auto-dispatch] victor skipped booking ${booking.id}: ${result.reason}`);
+      return "skipped";
+    }
+    console.log(`[auto-dispatch] booking ${booking.id} → mover dispatch (victor)`);
+    return "dispatched";
+  } catch (err) {
+    console.error("[auto-dispatch] mover fallback failed:", err);
+    return "failed";
   }
 }
 
@@ -364,7 +457,18 @@ async function notifyPartnerOfRoutedBooking(
 // Admin fallback alert (used by rejection re-route after N failures)
 // ---------------------------------------------------------------------------
 
-export async function notifyAdminsOfDispatchFailure(booking: Booking, attempts: number): Promise<void> {
+export async function notifyAdminsOfDispatchFailure(
+  booking: Booking,
+  attempts: number,
+  moverFallback: MoverFallbackOutcome = "dispatched",
+): Promise<void> {
+  const outcomeText: Record<MoverFallbackOutcome, string> = {
+    dispatched: "dispatched to movers",
+    skipped: "NOT dispatched to movers (mover dispatch declined it) — needs manual routing",
+    failed: "NOT dispatched to movers (mover dispatch errored) — needs manual routing",
+    not_attempted: "not dispatched to movers — needs manual routing",
+  };
+
   try {
     const admins = await db.select().from(users).where(eq(users.role, "admin"));
     for (const admin of admins) {
@@ -372,7 +476,7 @@ export async function notifyAdminsOfDispatchFailure(booking: Booking, attempts: 
         userId: admin.id,
         type: "dispatch_fallback",
         title: "Partner auto-dispatch failed",
-        message: `Booking #${booking.id.slice(0, 8)} could not be routed to any partner after ${attempts} attempts — dispatched to movers.`,
+        message: `Booking #${booking.id.slice(0, 8)} could not be routed to any partner after ${attempts} attempts — ${outcomeText[moverFallback]}.`,
         bookingId: booking.id,
         actionUrl: `/admin/bookings/${booking.id}`,
         isRead: false,

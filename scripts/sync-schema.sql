@@ -1673,3 +1673,34 @@ ALTER TABLE "bookings"
   ADD COLUMN IF NOT EXISTS "auto_routed"      boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS "auto_routed_at"   timestamp,
   ADD COLUMN IF NOT EXISTS "routing_attempts" integer NOT NULL DEFAULT 0;
+
+-- Google Business Profile review sync (see migrations/0027_google_reviews.sql).
+-- Separate from `reviews`: that table's booking_id/customer_id are NOT NULL
+-- FKs and it feeds mover rating averages, which Google reviews would skew.
+CREATE TABLE IF NOT EXISTS google_reviews (
+  id                  varchar     PRIMARY KEY DEFAULT gen_random_uuid(),
+  google_review_id    text        NOT NULL UNIQUE,
+  review_name         text        NOT NULL,
+  location_id         text,
+  reviewer_name       text,
+  reviewer_photo_url  text,
+  rating              integer,
+  comment             text,
+  response            text,
+  response_at         timestamp,
+  responded_by        text,
+  google_created_at   timestamp,
+  google_updated_at   timestamp,
+  synced_at           timestamp   NOT NULL DEFAULT now(),
+  created_at          timestamp   NOT NULL DEFAULT now(),
+  updated_at          timestamp   NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS google_reviews_rating_idx   ON google_reviews(rating);
+CREATE INDEX IF NOT EXISTS google_reviews_response_idx ON google_reviews(response);
+CREATE INDEX IF NOT EXISTS google_reviews_created_idx  ON google_reviews(google_created_at);
+
+-- In-app review replies drafted by Ember.
+ALTER TABLE "reviews"
+  ADD COLUMN IF NOT EXISTS "response"    text,
+  ADD COLUMN IF NOT EXISTS "response_at" timestamp;

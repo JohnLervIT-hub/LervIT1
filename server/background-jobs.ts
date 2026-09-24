@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from './db';
 import { getBaseUrl } from './utils/urls';
-import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, inAppNotifications, quotes, leads, contentItems } from '@shared/schema';
+import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, googleReviews, inAppNotifications, quotes, leads, contentItems } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc } from 'drizzle-orm';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
@@ -26,6 +26,7 @@ import { gt } from 'drizzle-orm';
 import { paymentRecoverySweep } from './lib/paymentRecovery';
 import { agentEventBus } from './lib/agentEventBus';
 import { higgsfieldProvider } from './providers/higgsfield';
+import { getAccountId, isGmbConfigured, listReviews, starRatingToNumber } from './lib/gmbClient';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
@@ -380,6 +381,19 @@ export function initBackgroundJobs() {
         logger.info({ event: 'ember_blog_post', result }, 'Ember blog post drafted');
       } catch (err) {
         logger.error({ err, event: 'ember_blog_post' }, 'Ember blog post failed');
+      }
+    });
+  }, TZ);
+
+  // Every 6h — pull Google Business reviews into google_reviews.
+  // No-ops cleanly until GOOGLE_GMB_REFRESH_TOKEN is set (see gmbClient).
+  cron.schedule('0 */6 * * *', async () => {
+    await withJobLock('gmb_review_sync', async () => {
+      try {
+        const result = await syncGoogleReviews();
+        logger.info({ event: 'gmb_review_sync', ...result }, 'Google review sync complete');
+      } catch (err) {
+        logger.error({ err, event: 'gmb_review_sync' }, 'Google review sync failed');
       }
     });
   }, TZ);
@@ -1266,6 +1280,89 @@ async function sendPostCompletionReviewRequest(bookingId: string) {
     actionUrl: `/review/${bookingId}`,
     isRead: false,
   });
+}
+
+/**
+ * Pull Google Business reviews into google_reviews, upserting on
+ * google_review_id so a re-sync updates in place instead of duplicating.
+ *
+ * Intentionally a no-op until GOOGLE_GMB_REFRESH_TOKEN is set — gmbClient
+ * returns null/[] rather than throwing, and this returns a skipped result so
+ * the cron logs cleanly instead of erroring every 6h.
+ */
+async function syncGoogleReviews(): Promise<{
+  skipped?: string;
+  fetched?: number;
+  upserted?: number;
+}> {
+  if (!isGmbConfigured()) {
+    return { skipped: 'gmb_not_configured' };
+  }
+
+  const locationId = process.env.GOOGLE_GMB_LOCATION_ID?.trim();
+  if (!locationId) {
+    logger.warn('[GMB sync] GOOGLE_GMB_LOCATION_ID not set — skipping');
+    return { skipped: 'no_location_id' };
+  }
+
+  const accountId = await getAccountId();
+  if (!accountId) return { skipped: 'no_account' };
+
+  const fetched = await listReviews(accountId, locationId);
+  if (fetched.length === 0) {
+    // listReviews returns [] on a failed page too, so this is "nothing to do",
+    // never "the location has no reviews" — we don't delete anything here.
+    return { fetched: 0, upserted: 0 };
+  }
+
+  // Google shouldn't repeat a reviewId within a listing, but ON CONFLICT
+  // errors if one batch touches the same row twice — dedupe defensively.
+  const unique = new Map<string, (typeof fetched)[number]>();
+  for (const r of fetched) unique.set(r.reviewId, r);
+
+  const now = new Date();
+  const rows = Array.from(unique.values()).map((r) => ({
+    googleReviewId: r.reviewId,
+    reviewName: r.name,
+    locationId,
+    reviewerName: r.reviewer?.displayName ?? null,
+    reviewerPhotoUrl: r.reviewer?.profilePhotoUrl ?? null,
+    rating: starRatingToNumber(r.starRating),
+    comment: r.comment ?? null,
+    // A reply already on Google (posted by us earlier, or by hand in the GMB
+    // UI) is adopted as our response so it isn't drafted a second time.
+    response: r.reviewReply?.comment ?? null,
+    responseAt: r.reviewReply?.updateTime ? new Date(r.reviewReply.updateTime) : null,
+    respondedBy: r.reviewReply ? 'manual' : null,
+    googleCreatedAt: r.createTime ? new Date(r.createTime) : null,
+    googleUpdatedAt: r.updateTime ? new Date(r.updateTime) : null,
+    syncedAt: now,
+  }));
+
+  await db
+    .insert(googleReviews)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: googleReviews.googleReviewId,
+      set: {
+        reviewName: sql`excluded.review_name`,
+        locationId: sql`excluded.location_id`,
+        reviewerName: sql`excluded.reviewer_name`,
+        reviewerPhotoUrl: sql`excluded.reviewer_photo_url`,
+        rating: sql`excluded.rating`,
+        comment: sql`excluded.comment`,
+        googleUpdatedAt: sql`excluded.google_updated_at`,
+        // COALESCE so a local draft that hasn't been posted yet survives the
+        // sync: Google has no reply for it, and excluded.response is null.
+        response: sql`COALESCE(excluded.response, ${googleReviews.response})`,
+        responseAt: sql`COALESCE(excluded.response_at, ${googleReviews.responseAt})`,
+        respondedBy: sql`COALESCE(excluded.responded_by, ${googleReviews.respondedBy})`,
+        syncedAt: now,
+        updatedAt: now,
+      },
+    });
+
+  return { fetched: fetched.length, upserted: rows.length };
 }
 
 // Auto-cancel bookings with past dates that weren't completed

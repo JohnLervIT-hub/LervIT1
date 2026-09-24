@@ -290,6 +290,10 @@ export const reviews = pgTable("reviews", {
   customerId: varchar("customer_id").references(() => users.id).notNull(),
   rating: integer("rating").notNull(),
   comment: text("comment"),
+  // Reply drafted by Ember (respond_to_review). In-app reviews are not on
+  // Google, so this is posted manually — see googleReviews for the GMB side.
+  response: text("response"),
+  responseAt: timestamp("response_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   moverIdIdx: index("reviews_mover_id_idx").on(table.moverId),
@@ -2159,6 +2163,41 @@ export const gmbPosts = pgTable("gmb_posts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * Google Business Profile reviews, synced every 6h by background-jobs.
+ *
+ * Deliberately NOT rows in `reviews`: that table's bookingId/customerId are
+ * NOT NULL foreign keys and it is aggregated by moverId to compute mover
+ * ratings, which a Google review (no booking, no customer, no mover) would
+ * both violate and skew. See migrations/0027_google_reviews.sql.
+ */
+export const googleReviews = pgTable("google_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Upsert key — opaque per-review id from Google, stable across syncs.
+  googleReviewId: text("google_review_id").notNull().unique(),
+  // "accounts/{a}/locations/{l}/reviews/{r}" — needed to post a reply back.
+  reviewName: text("review_name").notNull(),
+  locationId: text("location_id"),
+  reviewerName: text("reviewer_name"),
+  reviewerPhotoUrl: text("reviewer_photo_url"),
+  // 1-5, or null when Google returns STAR_RATING_UNSPECIFIED.
+  rating: integer("rating"),
+  comment: text("comment"),
+  // Our reply. Null = unanswered, which is what the reply queue reads.
+  response: text("response"),
+  responseAt: timestamp("response_at"),
+  respondedBy: text("responded_by"), // ember | manual
+  googleCreatedAt: timestamp("google_created_at"),
+  googleUpdatedAt: timestamp("google_updated_at"),
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  ratingIdx: index("google_reviews_rating_idx").on(table.rating),
+  responseIdx: index("google_reviews_response_idx").on(table.response),
+  googleCreatedIdx: index("google_reviews_created_idx").on(table.googleCreatedAt),
+}));
+
 export const socialPosts = pgTable("social_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   platform: text("platform").notNull(), // facebook | instagram | tiktok | linkedin
@@ -2190,6 +2229,7 @@ export const newsletters = pgTable("newsletters", {
 
 export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertGmbPostSchema = createInsertSchema(gmbPosts).omit({ id: true, createdAt: true });
+export const insertGoogleReviewSchema = createInsertSchema(googleReviews).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({ id: true, createdAt: true });
 export const insertNewsletterSchema = createInsertSchema(newsletters).omit({ id: true, createdAt: true, updatedAt: true });
 
@@ -2197,6 +2237,8 @@ export type BlogPost = typeof blogPosts.$inferSelect;
 export type InsertBlogPost = z.infer<typeof insertBlogPostSchema>;
 export type GmbPost = typeof gmbPosts.$inferSelect;
 export type InsertGmbPost = z.infer<typeof insertGmbPostSchema>;
+export type GoogleReview = typeof googleReviews.$inferSelect;
+export type InsertGoogleReview = z.infer<typeof insertGoogleReviewSchema>;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
 export type Newsletter = typeof newsletters.$inferSelect;

@@ -71,6 +71,7 @@ import { buildReidEmail } from "./lib/reidEmailTemplates";
 import { buildIntelligenceSummary } from "./intelligence";
 import { computeBookingSla } from "./sla";
 import { stripe, PLATFORM_COMMISSION, calculatePlatformFee } from "./config/stripe";
+import { GOOGLE_PLACE_ID } from "./config/google";
 import { dispatchBooking, dispatchJobToMovers, dispatchPreSelectedMover, notifyMover } from "./dispatch";
 import { victor } from "./agents/victor";
 import { autoDispatchToPartner } from "./partner-dispatch";
@@ -2111,19 +2112,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const apiKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
       if (!apiKey) return res.status(503).json({ error: "Google API key not configured" });
 
-      // Step 1: Text search to find the Place ID
-      const searchRes = await fetch(
-        `https://maps.googleapis.com/maps/api/place/textsearch/json?query=LervIT+Calgary+moving&key=${apiKey}`
-      );
-      const searchData: any = await searchRes.json();
+      // Pinned place ID (server/config/google.ts). This used to run a Places
+      // textsearch for "LervIT Calgary moving" on every cache miss and take
+      // results[0] — a query that could silently resolve to a different
+      // listing, and that disagreed with the ID hardcoded in Kai's
+      // review-request SMS. Both now read the same constant.
+      const placeId = GOOGLE_PLACE_ID;
 
-      if (!searchData.results?.length) {
-        return res.status(404).json({ error: "Business not found on Google Maps" });
-      }
-
-      const placeId: string = searchData.results[0].place_id;
-
-      // Step 2: Fetch place details — reviews, rating, and canonical Google Maps URL
+      // Fetch place details — reviews, rating, and canonical Google Maps URL
       const detailsRes = await fetch(
         `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,rating,user_ratings_total,reviews,url&key=${apiKey}&language=en&reviews_sort=newest`
       );
@@ -7221,7 +7217,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Fire-and-forget so a dispatch hiccup can't stall Stripe's
             // webhook 200 window.
             void (async () => {
-              const partnerResult = await autoDispatchToPartner(booking, { allowFallbackToMover: true });
+              // autoDispatchToPartner owns the mover fallback (via Victor, which
+              // re-fetches this booking — the row is `pending` at this point, so
+              // Victor's guards pass).
+              const partnerResult = await autoDispatchToPartner(booking, {
+                allowFallbackToMover: true,
+                moverFallback: 'victor',
+              });
               if (partnerResult.dispatched) {
                 logEvent.payment('partner_auto_routed', {
                   bookingId: booking.id,
@@ -7230,11 +7232,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
                 return;
               }
-              await victor.run('dispatch', { bookingId: booking.id });
               logEvent.payment('movers_notified', {
                 bookingId: booking.id,
                 websocketConnected: moverWebSocket.getConnectedMoversCount(),
                 partnerFallbackReason: partnerResult.reason,
+                moverFallback: partnerResult.moverFallback,
               });
             })().catch(err =>
               logEvent.error('webhook_mover_notifications', err, { bookingId: booking.id }),

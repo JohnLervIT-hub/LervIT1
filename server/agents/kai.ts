@@ -26,6 +26,7 @@ import { Resend } from 'resend';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { users, movers, bookings, reviews } from '@shared/schema';
+import { GOOGLE_REVIEW_URL } from '../config/google';
 import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
@@ -56,8 +57,7 @@ const KAI_MAX_CONTACTS_PER_RUN = 5;
 const KAI_PROMO_CODE = 'KAI15';
 
 // LervIT Technologies, Calgary — place id is fixed, do not change.
-const GOOGLE_REVIEW_URL =
-  'https://search.google.com/local/writereview?placeid=ChIJwfu0I0JVUqgR6kpKN2fpsQA';
+
 
 const KAI_EMAIL = process.env.KAI_EMAIL?.trim() || 'kai.bennett@lervit.com';
 const KAI_FROM = `Kai Bennett | LervIT <${KAI_EMAIL}>`;
