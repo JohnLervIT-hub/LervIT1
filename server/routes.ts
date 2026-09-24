@@ -15439,24 +15439,74 @@ Respond with VALID JSON only:
 
       const hasContent = !!(item.videoUrl || item.caption || item.script);
 
-      if (
-        publishablePlatforms.includes(item.platform ?? '') &&
-        hasContent
-      ) {
-        ember.run('publish_to_social', {
-          contentItemId: req.params.itemId,
-        }).catch(err =>
-          logger.error({ err }, '[Ember] Auto-publish failed'),
-        );
-
-        logger.info({
-          contentItemId: req.params.itemId,
-          platform: item.platform,
-          hasVideo: !!item.videoUrl,
-        }, '[Ember] Auto-publish triggered');
+      if (!publishablePlatforms.includes(item.platform ?? '') || !hasContent) {
+        // Approved, but there is nothing this route can ship. The item keeps
+        // status 'published' and waits for a manual Publish.
+        return res.json({
+          ok: true,
+          item: updated,
+          published: false,
+          reason: !hasContent
+            ? 'Item has no video, caption or script to publish'
+            : `No auto-publish for platform: ${item.platform ?? 'null'}`,
+        });
       }
 
-      res.json({ ok: true, item: updated });
+      logger.info({
+        contentItemId: itemId,
+        platform: item.platform,
+        hasVideo: !!item.videoUrl,
+      }, '[Ember] Auto-publish triggered');
+
+      // Awaited, not fire-and-forget. This used to return {ok:true} before the
+      // Meta call resolved, so the admin saw "approved & publishing" and a
+      // published badge whether or not the post ever went out. An Instagram
+      // video can hold this request for up to ~2 min while Meta processes the
+      // REELS container (metaProvider.waitForContainer).
+      let publishResult: any;
+      try {
+        publishResult = await ember.run('publish_to_social', { contentItemId: itemId });
+      } catch (err: any) {
+        publishResult = { success: false, message: err?.message ?? String(err) };
+      }
+
+      // publishToSocial rolls the item back to 'qa' when the post fails, so
+      // re-read rather than returning the pre-publish snapshot.
+      const [fresh] = await db
+        .select()
+        .from(contentItems)
+        .where(eq(contentItems.id, itemId))
+        .limit(1);
+
+      if (!publishResult?.success) {
+        const detail =
+          publishResult?.message ??
+          publishResult?.results?.[0]?.error ??
+          publishResult?.error ??
+          'Publish failed';
+
+        logger.error(
+          { contentItemId: itemId, platform: item.platform, detail },
+          '[Ember] Auto-publish failed',
+        );
+
+        return res.status(502).json({
+          error: 'publish failed',
+          detail: String(detail),
+          item: fresh ?? updated,
+          published: false,
+        });
+      }
+
+      const posted = publishResult.results?.[0];
+
+      res.json({
+        ok: true,
+        item: fresh ?? updated,
+        published: true,
+        postId: posted?.postId,
+        url: posted?.url,
+      });
     } catch (err) {
       logger.error({ err }, '[Admin] approve content item failed');
       res.status(500).json({ error: 'Failed to approve content item' });

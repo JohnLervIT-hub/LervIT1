@@ -590,18 +590,41 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
       );
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Content item approved & publishing" });
+    onSuccess: (payload: any) => {
+      // The route now waits for the Meta call, so the toast can say what
+      // actually happened instead of "publishing" and hoping.
+      toast(
+        payload?.published
+          ? {
+              title: "Approved & published",
+              description: payload.url ?? payload.postId ?? undefined,
+            }
+          : {
+              title: "Approved",
+              description: payload?.reason ?? "Nothing to auto-publish.",
+            },
+      );
       invalidate();
       setConfirmingItem(null);
       setPreviewItem(null);
     },
     onError: (err: any) => {
+      // A failed publish rolls the item back to 'qa' and returns 502, which
+      // apiRequest throws as `<status>: <body>`. Surface the server's detail.
+      const raw = err?.message ?? "Unknown error";
+      let description = raw;
+      try {
+        description = JSON.parse(raw.slice(raw.indexOf(":") + 1).trim())?.detail ?? raw;
+      } catch {
+        /* not JSON — show the raw message */
+      }
       toast({
-        title: "Approve failed",
-        description: err?.message ?? "Unknown error",
+        title: "Publish failed — item returned to QA",
+        description,
         variant: "destructive",
       });
+      invalidate();
+      setConfirmingItem(null);
     },
   });
 
