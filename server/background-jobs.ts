@@ -1386,6 +1386,11 @@ async function syncGoogleReviews(): Promise<{
 const GMB_AUTO_REPLY_BATCH = 10;
 const GMB_AUTO_REPLY_MAX_AGE_DAYS = 30;
 
+// Three tries per review, then it's left for a human. A review Google keeps
+// rejecting (deleted, moderated, location unlinked) is not going to start
+// working on the eleventh attempt, and every retry is an API call.
+const GMB_AUTO_REPLY_MAX_ATTEMPTS = 3;
+
 /**
  * Draft and post replies to recent, well-rated Google reviews.
  *
@@ -1395,8 +1400,17 @@ const GMB_AUTO_REPLY_MAX_AGE_DAYS = 30;
  *    enforces the same rule, this is just the queue filter).
  *  - google_created_at within 30 days. This is the review's own date from
  *    Google, not our row's created_at — see the note in the caller below.
- *  - response IS NULL, so a reply already posted on Google, drafted by an
- *    earlier run, or written by hand in the GMB UI is never overwritten.
+ *  - unanswered, in one of two senses:
+ *      response IS NULL                              — never drafted, or
+ *      responded_by = 'ember' AND response_at IS NULL — drafted by us but the
+ *                                                       post to Google failed.
+ *    The second case is a resume, not a redraft: ember reuses the stored text
+ *    and only retries the GMB call, so a retry costs no model tokens.
+ *    responded_by = 'manual' is excluded — that reply came back from Google's
+ *    own reviewReply during sync and is already live there, so re-posting it
+ *    would overwrite a hand-written answer with itself.
+ *  - reply_attempts < 3, so a review that can never be posted stops being
+ *    retried instead of consuming a queue slot on every tick.
  *
  * No-ops when GMB is unconfigured rather than drafting replies nothing can
  * post, matching syncGoogleReviews.
@@ -1407,6 +1421,7 @@ async function autoReplyToGoogleReviews(): Promise<{
   posted?: number;
   drafted?: number;
   failed?: number;
+  exhausted?: number;
 }> {
   if (!isGmbConfigured()) {
     return { skipped: 'gmb_not_configured' };
@@ -1417,11 +1432,23 @@ async function autoReplyToGoogleReviews(): Promise<{
   // A null google_created_at fails the >= comparison in SQL, so undated
   // reviews are excluded — we can't prove they're inside the window.
   const candidates = await db
-    .select({ googleReviewId: googleReviews.googleReviewId, rating: googleReviews.rating })
+    .select({
+      id: googleReviews.id,
+      googleReviewId: googleReviews.googleReviewId,
+      rating: googleReviews.rating,
+      replyAttempts: googleReviews.replyAttempts,
+    })
     .from(googleReviews)
     .where(
       and(
-        isNull(googleReviews.response),
+        or(
+          isNull(googleReviews.response),
+          and(
+            eq(googleReviews.respondedBy, 'ember'),
+            isNull(googleReviews.responseAt),
+          ),
+        ),
+        lt(googleReviews.replyAttempts, GMB_AUTO_REPLY_MAX_ATTEMPTS),
         gte(googleReviews.rating, 4),
         gte(googleReviews.googleCreatedAt, cutoff),
       ),
@@ -1436,10 +1463,23 @@ async function autoReplyToGoogleReviews(): Promise<{
   let posted = 0;
   let drafted = 0;
   let failed = 0;
+  let exhausted = 0;
 
   // Sequential on purpose — 10 concurrent model calls is exactly the burst
   // the batch cap is meant to prevent.
   for (const review of candidates) {
+    const attempt = review.replyAttempts + 1;
+
+    // Spend the attempt BEFORE making it. Counting afterwards would mean an
+    // attempt that throws — or a process killed mid-reply — never increments,
+    // and the row comes back on the next tick with its budget untouched
+    // forever. That is the loop this counter exists to stop.
+    await db
+      .update(googleReviews)
+      .set({ replyAttempts: attempt, updatedAt: new Date() })
+      .where(eq(googleReviews.id, review.id));
+
+    let landed = false;
     try {
       // Via run() rather than the method directly so each reply lands in
       // agent_logs and emits agent.ember.respond_to_review like every other
@@ -1448,18 +1488,31 @@ async function autoReplyToGoogleReviews(): Promise<{
         googleReviewId: review.googleReviewId,
       });
       // posted=false means the draft was saved but the GMB call didn't land.
+      // alreadyAnswered covers a reply that arrived via sync between the
+      // query and now — nothing left to do either way.
+      landed = Boolean(result?.posted || result?.alreadyAnswered);
       if (result?.posted) posted++;
       else drafted++;
     } catch (err) {
       failed++;
       logger.error(
-        { err, event: 'gmb_auto_reply', googleReviewId: review.googleReviewId },
+        { err, event: 'gmb_auto_reply', googleReviewId: review.googleReviewId, attempt },
         'GMB auto-reply failed for review',
+      );
+    }
+
+    if (!landed && attempt >= GMB_AUTO_REPLY_MAX_ATTEMPTS) {
+      // Last chance used. Logged loudly because from here the row is invisible
+      // to the sweep — if the reply never landed, only a human will notice.
+      exhausted++;
+      logger.warn(
+        { event: 'gmb_auto_reply_exhausted', googleReviewId: review.googleReviewId, attempt },
+        'GMB auto-reply budget exhausted — review will not be retried',
       );
     }
   }
 
-  return { candidates: candidates.length, posted, drafted, failed };
+  return { candidates: candidates.length, posted, drafted, failed, exhausted };
 }
 
 // Auto-cancel bookings with past dates that weren't completed

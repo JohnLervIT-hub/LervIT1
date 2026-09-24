@@ -1689,12 +1689,19 @@ CREATE TABLE IF NOT EXISTS google_reviews (
   response            text,
   response_at         timestamp,
   responded_by        text,
+  -- Auto-reply retry budget; see migrations/0028_google_reviews_reply_attempts.sql.
+  reply_attempts      integer     NOT NULL DEFAULT 0,
   google_created_at   timestamp,
   google_updated_at   timestamp,
   synced_at           timestamp   NOT NULL DEFAULT now(),
   created_at          timestamp   NOT NULL DEFAULT now(),
   updated_at          timestamp   NOT NULL DEFAULT now()
 );
+
+-- Added after 0027, so existing installs need the ALTER — the CREATE above is
+-- a no-op for them (migrations/0028_google_reviews_reply_attempts.sql).
+ALTER TABLE google_reviews
+  ADD COLUMN IF NOT EXISTS reply_attempts integer NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS google_reviews_rating_idx   ON google_reviews(rating);
 CREATE INDEX IF NOT EXISTS google_reviews_response_idx ON google_reviews(response);

@@ -2183,10 +2183,15 @@ export const googleReviews = pgTable("google_reviews", {
   // 1-5, or null when Google returns STAR_RATING_UNSPECIFIED.
   rating: integer("rating"),
   comment: text("comment"),
-  // Our reply. Null = unanswered, which is what the reply queue reads.
+  // Our reply. Null = unanswered. response set + response_at null means the
+  // draft was written but the post to Google didn't land — the reply queue
+  // treats that as unfinished and retries it.
   response: text("response"),
   responseAt: timestamp("response_at"),
   respondedBy: text("responded_by"), // ember | manual
+  // Auto-reply retry budget. Bumped before each attempt by the background
+  // sweep; at 3 the review is left alone. See migration 0028.
+  replyAttempts: integer("reply_attempts").default(0).notNull(),
   googleCreatedAt: timestamp("google_created_at"),
   googleUpdatedAt: timestamp("google_updated_at"),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),

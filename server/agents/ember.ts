@@ -737,6 +737,10 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
    * one-time OAuth flow — see server/lib/gmbClient.ts), the draft is still
    * saved and the call is skipped with a warning rather than throwing, so
    * nothing is lost and the caller does not fail.
+   *
+   * Called again for a review whose draft was saved but never posted, it
+   * resumes that draft instead of writing a new one — see isRetry below. The
+   * auto-reply sweep re-queues exactly those rows, with a three-attempt cap.
    */
   private async respondToGoogleReview(googleReviewId: string, options?: AgentRunOptions) {
     const [review] = await db
@@ -747,7 +751,13 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
 
     if (!review) throw new Error(`respond_to_review: google review ${googleReviewId} not found`);
 
-    if (review.response) {
+    // "Answered" means the reply is live on Google, which response_at records.
+    // A stored response with no response_at is a draft whose post failed: the
+    // text is already written and paid for, so it is resumed below rather than
+    // skipped. responded_by='manual' is a reply adopted from Google's own
+    // reviewReply during sync — live there even if it carried no updateTime.
+    const isRetry = Boolean(review.response) && !review.responseAt && review.respondedBy !== 'manual';
+    if (review.response && !isRetry) {
       logger.info({ googleReviewId }, '[Ember] google review already answered — skipping');
       return { googleReviewId, alreadyAnswered: true, reply: review.response };
     }
@@ -771,10 +781,20 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
     }
 
     if (options?.dryRun) {
-      return { dryRun: true, would: 'respond_on_google', googleReviewId, rating: review.rating };
+      return {
+        dryRun: true,
+        would: isRetry ? 'repost_on_google' : 'respond_on_google',
+        googleReviewId,
+        rating: review.rating,
+      };
     }
 
-    const reply = await this.draftReviewReply(review.reviewerName, review.rating, review.comment);
+    // A retry re-posts the existing draft verbatim — the GMB call is what
+    // failed, not the writing, and redrafting would burn a model call to
+    // produce different text for the same review on every attempt.
+    const reply = isRetry
+      ? review.response!
+      : await this.draftReviewReply(review.reviewerName, review.rating, review.comment);
 
     let posted = false;
     if (isGmbConfigured()) {
@@ -798,8 +818,11 @@ neighbourhood spotlight, or a booking-friendly reminder. Keep it fresh vs prior 
       })
       .where(eq(googleReviews.id, review.id));
 
-    logger.info({ googleReviewId, rating: review.rating, posted }, '[Ember] google review response drafted');
-    return { googleReviewId, rating: review.rating, reply, posted, source: 'google' };
+    logger.info(
+      { googleReviewId, rating: review.rating, posted, retry: isRetry },
+      isRetry ? '[Ember] google review reply re-posted' : '[Ember] google review response drafted',
+    );
+    return { googleReviewId, rating: review.rating, reply, posted, retry: isRetry, source: 'google' };
   }
 
   /** Shared Claude call for both review sources. */
