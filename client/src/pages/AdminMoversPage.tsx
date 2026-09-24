@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { 
   Table, 
   TableBody, 
@@ -29,7 +30,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck, CreditCard } from "lucide-react";
+import { Truck, ArrowLeft, Search, CheckCircle, XCircle, Star, RefreshCw, Upload, Camera, Loader2, UserCheck, CreditCard, Power } from "lucide-react";
 import { useState, useRef } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -185,6 +186,36 @@ export default function AdminMoversPage() {
       toast({
         title: "Override failed",
         description: "Could not override onboarding. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleAvailabilityMutation = useMutation({
+    mutationFn: async ({ moverId, isAvailable }: { moverId: string; isAvailable: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/movers/${moverId}`, { isAvailable });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update availability");
+      return data;
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/movers"] });
+      // `selectedMover` is a snapshot taken when the row was clicked, so the
+      // list refetch alone would leave the open dialog showing the old state.
+      setSelectedMover((prev) =>
+        prev ? { ...prev, isAvailable: updated?.isAvailable ?? !prev.isAvailable } : prev
+      );
+      toast({
+        title: updated?.isAvailable ? "Mover forced online" : "Mover forced offline",
+        description: updated?.isAvailable
+          ? "They are visible to customers and back in the dispatch pool."
+          : "They are hidden from customers and will not receive job offers.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not change availability",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -461,12 +492,56 @@ export default function AdminMoversPage() {
         <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Upload Vehicle Photo</DialogTitle>
+              <DialogTitle>Manage Mover</DialogTitle>
               <DialogDescription>
-                Upload a vehicle photo for {selectedMover?.user?.name || "this mover"}
+                Availability and vehicle photo for {selectedMover?.user?.name || "this mover"}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              {selectedMover && (
+                <div className="p-3 rounded-lg border bg-muted/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${selectedMover.isAvailable ? "bg-green-500" : "bg-muted-foreground/50"}`}
+                        />
+                        <p className="text-sm font-medium" data-testid="text-availability-state">
+                          Currently {selectedMover.isAvailable ? "Online" : "Offline"}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {selectedMover.isAvailable
+                          ? "Visible to customers and in the dispatch pool."
+                          : "Hidden from customers and receiving no job offers."}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="admin-availability" className="text-xs whitespace-nowrap">
+                        {selectedMover.isAvailable ? "Force Offline" : "Force Online"}
+                      </Label>
+                      {toggleAvailabilityMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Power className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      <Switch
+                        id="admin-availability"
+                        checked={selectedMover.isAvailable}
+                        disabled={toggleAvailabilityMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          toggleAvailabilityMutation.mutate({
+                            moverId: selectedMover.id,
+                            isAvailable: checked,
+                          })
+                        }
+                        data-testid="switch-admin-availability"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {selectedMover && selectedMover.onboardingCompleted === false && (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
                   <div className="flex items-center justify-between gap-3">

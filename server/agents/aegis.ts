@@ -9,7 +9,9 @@
  *                                   suspends the mover if the doc has expired.
  *   - `scan_dispatch_eligibility` : safety net — anyone flagged as available
  *                                   without isVerified/documentsVerified is
- *                                   forced offline and notified.
+ *                                   forced offline and notified. Then sweeps
+ *                                   movers left online with stale GPS, who
+ *                                   went online and closed the app.
  *   - `suspend_mover`             : single choke-point for pilot suspension.
  *                                   Sets pilotStatus='suspended', isAvailable
  *                                   false, records the reason in pilotNotes.
@@ -20,7 +22,7 @@
  * suspension notices only, to avoid noise.
  */
 
-import { and, eq, inArray, isNotNull, lte, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, lte, or } from 'drizzle-orm';
 import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { movers, users, verificationItems } from '@shared/schema';
@@ -47,6 +49,12 @@ const EXPIRY_DOCS = [
   'VEHICLE_REGISTRATION',
   'BACKGROUND_CHECK',
 ] as const;
+
+// A mover who goes online and closes the app stays in the dispatch pool
+// forever: nothing but the toggle ever wrote `is_available`. Dispatch already
+// treats a GPS ping older than 2h as "not on an active trip" (AC-11), so 4h of
+// silence is a comfortable margin past that before we call them gone.
+const STALE_LOCATION_MS = 4 * 60 * 60 * 1000;
 
 const SUSPENSION_THRESHOLD_DAYS = 0;
 const WARNING_7_DAYS = 7;
@@ -97,8 +105,10 @@ interface ScanExpiringResult {
 interface ScanEligibilityResult {
   total: number;
   corrected: number;
+  staleOffline: number;
   dryRun?: boolean;
   violations?: Array<{ moverId: string; name: string | null; isVerified: boolean }>;
+  stale?: Array<{ moverId: string; name: string | null; lastLocationUpdate: Date | null }>;
 }
 
 // ─── agent ─────────────────────────────────────────────────
@@ -288,15 +298,18 @@ export class AegisAgent extends BaseAgent {
       );
 
     if (options.dryRun) {
+      const staleDry = await this.findStaleOnlineMovers();
       return {
         total: violations.length,
         corrected: 0,
+        staleOffline: 0,
         dryRun: true,
         violations: violations.map((v) => ({
           moverId: v.id,
           name: v.name,
           isVerified: v.isVerified,
         })),
+        stale: staleDry,
       };
     }
 
@@ -338,7 +351,93 @@ export class AegisAgent extends BaseAgent {
       corrected++;
     }
 
-    return { total: violations.length, corrected };
+    // Stale-GPS sweep runs after the correction above, so movers already forced
+    // offline for missing verification are out of the candidate set and are not
+    // counted or logged twice.
+    const staleOffline = await this.sweepStaleOnlineMovers();
+
+    return { total: violations.length, corrected, staleOffline };
+  }
+
+  // ─── stale-location sweep ────────────────────────────────
+
+  /**
+   * Movers who are online but whose last GPS ping is older than
+   * STALE_LOCATION_MS. `auto_offline_booking_id IS NULL` skips anyone the
+   * dispatch pipeline is already holding for a job, so this never fights that
+   * bookkeeping (see server/dispatch.ts).
+   *
+   * A NULL `last_location_update` is deliberately not stale. There is no record
+   * of when a mover went online, so a null cannot be told apart from someone who
+   * toggled on seconds ago and has not reported a fix yet — and going online
+   * with an address on file geocodes and stamps the column anyway. Movers with
+   * no coordinates at all are already excluded from dispatch.
+   */
+  private async findStaleOnlineMovers() {
+    const cutoff = new Date(Date.now() - STALE_LOCATION_MS);
+
+    return db
+      .select({
+        moverId: movers.id,
+        name: users.name,
+        lastLocationUpdate: movers.lastLocationUpdate,
+      })
+      .from(movers)
+      .innerJoin(users, eq(users.id, movers.userId))
+      .where(
+        and(
+          eq(movers.isAvailable, true),
+          isNull(movers.autoOfflineBookingId),
+          isNotNull(movers.lastLocationUpdate),
+          lt(movers.lastLocationUpdate, cutoff),
+        ),
+      );
+  }
+
+  private async sweepStaleOnlineMovers(): Promise<number> {
+    const stale = await this.findStaleOnlineMovers();
+    if (stale.length === 0) return 0;
+
+    let sweptCount = 0;
+    for (const m of stale) {
+      // Re-check the conditions in the UPDATE itself: the sweep is not the only
+      // writer of this flag, and a mover who came back or accepted a job since
+      // the SELECT must not be knocked offline by a stale read.
+      const swept = await db
+        .update(movers)
+        .set({ isAvailable: false })
+        .where(
+          and(
+            eq(movers.id, m.moverId),
+            eq(movers.isAvailable, true),
+            isNull(movers.autoOfflineBookingId),
+          ),
+        )
+        .returning({ id: movers.id });
+
+      if (swept.length === 0) continue;
+
+      logger.info(
+        {
+          event: 'aegis_stale_location_offline',
+          moverId: m.moverId,
+          name: m.name,
+          lastLocationUpdate: m.lastLocationUpdate,
+        },
+        `[Aegis] Forced ${m.name ?? m.moverId} offline — no GPS for over ${STALE_LOCATION_MS / 3600000}h`,
+      );
+
+      await emitEvent(
+        'aegis.availability_corrected',
+        'mover',
+        m.moverId,
+        { reason: 'stale_location', lastLocationUpdate: m.lastLocationUpdate },
+        'agent',
+      );
+      sweptCount++;
+    }
+
+    return sweptCount;
   }
 
   // ─── suspend / reactivate ────────────────────────────────
