@@ -1717,3 +1717,8 @@ ALTER TABLE "reviews"
 -- Higgsfield poller retry budget (migrations/0030_content_items_poll_attempts.sql).
 ALTER TABLE content_items
   ADD COLUMN IF NOT EXISTS higgsfield_poll_attempts integer NOT NULL DEFAULT 0;
+
+-- Social post publish results (migrations/0031_social_posts_publish.sql).
+ALTER TABLE social_posts
+  ADD COLUMN IF NOT EXISTS platform_post_id text,
+  ADD COLUMN IF NOT EXISTS failure_reason   text;

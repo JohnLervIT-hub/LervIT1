@@ -2184,54 +2184,83 @@ Platform: ${item.platform ?? 'N/A'}`;
     const isVideo = !!item.videoUrl;
     const isPhoto = !item.videoUrl && !!item.assetUrl;
 
+    // The approve route flips the item to 'published' before this runs and
+    // returns {ok:true} immediately, so a failure here is the only record that
+    // the post never went out. Roll the item back to 'qa' rather than leaving
+    // it reading as published — from 'qa' it can be approved again.
+    const rollbackToQa = async (reason: string) => {
+      await db
+        .update(contentItems)
+        .set({ status: 'qa', publishedAt: null, updatedAt: new Date() })
+        .where(eq(contentItems.id, input.contentItemId));
+
+      logger.error(
+        { contentItemId: input.contentItemId, platform, reason },
+        '[Ember] publish failed — item rolled back to qa',
+      );
+    };
+
     let results: Array<{ postId: string; platform: string; url?: string; error?: string }>;
 
-    if (platform === 'linkedin') {
-      const result = await linkedInProvider.post({
-        text: caption,
-        // A video still goes out as a link preview — native video needs the
-        // multipart Assets API, which the provider does not implement. A
-        // still is uploaded and posted natively via imageUrl.
-        url: item.videoUrl ? mediaUrl : undefined,
-        imageUrl: item.assetUrl ?? undefined,
-        title: 'LervIT Moving Calgary',
-        description: caption.slice(0, 200),
-        hashtags: item.hashtags ?? [],
-      });
-      results = [
-        {
-          postId: result.postId,
-          platform: 'linkedin',
-          url: result.url,
-          error: result.error,
-        },
-      ];
-    } else {
-      if (platform === 'instagram') {
-        if (!mediaUrl) {
-          throw new Error('Instagram requires photo or video');
+    try {
+      if (platform === 'linkedin') {
+        const result = await linkedInProvider.post({
+          text: caption,
+          // A video still goes out as a link preview — native video needs the
+          // multipart Assets API, which the provider does not implement. A
+          // still is uploaded and posted natively via imageUrl.
+          url: item.videoUrl ? mediaUrl : undefined,
+          imageUrl: item.assetUrl ?? undefined,
+          title: 'LervIT Moving Calgary',
+          description: caption.slice(0, 200),
+          hashtags: item.hashtags ?? [],
+        });
+        results = [
+          {
+            postId: result.postId,
+            platform: 'linkedin',
+            url: result.url,
+            error: result.error,
+          },
+        ];
+      } else {
+        if (platform === 'instagram') {
+          if (!mediaUrl) {
+            throw new Error('Instagram requires photo or video');
+          }
+          if (item.aspectRatio && item.aspectRatio !== '9:16') {
+            logger.warn(
+              { itemId: item.id, aspectRatio: item.aspectRatio },
+              '[Ember] IG content may not be 9:16 — Reels requires 9:16',
+            );
+          }
         }
-        if (item.aspectRatio && item.aspectRatio !== '9:16') {
-          logger.warn(
-            { itemId: item.id, aspectRatio: item.aspectRatio },
-            '[Ember] IG content may not be 9:16 — Reels requires 9:16',
-          );
-        }
-      }
 
-      if (platform === 'facebook') {
-        if (!mediaUrl && !item.caption) {
-          throw new Error('Facebook requires media or caption');
+        if (platform === 'facebook') {
+          if (!mediaUrl && !item.caption) {
+            throw new Error('Facebook requires media or caption');
+          }
         }
-      }
 
-      results = await metaProvider.publish({
-        message: caption,
-        videoUrl: isVideo ? mediaUrl : undefined,
-        photoUrl: isPhoto ? mediaUrl : undefined,
-        hashtags: item.hashtags ?? [],
+        results = await metaProvider.publish({
+          message: caption,
+          videoUrl: isVideo ? mediaUrl : undefined,
+          photoUrl: isPhoto ? mediaUrl : undefined,
+          hashtags: item.hashtags ?? [],
+          platform,
+        });
+      }
+    } catch (err: any) {
+      // The media guards above throw, and a provider can too.
+      const message = err?.message ?? String(err);
+      await rollbackToQa(message);
+      return {
+        success: false,
         platform,
-      });
+        error: true,
+        message,
+        contentItemId: input.contentItemId,
+      };
     }
 
     const first = results[0];
@@ -2269,14 +2298,7 @@ Platform: ${item.platform ?? 'N/A'}`;
         '[Ember] Content posted',
       );
     } else {
-      logger.error(
-        {
-          contentItemId: input.contentItemId,
-          platform,
-          error: first?.error,
-        },
-        '[Ember] publish_to_social failed',
-      );
+      await rollbackToQa(first?.error ?? 'provider returned no post id');
     }
 
     return {

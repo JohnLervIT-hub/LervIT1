@@ -89,6 +89,8 @@ import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
 import { riley } from "./agents/riley";
 import { nova } from "./agents/nova";
 import { ember } from "./agents/ember";
+import { metaProvider } from "./providers/meta";
+import { linkedInProvider } from "./providers/linkedin";
 import { reid } from "./agents/reid";
 import { documentAudits, documentIrregularities } from "@shared/schema";
 import { novaWebhookRouter } from "./nova-webhook-routes";
@@ -15645,6 +15647,101 @@ Respond with VALID JSON only:
     }
   });
 
+  // Publishes one social_posts row and records the outcome. Facebook goes
+  // through metaProvider; LinkedIn has its own provider (metaProvider returns
+  // 'Use linkedInProvider directly'). Instagram and TikTok are rejected up
+  // front: social_posts carries copy only, and IG Content Publishing has no
+  // text-only post — it needs an image or video container.
+  async function publishSocialPost(id: string, req: Request, res: Response) {
+    const [post] = await db
+      .select()
+      .from(socialPosts)
+      .where(eq(socialPosts.id, id))
+      .limit(1);
+
+    if (!post) return res.status(404).json({ error: 'Not found' });
+
+    if (post.status === 'published') {
+      return res.status(409).json({
+        error: 'already published',
+        detail: `Post is already live (${post.platformPostId ?? 'no id recorded'})`,
+      });
+    }
+
+    const platform = post.platform;
+
+    if (platform === 'instagram' || platform === 'tiktok') {
+      return res.status(400).json({
+        error: 'publish failed',
+        detail:
+          platform === 'instagram'
+            ? 'Instagram needs an image or video; social posts hold copy only. Use a campaign content item instead.'
+            : 'TikTok publishing is not implemented.',
+      });
+    }
+
+    if (platform !== 'facebook' && platform !== 'linkedin') {
+      return res.status(400).json({
+        error: 'publish failed',
+        detail: `Unsupported platform: ${platform ?? 'null'}`,
+      });
+    }
+
+    let platformPostId = '';
+    let failure: string | undefined;
+
+    try {
+      if (platform === 'linkedin') {
+        const result = await linkedInProvider.post({
+          text: post.content,
+          hashtags: post.hashtags ?? [],
+        });
+        platformPostId = result.postId;
+        failure = result.error;
+      } else {
+        // Page id and token come from META_PAGE_ID / META_PAGE_ACCESS_TOKEN
+        // inside the provider — per-Page credentials, not per-post, so there
+        // is nothing to pass in from the row.
+        const [result] = await metaProvider.publish({
+          message: post.content,
+          hashtags: post.hashtags ?? [],
+          platform,
+        });
+        platformPostId = result?.postId ?? '';
+        failure = result?.error ?? (result ? undefined : 'No result from provider');
+      }
+    } catch (err: any) {
+      failure = err?.message ?? String(err);
+    }
+
+    if (failure || !platformPostId) {
+      const detail = failure ?? 'Provider returned no post id';
+
+      await db
+        .update(socialPosts)
+        .set({ status: 'failed', failureReason: detail })
+        .where(eq(socialPosts.id, id));
+
+      logger.error({ socialPostId: id, platform, detail }, '[Admin] social publish failed');
+      return res.status(502).json({ error: 'publish failed', detail });
+    }
+
+    const [row] = await db
+      .update(socialPosts)
+      .set({
+        status: 'published',
+        platformPostId,
+        postedAt: new Date(),
+        failureReason: null,
+        approvedBy: String((req as any).user?.id ?? 'admin'),
+      })
+      .where(eq(socialPosts.id, id))
+      .returning();
+
+    logger.info({ socialPostId: id, platform, platformPostId }, '[Admin] social post published');
+    return res.json(row);
+  }
+
   app.get("/api/admin/ember/social-posts", async (req: Request, res: Response) => {
     try {
       if (!requireAdmin(req, res)) return;
@@ -15668,6 +15765,13 @@ Respond with VALID JSON only:
     try {
       if (!requireAdmin(req, res)) return;
       const id = req.params.id;
+      // { action: 'publish' } actually ships the post. Everything else here is
+      // a field edit — note that a bare `status` write does NOT publish, which
+      // is how rows used to read as live having never reached Meta.
+      if (req.body?.action === 'publish') {
+        return await publishSocialPost(id, req, res);
+      }
+
       const patch: Record<string, any> = {};
       if (typeof req.body?.status === 'string') patch.status = req.body.status;
       if (typeof req.body?.content === 'string') patch.content = req.body.content;

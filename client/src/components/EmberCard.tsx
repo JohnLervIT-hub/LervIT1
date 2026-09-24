@@ -50,6 +50,23 @@ interface EmberStats {
   videosReady: number;
 }
 
+interface SocialPost {
+  id: string;
+  platform: string;
+  content: string;
+  hashtags: string[] | null;
+  status: string | null;
+  platformPostId: string | null;
+  failureReason: string | null;
+  postedAt: string | null;
+  createdAt: string;
+}
+
+// social_posts holds copy only. Instagram needs an image or video container
+// and TikTok has no publisher, so only these two can actually ship from here.
+const PUBLISHABLE_PLATFORMS = new Set(["facebook", "linkedin"]);
+const PUBLISHABLE_STATUSES = new Set(["draft", "approved", "failed"]);
+
 type EmberAction =
   | "generate_blog_post"
   | "generate_gmb_post"
@@ -65,6 +82,55 @@ export function EmberCard() {
 
   const { data, isLoading } = useQuery<EmberStats>({
     queryKey: ["/api/admin/agent/ember/stats"],
+  });
+
+  const { data: socialData } = useQuery<{ posts: SocialPost[] }>({
+    queryKey: ["/api/admin/ember/social-posts"],
+  });
+
+  const publishSocial = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest(
+        "PATCH",
+        `/api/admin/ember/social-posts/${id}`,
+        { action: "publish" },
+      );
+      return res.json();
+    },
+    onSuccess: (row: SocialPost) => {
+      toast({
+        title: `Published to ${row.platform}`,
+        description: row.platformPostId
+          ? `Post id ${row.platformPostId}`
+          : "Live now.",
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/ember/social-posts"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/agent/ember/stats"],
+      });
+    },
+    onError: (err: any) => {
+      // apiRequest throws `<status>: <body>`; dig out the server's detail so
+      // the toast says why rather than showing a raw JSON blob.
+      const raw = err?.message ?? "Unknown error";
+      let detail = raw;
+      const body = raw.slice(raw.indexOf(":") + 1).trim();
+      try {
+        detail = JSON.parse(body)?.detail ?? raw;
+      } catch {
+        /* not JSON — show the raw message */
+      }
+      toast({
+        title: "Publish failed",
+        description: detail,
+        variant: "destructive",
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/ember/social-posts"],
+      });
+    },
   });
 
   const trigger = useMutation({
@@ -353,6 +419,69 @@ export function EmberCard() {
               />
             </div>
 
+            {!!socialData?.posts?.length && (
+              <div className="rounded-md border">
+                <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b">
+                  Social posts
+                </div>
+                <ul className="divide-y">
+                  {socialData.posts.slice(0, 8).map((post) => {
+                    const canPublish =
+                      PUBLISHABLE_PLATFORMS.has(post.platform) &&
+                      PUBLISHABLE_STATUSES.has(post.status ?? "draft");
+
+                    return (
+                      <li key={post.id} className="px-3 py-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-medium capitalize">
+                              {post.platform}
+                            </span>
+                            <span
+                              className={`text-xs ${socialStatusTone(post.status)}`}
+                            >
+                              {post.status ?? "draft"}
+                            </span>
+                          </div>
+                          {canPublish ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 shrink-0"
+                              onClick={() => publishSocial.mutate(post.id)}
+                              disabled={publishSocial.isPending}
+                              data-testid={`button-publish-social-${post.id}`}
+                            >
+                              {publishSocial.isPending ? (
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              ) : (
+                                <Send className="w-3 h-3 mr-1" />
+                              )}
+                              Publish
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {post.status === "published"
+                                ? "live"
+                                : "no publisher"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {post.content}
+                        </p>
+                        {!!post.failureReason && (
+                          <p className="text-xs text-red-600 line-clamp-2">
+                            {post.failureReason}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
             {data.recentEvents.length > 0 && (
               <div className="rounded-md border">
                 <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b">
@@ -382,6 +511,13 @@ export function EmberCard() {
       </CardContent>
     </Card>
   );
+}
+
+function socialStatusTone(status: string | null): string {
+  if (status === "published" || status === "posted") return "text-emerald-600";
+  if (status === "failed") return "text-red-600";
+  if (status === "approved") return "text-blue-600";
+  return "text-muted-foreground";
 }
 
 function eventTone(eventType: string): string {

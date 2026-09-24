@@ -2216,8 +2216,14 @@ export const socialPosts = pgTable("social_posts", {
   platform: text("platform").notNull(), // facebook | instagram | tiktok | linkedin
   content: text("content").notNull(),
   hashtags: text("hashtags").array(),
-  status: text("status").default("draft"), // draft | approved | posted
+  // draft | approved | published | failed
+  // ('posted' is the pre-publisher legacy value for rows marked live by hand.)
+  status: text("status").default("draft"),
   approvedBy: text("approved_by"),
+  // Graph API / LinkedIn id returned by a successful publish.
+  platformPostId: text("platform_post_id"),
+  // Provider error from the last failed publish; cleared on success.
+  failureReason: text("failure_reason"),
   postedAt: timestamp("posted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
