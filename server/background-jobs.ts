@@ -29,6 +29,11 @@ import { higgsfieldProvider, HiggsfieldApiError } from './providers/higgsfield';
 import { getAccountId, isGmbConfigured, listReviews, starRatingToNumber } from './lib/gmbClient';
 
 const NOTIFICATION_EXPIRY_MINUTES = 10;
+
+// Higgsfield poll budget. The loop ticks every 30s, so this is ~10 minutes of
+// wall clock for an item that gets a slot on every tick — less when more than
+// ten items are pending, since the batch is capped at ten.
+const HIGGSFIELD_MAX_POLL_ATTEMPTS = 20;
 const PENDING_PAYMENT_TIMEOUT_MINUTES = 120; // 2 hours for customers to complete payment
 const PAYMENT_REMINDER_MINUTES = 15; // Send reminder 15 mins before expiry
 
@@ -489,6 +494,29 @@ export function initBackgroundJobs() {
         .limit(10);
 
       for (const item of pending) {
+        const attempts = item.higgsfieldPollAttempts ?? 0;
+
+        if (attempts >= HIGGSFIELD_MAX_POLL_ATTEMPTS) {
+          await db
+            .update(contentItems)
+            .set({ status: 'failed', updatedAt: new Date() })
+            .where(eq(contentItems.id, item.id));
+
+          logger.error(
+            { itemId: item.id, jobId: item.providerJobId, attempts },
+            `[Jobs] Higgsfield exceeded max poll attempts (${HIGGSFIELD_MAX_POLL_ATTEMPTS})`,
+          );
+          continue;
+        }
+
+        // Spend the budget before the attempt so a poll that throws still
+        // counts. updatedAt is deliberately left alone — the batch is ordered
+        // by it, and bumping it here would reshuffle the queue every tick.
+        await db
+          .update(contentItems)
+          .set({ higgsfieldPollAttempts: attempts + 1 })
+          .where(eq(contentItems.id, item.id));
+
         try {
           const result = await higgsfieldProvider.getJobStatus(item.providerJobId!);
 

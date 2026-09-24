@@ -1713,3 +1713,7 @@ CREATE INDEX IF NOT EXISTS google_reviews_created_idx  ON google_reviews(google_
 ALTER TABLE "reviews"
   ADD COLUMN IF NOT EXISTS "response"    text,
   ADD COLUMN IF NOT EXISTS "response_at" timestamp;
+
+-- Higgsfield poller retry budget (migrations/0030_content_items_poll_attempts.sql).
+ALTER TABLE content_items
+  ADD COLUMN IF NOT EXISTS higgsfield_poll_attempts integer NOT NULL DEFAULT 0;

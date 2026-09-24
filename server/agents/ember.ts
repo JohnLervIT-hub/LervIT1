@@ -1981,7 +1981,15 @@ Type: ${item.type}`;
 
       await db
         .update(contentItems)
-        .set({ providerJobId: job.jobId, generator: 'higgsfield', updatedAt: new Date() })
+        .set({
+          providerJobId: job.jobId,
+          generator: 'higgsfield',
+          // New job id, fresh retry budget — otherwise a resubmit inherits the
+          // exhausted counter from the attempt that failed and the poller
+          // gives up on it immediately.
+          higgsfieldPollAttempts: 0,
+          updatedAt: new Date(),
+        })
         .where(eq(contentItems.id, input.contentItemId));
 
       await emitEvent(

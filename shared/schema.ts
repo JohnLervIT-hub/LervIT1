@@ -2296,6 +2296,9 @@ export const contentItems = pgTable("content_items", {
   aspectRatio: text("aspect_ratio"),
   generator: text("generator"), // heygen | higgsfield | ember | manual
   providerJobId: text("provider_job_id"),
+  // Retry budget for the 30s Higgsfield poller; see
+  // migrations/0030_content_items_poll_attempts.sql.
+  higgsfieldPollAttempts: integer("higgsfield_poll_attempts").notNull().default(0),
   videoUrl: text("video_url"),
   thumbnailUrl: text("thumbnail_url"),
   assetUrl: text("asset_url"),
