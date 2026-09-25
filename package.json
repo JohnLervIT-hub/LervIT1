@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:vite --external:@vitejs/*",
+    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:vite --external:@vitejs/* && npm run build:scripts",
+    "build:scripts": "esbuild scripts/schedule-followups.ts scripts/kick-stranded-leads.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/scripts --external:vite --external:@vitejs/*",
     "start": "node scripts/startup-migrate.js && NODE_ENV=production node dist/index.js",
     "worker": "tsx server/worker.ts",
     "check": "tsc",

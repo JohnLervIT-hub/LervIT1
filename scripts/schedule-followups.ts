@@ -15,13 +15,18 @@
  * pings first and aborts rather than hanging.
  *
  * REDIS_URL is redis.railway.internal, which only resolves inside Railway's
- * private network. Run it there:
+ * private network. Run it there -- but NOT with tsx: the runtime image is
+ * built with `npm ci --omit=dev` (no tsx) and never copies server/, so
+ * `npx tsx scripts/schedule-followups.ts` cannot resolve ../server/db there.
+ * `npm run build:scripts` esbuild-bundles this file into dist/scripts, which
+ * inlines server/ and shared/ and leaves only prod deps external:
  *
- *   railway ssh "npx tsx scripts/schedule-followups.ts"                  # dry-run
- *   railway ssh "npx tsx scripts/schedule-followups.ts --execute"
- *   railway ssh "npx tsx scripts/schedule-followups.ts --execute --leadIds a,b,c"
+ *   railway ssh "node dist/scripts/schedule-followups.js"                  # dry-run
+ *   railway ssh "node dist/scripts/schedule-followups.js --execute"
+ *   railway ssh "node dist/scripts/schedule-followups.js --execute --leadIds a,b,c"
  *
- * The dry-run reads only Postgres, so it also works under `railway run`.
+ * The dry-run reads only Postgres, so it also works from a laptop under
+ * `railway run tsx scripts/schedule-followups.ts`, where tsx and server/ exist.
  */
 import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import { db } from '../server/db';

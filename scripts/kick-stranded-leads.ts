@@ -25,6 +25,12 @@
  * REDIS_URL points at redis.railway.internal, which only resolves inside
  * Railway's private network, so the queue path needs `railway ssh` while the
  * direct path works under `railway run`.
+ *
+ * Inside the container the tsx invocations above do NOT work -- the runtime
+ * image has no tsx (`npm ci --omit=dev`) and no server/ directory. Use the
+ * esbuild bundle that `npm run build:scripts` emits into dist/scripts:
+ *
+ *   railway ssh "node dist/scripts/kick-stranded-leads.js --execute"
  */
 import { and, eq, isNotNull, notExists } from 'drizzle-orm';
 import { db } from '../server/db';
