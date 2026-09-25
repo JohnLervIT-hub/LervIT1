@@ -22,7 +22,7 @@ import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifica
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { hasSmsConsent } from '../lib/smsConsent';
-import { wasContactedToday } from './dedupe';
+import { wasContactedToday, wasEverSmsed } from './dedupe';
 
 const ALEX_EMAIL_MODEL = 'claude-sonnet-4-6';
 const ALEX_SMS_MODEL = 'claude-haiku-4-5-20251001';
@@ -77,7 +77,7 @@ function bookingLinkFor(baseUrl: string, lead: { quoteId: string | null }, quote
 
 // SMS_STOP_SUFFIX kept short (GSM-7) — CTIA A2P 10DLC requires an opt-out
 // affordance on cold/marketing SMS.
-const SMS_STOP_SUFFIX = ' Rply STOP to opt out';
+const SMS_STOP_SUFFIX = ' Reply STOP to opt out or HELP for info.';
 const SMS_PREFIX = 'Hi, Alex from LervIT here! ';
 
 // Compose an SMS from Claude-generated body + a deterministic booking link + opt-out
@@ -371,7 +371,10 @@ Write a conversion email. Include:
 
     // Cold-lead SMS suppression: only send SMS to leads that entered via a
     // channel with implied opt-in. Scout-scraped leads fall through to email.
-    const smsAllowed = touchNumber === 2 && lead.contactPhone && hasSmsConsent(lead);
+    // isFirstSms carries the published-contact exemption's one-message limit.
+    const isFirstSms = !(await wasEverSmsed({ entityId: leadId, entityType: 'lead' }));
+    const smsAllowed =
+      touchNumber === 2 && lead.contactPhone && hasSmsConsent(lead, { isFirstSms });
 
     if (touchNumber === 2 && lead.contactPhone && !smsAllowed) {
       logger.info({ leadId, sourceChannel: lead.sourceChannel }, 'Alex.sendTouch: SMS suppressed — no consent, falling through to email');
@@ -380,13 +383,13 @@ Write a conversion email. Include:
     if (smsAllowed) {
       channel = 'sms';
       const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
-      // Budget: 160 - prefix(28) - newline(1) - link(~30) - stop(~22) ≈ 79
+      // Budget: 160 - prefix(28) - newline(1) - link(~30) - stop(40) ≈ 60
       const claudeBody = await this.callClaude(
         `Write an SMS body only (no greeting, no URL, no opt-out language).
-Length: STRICTLY under 79 characters.
+Length: STRICTLY under 60 characters.
 ${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
 Mention promo code LERVIT10 for 10% off if it fits within the character budget.
-The greeting "Hi, Alex from LervIT here! ", a booking link, and "Rply STOP to opt out" are appended automatically — do NOT include them.
+The greeting "Hi, Alex from LervIT here! ", a booking link, and "Reply STOP to opt out or HELP for info." are appended automatically — do NOT include them.
 IMPORTANT: Never invent or guess neighborhood names, street names, or addresses. Only reference locations that appear below.
 Return only the body text.`,
         `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
@@ -437,16 +440,26 @@ ${lead.quoteId ? '(This link reopens their exact saved quote.)' : ''}`,
       return { skipped: true, reason: 'no reachable channel', touchNumber };
     }
 
-    const nextStatus = touchNumber >= 4 ? 'cold' : 'contacted';
-    await db
-      .update(leads)
-      .set({
-        status: nextStatus,
-        touchpoints: (lead.touchpoints ?? 0) + 1,
-        lastTouchedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(leads.id, leadId));
+    // A lead only counts as touched when the provider accepted the message.
+    // Advancing on a failed send burned the touch: status went to 'contacted',
+    // touchpoints incremented, and the lead was never written to again.
+    if (!delivered) {
+      logger.warn(
+        { leadId, channel, touchNumber, sourceChannel: lead.sourceChannel },
+        'Alex.sendTouch: send failed — leaving lead state unchanged',
+      );
+    } else {
+      const nextStatus = touchNumber >= 4 ? 'cold' : 'contacted';
+      await db
+        .update(leads)
+        .set({
+          status: nextStatus,
+          touchpoints: (lead.touchpoints ?? 0) + 1,
+          lastTouchedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, leadId));
+    }
 
     await emitEvent('lead.touched', 'lead', leadId, {
       touchNumber,
@@ -524,7 +537,8 @@ Complete link: ${(process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim()}/
 
     // Even for admin-initiated manual sends, the LEAD must have opted in via
     // a channel with implied consent. Operator click ≠ CTIA/CRTC consent.
-    if (!hasSmsConsent(lead)) {
+    const isFirstSms = !(await wasEverSmsed({ entityId: lead.id, entityType: 'lead' }));
+    if (!hasSmsConsent(lead, { isFirstSms })) {
       logger.info({ leadId: lead.id, sourceChannel: lead.sourceChannel }, 'Alex.sendManualSms: no lead consent — skipping SMS');
       return { skipped: true, reason: 'no_sms_consent' };
     }
@@ -538,10 +552,10 @@ Complete link: ${(process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim()}/
 
     const claudeBody = await this.callClaude(
       `Write an SMS body only (no greeting, no URL, no opt-out language).
-Length: STRICTLY under 79 characters.
+Length: STRICTLY under 60 characters.
 ${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
 Mention promo code LERVIT10 for 10% off if it fits within the character budget.
-The greeting "Hi, Alex from LervIT here! ", a booking link, and "Rply STOP to opt out" are appended automatically — do NOT include them.
+The greeting "Hi, Alex from LervIT here! ", a booking link, and "Reply STOP to opt out or HELP for info." are appended automatically — do NOT include them.
 IMPORTANT: Never invent or guess neighborhood names, street names, or addresses. Only reference locations that appear below.
 Return only the body text.`,
       `Follow up with: ${lead.notes ?? 'Calgary mover inquiry'}
@@ -566,15 +580,22 @@ Dropoff area: ${dropoffArea ?? 'not available'}`,
       type: 'booking_update',
     });
 
-    await db
-      .update(leads)
-      .set({
-        status: 'contacted',
-        touchpoints: (lead.touchpoints ?? 0) + 1,
-        lastTouchedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(leads.id, lead.id));
+    if (!delivered) {
+      logger.warn(
+        { leadId: lead.id, sourceChannel: lead.sourceChannel },
+        'Alex.sendManualSms: send failed — leaving lead state unchanged',
+      );
+    } else {
+      await db
+        .update(leads)
+        .set({
+          status: 'contacted',
+          touchpoints: (lead.touchpoints ?? 0) + 1,
+          lastTouchedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, lead.id));
+    }
 
     await emitEvent('lead.touched', 'lead', lead.id, {
       touchNumber: (lead.touchpoints ?? 0) + 1,

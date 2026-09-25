@@ -21,11 +21,28 @@ export const CONSENTED_SOURCES = [
   'personal',
 ];
 
-export function hasSmsConsent(lead: {
-  sourceChannel?: string | null;
-  utmSource?: string | null;
-  smsConsentAt?: Date | null;
-}): boolean {
+/**
+ * CASL s.6(6) publicly-available exemption — recipient conspicuously published
+ * their number for business contact on Kijiji. First message only; no repeat if
+ * no response.
+ *
+ * Deliberately a separate list from CONSENTED_SOURCES: "first message only" is
+ * a condition of the exemption, so it has to be enforced rather than described.
+ * hasSmsConsent() clears these sources only when the caller passes
+ * isFirstSms — i.e. has checked that no SMS has ever gone to this lead.
+ */
+export const PUBLISHED_CONTACT_SOURCES = [
+  'kijiji_services',
+];
+
+export function hasSmsConsent(
+  lead: {
+    sourceChannel?: string | null;
+    utmSource?: string | null;
+    smsConsentAt?: Date | null;
+  },
+  opts: { isFirstSms?: boolean } = {},
+): boolean {
   // A recorded consent timestamp is the strongest evidence we have and wins
   // outright — sourceChannel can be edited or re-classified after the fact,
   // the stamp cannot.
@@ -34,5 +51,8 @@ export function hasSmsConsent(lead: {
   // a CTIA-compliant SMS disclosure. A click on an ad is not consent to be
   // texted; the consent has to come from the form the click leads to, which
   // now stamps smsConsentAt above.
-  return CONSENTED_SOURCES.includes(lead.sourceChannel ?? '');
+  const source = lead.sourceChannel ?? '';
+  if (CONSENTED_SOURCES.includes(source)) return true;
+  // Published-contact exemption: one message, and only if this is it.
+  return opts.isFirstSms === true && PUBLISHED_CONTACT_SOURCES.includes(source);
 }

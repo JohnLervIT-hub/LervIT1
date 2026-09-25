@@ -13,7 +13,7 @@
 
 import crypto from 'crypto';
 import express, { type Request, type Response } from 'express';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import Anthropic from '@anthropic-ai/sdk';
 import Telnyx from 'telnyx';
 import {
@@ -38,6 +38,7 @@ import { decideNextDMResponse } from './lib/novaReasoning';
 import { resolveIdentity, linkIdentityFromContact, type ResolvedIdentity } from './lib/identityResolver';
 import { agentEventBus } from './lib/agentEventBus';
 import { JAILBREAK_PREAMBLE } from './lib/promptSanitizer';
+import { hasSmsConsent } from './lib/smsConsent';
 import type { NovaCallContext } from './lib/novaBridge';
 
 // Regexes used to auto-extract contact info from customer DMs so anonymous
@@ -48,6 +49,73 @@ const DM_PHONE_REGEX = /(\+?1?[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4
 const DM_EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
 
 const router = express.Router();
+
+/**
+ * SMS consent gate for Nova's outreach texts.
+ *
+ * Nova used to text any number handed to it by the voice agent, with no
+ * reference to the lead record — the only outbound path with no CASL check.
+ * Matching on the last 10 digits rather than the raw string on purpose: the
+ * leads table holds numbers in several formats, and a formatting miss here
+ * would read as "no consent" and silently drop a legitimate send.
+ */
+async function novaSmsAllowed(
+  phone: string,
+): Promise<{ allowed: boolean; reason: string; leadId?: string }> {
+  const digits = (phone ?? '').replace(/[^0-9]/g, '');
+  if (digits.length < 10) return { allowed: false, reason: 'unusable_phone' };
+  const last10 = digits.slice(-10);
+
+  const [lead] = await db
+    .select()
+    .from(leads)
+    .where(sql`right(regexp_replace(${leads.contactPhone}, '[^0-9]', '', 'g'), 10) = ${last10}`)
+    .orderBy(desc(leads.createdAt))
+    .limit(1);
+
+  if (!lead) return { allowed: false, reason: 'no_lead_for_phone' };
+  // Nova's own callers land as sourceChannel 'nova_voice', which is a
+  // consented source, so the normal voice flow passes.
+  if (!hasSmsConsent(lead)) {
+    return { allowed: false, reason: 'no_sms_consent', leadId: lead.id };
+  }
+  return { allowed: true, reason: 'consented', leadId: lead.id };
+}
+
+/**
+ * Transactional guard for the two sends that are about an existing booking
+ * (the payment link and the confirmation) rather than outreach. Those are not
+ * gated on lead consent — the recipient just made the booking on the phone with
+ * us — but they are gated on the number actually belonging to that booking's
+ * customer, so neither endpoint can be pointed at a stranger.
+ */
+async function phoneOwnsBooking(bookingId: string, phone: string): Promise<boolean> {
+  const last10 = (phone ?? '').replace(/[^0-9]/g, '').slice(-10);
+  if (last10.length < 10) return false;
+  const [row] = await db
+    .select({ phone: users.phone })
+    .from(bookings)
+    .innerJoin(users, eq(users.id, bookings.customerId))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!row?.phone) return false;
+  return row.phone.replace(/[^0-9]/g, '').slice(-10) === last10;
+}
+
+/** Log-and-skip wrapper so every gated call site reads the same. */
+async function novaSendSmsGated(
+  site: string,
+  phone: string,
+  message: string,
+  type: 'pilot_status' | 'booking_update',
+): Promise<boolean> {
+  const gate = await novaSmsAllowed(phone);
+  if (!gate.allowed) {
+    logger.warn({ site, reason: gate.reason, leadId: gate.leadId }, '[Nova SMS] suppressed — no consent');
+    return false;
+  }
+  return notificationService.sendSMS({ to: phone, message, type });
+}
 
 // ─── ElevenLabs param casing normalization ───────────────────
 //
@@ -437,6 +505,13 @@ router.post(
 // Captures WhatsApp OTPs and any other inbound SMS delivered to our Telnyx
 // number. Ack fast, log to business_events, never throw back to Telnyx.
 
+// CTIA keyword response. STOP is handled upstream by Telnyx (which is why
+// sendSMS maps error 40010 "recipient opted out"); HELP had no responder at
+// all, so a candidate asking who we are got silence.
+const HELP_REPLY =
+  'LervIT Moving Platform. For help call or email john@lervit.com. ' +
+  'Reply STOP to unsubscribe.';
+
 router.post(
   '/api/nova/sms/inbound',
   async (req: Request, res: Response) => {
@@ -450,6 +525,28 @@ router.post(
         { from, to, text, id, received_at },
         '[Nova SMS] Inbound SMS received',
       );
+
+      // Telnyx sends `from` as an object on inbound messages; the raw string
+      // shows up on some payload shapes, so accept either.
+      const fromNumber =
+        typeof from === 'string' ? from : (from?.phone_number ?? '');
+      const keyword = typeof text === 'string' ? text.trim().toUpperCase() : '';
+
+      if (keyword === 'HELP' && fromNumber) {
+        const delivered = await notificationService.sendSMS({
+          to: fromNumber,
+          message: HELP_REPLY,
+          type: 'help_reply',
+        });
+        logger.info({ to: fromNumber, delivered }, '[Nova SMS] HELP reply sent');
+        await emitEvent(
+          'sms.help_replied',
+          'sms',
+          id ?? 'unknown',
+          { from: fromNumber, delivered },
+          'system',
+        ).catch(() => {});
+      }
 
       await emitEvent(
         'nova.sms_received',
@@ -542,14 +639,14 @@ router.post(
           : `${APP_BASE_URL}/signup`;
 
       if (phone) {
-        await notificationService.sendSMS({
-          to: phone,
-          message:
-            `Hi ${name ?? 'there'}! Nova from LervIT. ` +
+        await novaSendSmsGated(
+          'collect_email',
+          phone,
+          `Hi ${name ?? 'there'}! Nova from LervIT. ` +
             `Sign up here: ${signupUrl} ` +
-            `Reply STOP to opt out`,
-          type: 'pilot_status',
-        });
+            `Reply STOP to opt out or HELP for info.`,
+          'pilot_status',
+        );
       }
 
       await sendResendEmail({
@@ -608,16 +705,16 @@ router.post(
         ? `${MARKETING_SITE_URL}/become-a-mover`
         : `${APP_BASE_URL}/request-move`;
 
-    await notificationService.sendSMS({
-      to: phone,
-      message:
-        `${name ? `Hi ${name}! ` : ''}` +
+    await novaSendSmsGated(
+      'send_link_post',
+      phone,
+      `${name ? `Hi ${name}! ` : ''}` +
         `Nova from LervIT. ` +
         `${type === 'mover' ? 'Start earning: ' : 'Get your quote: '}` +
         `${signupUrl} ` +
-        `Reply STOP to opt out`,
-      type: 'pilot_status',
-    });
+        `Reply STOP to opt out or HELP for info.`,
+      'pilot_status',
+    );
 
     if (leadId) {
       await emitEvent(
@@ -655,14 +752,15 @@ router.get('/api/nova/send-link', async (req: Request, res: Response) => {
     : `${APP_BASE_URL}/request-move`;
 
   try {
-    await notificationService.sendSMS({
-      to: phone,
-      message: isMover
-        ? `Ready to join LervIT? Apply here: ${link} Reply STOP to opt out`
+    await novaSendSmsGated(
+      'send_link_get',
+      phone,
+      isMover
+        ? `Ready to join LervIT? Apply here: ${link} Reply STOP to opt out or HELP for info.`
         : `Nova from LervIT. Book your Calgary move: ${link} ` +
-          `Use code LERVIT10 for 10% off. Reply STOP to opt out`,
-      type: 'pilot_status',
-    });
+          `Use code LERVIT10 for 10% off. Reply STOP to opt out or HELP for info.`,
+      'pilot_status',
+    );
 
     // Previously missing on the GET path, so voice-originated link sends
     // never showed up in business_events alongside the POST ones.
@@ -848,7 +946,11 @@ router.post(
       // Victor before the customer has paid.
       const paymentUrl = `${APP_BASE_URL}/pay/${bookingId}`;
 
-      if (customer.phone) {
+      // Transactional, not outreach: this is the payment link for the booking
+      // this caller just made, sent to the customer record the booking was
+      // created under. Consent-gating it on the leads table would strand the
+      // booking unpaid, so the check is ownership, not consent.
+      if (customer.phone && (await phoneOwnsBooking(bookingId, customer.phone))) {
         await notificationService.sendSMS({
           to: customer.phone,
           message:
@@ -856,6 +958,11 @@ router.post(
             `Your mover will be assigned once payment is confirmed.`,
           type: 'booking_update',
         });
+      } else if (customer.phone) {
+        logger.warn(
+          { bookingId },
+          '[Nova SMS] payment link suppressed — phone does not match booking customer',
+        );
       }
 
       await emitEvent(
@@ -919,6 +1026,17 @@ router.post(
 
       if (!booking.length) {
         return res.status(404).json({ error: 'Booking not found' });
+      }
+
+      // Transactional confirmation for an existing booking — gated on the
+      // number belonging to that booking's customer rather than on lead
+      // consent, since the phone here comes straight from the request body.
+      if (!(await phoneOwnsBooking(bookingId, phone))) {
+        logger.warn(
+          { bookingId },
+          '[Nova SMS] confirmation suppressed — phone does not match booking customer',
+        );
+        return res.status(403).json({ error: 'phone does not match booking customer' });
       }
 
       await notificationService.sendSMS({
@@ -996,14 +1114,14 @@ router.post(
         listUnsubscribeUrl: `${APP_BASE_URL}/preferences`,
       });
 
-      await notificationService.sendSMS({
-        to: phone,
-        message:
-          `Hi ${name}! Nova from LervIT. ` +
+      await novaSendSmsGated(
+        'create_account',
+        phone,
+        `Hi ${name}! Nova from LervIT. ` +
           `Complete your signup: ${signupUrl} ` +
-          `Reply STOP to opt out`,
-        type: 'pilot_status',
-      });
+          `Reply STOP to opt out or HELP for info.`,
+        'pilot_status',
+      );
 
       if (leadId) {
         await db
@@ -1103,15 +1221,14 @@ router.post(
 
     if (phone) {
       try {
-        await notificationService.sendSMS({
-          to: phone,
-          message:
-            `${name ? `Hi ${name}! ` : ''}` +
+        sent.sms = await novaSendSmsGated(
+          'send_signup',
+          phone,
+          `${name ? `Hi ${name}! ` : ''}` +
             `Nova from LervIT. Signup link: ${signupUrl} ` +
-            `Use LERVIT10 for 10% off. Reply STOP to opt out`,
-          type: 'pilot_status',
-        });
-        sent.sms = true;
+            `Use LERVIT10 for 10% off. Reply STOP to opt out or HELP for info.`,
+          'pilot_status',
+        );
       } catch (err) {
         logger.error({ err, phone }, '[Nova] send-signup SMS failed');
       }

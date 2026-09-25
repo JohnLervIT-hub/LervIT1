@@ -108,7 +108,11 @@ export interface SMSNotification {
     // already spent by the arriving-soon text ~10 minutes earlier, which would
     // drop this one silently. Bounded by a once-per-(booking, leg) dedup in
     // server/lib/arrivalGeofence.ts.
-    | 'arrival_notification';
+    | 'arrival_notification'
+    // Reply to an inbound HELP keyword. Outside RATE_LIMITED_TYPES because a
+    // keyword response is a carrier obligation, not outreach — it must never be
+    // dropped by the 1/hr budget. Bounded by the inbound message itself.
+    | 'help_reply';
 }
 
 // Helper function to extract first name from full name

@@ -22,7 +22,7 @@ import { emitEvent } from '../events';
 import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
-import { wasContactedToday } from './dedupe';
+import { wasContactedToday, wasEverSmsed } from './dedupe';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { hasSmsConsent } from '../lib/smsConsent';
 
@@ -41,8 +41,16 @@ const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 /** Appended to every Jordan SMS; budgeted out of the 160-char single segment. */
-const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
+const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out or HELP for info.';
 const SMS_SIGNUP_LABEL = '\n\nSign up here: ';
+// Prepended in code, never left to the model. CTIA/CASL both require the sender
+// to be identified in the message itself, and a prompt instruction is not a
+// guarantee — the model dropped the greeting often enough that Alex has always
+// prepended its own. Matches SMS_PREFIX in ./alex.
+const SMS_PREFIX = 'Hi, Jordan from LervIT here! ';
+// Greeting the model may still emit despite being told not to; stripped so the
+// message cannot introduce Jordan twice.
+const MODEL_GREETING = /^\s*(?:hi|hey|hello)[,!]?\s*(?:i'?m\s+)?jordan(?:\s+hayes)?(?:\s+from\s+lervit)?\s*(?:here)?[!,.:]*\s*/i;
 
 /**
  * The mover application page. It's a marketing-site route, not an app route, so
@@ -78,15 +86,31 @@ export function buildJordanSms(claudeBody: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     // Tidies the "Sign up here:" the model leaves behind once its URL is gone.
-    .replace(/[\s:;,.-]+$/, '');
+    .replace(/[\s:;,.-]+$/, '')
+    // Drop the greeting if the model emitted one — SMS_PREFIX supplies it.
+    .replace(MODEL_GREETING, '');
 
-  const bodyBudget = Math.max(0, 160 - urlLine.length - SMS_STOP_SUFFIX.length);
+  const bodyBudget = jordanBodyBudget();
   const body =
     cleanBody.length > bodyBudget
       ? cleanBody.slice(0, bodyBudget).replace(/\s+\S*$/, '').trimEnd()
       : cleanBody;
 
-  return `${body}${urlLine}${SMS_STOP_SUFFIX}`;
+  return `${SMS_PREFIX}${body}${urlLine}${SMS_STOP_SUFFIX}`;
+}
+
+/**
+ * Characters left for the model's body once the prefix, signup line and
+ * opt-out suffix are reserved. Interpolated into the prompts so the budget
+ * cannot drift away from the constants above.
+ */
+export function jordanBodyBudget(): number {
+  const reserved =
+    SMS_PREFIX.length +
+    SMS_SIGNUP_LABEL.length +
+    moverApplyLink().length +
+    SMS_STOP_SUFFIX.length;
+  return Math.max(0, 160 - reserved);
 }
 
 interface OnboardCandidateInput {
@@ -135,7 +159,8 @@ export class JordanAgent extends BaseAgent {
       if (!lead.contactPhone) {
         return { skipped: true, reason: 'no_phone_for_sms_override' };
       }
-      if (hasSmsConsent(lead) || !lead.contactEmail) {
+      const isFirstSms = !(await wasEverSmsed({ entityId: leadId, entityType: 'lead' }));
+      if (hasSmsConsent(lead, { isFirstSms }) || !lead.contactEmail) {
         return this.sendManualSms(lead, options);
       }
       smsBlockedNoConsent = true;
@@ -297,8 +322,11 @@ Application link: ${applyLink}`,
     let delivered = false;
 
     // CASL: touch 2 texts only leads whose source implies express consent.
-    // Everything else drops through to the email branch below.
-    const smsBlockedNoConsent = touchNumber === 2 && !!lead.contactPhone && !hasSmsConsent(lead);
+    // Everything else drops through to the email branch below. isFirstSms
+    // carries the published-contact exemption's one-message limit.
+    const isFirstSms = !(await wasEverSmsed({ entityId: lead.id, entityType: 'lead' }));
+    const smsBlockedNoConsent =
+      touchNumber === 2 && !!lead.contactPhone && !hasSmsConsent(lead, { isFirstSms });
     if (smsBlockedNoConsent) {
       logger.warn(
         { leadId: lead.id, source: lead.sourceChannel },
@@ -314,11 +342,9 @@ Application link: ${applyLink}`,
 You are Jordan from LervIT, Calgary's moving platform.
 Write a brief, friendly SMS follow-up to
 someone who might want to earn money moving.
-Start with: 'Hi, Jordan from LervIT here! '
-Then add personalized follow-up based on
-the candidate context.
-Do not include a link or an opt-out line — both are appended for you.
-Not pushy. Total under 80 characters.
+Write the body only — the greeting "Hi, Jordan from LervIT here! ", a signup
+link and an opt-out line are all appended for you. Do NOT include them.
+Not pushy. STRICTLY under ${jordanBodyBudget()} characters.
 Return only the SMS text, nothing else.`,
         `<data>
 Follow up for: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
@@ -386,16 +412,26 @@ Application link: ${applyLink}`,
       };
     }
 
-    const nextStatus = touchNumber >= 4 ? 'cold' : 'contacted';
-    await db
-      .update(leads)
-      .set({
-        status: nextStatus,
-        touchpoints: (lead.touchpoints ?? 0) + 1,
-        lastTouchedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(leads.id, leadId));
+    // Only a send the provider accepted counts as a touch. Advancing on a
+    // failure marked the candidate 'contacted' and consumed one of the four
+    // touches for a message that never arrived.
+    if (!delivered) {
+      logger.warn(
+        { leadId, channel, touchNumber, source: lead.sourceChannel },
+        '[Jordan] send failed — leaving lead state unchanged',
+      );
+    } else {
+      const nextStatus = touchNumber >= 4 ? 'cold' : 'contacted';
+      await db
+        .update(leads)
+        .set({
+          status: nextStatus,
+          touchpoints: (lead.touchpoints ?? 0) + 1,
+          lastTouchedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, leadId));
+    }
 
     await emitEvent('lead.mover_touched', 'lead', leadId, {
       touchNumber,
@@ -418,7 +454,8 @@ Application link: ${applyLink}`,
 
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
     if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
-    if (!hasSmsConsent(lead)) {
+    const isFirstSms = !(await wasEverSmsed({ entityId: lead.id, entityType: 'lead' }));
+    if (!hasSmsConsent(lead, { isFirstSms })) {
       logger.warn(
         { leadId: lead.id, source: lead.sourceChannel },
         '[Jordan] Skipping SMS — no CASL consent and no email to fall back to',
@@ -441,10 +478,10 @@ Application link: ${applyLink}`,
 
 You are Jordan from LervIT, Calgary's moving platform.
 Write a brief, friendly SMS to someone who might want to earn money moving.
-Start with: 'Hi, Jordan from LervIT here! '
+Write the body only — the greeting "Hi, Jordan from LervIT here! ", a signup
+link and an opt-out line are all appended for you. Do NOT include them.
 Personalize from the candidate context.
-Do not include a link or an opt-out line — both are appended for you.
-Not pushy. Total under 80 characters.
+Not pushy. STRICTLY under ${jordanBodyBudget()} characters.
 Return only the SMS text, nothing else.`,
       `<data>
 Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 'notes')}
@@ -468,17 +505,24 @@ Candidate context: ${sanitizeForPrompt(lead.notes ?? 'Calgary mover candidate', 
       type: 'job_alert',
     });
 
-    await db
-      .update(leads)
-      .set({
-        status: 'contacted',
-        touchpoints: (lead.touchpoints ?? 0) + 1,
-        lastTouchedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(leads.id, lead.id));
+    if (!delivered) {
+      logger.warn(
+        { leadId: lead.id, source: lead.sourceChannel },
+        '[Jordan] manual SMS failed — leaving lead state unchanged',
+      );
+    } else {
+      await db
+        .update(leads)
+        .set({
+          status: 'contacted',
+          touchpoints: (lead.touchpoints ?? 0) + 1,
+          lastTouchedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, lead.id));
 
-    await this.scheduleNovaColdCallFollowUp(lead);
+      await this.scheduleNovaColdCallFollowUp(lead);
+    }
 
     await emitEvent('lead.mover_touched', 'lead', lead.id, {
       touchNumber: (lead.touchpoints ?? 0) + 1,

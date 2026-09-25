@@ -13,7 +13,7 @@
 
 import { db } from '../db';
 import { businessEvents } from '@shared/schema';
-import { and, eq, gte, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 
 type EntityType = 'lead' | 'mover' | 'booking' | 'partner' | 'customer' | 'agent';
 
@@ -73,4 +73,31 @@ async function queryDedupe(opts: CheckOptions, since: Date): Promise<DedupeResul
     (Date.now() - row.createdAt.getTime()) / (1000 * 60 * 60 * 24),
   );
   return { contacted: true, lastEvent: row.eventType, daysAgo };
+}
+
+/**
+ * Has this entity ever been sent an SMS, by any agent, on any date?
+ *
+ * Every outreach send records its channel in the event payload, so a single
+ * `payload->>'channel' = 'sms'` lookup answers it without a per-agent event
+ * list. Used by the CASL published-contact exemption, which permits one
+ * message and no repeat — see PUBLISHED_CONTACT_SOURCES in ../lib/smsConsent.
+ */
+export async function wasEverSmsed(opts: {
+  entityId: string;
+  entityType?: EntityType;
+}): Promise<boolean> {
+  const conds = [
+    eq(businessEvents.entityId, opts.entityId),
+    sql`${businessEvents.payload}->>'channel' = 'sms'`,
+  ];
+  if (opts.entityType) {
+    conds.push(eq(businessEvents.entityType, opts.entityType));
+  }
+  const [row] = await db
+    .select({ id: businessEvents.id })
+    .from(businessEvents)
+    .where(and(...conds))
+    .limit(1);
+  return !!row;
 }
