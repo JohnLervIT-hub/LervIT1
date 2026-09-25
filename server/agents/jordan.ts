@@ -306,6 +306,15 @@ Candidate context: ${safeNotes || 'Calgary mover candidate'}
       });
     }
 
+    // Only a send the provider accepted counts as touch 1. Advancing on a
+    // failure marked the candidate 'contacted', consumed one of the four
+    // touches and scheduled three follow-ups for a message that never
+    // arrived. Matches the guards in sendTouch and sendManualSms.
+    if (!emailSent && !smsSentTouch1) {
+      logger.warn({ leadId }, 'Jordan.onboardCandidate: no channel delivered — not advancing lead state');
+      return { skipped: true, reason: 'no_reachable_channel' };
+    }
+
     await db
       .update(leads)
       .set({
