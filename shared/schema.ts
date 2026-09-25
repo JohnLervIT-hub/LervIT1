@@ -371,6 +371,11 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   // off the request body and writes it as a decimal string. Leaving it in the
   // schema would reject the number the client actually sends.
   aiDetectedVolumeCuft: true,
+  // Same: the client sends an array of { itemName, premiumKey } and the route
+  // reads it straight off req.body to sum keyed item premiums. The column is
+  // text, so validating the request against it rejected every booking that
+  // carried identified items.
+  detectedItems: true,
 }).extend({
   // Override preferredDate to accept ISO date strings from the frontend
   preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),
