@@ -209,6 +209,10 @@ export class RyanAgent extends BaseAgent {
           // address keep flowing to Jordan's email touches; those with neither
           // are unreachable and must never be routed again.
           or(eq(leads.smsOptedOut, false), isNotNull(leads.contactEmail)),
+          // Scraped listings frequently yield neither a phone nor an email
+          // (Kijiji hides both behind its messaging form). Those rows have no
+          // channel Jordan can open, so they must not consume a vetter slot.
+          or(isNotNull(leads.contactPhone), isNotNull(leads.contactEmail)),
         ),
       );
 
@@ -605,6 +609,7 @@ export class RyanAgent extends BaseAgent {
       let phone: string | null = null;
       let email: string | null = null;
       let description: string | null = null;
+      let listingName: string | null = null;
       if (item.url && listingPageFetches < opts.maxListingPages) {
         listingPageFetches++;
         const listingHtml = await fetchWithScrapingBee(item.url, {
@@ -616,15 +621,18 @@ export class RyanAgent extends BaseAgent {
           // own body text. Scanning the full HTML kept surfacing Kijiji's
           // Adevinta template email; if the poster didn't put their address
           // in the ad body, we'd rather return null than a false positive.
-          description = extractDescription(listingHtml);
+          const rawDescription = extractDescription(listingHtml);
+          description = rawDescription ? decodeHtmlEntities(rawDescription) : null;
           phone = extractPhone(listingHtml);
           email = description ? extractEmail(description) : null;
+          listingName = extractListingName(listingHtml);
           logger.info(
             {
               source: opts.source,
               url: item.url,
               hasPhone: !!phone,
               hasEmail: !!email,
+              listingName,
               descLen: description?.length ?? 0,
             },
             'Ryan: listing page contact scan',
@@ -665,7 +673,7 @@ export class RyanAgent extends BaseAgent {
         const [inserted] = await db
           .insert(leads)
           .values({
-            contactName: opts.contactName,
+            contactName: listingName ?? opts.contactName,
             contactEmail: email ?? undefined,
             contactPhone: contactPhone ?? undefined,
             sourceChannel: opts.source,
@@ -919,6 +927,85 @@ function titleFromUrlSlug(url: string): string | null {
   if (!slug) return null;
   const decoded = slug.replace(/[-_+]/g, ' ').replace(/\s+/g, ' ').trim();
   return decoded.length >= 5 ? decoded : null;
+}
+
+/**
+ * Decode the handful of HTML entities that survive `stripHtml`, and strip the
+ * invisible characters posters sprinkle between letters to defeat scrapers
+ * (U+034F COMBINING GRAPHEME JOINER is the one actually present in our Kijiji
+ * rows; the U+200B-U+200D / U+FEFF / U+00AD set covers the usual variants).
+ *
+ * `&amp;` is decoded LAST on purpose — doing it first would turn a
+ * double-escaped `&amp;quot;` into a live quote.
+ */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&#x0*27;/gi, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u034F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Names that are structurally valid but useless as a salutation — Kijiji's
+ * own chrome, and ad titles that leak through the microdata patterns below.
+ */
+const NAME_BLACKLIST = [
+  'kijiji',
+  'craigslist',
+  'sign in',
+  'my account',
+  'post ad',
+  'moving & storage',
+  'moving and storage',
+] as const;
+
+/**
+ * A poster name is a name, not an ad headline. Reject candidates that read
+ * like a listing title so Jordan never opens an SMS with
+ * "Hi 110 h two pro movers truck 20ft 26f calgary".
+ */
+function isPlausiblePosterName(candidate: string): boolean {
+  if (candidate.length < 2 || candidate.length > 60) return false;
+  const lower = candidate.toLowerCase();
+  if (NAME_BLACKLIST.some(b => lower.includes(b))) return false;
+  // Ad titles carry prices, rates and phone digits; real names rarely do.
+  if (/\d/.test(candidate)) return false;
+  if (/[$/]|\bhr\b|\bper\b/i.test(candidate)) return false;
+  // More than four words is a sentence, not a name.
+  if (candidate.split(/\s+/).length > 4) return false;
+  return true;
+}
+
+/**
+ * Pull the poster's display name off a listing page so leads stop landing as
+ * the literal placeholder ("Kijiji Poster").
+ *
+ * Pattern order matters: the poster-specific attributes come first because
+ * schema.org `itemprop="name"` on a Kijiji listing is the *ad title* far more
+ * often than the seller — it is kept only as a last resort, behind
+ * `isPlausiblePosterName`.
+ */
+export function extractListingName(html: string): string | null {
+  const patterns: RegExp[] = [
+    /data-testid="poster-name"[^>]*>([^<]{2,60})</i,
+    /"posterName"\s*:\s*"([^"]{2,60})"/i,
+    /class="[^"]*sellerName[^"]*"[^>]*>([^<]{2,60})</i,
+    /<span[^>]*itemprop="name"[^>]*>([^<]{2,60})<\/span>/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1]) continue;
+    const candidate = decodeHtmlEntities(match[1]);
+    if (isPlausiblePosterName(candidate)) return candidate;
+  }
+  return null;
 }
 
 /**
