@@ -16,8 +16,15 @@
  * default — same convention as cleanup-sam-wrong-leads.ts.
  *
  * Run:
- *   tsx scripts/kick-stranded-leads.ts             # dry-run (SELECT only)
- *   tsx scripts/kick-stranded-leads.ts --execute   # actually enqueue
+ *   tsx scripts/kick-stranded-leads.ts                      # dry-run (SELECT only)
+ *   tsx scripts/kick-stranded-leads.ts --execute            # enqueue on the vetter queue
+ *   tsx scripts/kick-stranded-leads.ts --execute --direct   # run Jordan in-process
+ *
+ * --direct skips BullMQ and calls jordan.run() here, the same way the
+ * agentEventBus fallback does when REDIS_URL is unset. Use it from a laptop:
+ * REDIS_URL points at redis.railway.internal, which only resolves inside
+ * Railway's private network, so the queue path needs `railway ssh` while the
+ * direct path works under `railway run`.
  */
 import { and, eq, isNotNull, notExists } from 'drizzle-orm';
 import { db } from '../server/db';
@@ -27,6 +34,7 @@ import { QUEUE_NAMES } from '../server/queue';
 
 async function main() {
   const execute = process.argv.includes('--execute');
+  const direct = process.argv.includes('--direct');
 
   const stranded = await db
     .select({
@@ -71,13 +79,43 @@ async function main() {
   }
 
   if (!execute) {
-    console.log('\nDry run — re-run with --execute to enqueue onboard_candidate jobs.');
+    console.log('\nDry run — re-run with --execute to kick these leads.');
+    console.log('Add --direct to run Jordan in-process instead of enqueueing.');
+    return;
+  }
+
+  if (direct) {
+    // Imported here, not at module scope: jordan.ts constructs an Anthropic
+    // client at load time, so a plain dry-run shouldn't need the API key.
+    const { jordan } = await import('../server/agents/jordan');
+
+    console.log('\nRunning Jordan in-process (--direct):\n');
+    let succeeded = 0;
+    for (const lead of stranded) {
+      const label = `${lead.id}  ${lead.contactName ?? '(no name)'}`;
+      try {
+        const out = await jordan.run('onboard_candidate', { leadId: lead.id }, { dryRun: false });
+        if (out?.skipped) {
+          console.log(`  SKIPPED  ${label} — ${out.reason}`);
+        } else {
+          succeeded++;
+          console.log(
+            `  SENT     ${label} — channel=${out?.channel} ` +
+              `smsSentTouch1=${out?.smsSentTouch1} emailSent=${out?.emailSent}`,
+          );
+        }
+      } catch (err) {
+        console.error(`  ERROR    ${label}:`, err instanceof Error ? err.message : err);
+      }
+    }
+    console.log(`\nDelivered ${succeeded}/${stranded.length}.`);
     return;
   }
 
   const queue = createAgentQueue(QUEUE_NAMES.VETTER);
   if (!queue) {
     console.error('\nVETTER queue unavailable (REDIS_URL unset) — nothing enqueued.');
+    console.error('Re-run with --direct to run Jordan in-process instead.');
     process.exitCode = 1;
     return;
   }
