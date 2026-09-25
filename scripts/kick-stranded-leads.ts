@@ -51,6 +51,12 @@ async function main() {
         eq(leads.sourceChannel, 'kijiji_services'),
         eq(leads.assignedAgent, 'jordan-hayes'),
         isNotNull(leads.contactPhone),
+        // Stranded means never touched. Without this a lead whose send
+        // succeeded but whose event write didn't land still matches the
+        // NOT EXISTS below, and re-running texts them a second time — which
+        // the s.6(6) exemption does not allow.
+        eq(leads.status, 'new'),
+        eq(leads.touchpoints, 0),
         notExists(
           db
             .select({ id: businessEvents.id })
@@ -85,6 +91,20 @@ async function main() {
   }
 
   if (direct) {
+    // onboardCandidate schedules touches 2-4 and Nova's cold call on BullMQ
+    // after a successful send. getRedisConnection sets maxRetriesPerRequest
+    // to null because BullMQ requires it, so queue.add against an unreachable
+    // host never rejects — it just waits, and the run hangs mid-lead with the
+    // SMS already sent and no event written. Drop REDIS_URL so both call
+    // sites take their documented "queue unavailable" branch instead.
+    if (process.env.REDIS_URL) {
+      delete process.env.REDIS_URL;
+      console.log(
+        '\n--direct: REDIS_URL unset for this process. Touches 2-4 and the Nova\n' +
+          'cold call will NOT be scheduled — run from inside Railway for those.',
+      );
+    }
+
     // Imported here, not at module scope: jordan.ts constructs an Anthropic
     // client at load time, so a plain dry-run shouldn't need the API key.
     const { jordan } = await import('../server/agents/jordan');
