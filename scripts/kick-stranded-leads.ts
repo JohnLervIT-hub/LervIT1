@@ -32,6 +32,17 @@
  *   tsx scripts/kick-stranded-leads.ts                      # dry-run (SELECT only)
  *   tsx scripts/kick-stranded-leads.ts --execute            # enqueue on the vetter queue
  *   tsx scripts/kick-stranded-leads.ts --execute --direct   # run Jordan in-process
+ *   tsx scripts/kick-stranded-leads.ts --execute --only=<id>,<id>
+ *
+ * --only restricts the send to an explicit allowlist of lead ids. The sweep
+ * still prints everything it found, so you can see what was held back. Needed
+ * because the three sam_places sole-operator queries do NOT only return sole
+ * operators: of the six rows in the first backfill, four were companies
+ * (an incorporated staffing firm, a courier, a franchise, a car rental) whose
+ * listed number is a switchboard, not the owner's mobile. Texting those is
+ * both a mis-targeted recruitment message and the 40021 rejection that keeps
+ * the fleet queries email-only. Narrowing SOLE_OPERATOR_CHANNELS in sam.ts is
+ * the real fix; until then, pick the leads by hand.
  *
  * --direct skips BullMQ and calls jordan.run() here, the same way the
  * agentEventBus fallback does when REDIS_URL is unset. Use it from a laptop:
@@ -85,6 +96,10 @@ function displayName(lead: { contactName: string | null; companyName: string | n
 async function main() {
   const execute = process.argv.includes('--execute');
   const direct = process.argv.includes('--direct');
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const only = onlyArg
+    ? onlyArg.slice('--only='.length).split(',').map((v) => v.trim()).filter(Boolean)
+    : null;
 
   const stranded = await db
     .select({
@@ -137,9 +152,34 @@ async function main() {
     );
   }
 
+  // --only narrows the send without narrowing the sweep: the listing above is
+  // the full stranded set, this is what actually gets contacted.
+  let targets = stranded;
+  if (only) {
+    const found = new Set(stranded.map((l) => l.id));
+    const unknown = only.filter((id) => !found.has(id));
+    if (unknown.length > 0) {
+      console.error(`\n--only names ${unknown.length} id(s) not in the stranded set:`);
+      for (const id of unknown) console.error(`  ${id}`);
+      console.error('Refusing to run on a partial allowlist — check the ids.');
+      process.exitCode = 1;
+      return;
+    }
+    targets = stranded.filter((l) => only.includes(l.id));
+    const heldBack = stranded.filter((l) => !only.includes(l.id));
+    console.log(`\n--only: contacting ${targets.length} of ${stranded.length}.`);
+    if (heldBack.length > 0) {
+      console.log('Held back:');
+      for (const lead of heldBack) {
+        console.log(`  ${lead.id}  ${displayName(lead)}  ${lead.contactPhone}`);
+      }
+    }
+  }
+
   if (!execute) {
     console.log('\nDry run — re-run with --execute to kick these leads.');
     console.log('Add --direct to run Jordan in-process instead of enqueueing.');
+    console.log('Add --only=<id>,<id> to restrict the send to specific leads.');
     return;
   }
 
@@ -164,7 +204,7 @@ async function main() {
 
     console.log('\nRunning Jordan in-process (--direct):\n');
     let succeeded = 0;
-    for (const lead of stranded) {
+    for (const lead of targets) {
       const label = `${lead.id}  ${displayName(lead)}`;
       try {
         const out = await jordan.run('onboard_candidate', { leadId: lead.id }, { dryRun: false });
@@ -181,7 +221,7 @@ async function main() {
         console.error(`  ERROR    ${label}:`, err instanceof Error ? err.message : err);
       }
     }
-    console.log(`\nDelivered ${succeeded}/${stranded.length}.`);
+    console.log(`\nDelivered ${succeeded}/${targets.length}.`);
     return;
   }
 
@@ -195,7 +235,7 @@ async function main() {
 
   console.log('');
   let kicked = 0;
-  for (const lead of stranded) {
+  for (const lead of targets) {
     try {
       await queue.add('onboard_candidate', { leadId: lead.id });
       kicked++;
@@ -205,7 +245,7 @@ async function main() {
     }
   }
 
-  console.log(`\nEnqueued ${kicked}/${stranded.length} onboard_candidate job(s).`);
+  console.log(`\nEnqueued ${kicked}/${targets.length} onboard_candidate job(s).`);
   await queue.close();
 }
 
