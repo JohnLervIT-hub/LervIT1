@@ -41,7 +41,7 @@ const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 /** Appended to every Jordan SMS; budgeted out of the 160-char single segment. */
-const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out or HELP for info.';
+const SMS_STOP_SUFFIX = '\n\nReply STOP to opt out.';
 const SMS_SIGNUP_LABEL = '\n\nSign up here: ';
 // Prepended in code, never left to the model. CTIA/CASL both require the sender
 // to be identified in the message itself, and a prompt instruction is not a
@@ -103,6 +103,11 @@ export function buildJordanSms(claudeBody: string): string {
  * Characters left for the model's body once the prefix, signup line and
  * opt-out suffix are reserved. Interpolated into the prompts so the budget
  * cannot drift away from the constants above.
+ *
+ * The suffix deliberately omits "or HELP for info": between the 29-char
+ * greeting and the signup URL it left 41 characters for the message itself,
+ * which truncated mid-sentence. HELP is answered by the inbound webhook
+ * whether or not the outbound text advertises it.
  */
 export function jordanBodyBudget(): number {
   const reserved =
