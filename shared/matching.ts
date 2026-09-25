@@ -297,9 +297,15 @@ export function calculateExpiryTime(timeoutMinutes: number = 10): Date {
  *
  * loadSize mapping:
  *   'boxes'     → 'car'     (small: SUV / small vehicle)
+ *   'small'     → 'car'     (legacy/off-enum alias for 'boxes')
  *   'medium'    → 'pickup'  (medium: pickup truck)
  *   'large'     → 'van'     (large: cargo van)
  *   'apartment' → 'truck'   (full: moving truck)
+ *
+ * Anything unrecognized (including null) falls back to 'pickup', not 'car':
+ * an unknown load must err toward a larger vehicle. Dispatching a car for a
+ * load that needed a pickup strands the job at the curb; the reverse is only
+ * a slightly over-sized vehicle.
  */
 export function resolveVehicleForBooking(
   aiRecommendedVehicle: string | null | undefined,
@@ -312,8 +318,9 @@ export function resolveVehicleForBooking(
     case 'apartment': return 'truck';
     case 'large':     return 'van';
     case 'medium':    return 'pickup';
-    case 'boxes':
-    default:          return 'car';
+    case 'boxes':     return 'car';
+    case 'small':     return 'car';
+    default:          return 'pickup';
   }
 }
 
