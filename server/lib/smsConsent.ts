@@ -3,8 +3,9 @@
  *
  * A lead may only be texted when it reached us through a channel that implies
  * express consent — i.e. a human handed us the number. Leads scraped from
- * public listings (Kijiji, Craigslist, RentFaster, Google Alerts, Google
- * Places) never qualify and are email-only.
+ * public listings (Craigslist, RentFaster, Google Alerts) never qualify and
+ * are email-only. The exception is PUBLISHED_CONTACT_SOURCES below, which
+ * carries a single message under CASL s.6(6).
  *
  * Single source of truth for Alex (CLOSER-D) and Jordan (VETTER). Do not
  * re-declare this list inside an agent — the two copies drift.
@@ -33,6 +34,15 @@ export const CONSENTED_SOURCES = [
  */
 export const PUBLISHED_CONTACT_SOURCES = [
   'kijiji_services',
+  // Google Places sole-operator queries. Same basis as Kijiji: a one-person
+  // operator who lists a number on a public business profile has published it
+  // for business contact. Deliberately only the three sole-operator channels —
+  // the fleet/company queries (logistics, delivery_co, small_moving, courier,
+  // truck_rental, furniture_delivery) stay email-only, since those numbers are
+  // switchboards and staffed lines, not the operator's own mobile.
+  'sam_places_delivery_driver',
+  'sam_places_cargo_van',
+  'sam_places_man_with_truck',
 ];
 
 export function hasSmsConsent(

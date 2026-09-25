@@ -312,6 +312,13 @@ Candidate context: ${safeNotes || 'Calgary mover candidate'}
     // arrived. Matches the guards in sendTouch and sendManualSms.
     if (!emailSent && !smsSentTouch1) {
       logger.warn({ leadId }, 'Jordan.onboardCandidate: no channel delivered — not advancing lead state');
+      // Hand the candidate back. Ryan stamps assignedAgent when it routes and
+      // its routable query needs it null, so leaving it set here is what
+      // stranded the pre-fix leads: claimed by Jordan, touched by nobody.
+      await db
+        .update(leads)
+        .set({ assignedAgent: null, updatedAt: new Date() })
+        .where(eq(leads.id, leadId));
       return { skipped: true, reason: 'no_reachable_channel' };
     }
 

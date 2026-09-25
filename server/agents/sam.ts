@@ -5,10 +5,16 @@
  * Actions:
  *   - `scan_b2b_prospects`         : daily Google Places sweep across five
  *                                    Calgary fleet queries. Creates up to 5
- *                                    new b2b leads per run.
- *   - `send_b2b_touch`             : one touch (T1..T4). Email-first with
- *                                    SMS fallback. T4 flips dealStage='lost'
- *                                    if still 'contacted'/'prospect'.
+ *                                    new b2b leads per run. Sole-operator
+ *                                    channels (SOLE_OPERATOR_CHANNELS) are
+ *                                    routed to Jordan's vetter queue instead
+ *                                    of the B2B cadence — they're supply.
+ *   - `send_b2b_touch`             : one touch (T1..T4). Email-only: Places
+ *                                    numbers for real companies are landlines
+ *                                    and Telnyx rejects them (40021), so a
+ *                                    lead with no contactEmail is skipped.
+ *                                    T4 flips dealStage='lost' if still
+ *                                    'contacted'/'prospect'.
  *   - `scan_stuck_partners`        : daily sweep of partners stuck at
  *                                    status='invited' for 7+ days.
  *   - `send_partner_followup`      : one touch (T1..T3). T3 emits
@@ -125,6 +131,19 @@ const PROSPECT_QUERIES: Array<{ query: string; industry: string; source: string 
   { query: 'cargo van for hire calgary',    industry: 'logistics',        source: 'sam_places_cargo_van' },
   { query: 'small moving service calgary',  industry: 'moving_company',   source: 'sam_places_small_moving' },
   { query: 'furniture delivery calgary',    industry: 'delivery_company', source: 'sam_places_furniture_delivery' },
+];
+
+/**
+ * Queries that surface one-person operators rather than companies. Their
+ * listed number is a personal mobile, so they are mover-supply candidates for
+ * Jordan, not B2B accounts for Sam's email cadence. Kept in sync with
+ * PUBLISHED_CONTACT_SOURCES in server/lib/smsConsent.ts, which grants these
+ * channels the CASL s.6(6) single-message exemption.
+ */
+const SOLE_OPERATOR_CHANNELS: string[] = [
+  'sam_places_delivery_driver',
+  'sam_places_cargo_van',
+  'sam_places_man_with_truck',
 ];
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -361,9 +380,31 @@ export class SamAgent extends BaseAgent {
 
       if (!inserted) continue;
 
-      // Enqueue T1 immediately.
+      // Sole operators are supply, not accounts: the "business number" on a
+      // one-person Places listing is the operator's own mobile, and Sam's
+      // cadence is email-only while these leads never carry an address. Send
+      // them to Jordan's mover recruitment instead of a touch that can only
+      // skip. Everything else keeps the B2B cadence.
       try {
-        if (queue) {
+        if (SOLE_OPERATOR_CHANNELS.includes(c.source)) {
+          const vetterQueue = createAgentQueue(QUEUE_NAMES.VETTER);
+          if (vetterQueue) {
+            await vetterQueue.add('onboard_candidate', { leadId: inserted.id });
+          } else {
+            // Same bus fallback Ryan uses when Redis is down —
+            // subscriptions.ts maps ryan.lead_found to onboard_candidate.
+            await agentEventBus.emit(
+              'ryan.lead_found',
+              {
+                leadId: inserted.id,
+                source: c.source,
+                phone,
+                email: null,
+              },
+              'sam',
+            );
+          }
+        } else if (queue) {
           await queue.add('send_b2b_touch', { leadId: inserted.id, touchNumber: 1 });
         } else {
           await agentEventBus.emit(
