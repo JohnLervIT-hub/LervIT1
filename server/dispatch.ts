@@ -97,8 +97,11 @@ interface DispatchableBooking {
   id: string;
   loadSize: string | null;
   aiRecommendedVehicle: string | null;
-  /** Optional: AI-detected raw volume in ft³. When absent, loadSize is used. */
-  aiDetectedVolumeCuft?: number | null;
+  /**
+   * Optional: AI-detected raw volume in ft³. When absent, loadSize is used.
+   * Reads back from the numeric column as a string, so both forms are accepted.
+   */
+  aiDetectedVolumeCuft?: string | number | null;
   pickupLatitude: string | number | null;
   pickupLongitude: string | number | null;
   dropoffLatitude: string | number | null;
@@ -421,8 +424,11 @@ export async function dispatchJobToMovers(
   // Resolve raw volume for the class-based capacity filter. Prefer AI-detected
   // volume; fall back to the load-size estimate so class filtering still works
   // for legacy bookings that never went through the vision pipeline.
-  const rawVolumeCuft: number = (typeof booking.aiDetectedVolumeCuft === 'number' && booking.aiDetectedVolumeCuft > 0)
-    ? booking.aiDetectedVolumeCuft
+  const detectedVolumeCuft = booking.aiDetectedVolumeCuft != null
+    ? parseFloat(String(booking.aiDetectedVolumeCuft))
+    : NaN;
+  const rawVolumeCuft: number = Number.isFinite(detectedVolumeCuft) && detectedVolumeCuft > 0
+    ? detectedVolumeCuft
     : (booking.loadSize ? PRICING_CONFIG.loadSizeVolumes[booking.loadSize] ?? 40 : 40);
   const requiredClass = getVehicleClassFromVolume(rawVolumeCuft);
   const requiredRank = getVehicleClassRank(requiredClass);

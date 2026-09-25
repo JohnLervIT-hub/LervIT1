@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer, boolean, doublePrecision, unique, index, date, time, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, numeric, integer, boolean, doublePrecision, unique, index, date, time, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -191,6 +191,10 @@ export const bookings = pgTable("bookings", {
   aiWeightClass: text("ai_weight_class"),
   aiRecommendedVehicle: text("ai_recommended_vehicle"),
   aiConfidenceScore: decimal("ai_confidence_score", { precision: 3, scale: 2 }),
+  // Raw volume the vision pipeline measured for the whole load, in ft³. Dispatch
+  // prefers this over the loadSize bucket when filtering movers by vehicle class.
+  // Like every numeric column here it reads back as a string — parse at the call site.
+  aiDetectedVolumeCuft: numeric("ai_detected_volume_cuft"),
   detectedItems: text("detected_items"),
   
   paymentStatus: text("payment_status").default("pending"),
@@ -363,6 +367,10 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   dropoffDifficultyFee: true,
   heavyItemFee: true,
   subtotal: true,
+  // Server-derived like the fee columns: POST /api/bookings takes the raw number
+  // off the request body and writes it as a decimal string. Leaving it in the
+  // schema would reject the number the client actually sends.
+  aiDetectedVolumeCuft: true,
 }).extend({
   // Override preferredDate to accept ISO date strings from the frontend
   preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),

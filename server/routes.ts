@@ -4553,6 +4553,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
         ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
+        // Persist the measured volume, not just the loadSize bucket it was
+        // rounded into: dispatch reads it back to pick the vehicle class.
+        ...(aiDetectedVolumeCuft !== undefined && { aiDetectedVolumeCuft: toDecimalString(aiDetectedVolumeCuft) }),
         // Provenance for the coordinates written just below. Without it a
         // mock-geocoded booking looks identical to a real one, and anything
         // measuring against these points (the arrival geofence, the ETA) quietly

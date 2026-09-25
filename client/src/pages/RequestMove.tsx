@@ -369,6 +369,10 @@ export default function RequestMove() {
   const identifiedItemsRef = useRef<IdentifiedItem[]>([]);
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
+  // Vehicle class the AI derived for the whole load ('car' | 'pickup' | 'van' | 'truck').
+  // Sent with the booking as aiRecommendedVehicle so dispatch filters on the vision
+  // result instead of re-deriving a vehicle from loadSize alone.
+  const [aiRecommendedVehicle, setAiRecommendedVehicle] = useState<string | undefined>(undefined);
 
   const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
     try {
@@ -1546,6 +1550,7 @@ export default function RequestMove() {
         // calculatePrice now takes the max of volume-based and loadSize-based vehicle class,
         // so the correct van/truck class is used even when weight bumps the tier.
         setAiDetectedVolume(totalVolume);
+        setAiRecommendedVehicle(recommendedVehicle);
 
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
@@ -1592,6 +1597,7 @@ export default function RequestMove() {
     if (completedItems.length === 0) {
       // Nothing left — reset to manual defaults
       setAiDetectedVolume(undefined);
+      setAiRecommendedVehicle(undefined);
       setLoadSize('medium');
       setNumberOfMovers(1);
       setHeavyItem(false);
@@ -1603,6 +1609,7 @@ export default function RequestMove() {
     );
 
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
     let tierIndex = 0;
     if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
     else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
@@ -1642,6 +1649,7 @@ export default function RequestMove() {
     if (maxDbTier2 > tierIndex) tierIndex = maxDbTier2;
 
     setAiDetectedVolume(totalVolume);
+    setAiRecommendedVehicle(vehicleTiers[tierIndex]);
 
     setLoadSize(loadSizeTiers[tierIndex]);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
@@ -1683,6 +1691,7 @@ export default function RequestMove() {
     // CAR_MAX: 20 ft³, PICKUP_MAX: 165 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
     const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
     const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
     let tierIndex = 0;
     if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
     else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
@@ -1729,6 +1738,7 @@ export default function RequestMove() {
 
     // Use actual volume for display consistency; calculatePrice handles class via loadSize floor.
     setAiDetectedVolume(totalVolume);
+    setAiRecommendedVehicle(vehicleTiers[tierIndex]);
     
     // Apply recommendations
     setLoadSize(recommendedLoadSize);
@@ -1924,6 +1934,7 @@ export default function RequestMove() {
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
         aiDetectedVolumeCuft: aiDetectedVolume || undefined,
+        aiRecommendedVehicle: aiRecommendedVehicle || undefined,
         heavyItemCount: countHeavyItems(identifiedItems),
         // Preferred: keyed premiums from Vision Engine 2.0 (server sums via
         // PRICING_CONFIG.itemPremiums). Legacy heavyItemFeeOverride is only
