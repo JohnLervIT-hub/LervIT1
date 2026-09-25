@@ -40,7 +40,7 @@ async function main() {
     })
     .from(leads)
     .where(
-      sql`${leads.sourceChannel} = ANY(${CHANNELS}) AND ${leads.status} != 'cold'`,
+      sql`${leads.sourceChannel} = ANY(ARRAY[${sql.join(CHANNELS.map(c => sql`${c}`), sql`, `)}]) AND ${leads.status} != 'cold'`,
     );
 
   if (targets.length === 0) {
