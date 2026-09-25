@@ -32,7 +32,7 @@ const JORDAN_EMAIL = process.env.JORDAN_EMAIL?.trim() || 'jordan.hayes@lervit.co
 const JORDAN_FROM = `Jordan Hayes | LervIT <${JORDAN_EMAIL}>`;
 const JORDAN_REPLY_TO = 'support@lervit.com';
 
-const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
+export const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
   2: 24 * 60 * 60 * 1000,
   3: 48 * 60 * 60 * 1000,
   4: 72 * 60 * 60 * 1000,
