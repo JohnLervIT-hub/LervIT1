@@ -36,12 +36,9 @@ export const PUBLISHED_CONTACT_SOURCES = [
   'kijiji_services',
   // Google Places sole-operator queries. Same basis as Kijiji: a one-person
   // operator who lists a number on a public business profile has published it
-  // for business contact. Deliberately only the three sole-operator channels —
-  // the fleet/company queries (logistics, delivery_co, small_moving, courier,
-  // truck_rental, furniture_delivery) stay email-only, since those numbers are
-  // switchboards and staffed lines, not the operator's own mobile.
-  'sam_places_delivery_driver',
-  'sam_places_cargo_van',
+  // for business contact. Only man_with_truck — delivery_driver and cargo_van
+  // removed 2026-09-25 after Telnyx 40021 confirmed their numbers are business
+  // landlines, not personal mobiles. Fleet/company channels stay email-only.
   'sam_places_man_with_truck',
 ];
 

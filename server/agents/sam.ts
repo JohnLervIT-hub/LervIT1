@@ -141,8 +141,8 @@ const PROSPECT_QUERIES: Array<{ query: string; industry: string; source: string 
  * channels the CASL s.6(6) single-message exemption.
  */
 const SOLE_OPERATOR_CHANNELS: string[] = [
-  'sam_places_delivery_driver',
-  'sam_places_cargo_van',
+  // delivery_driver and cargo_van removed 2026-09-25: Places phones for courier/van
+  // services are business landlines. Telnyx 40021 confirmed on all attempted sends.
   'sam_places_man_with_truck',
 ];
 
