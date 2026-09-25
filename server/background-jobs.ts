@@ -10,9 +10,7 @@ import { moverWebSocket } from './websocket';
 import { dispatchBooking, dispatchJobToMovers, releaseMoversForBookings } from './dispatch';
 import { emitEvent } from './events';
 import { xavier } from './agents/xavier';
-import { scout } from './agents/scout';
 import { alex } from './agents/alex';
-import { ryan } from './agents/ryan';
 import { victor } from './agents/victor';
 import { mark } from './agents/mark';
 import { kai } from './agents/kai';
@@ -162,34 +160,6 @@ export function initBackgroundJobs() {
         logger.info({ event: 'xavier_daily_brief' }, 'Xavier Cole daily brief sent');
       } catch (err) {
         logger.error({ err, event: 'xavier_daily_brief' }, 'Xavier daily brief failed');
-      }
-    });
-  }, TZ);
-
-  // Daily 07:00 Calgary — Scout Reid (HUNTER-D) crawls demand signals and
-  // routes high-intent leads to Alex on the closer-d queue.
-  cron.schedule('0 7 * * *', async () => {
-    await withJobLock('scout_daily_crawl', async () => {
-      try {
-        const results = await scout.run('process_signals', {});
-        logger.info({ event: 'scout_daily_crawl', results }, 'Scout Reid daily crawl complete');
-      } catch (err) {
-        logger.error({ err, event: 'scout_daily_crawl' }, 'Scout daily crawl failed');
-      }
-    });
-  }, TZ);
-
-  // Daily 07:00 Calgary — Ryan Brooks (HUNTER-S) crawls supply signals and
-  // routes high-intent mover candidates to Jordan on the vetter queue.
-  // Runs in parallel with Scout — separate lock so a slow Scout run doesn't
-  // starve Ryan (both are I/O-bound crawls, not CPU-heavy).
-  cron.schedule('0 7 * * *', async () => {
-    await withJobLock('ryan_daily_crawl', async () => {
-      try {
-        const results = await ryan.run('process_signals', {});
-        logger.info({ event: 'ryan_daily_crawl', results }, 'Ryan Brooks daily crawl complete');
-      } catch (err) {
-        logger.error({ err, event: 'ryan_daily_crawl' }, 'Ryan daily crawl failed');
       }
     });
   }, TZ);
