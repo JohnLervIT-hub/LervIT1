@@ -12,6 +12,7 @@
 
 import { Worker, type Job } from 'bullmq';
 import { getRedisConnection, QUEUE_NAMES } from '../queue';
+import { createAgentQueue } from './queue';
 import { logger } from '../logger';
 import { alex } from './alex';
 import { scout } from './scout';
@@ -64,6 +65,74 @@ export function startAgentWorkers(): void {
   logger.info(
     'Agent workers started: Alex Morgan (closer-d), Scout Reid (hunter-d), Ryan Brooks (hunter-s), Jordan Hayes (vetter), Victor Nash (dispatch), Mark Shaw (pulse), Riley Morgan (onboard), Kai Bennett (retain), Sam Carter (sales), Aegis Ford (compliance), Nova Clarke (voice), Ember Lane (magnet), Reid Calloway (docops)',
   );
+
+  scheduleHunterSweeps();
+}
+
+/**
+ * Self-scheduling hunter sweeps.
+ *
+ * Scout and Ryan also run `process_signals` once a day at 07:00 Calgary from
+ * `initBackgroundJobs` (in-process, node-cron). These queue-backed sweeps add
+ * the intra-day cadence and a startup run, so signals already sitting in the
+ * DB get processed on deploy instead of waiting for the next 07:00.
+ */
+const HUNTER_SWEEPS = [
+  {
+    label: 'Scout Reid',
+    queueName: QUEUE_NAMES.HUNTER_D,
+    jobId: 'scout-scheduled-sweep',
+    everyMs: 6 * 60 * 60 * 1000,
+  },
+  {
+    label: 'Ryan Brooks',
+    queueName: QUEUE_NAMES.HUNTER_S,
+    jobId: 'ryan-scheduled-sweep',
+    everyMs: 4 * 60 * 60 * 1000,
+  },
+] as const;
+
+// Long enough for the workers above to attach before the first job lands.
+const SWEEP_STARTUP_DELAY_MS = 30_000;
+
+type HunterSweep = (typeof HUNTER_SWEEPS)[number];
+
+function scheduleHunterSweeps(): void {
+  for (const sweep of HUNTER_SWEEPS) {
+    setTimeout(() => void enqueueHunterSweep(sweep), SWEEP_STARTUP_DELAY_MS);
+    setInterval(() => void enqueueHunterSweep(sweep), sweep.everyMs);
+    logger.info(
+      { queue: sweep.queueName, everyMs: sweep.everyMs },
+      `${sweep.label} scheduled sweep armed`,
+    );
+  }
+}
+
+async function enqueueHunterSweep(sweep: HunterSweep): Promise<void> {
+  try {
+    const queue = createAgentQueue(sweep.queueName);
+    if (!queue) return; // No Redis — nothing to enqueue onto.
+
+    // Fixed jobId is the dedup key: BullMQ silently ignores add() while a job
+    // with that ID still exists, so a redeploy can't stack sweeps. That cuts
+    // both ways — a job left behind in the failed set would make every later
+    // add() a permanent no-op, so this clears on failure as well as success
+    // (the queue default keeps the last 500 failures for the audit trail).
+    const job = await queue.add(
+      'process_signals',
+      {},
+      { jobId: sweep.jobId, removeOnComplete: true, removeOnFail: true },
+    );
+    logger.info(
+      { queue: sweep.queueName, jobId: job.id },
+      `${sweep.label} scheduled sweep enqueued`,
+    );
+  } catch (err) {
+    logger.error(
+      { queue: sweep.queueName, err },
+      `${sweep.label} scheduled sweep enqueue failed`,
+    );
+  }
 }
 
 function spawnWorker(queueName: string, agent: BaseAgent, concurrency: number): Worker {
