@@ -771,6 +771,12 @@ export default function RequestMove() {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
     },
     onError: (error: Error) => {
+      // A failed submit was previously invisible: booking_submitted only fires
+      // from onSuccess, so a server-side rejection looked identical to a user
+      // who never pressed the button.
+      trackEvent("booking_submit_failed", {
+        error: error?.message ?? String(error),
+      });
       toast({
         title: "Booking Failed",
         description: error.message || "We couldn't process your booking. Please check your details and try again.",
