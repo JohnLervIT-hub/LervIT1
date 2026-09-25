@@ -1,4 +1,9 @@
-const CACHE_VERSION = 'v4';
+// Registered as /sw.js?v=<build hash> (stamped into index.html by the
+// stamp-build-hash plugin in vite.config.ts), so the cache names below change
+// on every deploy and the activate handler drops the previous build's caches.
+// Without that, a months-old index.html stayed in STATIC_CACHE and kept asking
+// for hashed chunks the current image no longer ships.
+const CACHE_VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const STATIC_CACHE = `lervit-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `lervit-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `lervit-api-${CACHE_VERSION}`;
@@ -24,7 +29,7 @@ const CACHEABLE_API_ROUTES = [
 const OFFLINE_FALLBACK_PAGE = '/';
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v3...');
+  console.log('[SW] Installing service worker', CACHE_VERSION);
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => {
@@ -36,7 +41,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v3...');
+  console.log('[SW] Activating service worker', CACHE_VERSION);
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(

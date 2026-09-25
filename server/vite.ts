@@ -38,6 +38,11 @@ function isImmutableAsset(filePath: string): boolean {
   return rel.includes("/assets/") && HASHED_ASSET.test(rel);
 }
 
+// Extensions that only ever name a real build artifact or static file. Used to
+// decide which misses 404 instead of falling through to the SPA shell.
+const ASSET_LIKE_PATH =
+  /\.(js|mjs|cjs|css|map|json|wasm|woff2?|ttf|eot|otf|png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|mp3|wav|pdf|txt|xml|csv)$/i;
+
 export function serveStatic(app: Express) {
   const distPath = path.resolve(moduleDir, "public");
 
@@ -65,7 +70,19 @@ export function serveStatic(app: Express) {
   // Fall through to index.html if the file doesn't exist. This is the path an
   // SPA navigation actually takes, so it needs the same no-cache treatment —
   // setHeaders above only fires for files express.static itself matched.
-  app.use("*", (_req, res) => {
+  //
+  // A request that looks like a build artifact is the exception: it must 404.
+  // Each image ships only the current dist, so a client holding an older
+  // index.html asks for hashed chunks that no longer exist. Answering those
+  // with index.html hands the browser HTML under a .js URL, which fails as
+  // "'text/html' is not a valid JavaScript MIME type" and takes the whole page
+  // down. A 404 is just a rejected dynamic import, which React can catch.
+  app.use("*", (req, res) => {
+    const pathname = req.originalUrl.split("?")[0];
+    if (pathname.startsWith("/assets/") || ASSET_LIKE_PATH.test(pathname)) {
+      res.status(404).type("text/plain").send("Not Found");
+      return;
+    }
     res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
