@@ -201,8 +201,27 @@ export class JordanAgent extends BaseAgent {
     const applyLink = moverApplyLink();
 
     const safeNotes = sanitizeForPrompt(lead.notes ?? '', 'notes');
-    const raw = await this.callClaude(
-      `${JAILBREAK_PREAMBLE}
+
+    // Phone-only lead (e.g. kijiji_services) — touch 1 falls back to SMS.
+    // Resolved before the email draft so a lead with no address to write to
+    // doesn't pay for a 600-token email nothing can send.
+    const smsFallback = !lead.contactEmail && !!lead.contactPhone;
+    if (smsFallback) {
+      const isFirstSms = !(await wasEverSmsed({ entityId: leadId, entityType: 'lead' }));
+      if (!hasSmsConsent(lead, { isFirstSms })) {
+        logger.warn(
+          { leadId, source: lead.sourceChannel },
+          '[Jordan] touch 1 SMS blocked — no CASL consent and no email to fall back to',
+        );
+        return { skipped: true, reason: 'no_sms_consent_no_email' };
+      }
+    }
+
+    let subject = '';
+    let body = '';
+    if (!smsFallback) {
+      const raw = await this.callClaude(
+        `${JAILBREAK_PREAMBLE}
 
 You are Jordan Hayes, a mover recruitment specialist at LervIT, Calgary's
 AI-powered moving platform. Write a friendly recruitment email to someone who
@@ -230,7 +249,7 @@ Examples:
 'Join LervIT — flexible moving work'
 
 Format: first line MUST be "SUBJECT: <subject line>", then a blank line, then the body.`,
-      `Candidate signal:
+        `Candidate signal:
 Source: ${lead.sourceChannel ?? 'unknown'}
 <data>
 Notes: ${safeNotes}
@@ -239,27 +258,52 @@ Intent score: ${lead.intentScore}
 
 Write recruitment email with CTA "Apply to become a LervIT mover".
 Application link: ${applyLink}`,
-      JORDAN_EMAIL_MODEL,
-      600,
-    );
-
-    const { subject, body } = parseSubjectAndBody(
-      raw,
-      'Moving driver opportunities in Calgary',
-    );
+        JORDAN_EMAIL_MODEL,
+        600,
+      );
+      ({ subject, body } = parseSubjectAndBody(raw, 'Moving driver opportunities in Calgary'));
+    }
 
     if (options.dryRun) {
       return {
         dryRun: true,
         wouldContact: [leadId],
-        preview: { to: lead.contactEmail ?? null, subject, body },
+        preview: smsFallback
+          ? { to: lead.contactPhone, channel: 'sms' as const }
+          : { to: lead.contactEmail ?? null, channel: 'email' as const, subject, body },
         ...(smsBlockedNoConsent ? { fallback: 'email' as const } : {}),
       };
     }
 
     let emailSent = false;
+    let smsSentTouch1 = false;
+
     if (lead.contactEmail) {
       emailSent = await sendJordanEmail(lead.contactEmail, subject, body);
+    } else if (smsFallback && lead.contactPhone) {
+      // Body only: buildJordanSms prepends the greeting and appends the signup
+      // link and opt-out line, and strips any URL the model inlines anyway.
+      const rawSms = await this.callClaude(
+        `${JAILBREAK_PREAMBLE}
+
+You are Jordan from LervIT, Calgary's moving platform.
+Write a brief, friendly first SMS to someone who might want to earn money moving.
+Write the body only — the greeting "Hi, Jordan from LervIT here! ", a signup
+link and an opt-out line are all appended for you. Do NOT include them.
+Not pushy. STRICTLY under ${jordanBodyBudget()} characters.
+Return only the SMS text, nothing else.`,
+        `<data>
+Source: ${lead.sourceChannel ?? 'unknown'}
+Candidate context: ${safeNotes || 'Calgary mover candidate'}
+</data>`,
+        JORDAN_SMS_MODEL,
+        120,
+      );
+      smsSentTouch1 = await notificationService.sendSMS({
+        to: lead.contactPhone,
+        message: buildJordanSms(rawSms),
+        type: 'job_alert',
+      });
     }
 
     await db
@@ -292,10 +336,15 @@ Application link: ${applyLink}`,
 
     await this.scheduleNovaColdCallFollowUp(lead);
 
+    // The channel we attempted, not the one that landed: a failed SMS logged as
+    // 'email' would misattribute the touch in every downstream count.
+    const channel: 'email' | 'sms' = smsFallback ? 'sms' : 'email';
+
     await emitEvent('lead.mover_contacted', 'lead', leadId, {
       touchNumber: 1,
-      channel: 'email',
+      channel,
       emailSent,
+      smsSentTouch1,
       agentName: this.name,
       ...(smsBlockedNoConsent ? { smsSkipped: true, fallbackReason: 'no_sms_consent' } : {}),
     });
@@ -303,8 +352,9 @@ Application link: ${applyLink}`,
     return {
       success: true,
       touchNumber: 1,
-      channel: 'email',
+      channel,
       emailSent,
+      smsSentTouch1,
       ...(smsBlockedNoConsent
         ? { smsSkipped: true, fallback: 'email' as const, fallbackReason: 'no_sms_consent' }
         : {}),
