@@ -203,6 +203,14 @@ export class AlexAgent extends BaseAgent {
       return { skipped: true, reason: `lead is ${lead.status}` };
     }
 
+    // An inbound STOP with no email address leaves nothing we may send. The
+    // send-time gate already blocks the SMS; skipping here keeps the lead from
+    // being picked up, retried and logged every single day.
+    if (lead.smsOptedOut && !lead.contactEmail) {
+      logger.info({ leadId: leadId }, 'Alex.convertLead: lead opted out of SMS and has no email — unreachable');
+      return { skipped: true, reason: 'sms_opted_out_no_email' };
+    }
+
     if (channelOverride === 'sms') {
       if (!lead.contactPhone) {
         return { skipped: true, reason: 'no_phone_for_sms_override' };
@@ -347,6 +355,14 @@ Write a conversion email. Include:
     if (!lead) return { skipped: true, reason: 'lead not found' };
     if (lead.status === 'converted' || lead.status === 'cold') {
       return { skipped: true, reason: `lead is ${lead.status}` };
+    }
+
+    // An inbound STOP with no email address leaves nothing we may send. The
+    // send-time gate already blocks the SMS; skipping here keeps the lead from
+    // being picked up, retried and logged every single day.
+    if (lead.smsOptedOut && !lead.contactEmail) {
+      logger.info({ leadId: leadId }, 'Alex.sendTouch: lead opted out of SMS and has no email — unreachable');
+      return { skipped: true, reason: 'sms_opted_out_no_email' };
     }
 
     // Dedupe: at most one Alex touch per lead per day, regardless of channel.

@@ -532,6 +532,34 @@ router.post(
         typeof from === 'string' ? from : (from?.phone_number ?? '');
       const keyword = typeof text === 'string' ? text.trim().toUpperCase() : '';
 
+      // STOP: Telnyx stops delivering on its own, but the lead record has to
+      // know too, or every sweep re-selects the number and spends a send being
+      // refused. Applied to EVERY lead row carrying that number — a person can
+      // have several (a scraped candidate row plus a later quote form), and
+      // honouring the STOP on only the newest would let the others text again.
+      if (keyword === 'STOP' && fromNumber) {
+        const last10 = fromNumber.replace(/[^0-9]/g, '').slice(-10);
+        if (last10.length === 10) {
+          const optedOut = await db
+            .update(leads)
+            .set({ smsOptedOut: true, smsConsentAt: null, updatedAt: new Date() })
+            .where(sql`right(regexp_replace(${leads.contactPhone}, '[^0-9]', '', 'g'), 10) = ${last10}`)
+            .returning({ id: leads.id });
+
+          logger.warn(
+            { leads: optedOut.length },
+            '[Nova SMS] STOP received — SMS consent revoked',
+          );
+          await emitEvent(
+            'sms.opted_out',
+            'sms',
+            id ?? 'unknown',
+            { from: fromNumber, leadIds: optedOut.map((l) => l.id) },
+            'system',
+          ).catch(() => {});
+        }
+      }
+
       if (keyword === 'HELP' && fromNumber) {
         const delivered = await notificationService.sendSMS({
           to: fromNumber,

@@ -16,7 +16,7 @@
  * Jordan Hayes handles first-touch recruitment.
  */
 
-import { and, eq, gte, isNull, like, or } from 'drizzle-orm';
+import { and, eq, gte, isNull, isNotNull, like, or } from 'drizzle-orm';
 import { BaseAgent } from './base';
 import { db } from '../db';
 import { leads } from '@shared/schema';
@@ -205,6 +205,10 @@ export class RyanAgent extends BaseAgent {
           eq(leads.utmCampaign, 'ryan-brooks'),
           gte(leads.intentScore, ROUTE_TO_JORDAN_SCORE),
           isNull(leads.assignedAgent),
+          // A STOP revokes SMS, not email. Candidates who opted out but left an
+          // address keep flowing to Jordan's email touches; those with neither
+          // are unreachable and must never be routed again.
+          or(eq(leads.smsOptedOut, false), isNotNull(leads.contactEmail)),
         ),
       );
 

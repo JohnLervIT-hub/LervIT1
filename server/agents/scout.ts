@@ -16,7 +16,7 @@
  * and swallowed so the other sources still run.
  */
 
-import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, isNotNull, or, sql } from 'drizzle-orm';
 import { BaseAgent } from './base';
 import { db } from '../db';
 import { leads } from '@shared/schema';
@@ -231,6 +231,10 @@ export class ScoutAgent extends BaseAgent {
           // partner prospects (b2bp) sit unassigned in this same window —
           // both crawls run at 07:00 — and must not be pitched a move quote.
           eq(leads.leadType, 'b2c'),
+          // A STOP revokes SMS, not email, so an opted-out lead with an address
+          // still belongs in the email nurture. One with no address is
+          // unreachable and must never be routed again.
+          or(eq(leads.smsOptedOut, false), isNotNull(leads.contactEmail)),
         ),
       );
 

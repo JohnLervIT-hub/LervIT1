@@ -1986,6 +1986,11 @@ export const leads = pgTable("leads", {
   // so the source list alone can't prove what was agreed to.
   smsConsentAt: timestamp("sms_consent_at"),
   smsConsentText: text("sms_consent_text"),
+  // Inbound STOP, recorded by POST /api/nova/sms/inbound. Telnyx already
+  // suppresses delivery at the carrier layer, but nothing on our side knew, so
+  // agents kept selecting the lead and every send came back 40021/40010.
+  // hasSmsConsent() fails closed on this before any other check.
+  smsOptedOut: boolean("sms_opted_out").default(false).notNull(),
   // B2B sales pipeline (Sam Carter — SALES). All nullable so existing rows
   // stay valid; leadType defaults to 'b2c' to keep existing rows classified.
   companyName: text("company_name"),

@@ -1626,6 +1626,10 @@ ALTER TABLE "leads"
   ADD COLUMN IF NOT EXISTS "sms_consent_at"   timestamp,
   ADD COLUMN IF NOT EXISTS "sms_consent_text" text;
 
+-- Inbound STOP (see migrations/0033_leads_sms_opted_out.sql).
+ALTER TABLE "leads"
+  ADD COLUMN IF NOT EXISTS "sms_opted_out" boolean NOT NULL DEFAULT false;
+
 -- Ember newsletter drafts (see migrations/0021_newsletters.sql).
 CREATE TABLE IF NOT EXISTS "newsletters" (
   "id"           varchar   PRIMARY KEY DEFAULT gen_random_uuid(),

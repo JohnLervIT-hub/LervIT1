@@ -40,9 +40,13 @@ export function hasSmsConsent(
     sourceChannel?: string | null;
     utmSource?: string | null;
     smsConsentAt?: Date | null;
+    smsOptedOut?: boolean | null;
   },
   opts: { isFirstSms?: boolean } = {},
 ): boolean {
+  // An inbound STOP overrides everything below it, including a recorded
+  // consent stamp: consent given on Monday is revoked by a STOP on Tuesday.
+  if (lead.smsOptedOut === true) return false;
   // A recorded consent timestamp is the strongest evidence we have and wins
   // outright — sourceChannel can be edited or re-classified after the fact,
   // the stamp cannot.
