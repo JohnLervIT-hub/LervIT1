@@ -10,6 +10,17 @@ export interface NovaCallContext {
   dropoffAddress?: string;
   price?: string;
   leadId?: string;
+  /**
+   * Set when this leg is picking up a call that dropped — see
+   * server/lib/novaCallState.ts. Replaces the first message and the goal so
+   * Nova acknowledges the disconnect instead of replaying the intro.
+   */
+  resume?: {
+    stage?: string;
+    retryCount: number;
+    opening: string;
+    goal: string;
+  };
 }
 
 export function createNovaBridge(
@@ -45,15 +56,17 @@ export function createNovaBridge(
       .filter(Boolean)
       .join('. ');
 
-    const firstMessage =
-      context?.callType === 'lead_conversion'
+    const firstMessage = context?.resume
+      ? context.resume.opening
+      : context?.callType === 'lead_conversion'
         ? `${greeting} You reached out about a move${contextInfo ? ' — ' + contextInfo : ''}. Still planning that move?`
         : context?.callType === 'payment_recovery'
         ? `${greeting} You started booking a move but didn't complete payment. Want me to send the link again?`
         : `${greeting} You wanted to chat about your move. How can I help?`;
 
-    const goal =
-      context?.callType === 'lead_conversion'
+    const goal = context?.resume
+      ? context.resume.goal
+      : context?.callType === 'lead_conversion'
         ? 'Book the move live on this call. Offer LERVIT10 if they hesitate.'
         : context?.callType === 'payment_recovery'
         ? 'Get customer to complete payment at lervit.com'

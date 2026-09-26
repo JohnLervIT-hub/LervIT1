@@ -17209,37 +17209,58 @@ Respond with VALID JSON only:
   // connects here; the bridge translates between Telnyx media frames and
   // ElevenLabs Convai's audio protocol. Path is dynamic (per callControlId),
   // so we use noServer:true + manual upgrade routing.
+  let novaBridgeWss: WebSocketServer | null = null;
   try {
-    const novaBridgeWss = new WebSocketServer({ noServer: true });
+    novaBridgeWss = new WebSocketServer({ noServer: true });
 
     novaBridgeWss.on('connection', (ws, req) => {
       const rawId = req.url?.split('/api/nova/stream/')?.[1] ?? 'unknown';
       const callControlId = decodeURIComponent(rawId);
       const context = novaCallContextStore.get(callControlId);
-      logger.info({ callControlId, hasContext: !!context }, '[Bridge] Telnyx connected');
+      logger.info(
+        { callControlId, hasContext: !!context, hasResume: !!context?.resume },
+        '[Bridge] Telnyx connected',
+      );
       createNovaBridge(ws, callControlId, context);
-    });
-
-    httpServer.on('upgrade', (req, socket, head) => {
-      logger.info({
-        url: req.url,
-        from: (socket as any).remoteAddress,
-      }, '[http] upgrade request');
-
-      if (req.url?.startsWith('/api/nova/stream/')) {
-        novaBridgeWss.handleUpgrade(req, socket, head, (ws) => {
-          novaBridgeWss.emit('connection', ws, req);
-        });
-      } else {
-        // Don't destroy — let other WS servers handle it
-        // (socket.io, mover, customer, etc.)
-      }
     });
 
     logger.info('Nova bridge WebSocket initialized');
   } catch (err) {
     logger.error({ err }, 'Nova bridge WebSocket init FAILED — continuing without it');
   }
+
+  // Single upgrade dispatcher for every raw-ws endpoint on this server.
+  //
+  // Each of these used to attach its own `new WebSocketServer({ server, path })`,
+  // and ws aborts — with a 400 — any upgrade whose path that instance does not
+  // own. All of them see every upgrade, so the first one registered destroyed
+  // the others' handshakes: /ws/customer-notifications and the Nova bridge
+  // never completed a connection. Routing them from one place fixes that.
+  //
+  // Registered outside the try above so a bridge that failed to start does not
+  // take the mover and customer sockets down with it. socket.io keeps its own
+  // listener for /socket.io/ and only ends sockets nothing has written to, so
+  // the paths handled here are safe from it.
+  httpServer.on('upgrade', (req, socket, head) => {
+    const pathname = (req.url ?? '').split('?')[0];
+
+    logger.info({
+      url: req.url,
+      from: (socket as any).remoteAddress,
+    }, '[http] upgrade request');
+
+    const bridge = novaBridgeWss;
+    if (pathname.startsWith('/api/nova/stream/') && bridge) {
+      bridge.handleUpgrade(req, socket, head, (ws) => {
+        bridge.emit('connection', ws, req);
+      });
+    } else if (pathname === moverWebSocket.path) {
+      moverWebSocket.handleUpgrade(req, socket, head);
+    } else if (pathname === customerWebSocket.path) {
+      customerWebSocket.handleUpgrade(req, socket, head);
+    }
+    // Anything else: don't destroy — socket.io and its engine own /socket.io/.
+  });
 
   return httpServer;
 }

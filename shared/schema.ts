@@ -1961,6 +1961,26 @@ export const agentDecisions = pgTable("agent_decisions", {
 }));
 
 // c) leads — pre-booking pipeline
+/**
+ * Shape of `leads.call_context` — Nova's mid-call memory for a cold call.
+ *
+ * `stage` is the furthest point any call with this lead reached; a retry
+ * resumes from it rather than replaying the intro. `retryCount` is the number
+ * of drop-recovery re-dials already scheduled for this lead (capped in the
+ * hangup handler), and is carried on the re-enqueued job so the resume path
+ * and the cap agree.
+ */
+export interface LeadCallContext {
+  // Optional: the first dial records a retry budget before Nova has said
+  // anything, so a context can exist with no stage reached yet.
+  stage?: 'intro' | 'qualified' | 'objection' | 'booking_attempted';
+  interested?: boolean;
+  objection?: string;
+  /** ISO timestamp of the write — when Nova last got this far. */
+  lastSaidAt: string;
+  retryCount: number;
+}
+
 export const leads = pgTable("leads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contactName: text("contact_name"),
@@ -1991,6 +2011,12 @@ export const leads = pgTable("leads", {
   // agents kept selecting the lead and every send came back 40021/40010.
   // hasSmsConsent() fails closed on this before any other check.
   smsOptedOut: boolean("sms_opted_out").default(false).notNull(),
+  // Mid-call state for Nova's voice calls, so a call that drops can be resumed
+  // instead of restarting from the intro. Written at each stage transition we
+  // can observe (dial, answer, in-call tool use, hangup) — see
+  // server/lib/novaCallState.ts. Nullable: a lead Nova has never called has no
+  // context, and `null` is what "start from the top" means downstream.
+  callContext: jsonb("call_context").$type<LeadCallContext>(),
   // B2B sales pipeline (Sam Carter — SALES). All nullable so existing rows
   // stay valid; leadType defaults to 'b2c' to keep existing rows classified.
   companyName: text("company_name"),

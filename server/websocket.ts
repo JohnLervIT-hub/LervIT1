@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'http';
+import type { IncomingMessage, Server } from 'http';
+import type { Duplex } from 'stream';
 import { Server as IOServer, type Namespace, type Socket as IOSocket } from 'socket.io';
 import { logger } from './logger';
 import crypto from 'crypto';
@@ -95,10 +96,31 @@ class MoverWebSocketServer {
   private clients: Map<string, ConnectedClient> = new Map();
   private pingInterval: NodeJS.Timeout | null = null;
 
-  initialize(server: Server) {
-    this.wss = new WebSocketServer({ 
-      server,
-      path: '/ws/mover-notifications',
+  /** Upgrade path this server owns. Dispatched from registerRoutes(). */
+  readonly path = '/ws/mover-notifications';
+
+  /**
+   * Complete a WebSocket handshake routed here by the upgrade dispatcher.
+   * `emit('connection')` is what the `{ server }` attachment used to do for us.
+   */
+  handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    if (!this.wss) {
+      socket.destroy();
+      return;
+    }
+    this.wss.handleUpgrade(req, socket, head, (ws) =>
+      this.wss!.emit('connection', ws, req),
+    );
+  }
+
+  initialize(_server: Server) {
+    // noServer: every WebSocketServer attached with `{ server }` aborts, with a
+    // 400, any upgrade whose path it does not own (ws/lib/websocket-server.js
+    // → shouldHandle → abortHandshake). With several socket servers on one
+    // httpServer that means whichever registers first destroys the others'
+    // handshakes, so all upgrade routing lives in one dispatcher in routes.ts.
+    this.wss = new WebSocketServer({
+      noServer: true,
       verifyClient: (info, callback) => {
         // Basic origin validation
         const origin = info.origin || info.req.headers.origin;
@@ -289,10 +311,29 @@ class CustomerWebSocketServer {
   private clients: Map<string, ConnectedCustomer> = new Map();
   private pingInterval: NodeJS.Timeout | null = null;
 
-  initialize(server: Server) {
+  /** Upgrade path this server owns. Dispatched from registerRoutes(). */
+  readonly path = '/ws/customer-notifications';
+
+  /**
+   * Complete a WebSocket handshake routed here by the upgrade dispatcher.
+   * `emit('connection')` is what the `{ server }` attachment used to do for us.
+   */
+  handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    if (!this.wss) {
+      socket.destroy();
+      return;
+    }
+    this.wss.handleUpgrade(req, socket, head, (ws) =>
+      this.wss!.emit('connection', ws, req),
+    );
+  }
+
+  initialize(_server: Server) {
+    // noServer — see the note on MoverWebSocketServer.initialize. This socket
+    // never connected at all while it shared the httpServer: the mover server
+    // registers first and 400'd every /ws/customer-notifications handshake.
     this.wss = new WebSocketServer({
-      server,
-      path: '/ws/customer-notifications',
+      noServer: true,
       verifyClient: (info, callback) => {
         const origin = info.origin || info.req.headers.origin;
         const host = info.req.headers.host;

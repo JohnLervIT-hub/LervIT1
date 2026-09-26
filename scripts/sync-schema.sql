@@ -1630,6 +1630,10 @@ ALTER TABLE "leads"
 ALTER TABLE "leads"
   ADD COLUMN IF NOT EXISTS "sms_opted_out" boolean NOT NULL DEFAULT false;
 
+-- Nova mid-call memory (see migrations/0034_leads_call_context.sql).
+ALTER TABLE "leads"
+  ADD COLUMN IF NOT EXISTS "call_context" jsonb;
+
 -- Ember newsletter drafts (see migrations/0021_newsletters.sql).
 CREATE TABLE IF NOT EXISTS "newsletters" (
   "id"           varchar   PRIMARY KEY DEFAULT gen_random_uuid(),

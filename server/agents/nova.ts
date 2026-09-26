@@ -21,6 +21,12 @@ import { emitEvent } from '../events';
 import { logger } from '../logger';
 import { wasContactedToday } from './dedupe';
 import { novaCallContextStore } from '../nova-webhook-routes';
+import type { NovaCallContext } from '../lib/novaBridge';
+import {
+  buildResumeBrief,
+  recordCallStage,
+  startCallContext,
+} from '../lib/novaCallState';
 import { agentEventBus } from '../lib/agentEventBus';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 
@@ -48,6 +54,9 @@ interface InitiateCallOpts {
   entityType: string;
   callType: string;
   metadata: Record<string, unknown>;
+  // Extra bridge context merged over what we derive from `metadata` — used by
+  // the drop-recovery path to hand the bridge its resume opening and goal.
+  context?: Partial<NovaCallContext>;
 }
 
 interface InitiateCallResult {
@@ -172,6 +181,7 @@ export class NovaAgent extends BaseAgent {
               ? String(rawPrice)
               : undefined,
           leadId: typeof meta.leadId === 'string' ? meta.leadId : undefined,
+          ...opts.context,
         });
       }
 
@@ -402,15 +412,33 @@ export class NovaAgent extends BaseAgent {
       .catch((err) => logger.error({ err, leadId }, '[Nova] escalation emit failed'));
   }
 
+  /**
+   * Cold-call a mover candidate.
+   *
+   * Drop recovery: the Telnyx `call.hangup` handler re-enqueues this action
+   * with an incremented `retryCount` when a call dies in its first seconds.
+   * A retry is not a fresh call — it reads `leads.call_context` and opens by
+   * acknowledging the disconnect, resuming from the furthest stage the earlier
+   * call reached.
+   */
   async callMoverCold(
     input: {
       leadId: string;
       phone: string;
       name?: string;
       sourceChannel?: string;
+      // Set when this run is itself an out-of-hours reschedule, so it doesn't
+      // reschedule itself forever.
+      rescheduled?: boolean;
+      // Drop-recovery attempt number, carried on the job the call.hangup
+      // handler re-enqueues. Absent or 0 means this is a first dial.
+      retryCount?: number;
     },
     options?: AgentRunOptions,
   ) {
+    const retryCount = input.retryCount ?? 0;
+    const isRetry = retryCount > 0;
+
     const { allowed, reason } = this.checkCallHours();
     if (!allowed) {
       if (!input.rescheduled) {
@@ -422,7 +450,13 @@ export class NovaAgent extends BaseAgent {
           await novaQueue.add(
             'call_mover_cold',
             { ...input, rescheduled: true },
-            { delay: delayMs, jobId: `nova_cold_reschedule_${input.leadId}` },
+            // Suffix retries: a drop-recovery re-dial that lands out of hours
+            // would otherwise collide with the first call's reschedule jobId
+            // and be dropped as a duplicate.
+            {
+              delay: delayMs,
+              jobId: `nova_cold_reschedule_${input.leadId}${isRetry ? `_r${retryCount}` : ''}`,
+            },
           );
           logger.info(
             { leadId: input.leadId, scheduledFor: fireAt.toISOString() },
@@ -439,16 +473,22 @@ export class NovaAgent extends BaseAgent {
         would: 'call_mover_cold',
         leadId: input.leadId,
         phone: input.phone,
+        retryCount,
       };
     }
 
-    const { contacted } = await wasContactedToday({
-      entityId: input.leadId,
-      entityType: 'lead',
-      eventTypes: ['nova.cold_call_initiated'],
-    });
-    if (contacted) {
-      return { skipped: true, reason: 'already_called_today' };
+    // A drop-recovery re-dial is the same call continuing, so it has to be
+    // exempt from the daily dedupe — the first leg already emitted
+    // nova.cold_call_initiated minutes ago and would block every retry.
+    if (!isRetry) {
+      const { contacted } = await wasContactedToday({
+        entityId: input.leadId,
+        entityType: 'lead',
+        eventTypes: ['nova.cold_call_initiated'],
+      });
+      if (contacted) {
+        return { skipped: true, reason: 'already_called_today' };
+      }
     }
 
     const lead = await db
@@ -467,10 +507,48 @@ export class NovaAgent extends BaseAgent {
 
     const name = input.name ?? lead[0].contactName ?? 'there';
 
+    // Mid-call memory from the leg that dropped. Only consulted on a retry: on
+    // a first dial a stale context from weeks ago would have Nova open as if
+    // the last call had just cut out.
+    const priorContext = isRetry ? lead[0].callContext : null;
+
+    // They already heard the pitch and turned it down before the line dropped
+    // — re-dialling is the retry loop pestering someone who said no.
+    if (priorContext?.interested === false) {
+      logger.info(
+        { leadId: input.leadId, retryCount },
+        '[Nova] cold call retry skipped — lead already declined',
+      );
+      return { skipped: true, reason: 'declined_previously' };
+    }
+
+    const resume = priorContext ? buildResumeBrief(priorContext, name) : null;
+
+    const script = resume
+      ? `${resume.opening} ${resume.goal}`
+      : `Hi ${name}, this is Nova from LervIT Moving in Calgary. I saw your listing and wanted to reach out about earning extra income with your vehicle. Do you have a quick minute?`;
+
     logger.info(
-      { leadId: input.leadId, phone: input.phone, name },
-      '[Nova] Initiating mover cold call',
+      {
+        leadId: input.leadId,
+        phone: input.phone,
+        name,
+        retryCount,
+        resumeStage: priorContext?.stage,
+      },
+      isRetry
+        ? '[Nova] Re-dialling dropped mover cold call'
+        : '[Nova] Initiating mover cold call',
     );
+
+    // Record the attempt before it rings: if the dial itself fails, the retry
+    // budget still reflects that this attempt was spent. A first dial starts a
+    // new memory; a retry keeps the stage the dropped leg reached.
+    if (isRetry) {
+      await recordCallStage(input.leadId, { retryCount });
+    } else {
+      await startCallContext(input.leadId);
+    }
 
     const result = await this.initiateCall({
       to: input.phone,
@@ -481,8 +559,20 @@ export class NovaAgent extends BaseAgent {
         leadId: input.leadId,
         moverName: name,
         sourceChannel: input.sourceChannel,
-        script: `Hi ${name}, this is Nova from LervIT Moving in Calgary. I saw your listing and wanted to reach out about earning extra income with your vehicle. Do you have a quick minute?`,
+        retryCount,
+        resumeStage: priorContext?.stage,
+        script,
       },
+      context: resume
+        ? {
+            resume: {
+              stage: priorContext?.stage,
+              retryCount,
+              opening: resume.opening,
+              goal: resume.goal,
+            },
+          }
+        : undefined,
     });
 
     if (result.callControlId) {
@@ -494,6 +584,7 @@ export class NovaAgent extends BaseAgent {
           callControlId: result.callControlId,
           callType: 'mover_cold_intro',
           phone: input.phone,
+          retryCount,
         },
         'agent',
       );
