@@ -633,8 +633,11 @@ router.post(
           !streamingStarted.has(callControlId)
         ) {
           try {
+            // Through the bridge, same as the initiate path: an inbound caller
+            // gets greeted by name and a retry keeps its resume brief, neither
+            // of which survives a direct stream to ElevenLabs.
             await telnyxSdk().calls.actions.startStreaming(callControlId, {
-              stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
+              stream_url: novaStreamUrl(callControlId),
               stream_track: 'both_tracks',
               stream_bidirectional_mode: 'rtp',
               stream_bidirectional_codec: 'PCMU',
