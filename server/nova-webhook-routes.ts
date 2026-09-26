@@ -152,6 +152,8 @@ const ELEVENLABS_PARAM_ALIASES: Record<string, string> = {
   // / send-link fell back to type='customer', silently handing a mover
   // candidate the customer signup link.
   Type: 'type',
+  // report_objection's free-text reason.
+  Reason: 'reason',
 };
 
 function aliasElevenLabsParams(obj: unknown): void {
@@ -315,6 +317,19 @@ async function maybeRetryDroppedColdCall(opts: {
     // written off). Re-dialling those is what call_mover_cold refuses to do
     // on its own side anyway — stop before burning a retry on it.
     if (['converted', 'cold', 'lost'].includes(lead.status ?? '')) return;
+
+    // They turned the pitch down on the call that just ended (report_objection
+    // wrote `interested: false`), so the line failing is not why it ended and a
+    // re-dial is the retry loop pestering someone who already said no.
+    // call_mover_cold refuses this too, but the retry would still burn a
+    // budgeted attempt and emit a scheduled event on the way there.
+    if (lead.callContext?.interested === false) {
+      logger.info(
+        { leadId, hangupCause, objection: lead.callContext?.objection },
+        '[Nova] not re-dialling — lead declined',
+      );
+      return;
+    }
 
     const retryCount = lead.callContext?.retryCount ?? 0;
     if (retryCount >= MAX_CALL_RETRIES) {
@@ -491,6 +506,7 @@ router.post(
               const [row] = await db
                 .select({
                   contactName: leads.contactName,
+                  companyName: leads.companyName,
                   pickupAddress: quotes.pickupAddress,
                   dropoffAddress: quotes.dropoffAddress,
                   totalPrice: quotes.totalPrice,
@@ -504,7 +520,26 @@ router.post(
                 ctx.pickupAddress = row.pickupAddress ?? undefined;
                 ctx.dropoffAddress = row.dropoffAddress ?? undefined;
                 ctx.price = row.totalPrice ? String(row.totalPrice) : undefined;
+                ctx.companyName = row.companyName ?? undefined;
                 ctx.leadId = entityId;
+              }
+            } else if (callType === 'mover_cold_intro' && entityId) {
+              // The dial path seeds this store directly, so we only land here
+              // when that was missed. Without the leadId the bridge sends the
+              // agent an empty {{leadId}} and report_objection cannot fire —
+              // the call goes on to be re-dialled after they said no.
+              const [row] = await db
+                .select({
+                  contactName: leads.contactName,
+                  companyName: leads.companyName,
+                })
+                .from(leads)
+                .where(eq(leads.id, entityId))
+                .limit(1);
+              ctx.leadId = entityId;
+              if (row) {
+                ctx.customerName = row.contactName ?? undefined;
+                ctx.companyName = row.companyName ?? undefined;
               }
             } else if (
               (callType === 'payment_recovery' || callType === 'review_request') &&
@@ -1534,6 +1569,50 @@ router.post(
               ? 'Link sent to your email!'
               : 'Failed to send link — please try again',
     });
+  },
+);
+
+// ─── Tool 7: report_objection ────────────────────────────────
+//
+// The agent calls this the moment a lead turns the pitch down ("not
+// interested", "don't call again", "remove me", "I already have a mover"), so
+// the refusal is on the lead row before the call ends. Without it the only
+// thing the hangup handler sees is a short call on a normal cause, which is
+// indistinguishable from a dropped line — it would re-dial someone who said no.
+
+router.post(
+  '/api/nova/tool/report-objection',
+  express.json(),
+  async (req: Request, res: Response) => {
+    // Same spelling tolerance as the signup tools: the aliaser above maps
+    // `LeadId`/`Lead_id`, and `lead_id` is what the newer tool schemas send.
+    const leadId: string | undefined = req.body?.leadId ?? req.body?.lead_id;
+    const reason: unknown = req.body?.reason;
+
+    if (!leadId) return res.status(400).json({ error: 'leadId required' });
+
+    const objection =
+      typeof reason === 'string' && reason.trim() ? reason.trim() : undefined;
+
+    // `objection` is only in the patch when we have one: recordCallStage spreads
+    // the patch over the existing context, so passing it as undefined would
+    // erase an objection an earlier leg recorded.
+    await recordCallStage(leadId, {
+      interested: false,
+      ...(objection ? { objection } : {}),
+    });
+
+    await emitEvent(
+      'nova.objection_reported',
+      'lead',
+      leadId,
+      { objection },
+      'agent',
+    );
+
+    logger.info({ leadId, objection }, '[Nova] objection reported on call');
+
+    return res.json({ ok: true });
   },
 );
 
@@ -2615,5 +2694,99 @@ async function sendInstagramMessage(
     logger.error({ err, recipientId }, '[Nova Instagram] fetch threw');
   }
 }
+
+// ─── Admin: test call ────────────────────────────────────────
+//
+// Dials one number through the real cold-call path so a change to the bridge
+// or the agent prompt can be heard before it goes anywhere near the lead
+// list. Unlike the ElevenLabs tool routes above this is operator-triggered
+// rather than agent-triggered, so it authenticates — and it fails closed:
+// an endpoint that places outbound calls and writes lead rows is a
+// toll-fraud and robocall vector the moment it answers an unsigned request.
+
+function toolSecretOk(provided: unknown, expected: string): boolean {
+  if (typeof provided !== 'string') return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  // timingSafeEqual throws on a length mismatch, which would leak length by
+  // way of a 500 — compare digests so the inputs are always equal-width.
+  return crypto.timingSafeEqual(
+    crypto.createHash('sha256').update(a).digest(),
+    crypto.createHash('sha256').update(b).digest(),
+  );
+}
+
+router.post(
+  '/api/nova/test-call',
+  express.json(),
+  async (req: Request, res: Response) => {
+    const secret = process.env.NOVA_TOOL_SECRET;
+    if (!secret) {
+      logger.error('[Nova] test-call refused — NOVA_TOOL_SECRET is not set');
+      return res.status(503).json({ error: 'test-call not configured' });
+    }
+    if (!toolSecretOk(req.headers['x-nova-tool-secret'], secret)) {
+      logger.warn('[Nova] test-call: bad or missing X-Nova-Tool-Secret');
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+
+    const {
+      phone,
+      name = 'Test Lead',
+      companyName = 'Test Co',
+      leadId: existingLeadId,
+    } = req.body ?? {};
+
+    if (typeof phone !== 'string' || !phone.trim()) {
+      return res.status(400).json({ error: 'phone required' });
+    }
+
+    try {
+      let leadId: string | undefined = existingLeadId;
+      if (!leadId) {
+        const [row] = await db
+          .insert(leads)
+          .values({
+            contactName: name,
+            contactPhone: phone,
+            companyName,
+            // There is no `leads.source` — the channel column is
+            // source_channel. leadType is the mover-candidate value because
+            // call_mover_cold is a b2bm pitch.
+            sourceChannel: 'manual',
+            leadType: 'b2bm',
+            status: 'new',
+          })
+          .returning({ id: leads.id });
+        leadId = row.id;
+      }
+
+      // Deferred import: nova.ts imports novaCallContextStore from this
+      // module, so a top-level import here closes the cycle.
+      const { nova } = await import('./agents/nova');
+
+      // `rescheduled: true` marks this as already-rescheduled so an
+      // out-of-hours test returns the refusal straight away instead of
+      // enqueueing a job for the next call window — queue.add hangs rather
+      // than throwing when REDIS_URL is unreachable, which is the normal
+      // case on a laptop. The reason comes back in `result` either way.
+      const result = await nova.callMoverCold({
+        leadId,
+        phone,
+        name,
+        sourceChannel: 'test',
+        rescheduled: true,
+      });
+
+      logger.info({ leadId, phone, result }, '[Nova] test-call placed');
+      return res.json({ ok: true, leadId, result });
+    } catch (err) {
+      logger.error({ err }, '[Nova] test-call failed');
+      return res
+        .status(500)
+        .json({ error: 'test-call failed', detail: String(err) });
+    }
+  },
+);
 
 export { router as novaWebhookRouter };

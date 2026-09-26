@@ -216,6 +216,8 @@ export class NovaAgent extends BaseAgent {
               ? String(rawPrice)
               : undefined,
           leadId: typeof meta.leadId === 'string' ? meta.leadId : undefined,
+          companyName:
+            typeof meta.companyName === 'string' ? meta.companyName : undefined,
           ...opts.context,
         });
       }
@@ -593,6 +595,7 @@ export class NovaAgent extends BaseAgent {
       metadata: {
         leadId: input.leadId,
         moverName: name,
+        companyName: lead[0].companyName ?? undefined,
         sourceChannel: input.sourceChannel,
         retryCount,
         resumeStage: priorContext?.stage,

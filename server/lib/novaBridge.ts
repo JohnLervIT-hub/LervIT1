@@ -10,6 +10,8 @@ export interface NovaCallContext {
   dropoffAddress?: string;
   price?: string;
   leadId?: string;
+  /** Lead's business name, when they have one — seeds {{companyName}}. */
+  companyName?: string;
   /**
    * Set when this leg is picking up a call that dropped — see
    * server/lib/novaCallState.ts. Replaces the first message and the goal so
@@ -72,16 +74,45 @@ export function createNovaBridge(
         ? 'Get customer to complete payment at lervit.com'
         : 'Help customer with their move. Get pickup and dropoff addresses.';
 
+    // Only with a leadId: report_objection writes to that lead row and 400s
+    // without one, so telling a lead-less call to reach for it just produces a
+    // failed tool call mid-conversation.
+    const objectionRule = context?.leadId
+      ? `If they say they are not interested, to not call again, to remove them, ` +
+        `or that they already have a mover, call the report_objection tool with ` +
+        `leadId "${context.leadId}" and their reason in a few words. ` +
+        `Then thank them, say you won't call again, and end the call.\n`
+      : '';
+
     const prompt =
       `You are Nova from LervIT Moving Calgary.\n` +
       `Be warm, casual, local. Max 2 sentences per response.\n` +
       `Never spell out words. Say "LervIT" as "LER-vit".\n` +
       `Say "lervit.com" as "lervit dot com".\n` +
+      objectionRule +
       `Goal: ${goal}`;
+
+    // Dynamic variables the console-side agent config interpolates as
+    // {{leadId}} / {{leadName}} / {{companyName}} — most importantly the
+    // report_objection tool's leadId param, which has no other way to learn
+    // which lead is on the phone. Always sent, with '' for what we don't know:
+    // ElevenLabs fails the conversation if a variable the agent references was
+    // not provided, and an inbound call has no lead behind it.
+    const dynamicVariables = {
+      leadId: context?.leadId ?? '',
+      leadName: context?.customerName ?? '',
+      companyName: context?.companyName ?? '',
+    };
+
+    logger.info(
+      { callControlId, leadId: dynamicVariables.leadId || undefined },
+      '[Bridge] Seeding agent dynamic variables',
+    );
 
     elevenWs.send(
       JSON.stringify({
         type: 'conversation_initiation_client_data',
+        dynamic_variables: dynamicVariables,
         conversation_config_override: {
           agent: {
             prompt: { prompt },
