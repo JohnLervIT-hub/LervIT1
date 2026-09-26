@@ -40,6 +40,13 @@ import { agentEventBus } from './lib/agentEventBus';
 import { JAILBREAK_PREAMBLE } from './lib/promptSanitizer';
 import { hasSmsConsent } from './lib/smsConsent';
 import type { NovaCallContext } from './lib/novaBridge';
+import {
+  DROPPED_CALL_MAX_SECONDS,
+  MAX_CALL_RETRIES,
+  RETRYABLE_HANGUP_CAUSES,
+  recordCallStage,
+} from './lib/novaCallState';
+import { createAgentQueue, QUEUE_NAMES } from './agents/queue';
 
 // Regexes used to auto-extract contact info from customer DMs so anonymous
 // senderIds can be linked to a users row mid-conversation. Kept loose — a
@@ -195,6 +202,170 @@ export const novaCallContextStore = new Map<string, NovaCallContext>();
 // crash boot when TELNYX_API_KEY is missing in local/dev.
 function telnyxSdk() {
   return new Telnyx({ apiKey: process.env.TELNYX_API_KEY ?? '' });
+}
+
+// call_control_ids already re-dialled, so a redelivered call.hangup webhook
+// for the same leg cannot queue a second retry (the jobId only dedupes while
+// the attempt number is unchanged, and the first retry has already bumped it).
+// In-process only, same caveat as `streamingStarted` above.
+const retriedCalls = new Set<string>();
+
+// Drop-recovery re-dial delay. Long enough that a candidate whose call cut out
+// in a parkade or a dead zone has moved on, short enough that the conversation
+// is still fresh to them.
+const COLD_CALL_RETRY_DELAY_MS = 10 * 60 * 1000;
+
+/** Seconds the call was up, from whichever field Telnyx populated. */
+function hangupDurationSeconds(callPayload: any): number | undefined {
+  const reported =
+    callPayload?.duration_seconds ?? callPayload?.call_duration_secs;
+  if (typeof reported === 'number') return reported;
+
+  const start = Date.parse(callPayload?.start_time ?? '');
+  const end = Date.parse(callPayload?.end_time ?? '');
+  if (Number.isFinite(start) && Number.isFinite(end)) {
+    return Math.max(0, (end - start) / 1000);
+  }
+  return undefined;
+}
+
+/**
+ * Re-enqueue a mover cold call that died before Nova could finish the pitch.
+ *
+ * Only for calls that ended fast *and* on a cause that reads as the line
+ * failing rather than the candidate hanging up on us — a long call is a
+ * conversation that ran its course, and a rejected/busy cause is an answer.
+ * `leads.call_context.retry_count` is the budget: it survives deploys and
+ * process restarts, which an in-memory counter would not.
+ *
+ * Never throws: this runs after the webhook has already been acked.
+ */
+async function maybeRetryDroppedColdCall(opts: {
+  callControlId: string;
+  callPayload: any;
+  callType?: string;
+  leadId?: string;
+}): Promise<void> {
+  if (opts.callType !== 'mover_cold_intro') return;
+  if (retriedCalls.has(opts.callControlId)) return;
+
+  const hangupCause: string | undefined = opts.callPayload?.hangup_cause;
+  const durationSeconds = hangupDurationSeconds(opts.callPayload);
+
+  if (!hangupCause || !RETRYABLE_HANGUP_CAUSES.has(hangupCause)) return;
+  if (durationSeconds === undefined || durationSeconds >= DROPPED_CALL_MAX_SECONDS) {
+    return;
+  }
+
+  try {
+    // custom_headers are not guaranteed on every Telnyx call event, so fall
+    // back to the voice_calls row this leg was logged against at dial time.
+    let leadId = opts.leadId;
+    if (!leadId) {
+      const [call] = await db
+        .select({ leadId: voiceCalls.leadId })
+        .from(voiceCalls)
+        .where(eq(voiceCalls.telnyxCallControlId, opts.callControlId))
+        .limit(1);
+      leadId = call?.leadId ?? undefined;
+    }
+    if (!leadId) {
+      logger.warn(
+        { callControlId: opts.callControlId, hangupCause },
+        '[Nova] dropped cold call has no lead — not retrying',
+      );
+      return;
+    }
+
+    const [lead] = await db
+      .select({
+        contactPhone: leads.contactPhone,
+        contactName: leads.contactName,
+        sourceChannel: leads.sourceChannel,
+        callContext: leads.callContext,
+        status: leads.status,
+      })
+      .from(leads)
+      .where(eq(leads.id, leadId))
+      .limit(1);
+
+    if (!lead?.contactPhone) return;
+
+    // The call may have ended in a state that settles the lead (signed up,
+    // written off). Re-dialling those is what call_mover_cold refuses to do
+    // on its own side anyway — stop before burning a retry on it.
+    if (['converted', 'cold', 'lost'].includes(lead.status ?? '')) return;
+
+    const retryCount = lead.callContext?.retryCount ?? 0;
+    if (retryCount >= MAX_CALL_RETRIES) {
+      logger.info(
+        { leadId, retryCount, hangupCause },
+        '[Nova] dropped cold call retry budget exhausted',
+      );
+      return;
+    }
+
+    const nextRetry = retryCount + 1;
+    retriedCalls.add(opts.callControlId);
+
+    const novaQueue = createAgentQueue(QUEUE_NAMES.VOICE_AGENT);
+    if (!novaQueue) {
+      // Local dev without Redis. Re-dialling in-process would be lost on the
+      // next restart and would fire with no worker to own it.
+      logger.warn(
+        { leadId, retryCount: nextRetry, hangupCause, durationSeconds },
+        '[Nova] REDIS_URL unset — dropped cold call not re-enqueued',
+      );
+      return;
+    }
+
+    // jobId carries the attempt number: duplicate hangup webhooks for the same
+    // leg collapse onto one job, while a genuine second drop still gets its own.
+    await novaQueue.add(
+      'call_mover_cold',
+      {
+        leadId,
+        phone: lead.contactPhone,
+        name: lead.contactName ?? undefined,
+        sourceChannel: lead.sourceChannel ?? undefined,
+        retryCount: nextRetry,
+        rescheduled: false,
+      },
+      {
+        delay: COLD_CALL_RETRY_DELAY_MS,
+        jobId: `nova_retry_${leadId}_${nextRetry}`,
+      },
+    );
+
+    // Bank the attempt now rather than at re-dial: two hangups racing here
+    // would otherwise both read the old count and queue the same attempt.
+    await recordCallStage(leadId, { retryCount: nextRetry });
+
+    await emitEvent(
+      'nova.cold_call_retry_scheduled',
+      'lead',
+      leadId,
+      {
+        callControlId: opts.callControlId,
+        hangupCause,
+        durationSeconds,
+        retryCount: nextRetry,
+        stage: lead.callContext?.stage,
+        delayMs: COLD_CALL_RETRY_DELAY_MS,
+      },
+      'agent',
+    );
+
+    logger.info(
+      { leadId, retryCount: nextRetry, hangupCause, durationSeconds },
+      '[Nova] Dropped cold call re-enqueued',
+    );
+  } catch (err) {
+    logger.error(
+      { err, callControlId: opts.callControlId },
+      '[Nova] cold call retry scheduling failed',
+    );
+  }
 }
 
 // ─── Telnyx webhook ──────────────────────────────────────────
@@ -414,6 +585,17 @@ router.post(
           'agent',
         );
 
+        // First observable stage of a cold call: the candidate picked up, so
+        // Nova's intro is being delivered. A retry that drops before this
+        // point keeps whatever stage the earlier leg reached.
+        if (callType === 'mover_cold_intro') {
+          const answeredLeadId =
+            entityId ?? novaCallContextStore.get(callControlId)?.leadId;
+          if (answeredLeadId) {
+            await recordCallStage(answeredLeadId, { stage: 'intro' });
+          }
+        }
+
         // Skip startStreaming if call.initiated already kicked it off for this
         // call — call.answered acts as a fallback for inbound or edge cases
         // where the initiate-path stream setup failed silently.
@@ -471,7 +653,11 @@ router.post(
         break;
       }
 
-      case 'call.hangup':
+      case 'call.hangup': {
+        // Read the in-process context before clearing it — on a cold call it
+        // carries the callType and leadId when Telnyx omits custom_headers.
+        const hangupContext = novaCallContextStore.get(callControlId);
+
         streamingStarted.delete(callControlId);
         novaCallContextStore.delete(callControlId);
 
@@ -492,7 +678,15 @@ router.post(
           },
           'agent',
         );
+
+        await maybeRetryDroppedColdCall({
+          callControlId,
+          callPayload,
+          callType: callType ?? hangupContext?.callType,
+          leadId: entityId ?? hangupContext?.leadId,
+        });
         break;
+      }
 
       default:
         logger.info({ eventType }, '[Nova Webhook] Unhandled event');
@@ -705,6 +899,13 @@ router.post(
         'agent',
       );
 
+      // Handing over an email mid-call is the qualification signal: if the
+      // line drops now, the retry picks up at "send you that link" rather
+      // than re-pitching from the top.
+      if (leadId) {
+        await recordCallStage(leadId, { stage: 'qualified', interested: true });
+      }
+
       return res.json({
         success: true,
         message: `Signup link sent to ${email}`,
@@ -752,6 +953,7 @@ router.post(
         { phone, type },
         'agent',
       ).catch(() => {});
+      await recordCallStage(leadId, { stage: 'qualified', interested: true });
     }
 
     return res.json({ success: true, message: `Link sent to ${phone}` });
@@ -1161,6 +1363,13 @@ router.post(
             status: 'contacted',
           })
           .where(eq(leads.id, leadId));
+
+        // Furthest stage we can observe: they were signing up when this tool
+        // fired, so a retry confirms and re-sends rather than pitching again.
+        await recordCallStage(leadId, {
+          stage: 'booking_attempted',
+          interested: true,
+        });
       }
 
       await emitEvent(
@@ -1275,6 +1484,11 @@ router.post(
         .catch((err) =>
           logger.error({ err, lead_id }, '[Nova] send-signup lead update failed'),
         );
+
+      await recordCallStage(lead_id, {
+        stage: 'booking_attempted',
+        interested: true,
+      });
     }
 
     await emitEvent(
