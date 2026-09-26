@@ -38,7 +38,7 @@ export function createNovaBridge(
   logger.info({ callControlId, callType: context?.callType }, '[Bridge] Connecting to ElevenLabs');
 
   const elevenWs = new WebSocket(
-    `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
+    `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}&output_format=ulaw_8000`,
   );
 
   let telnyxStreamId: string | undefined;
@@ -126,7 +126,6 @@ export function createNovaBridge(
               use_speaker_boost: true,
             },
             optimize_streaming_latency: 4,
-            output_format: 'ulaw_8000',
           },
           conversation: {
             client_events: ['audio', 'interruption', 'agent_response'],
