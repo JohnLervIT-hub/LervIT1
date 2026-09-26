@@ -16,8 +16,12 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      # --include=dev overrides `omit=dev` in the repo's .npmrc, which is there
+      # to keep production installs lean. Without it npm ci installs no
+      # typescript and no vite, so this job ran a stray system tsc against a
+      # tsconfig it could not satisfy, and the build job had no bundler at all.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
       - name: Run TypeScript type check
         run: npm run check
 
@@ -26,9 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Match key *material*, not the prefix on its own: the old pattern flagged
+      # `sk_live_...` in a doc comment and `startsWith('sk_live_')` in a runtime
+      # check, so this job could not pass while those lines existed.
       - name: Check for hardcoded secrets patterns
         run: |
-          ! grep -rn "sk_live_\|pk_live_\|whsec_[A-Za-z0-9]\{20\}" --include="*.ts" --include="*.tsx" server/ client/src/ || (echo "Possible hardcoded Stripe key found" && exit 1)
+          ! grep -rEn "(sk|pk|rk)_live_[A-Za-z0-9]{20,}|whsec_[A-Za-z0-9]{20,}" --include="*.ts" --include="*.tsx" server/ client/src/ || (echo "Possible hardcoded Stripe key found" && exit 1)
       - name: Check dist/ is not committed
         run: test ! -d dist || (echo "dist/ directory should not be committed" && exit 1)
       # Add eslint.config.js and run: npx eslint . --ext .ts,.tsx
@@ -43,8 +50,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      # See the note in the typecheck job: vite lives in devDependencies.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
       - name: Build project
         run: npm run build
       - name: Verify server bundle exists
