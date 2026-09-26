@@ -112,7 +112,6 @@ export function createNovaBridge(
     elevenWs.send(
       JSON.stringify({
         type: 'conversation_initiation_client_data',
-        dynamic_variables: dynamicVariables,
         conversation_config_override: {
           agent: {
             prompt: { prompt },
