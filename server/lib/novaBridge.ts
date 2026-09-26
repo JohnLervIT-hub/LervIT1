@@ -120,7 +120,7 @@ export function createNovaBridge(
             language: 'en',
           },
           tts: {
-            model_id: 'eleven_flash_v2_5',
+            model_id: 'eleven_flash_v2',
             voice_settings: {
               stability: 0.25,
               similarity_boost: 0.75,
@@ -131,14 +131,6 @@ export function createNovaBridge(
           },
           conversation: {
             client_events: ['audio', 'interruption', 'agent_response'],
-          },
-          input_format: {
-            type: 'ulaw',
-            sample_rate: 8000,
-          },
-          output_format: {
-            type: 'ulaw',
-            sample_rate: 8000,
           },
         },
       }),
@@ -212,8 +204,11 @@ export function createNovaBridge(
     logger.error({ err, callControlId }, '[Bridge] ElevenLabs error');
   });
 
-  elevenWs.on('close', () => {
-    logger.info({ callControlId }, '[Bridge] ElevenLabs disconnected');
+  elevenWs.on('close', (code, reason) => {
+    logger.info(
+      { callControlId, code, reason: reason?.toString() },
+      '[Bridge] ElevenLabs disconnected',
+    );
   });
 
   telnyxWs.on('close', () => {

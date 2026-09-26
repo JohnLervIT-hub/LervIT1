@@ -569,45 +569,8 @@ router.post(
           novaCallContextStore.set(callControlId, ctx);
         }
 
-        // For outbound calls, answer immediately and start ElevenLabs streaming
-        // instead of waiting for call.answered — Telnyx sometimes never fires
-        // .answered for outbound legs even after the callee picks up.
-        if ((direction === 'outgoing' || direction === 'outbound') && callControlId) {
-          try {
-            await telnyxSdk().calls.actions.answer(callControlId, {});
-
-            logger.info(
-              { callControlId },
-              '[Nova] Call answered via initiate',
-            );
-
-            // Small delay so Telnyx has time to fully set up the media leg
-            // before we ask it to open the bidirectional stream.
-            await new Promise((r) => setTimeout(r, 500));
-
-            if (ELEVENLABS_AGENT_ID) {
-              await telnyxSdk().calls.actions.startStreaming(callControlId, {
-                stream_url: novaStreamUrl(callControlId),
-                stream_track: 'both_tracks',
-                stream_bidirectional_mode: 'rtp',
-                stream_bidirectional_codec: 'PCMU',
-                stream_bidirectional_sampling_rate: 8000,
-              });
-              streamingStarted.add(callControlId);
-              logger.info(
-                { callControlId },
-                '[Nova] ElevenLabs stream started on initiate ✅',
-              );
-            }
-          } catch (err: any) {
-            logger.error(
-              { err, callControlId },
-              '[Nova] ElevenLabs stream failed',
-            );
-            // No fallback — let call stay silent
-            // Better than robotic TTS message
-          }
-        }
+        // Outbound calls: streaming starts on call.answered, not here.
+        // Telnyx 422s if you try to answer() a call you placed.
 
         break;
       }
