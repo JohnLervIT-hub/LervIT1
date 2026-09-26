@@ -115,7 +115,6 @@ export function createNovaBridge(
         conversation_config_override: {
           agent: {
             prompt: { prompt },
-            first_message: firstMessage,
             language: 'en',
           },
           tts: {
