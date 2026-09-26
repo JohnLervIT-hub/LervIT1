@@ -178,6 +178,26 @@ const APP_BASE_URL = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim
 const MARKETING_SITE_URL = (process.env.MARKETING_SITE_URL ?? 'https://lervit.com').trim();
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
+/**
+ * WebSocket URL Telnyx streams this call's audio to.
+ *
+ * Points at our own bridge (`/api/nova/stream/:callControlId`, upgraded in
+ * routes.ts) rather than straight at ElevenLabs, so `createNovaBridge` can
+ * apply the per-call context in `novaCallContextStore` — the customer's name,
+ * the callType goal, and the resume brief a drop-recovery re-dial carries.
+ * Streaming direct to api.elevenlabs.io gives up all of that: the agent runs
+ * on its console-configured prompt and opens a retry as if it were a first
+ * call.
+ *
+ * Same host and env var as the webhook URL above; ws(s) mirrors http(s) the
+ * way the client-side sockets derive theirs. The id is encoded because Telnyx
+ * call_control_ids are base64 — the upgrade handler decodes it back.
+ */
+function novaStreamUrl(callControlId: string): string {
+  const wsBase = APP_BASE_URL.replace(/^http/, 'ws');
+  return `${wsBase}/api/nova/stream/${encodeURIComponent(callControlId)}`;
+}
+
 // Per-phone dedupe for DM → voice handoffs. Same phone hitting handoff
 // multiple times inside CALL_COOLDOWN_MS (e.g. IG + Messenger both
 // escalating, or a rapid-fire follow-up DM) collapses to a single
@@ -532,7 +552,7 @@ router.post(
 
             if (ELEVENLABS_AGENT_ID) {
               await telnyxSdk().calls.actions.startStreaming(callControlId, {
-                stream_url: `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`,
+                stream_url: novaStreamUrl(callControlId),
                 stream_track: 'both_tracks',
                 stream_bidirectional_mode: 'rtp',
                 stream_bidirectional_codec: 'PCMU',
