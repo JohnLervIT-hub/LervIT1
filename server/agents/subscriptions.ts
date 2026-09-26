@@ -13,7 +13,7 @@ import { reid } from './reid';
 import { aegis } from './aegis';
 import { victor } from './victor';
 import { mark } from './mark';
-import { nova } from './nova';
+import { isOutOfHoursReason, nova } from './nova';
 import { alex } from './alex';
 import { sam } from './sam';
 import { kai } from './kai';
@@ -221,7 +221,7 @@ export function registerAgentSubscriptions(): void {
           // Out of hours applies to every mover equally — stop rather than
           // burning the remaining gaps on calls that will all skip.
           const reason = (result as any)?.reason;
-          if (reason === 'before_8am_mt' || reason === 'after_9pm_mt') {
+          if (isOutOfHoursReason(reason)) {
             logger.info({ bookingId, reason }, '[EventBus] no_accept: outside call hours');
             return;
           }
