@@ -22,6 +22,7 @@ import { logger } from '../logger';
 import { wasContactedToday } from './dedupe';
 import { novaCallContextStore } from '../nova-webhook-routes';
 import { agentEventBus } from '../lib/agentEventBus';
+import { createAgentQueue, QUEUE_NAMES } from './queue';
 
 const NOVA_PHONE = process.env.TELNYX_PHONE_NUMBER ?? '+18889820885';
 const TELNYX_CONNECTION_ID = process.env.TELNYX_CONNECTION_ID;
@@ -411,7 +412,26 @@ export class NovaAgent extends BaseAgent {
     options?: AgentRunOptions,
   ) {
     const { allowed, reason } = this.checkCallHours();
-    if (!allowed) return { skipped: true, reason };
+    if (!allowed) {
+      if (!input.rescheduled) {
+        // Re-enqueue on the BullMQ queue so the call survives deploys.
+        const fireAt = nextCallWindowStart();
+        const delayMs = Math.max(0, fireAt.getTime() - Date.now());
+        const novaQueue = createAgentQueue(QUEUE_NAMES.VOICE_AGENT);
+        if (novaQueue) {
+          await novaQueue.add(
+            'call_mover_cold',
+            { ...input, rescheduled: true },
+            { delay: delayMs, jobId: `nova_cold_reschedule_${input.leadId}` },
+          );
+          logger.info(
+            { leadId: input.leadId, scheduledFor: fireAt.toISOString() },
+            '[Nova] call_mover_cold rescheduled to next call window',
+          );
+        }
+      }
+      return { skipped: true, reason, rescheduled: !input.rescheduled };
+    }
 
     if (options?.dryRun) {
       return {
