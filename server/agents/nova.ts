@@ -5,7 +5,7 @@
  *   - `call_mover_dispatch`   : dial a mover to hand off a live job.
  *   - `call_lead_conversion`  : follow up on a warm lead by phone.
  *   - `call_review_request`   : post-move review nudge for the customer.
- *   - `check_call_hours`      : returns whether MT is inside 8am–9pm.
+ *   - `check_call_hours`      : returns whether MT is inside 8am–9pm, Mon–Sat.
  *
  * Calls are placed through Telnyx Call Control (`.calls.dial()`) and every
  * outbound leg is logged to `voice_calls` before the call rings so webhook
@@ -35,6 +35,28 @@ const TELNYX_CONNECTION_ID = process.env.TELNYX_CONNECTION_ID;
 
 const CALL_HOURS_START = 8;
 const CALL_HOURS_END = 21;
+// Sunday, as Date#getDay() reports it for Calgary wall-clock time. Closed day:
+// no outbound calls at all, regardless of hour.
+const CLOSED_DAY_MT = 0;
+
+/**
+ * Reasons checkCallHours() gives for refusing a call because of when it is.
+ *
+ * Callers branch on these to tell "not now, try later" apart from a per-entity
+ * skip like `no_phone`, so they live here rather than being re-listed as string
+ * literals at each call site — a new closed day would silently miss those.
+ */
+export const OUT_OF_HOURS_REASONS = [
+  'before_8am_mt',
+  'after_9pm_mt',
+  'sunday_mt',
+] as const;
+
+export type OutOfHoursReason = (typeof OUT_OF_HOURS_REASONS)[number];
+
+export function isOutOfHoursReason(reason: unknown): reason is OutOfHoursReason {
+  return OUT_OF_HOURS_REASONS.includes(reason as OutOfHoursReason);
+}
 
 const VEHICLE_LABELS: Record<string, string> = {
   A: 'SUV',
@@ -45,7 +67,7 @@ const VEHICLE_LABELS: Record<string, string> = {
 
 interface CallHoursResult {
   allowed: boolean;
-  reason?: string;
+  reason?: OutOfHoursReason;
 }
 
 interface InitiateCallOpts {
@@ -68,7 +90,8 @@ interface InitiateCallResult {
 const RESCHEDULE_HOUR_MT = 9;
 
 /**
- * Next instant at which it is RESCHEDULE_HOUR_MT in Calgary.
+ * Next instant at which it is RESCHEDULE_HOUR_MT in Calgary, on a day Nova is
+ * allowed to dial (Mon–Sat).
  *
  * Naively doing `new Date(now.toLocaleString(..., {timeZone}))` then
  * `.getTime()` returns Calgary wall-clock reinterpreted as the server's zone
@@ -86,6 +109,14 @@ function nextCallWindowStart(now = new Date()): Date {
     target.setDate(target.getDate() + 1);
   }
   target.setHours(RESCHEDULE_HOUR_MT, 0, 0, 0);
+
+  // Roll off a closed day, or the reschedule fires on Sunday, skips again as
+  // out of hours, and (for the paths that only reschedule once) is dropped.
+  // Covers both a Sunday reschedule and a Saturday-evening one that rolled
+  // into Sunday above.
+  while (target.getDay() === CLOSED_DAY_MT) {
+    target.setDate(target.getDate() + 1);
+  }
 
   return new Date(target.getTime() + zoneShiftMs);
 }
@@ -128,10 +159,14 @@ export class NovaAgent extends BaseAgent {
   }
 
   checkCallHours(): CallHoursResult {
-    const mtHour = new Date(
+    const mtNow = new Date(
       new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }),
-    ).getHours();
+    );
 
+    // Sunday first: closed all day, so the hour does not matter.
+    if (mtNow.getDay() === CLOSED_DAY_MT) return { allowed: false, reason: 'sunday_mt' };
+
+    const mtHour = mtNow.getHours();
     if (mtHour < CALL_HOURS_START) return { allowed: false, reason: 'before_8am_mt' };
     if (mtHour >= CALL_HOURS_END) return { allowed: false, reason: 'after_9pm_mt' };
     return { allowed: true };
