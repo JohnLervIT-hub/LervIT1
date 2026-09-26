@@ -140,6 +140,13 @@ export function createNovaBridge(
     try {
       const msg = JSON.parse(data.toString());
 
+      if (msg.type === 'conversation_initiation_metadata') {
+        logger.info(
+          { callControlId, metadata: msg.conversation_initiation_metadata_event },
+          '[Bridge] ElevenLabs negotiated config',
+        );
+      }
+
       if (msg.type === 'audio' && msg.audio_event?.audio_base_64) {
         if (telnyxWs.readyState === WebSocket.OPEN) {
           telnyxWs.send(
