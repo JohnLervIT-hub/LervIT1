@@ -3,6 +3,10 @@ import { Link, useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { API_BASE_URL } from "@/lib/native";
+import {
+  HIGGSFIELD_DEFAULT_DURATION,
+  HIGGSFIELD_DURATION_OPTIONS,
+} from "@shared/video";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -113,6 +117,7 @@ interface ContentItem {
   hashtags: string[] | null;
   cta: string | null;
   aspectRatio: string | null;
+  durationSeconds: number | null;
   generator: string | null;
   providerJobId: string | null;
   videoUrl: string | null;
@@ -125,6 +130,19 @@ interface ContentItem {
   costEstimate: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * The market read Ember stores on creative_brief.marketStrategy. Mirrors
+ * CreativeStrategy in server/agents/ember.ts; only the fields shown are typed,
+ * since the row is written by the server and read here for display only.
+ */
+interface MarketStrategy {
+  angle?: string;
+  rationale?: string;
+  season?: string;
+  area?: string | null;
+  moveType?: string | null;
 }
 
 interface ContentPlan {
@@ -629,10 +647,20 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
   });
 
   const trigger = useMutation({
-    mutationFn: async ({ action, contentItemId }: { action: EmberAction; contentItemId: string }) => {
+    mutationFn: async ({
+      action,
+      contentItemId,
+      // Extra per-action input (e.g. durationSeconds for a Higgsfield render).
+      // Merged after contentItemId so an action cannot drop it.
+      input,
+    }: {
+      action: EmberAction;
+      contentItemId: string;
+      input?: Record<string, unknown>;
+    }) => {
       const res = await apiRequest("POST", "/api/admin/agent/ember/trigger", {
         action,
-        input: { contentItemId },
+        input: { contentItemId, ...input },
         dry_run: false,
       });
       return res.json();
@@ -726,13 +754,18 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
     trigger.mutate({ action, contentItemId: item.id });
   };
 
-  const generateVideo = (item: ContentItem) => {
+  const generateVideo = (item: ContentItem, durationSeconds?: number) => {
     if (!VIDEO_TYPES.has(item.type)) return;
-    const action: EmberAction =
-      item.type === "higgsfield_video"
-        ? "generate_higgsfield_video"
-        : "generate_heygen_video";
-    trigger.mutate({ action, contentItemId: item.id });
+    const isHiggsfield = item.type === "higgsfield_video";
+    const action: EmberAction = isHiggsfield
+      ? "generate_higgsfield_video"
+      : "generate_heygen_video";
+    trigger.mutate({
+      action,
+      contentItemId: item.id,
+      // Only Higgsfield takes a length; HeyGen's is set by the script it reads.
+      input: isHiggsfield && durationSeconds ? { durationSeconds } : undefined,
+    });
   };
 
   const openPreview = (item: ContentItem) => {
@@ -880,7 +913,9 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
                 onOpen={() => openPreview(item)}
                 onApprove={() => requestApprove(item)}
                 onGenerateScript={() => generateScript(item)}
-                onGenerateVideo={() => generateVideo(item)}
+                onGenerateVideo={(durationSeconds) =>
+                  generateVideo(item, durationSeconds)
+                }
                 onPublish={() =>
                   trigger.mutate({ action: "publish_to_social", contentItemId: item.id })
                 }
@@ -903,7 +938,9 @@ function CampaignDetailView({ campaignId }: { campaignId: string }) {
           if (previewItem) requestApprove(previewItem);
         }}
         onGenerateScript={(item) => generateScript(item)}
-        onGenerateVideo={(item) => generateVideo(item)}
+        onGenerateVideo={(item, durationSeconds) =>
+          generateVideo(item, durationSeconds)
+        }
         onPublish={(item) =>
           trigger.mutate({ action: "publish_to_social", contentItemId: item.id })
         }
@@ -1010,7 +1047,7 @@ function ContentItemCard({
   onOpen: () => void;
   onApprove: () => void;
   onGenerateScript: () => void;
-  onGenerateVideo: () => void;
+  onGenerateVideo: (durationSeconds?: number) => void;
   onPublish: () => void;
   onReset: () => void;
   approvePending: boolean;
@@ -1026,6 +1063,11 @@ function ContentItemCard({
   const isFailed = item.status === "failed";
   // Higgsfield renders from a visual brief; only HeyGen reads a spoken script.
   const isBriefDriven = item.type === "higgsfield_video";
+  // Pre-filled from the last submitted length so a retry keeps it; null (never
+  // submitted) falls back to the same default the server would apply anyway.
+  const [durationSeconds, setDurationSeconds] = useState<number>(
+    item.durationSeconds ?? HIGGSFIELD_DEFAULT_DURATION,
+  );
 
   const canApprove = item.status !== "published" && item.status !== "approved" && !isGenerating;
   const canGenerateScriptOrCaption =
@@ -1192,12 +1234,38 @@ function ContentItemCard({
                 </Button>
               </>
             )}
+            {canGenerateVideo && isBriefDriven && (
+              <Select
+                value={String(durationSeconds)}
+                onValueChange={(v) => setDurationSeconds(Number(v))}
+                disabled={triggerPending}
+              >
+                {/* The card itself opens the preview on click; the dropdown
+                    must not trigger that on its way open. */}
+                <SelectTrigger
+                  className="h-9 w-[92px]"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`select-duration-${item.id}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HIGGSFIELD_DURATION_OPTIONS.map((seconds) => (
+                    <SelectItem key={seconds} value={String(seconds)}>
+                      {seconds}s
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {canGenerateVideo && (
               <Button
                 size="sm"
                 variant="outline"
                 disabled={triggerPending}
-                onClick={stop(onGenerateVideo)}
+                onClick={stop(() =>
+                  onGenerateVideo(isBriefDriven ? durationSeconds : undefined),
+                )}
               >
                 {item.type === "higgsfield_video" ? (
                   <Video className="w-3.5 h-3.5 mr-1.5" />
@@ -1288,22 +1356,33 @@ function ContentPreviewModal({
   onClose: () => void;
   onApprove: () => void;
   onGenerateScript: (item: ContentItem) => void;
-  onGenerateVideo: (item: ContentItem) => void;
+  onGenerateVideo: (item: ContentItem, durationSeconds?: number) => void;
   onPublish: (item: ContentItem) => void;
   triggerPending: boolean;
   approvePending: boolean;
 }) {
   const [briefOpen, setBriefOpen] = useState(false);
   const [videoErrored, setVideoErrored] = useState(false);
+  const [durationSeconds, setDurationSeconds] = useState<number>(
+    HIGGSFIELD_DEFAULT_DURATION,
+  );
 
   useEffect(() => {
     setVideoErrored(false);
     setBriefOpen(false);
-  }, [item?.id]);
+    // The modal is reused across items, so reset to the newly-shown item's
+    // stored length rather than leaving the previous item's pick in place.
+    setDurationSeconds(item?.durationSeconds ?? HIGGSFIELD_DEFAULT_DURATION);
+  }, [item?.id, item?.durationSeconds]);
 
   if (!item) return null;
 
   const brief = (item.creativeBrief ?? null) as Record<string, unknown> | null;
+  // Ember records the angle it researched onto the brief. Pulled out of the
+  // generic key/value dump below so it reads as a decision rather than as a
+  // nested JSON blob among the visual fields.
+  const { marketStrategy, ...briefFields } = brief ?? {};
+  const strategy = marketStrategy as MarketStrategy | undefined;
   const qa = (item.qaResults ?? null) as QAResults | null;
   const scriptChars = item.script?.length ?? 0;
   const scriptWords = wordCount(item.script);
@@ -1401,12 +1480,38 @@ function ContentPreviewModal({
                     Generate Brief
                   </Button>
                 )}
+                {canGenerateVideo && isBriefDriven && (
+                  <Select
+                    value={String(durationSeconds)}
+                    onValueChange={(v) => setDurationSeconds(Number(v))}
+                    disabled={triggerPending}
+                  >
+                    <SelectTrigger
+                      className="h-9 w-[92px]"
+                      data-testid={`select-preview-duration-${item.id}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HIGGSFIELD_DURATION_OPTIONS.map((seconds) => (
+                        <SelectItem key={seconds} value={String(seconds)}>
+                          {seconds}s
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 {canGenerateVideo && (
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={triggerPending}
-                    onClick={() => onGenerateVideo(item)}
+                    onClick={() =>
+                      onGenerateVideo(
+                        item,
+                        isBriefDriven ? durationSeconds : undefined,
+                      )
+                    }
                   >
                     {item.type === "higgsfield_video" ? (
                       <Video className="w-3.5 h-3.5 mr-1.5" />
@@ -1520,8 +1625,36 @@ function ContentPreviewModal({
           </section>
         )}
 
+        {/* Market strategy — what Ember researched before writing the prompt */}
+        {strategy?.angle && (
+          <section className="rounded-md border bg-muted/30 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Angle
+              </span>
+              <Badge variant="secondary" className="capitalize">
+                {strategy.angle.replace(/_/g, " ")}
+              </Badge>
+              {strategy.season && (
+                <Badge variant="outline" className="capitalize">
+                  {strategy.season} season
+                </Badge>
+              )}
+              {strategy.area && <Badge variant="outline">{strategy.area}</Badge>}
+              {strategy.moveType && (
+                <Badge variant="outline">{strategy.moveType}</Badge>
+              )}
+            </div>
+            {strategy.rationale && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {strategy.rationale}
+              </p>
+            )}
+          </section>
+        )}
+
         {/* Creative brief */}
-        {brief && Object.keys(brief).length > 0 && (
+        {Object.keys(briefFields).length > 0 && (
           <Collapsible open={briefOpen} onOpenChange={setBriefOpen}>
             <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
               <ChevronRight
@@ -1531,7 +1664,7 @@ function ContentPreviewModal({
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2">
               <dl className="rounded-md border bg-muted/30 p-3 text-xs space-y-1.5">
-                {Object.entries(brief).map(([k, v]) => (
+                {Object.entries(briefFields).map(([k, v]) => (
                   <div key={k} className="grid grid-cols-[7rem_1fr] gap-2">
                     <dt className="font-medium text-muted-foreground capitalize">{k}</dt>
                     <dd className="whitespace-pre-wrap break-words">

@@ -4,6 +4,8 @@
  * Verified against https://docs.higgsfield.ai (2026-09-24):
  *
  * Create:  POST https://api.higgsfield.ai/bytedance/seedance-2.0/text-to-video
+ *          Body: { prompt, duration (4-15, API default 5), resolution,
+ *                  aspect_ratio, generate_audio }
  *          Response: { status, request_id, status_url }
  * Status:  GET  ${status_url}   (defaults to
  *          https://api.higgsfield.ai/requests/${request_id}/status)
@@ -25,6 +27,7 @@
  * poller in background-jobs advances the job.
  */
 
+import { clampDuration } from '@shared/video';
 import { logger } from '../logger';
 
 /**
@@ -52,6 +55,7 @@ function higgsfieldCredentials(): string {
 
 export interface HiggsfieldVideoInput {
   prompt: string;
+  /** Seconds. Clamped to 4-15 by clampDuration; omitted means its default. */
   duration?: number;
   resolution?: '480p' | '720p' | '1080p' | '4k';
   aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
@@ -96,11 +100,17 @@ export class HiggsfieldProvider {
           ? '16:9'
           : (input.aspectRatio ?? '9:16');
 
+    // Resolved once, then used for both the log and the body — the log is
+    // meant to say what was actually submitted, and two independent `?? 5`
+    // expressions could disagree.
+    const duration = clampDuration(input.duration);
+
     logger.info(
       {
         prompt: input.prompt.slice(0, 50),
         aspectRatio,
-        duration: input.duration ?? 5,
+        duration,
+        requestedDuration: input.duration,
         resolution: '720p',
       },
       '[Higgsfield] Submitting Seedance 2.0',
@@ -116,7 +126,7 @@ export class HiggsfieldProvider {
         },
         body: JSON.stringify({
           prompt: input.prompt,
-          duration: input.duration ?? 5,
+          duration,
           resolution: '720p',
           aspect_ratio: aspectRatio,
           generate_audio: true,

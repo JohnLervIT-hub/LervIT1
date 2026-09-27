@@ -2344,6 +2344,12 @@ export const contentItems = pgTable("content_items", {
   hashtags: text("hashtags").array(),
   cta: text("cta"),
   aspectRatio: text("aspect_ratio"),
+  // Requested render length in seconds. The DB default mirrors
+  // HIGGSFIELD_DEFAULT_DURATION in shared/video.ts — keep the two in step.
+  // clampDuration() there is still what resolves a null or out-of-range value
+  // at call time, and remains the only place the 4-15 range lives. See
+  // migrations/0035_content_items_duration_seconds.sql.
+  durationSeconds: integer("duration_seconds").default(10),
   generator: text("generator"), // heygen | higgsfield | ember | manual
   providerJobId: text("provider_job_id"),
   // Retry budget for the 30s Higgsfield poller; see

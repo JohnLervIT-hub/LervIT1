@@ -43,6 +43,7 @@ import { emitEvent } from '../events';
 import { JAILBREAK_PREAMBLE, sanitizeForPrompt } from '../lib/promptSanitizer';
 import { heygenProvider } from '../providers/heygen';
 import { higgsfieldProvider } from '../providers/higgsfield';
+import { clampDuration } from '@shared/video';
 import { isGmbConfigured, replyToReview } from '../lib/gmbClient';
 import { metaProvider } from '../providers/meta';
 import { linkedInProvider } from '../providers/linkedin';
@@ -169,6 +170,312 @@ const CALGARY_AREAS = [
 ] as const;
 
 const CALGARY_QUADRANTS = ['NW', 'NE', 'SW', 'SE'] as const;
+
+// ─── Creative strategy: research the market, then pick an angle ───
+//
+// Video prompts used to be generic — every Higgsfield render got the same
+// "Calgary urban environment, professional cinematography" framing regardless
+// of who was actually in the market that month. This layer reads real demand
+// first (gatherTrendData), decides which persuasive angle fits that context,
+// and only then writes the prompt.
+//
+// The decision is deliberately NOT left to the model. A rule-based score is
+// auditable, reproducible for the same inputs, and testable; a model asked to
+// "pick the best angle" gives a different answer every call and cannot be
+// regression-tested. The model's job is to render the chosen angle well.
+
+export type MovingSeason = 'peak' | 'shoulder' | 'winter';
+
+export type CreativeAngle =
+  | 'urgency'
+  | 'social_proof'
+  | 'price_anchor'
+  | 'local_trust';
+
+/**
+ * Calgary residential moving seasonality. Lease turnover and the school break
+ * put most moves between May and August; April/September/October are shoulders;
+ * November-March is thin and price-driven (snow, frozen walkways, almost nobody
+ * moves in a Calgary winter by choice).
+ */
+function seasonFor(now: Date): MovingSeason {
+  // Calgary time, not server time. A UTC host is already into the next day by
+  // late evening MST, which would roll the month on the 1st and the 31st.
+  const month = Number(
+    now.toLocaleString('en-US', { month: 'numeric', timeZone: 'America/Edmonton' }),
+  );
+  if (month >= 5 && month <= 8) return 'peak';
+  if (month === 4 || month === 9 || month === 10) return 'shoulder';
+  return 'winter';
+}
+
+/** Service-area towns that are not Calgary — "do you even come out here" markets. */
+const OFF_CALGARY_CITIES = new Set([
+  'Airdrie', 'Cochrane', 'Okotoks', 'Chestermere',
+]);
+
+/** Small loads: the buyer is comparing prices, often against doing it themselves. */
+const BUDGET_MOVE_TYPES = new Set(['boxes', 'small']);
+
+/** Whole-home loads: high consideration, the buyer is looking for reassurance. */
+const CONSIDERED_MOVE_TYPES = new Set(['large', 'apartment']);
+
+/**
+ * loadSize is app-controlled (shared/schema.ts uses a zod enum), but it reaches
+ * here straight from a DB column, so it is mapped through a fixed table before
+ * going anywhere near a prompt. An unrecognised bucket becomes null rather than
+ * being interpolated — the same containment rule bucketArea() applies to
+ * addresses.
+ */
+const MOVE_TYPE_LABELS: Record<string, string> = {
+  boxes: 'a few boxes',
+  small: 'a small load',
+  medium: 'a mid-size home',
+  large: 'a full house',
+  apartment: 'a full apartment',
+};
+
+/**
+ * What each angle means on screen. The prompt gets `visual`; `intent` and
+ * `callout` steer the brief so the caption and the footage argue the same thing.
+ */
+export const ANGLE_DIRECTION: Record<
+  CreativeAngle,
+  { label: string; intent: string; visual: string; callout: string }
+> = {
+  urgency: {
+    label: 'Urgency',
+    intent:
+      'Slots are genuinely scarce right now. Convey time running out, never a countdown gimmick or a fake discount deadline.',
+    visual:
+      'Brisk handheld camera, movers loading at pace, a hand checking a phone calendar, low sun dropping behind the skyline, sense of a day being beaten',
+    callout: 'Book the date before it goes.',
+  },
+  social_proof: {
+    label: 'Social proof',
+    intent:
+      'Lead with other Calgarians having already trusted this. Reassurance over excitement — the viewer is deciding whether to risk their belongings.',
+    visual:
+      'Warm natural light, a real handshake at a doorway, neighbours visible on the street, uniformed movers carrying a wrapped sofa with obvious care, steady tripod framing',
+    callout: 'Calgary already moved with us.',
+  },
+  price_anchor: {
+    label: 'Price anchor',
+    intent:
+      'Make the cost feel known and small before it is stated. Transparent, not cheap — no discount-bin energy.',
+    visual:
+      'Clean bright frames, a phone screen held up showing a simple quote, a single van loaded efficiently, uncluttered composition with lots of negative space',
+    callout: 'You see the price before you book.',
+  },
+  local_trust: {
+    label: 'Local trust',
+    intent:
+      'Prove this is a local operator who actually serves the viewer’s own area, not a national dispatcher. Specific place beats any adjective.',
+    visual:
+      'Recognisable local streetscape and low-rise residential character, van parked on a familiar-looking residential road, overcast-soft daylight, documentary framing',
+    callout: 'We are from here.',
+  },
+};
+
+/**
+ * A weak conversion ratio (bookings per lead) reads as a trust gap rather than a
+ * demand problem: people are asking and then not committing.
+ */
+const LOW_CONVERSION_RATIO = 0.25;
+
+/** Share of the window's moves one area must hold before it drives the angle. */
+const AREA_DOMINANCE_SHARE = 0.4;
+
+/** Applied when scores tie, so the same inputs always yield the same angle. */
+const ANGLE_TIE_BREAK: readonly CreativeAngle[] = [
+  'urgency', 'local_trust', 'price_anchor', 'social_proof',
+];
+
+export interface CreativeStrategy {
+  angle: CreativeAngle;
+  /** Why this angle won, in one line, for the admin UI and the audit log. */
+  rationale: string;
+  season: MovingSeason;
+  /** Dominant pickup area from the fixed list, e.g. "Bridgeland", "Calgary SE". */
+  area: string | null;
+  /** The market's city, when demand centres somewhere other than Calgary. */
+  city: string;
+  /** Human label for the dominant load size, or null if unrecognised. */
+  moveType: string | null;
+  scores: Record<CreativeAngle, number>;
+  windowDays: number;
+  bookingCount: number;
+  leadCount: number;
+  /** False when the window is too thin to read anything but the season. */
+  hasDemandSignal: boolean;
+  decidedAt: string;
+}
+
+/**
+ * Score every angle against the market, highest wins.
+ *
+ * These weights are heuristics, not measured lift. Nothing currently records how
+ * a published video performed — content_items has no impression or engagement
+ * columns — so there is no per-angle conversion history to rank against. Each
+ * rule below states the signal it reacts to; once content performance is
+ * tracked, this function is the one place to replace with a measured ranking.
+ *
+ * Pure and exported so it can be tested without a database.
+ */
+export function selectCreativeAngle(market: {
+  season: MovingSeason;
+  area: string | null;
+  areaShare: number;
+  moveTypeKey: string | null;
+  bookingCount: number;
+  leadCount: number;
+  hasDemandSignal: boolean;
+  now?: Date;
+}): CreativeStrategy {
+  const scores: Record<CreativeAngle, number> = {
+    urgency: 0,
+    // Baseline 1: the 5.0 rating is the strongest evergreen asset, so proof is
+    // where this lands when there is no signal at all to read.
+    social_proof: 1,
+    price_anchor: 0,
+    local_trust: 0,
+  };
+  // Reasons are filed under the angle they argue FOR, so the rationale explains
+  // the angle that won rather than listing every signal seen — a price-led
+  // rationale that cites a trust gap reads as self-contradicting.
+  const reasons: Record<CreativeAngle, string[]> = {
+    urgency: [], social_proof: [], price_anchor: [], local_trust: [],
+  };
+
+  // Season is knowable without any demand data, so it is always read — though
+  // only peak and winter actually carry a score.
+  if (market.season === 'peak') {
+    scores.urgency += 3;
+    reasons.urgency.push('peak season (May-Aug) — capacity is the real constraint');
+  } else if (market.season === 'shoulder') {
+    // Scores nothing on purpose. A shoulder month is not scarce, so paying it an
+    // urgency point would manufacture the very deadline the urgency direction
+    // forbids; with no other signal this correctly falls through to proof.
+    // Filed nowhere: it argues for no angle. It still shows in the context line.
+
+  } else {
+    scores.price_anchor += 3;
+    reasons.price_anchor.push('winter — demand is thin and price-led');
+  }
+
+  const isOffCalgary = !!market.area && OFF_CALGARY_CITIES.has(market.area);
+  if (isOffCalgary) {
+    scores.local_trust += 3;
+    reasons.local_trust.push(`demand centred on ${market.area}, outside Calgary proper`);
+  } else if (market.area && market.areaShare >= AREA_DOMINANCE_SHARE) {
+    scores.local_trust += 2;
+    reasons.local_trust.push(
+      `${market.area} holds ${Math.round(market.areaShare * 100)}% of recent moves`,
+    );
+  }
+
+  if (market.moveTypeKey && BUDGET_MOVE_TYPES.has(market.moveTypeKey)) {
+    scores.price_anchor += 2;
+    reasons.price_anchor.push('small loads dominate — buyers are comparing on price');
+  } else if (market.moveTypeKey && CONSIDERED_MOVE_TYPES.has(market.moveTypeKey)) {
+    scores.social_proof += 2;
+    reasons.social_proof.push('whole-home moves dominate — high-consideration purchase');
+  }
+
+  // Only meaningful with enough volume; on a handful of rows the ratio is noise.
+  if (market.hasDemandSignal && market.leadCount > 0) {
+    const ratio = market.bookingCount / market.leadCount;
+    if (ratio < LOW_CONVERSION_RATIO) {
+      scores.social_proof += 3;
+      reasons.social_proof.push(
+        `only ${Math.round(ratio * 100)}% of enquiries converted — reads as a trust gap`,
+      );
+    }
+  }
+
+  const angle = (Object.keys(scores) as CreativeAngle[]).reduce((best, candidate) => {
+    if (scores[candidate] > scores[best]) return candidate;
+    if (scores[candidate] < scores[best]) return best;
+    return ANGLE_TIE_BREAK.indexOf(candidate) < ANGLE_TIE_BREAK.indexOf(best)
+      ? candidate
+      : best;
+  }, 'social_proof' as CreativeAngle);
+
+  // Always stated, so a rationale never implies more evidence than there was.
+  const context = [
+    `${market.season} season`,
+    market.area ?? 'no leading area',
+    market.moveTypeKey ? MOVE_TYPE_LABELS[market.moveTypeKey] ?? 'mixed loads' : 'mixed loads',
+    market.hasDemandSignal
+      ? `${market.bookingCount} moves / ${market.leadCount} enquiries`
+      : 'window too thin to read demand',
+  ].join(', ');
+
+  const picked = reasons[angle];
+
+  return {
+    angle,
+    rationale: `${ANGLE_DIRECTION[angle].label}: ${
+      picked.length
+        ? picked.join('; ')
+        : 'nothing in the window argued for a sharper angle — proof is the safe default'
+    } (${context})`,
+    season: market.season,
+    area: market.area,
+    city: isOffCalgary && market.area ? market.area : 'Calgary',
+    moveType: market.moveTypeKey ? MOVE_TYPE_LABELS[market.moveTypeKey] ?? null : null,
+    scores,
+    windowDays: 0,
+    bookingCount: market.bookingCount,
+    leadCount: market.leadCount,
+    hasDemandSignal: market.hasDemandSignal,
+    decidedAt: (market.now ?? new Date()).toISOString(),
+  };
+}
+
+/** Quadrant codes read badly in a prompt; Seedance does better with words. */
+const QUADRANT_WORDS: Record<string, string> = {
+  NW: 'northwest', NE: 'northeast', SW: 'southwest', SE: 'southeast',
+};
+
+/** One prompt-safe line describing where and when this video is set. */
+export function marketSetting(strategy: CreativeStrategy): string {
+  const season =
+    strategy.season === 'peak'
+      ? 'bright high-summer daylight'
+      : strategy.season === 'winter'
+        ? 'crisp winter light, snow on the ground'
+        : 'clear shoulder-season light, bare trees';
+
+  // strategy.area only ever holds a value from CALGARY_AREAS or a quadrant, so
+  // no customer-typed address text can reach the prompt through here.
+  //
+  // The three shapes have to be phrased differently: a quadrant ("Calgary SE")
+  // is already a city reference, a named neighbourhood sits inside Calgary, and
+  // an off-Calgary town does not.
+  const quadrant = strategy.area?.startsWith('Calgary ')
+    ? QUADRANT_WORDS[strategy.area.slice('Calgary '.length)]
+    : undefined;
+
+  const place = !strategy.area
+    ? 'Calgary, Alberta'
+    : quadrant
+      ? `${quadrant} Calgary`
+      : OFF_CALGARY_CITIES.has(strategy.area)
+        ? `${strategy.area}, Alberta`
+        : `${strategy.area}, Calgary`;
+
+  return `Set in ${place}, ${season}`;
+}
+
+// The market read is the same for every item generated in a batch, so it is
+// cached briefly rather than re-queried per video. generateTrendPost can submit
+// several renders in one run.
+const STRATEGY_CACHE_MS = 15 * 60 * 1000;
+
+// Longer than TREND_WINDOW_DAYS: a weekly window is the right lens for "what
+// happened this week" copy, but too jumpy to steer creative strategy on.
+const STRATEGY_WINDOW_DAYS = 90;
 
 interface TrendSnapshot {
   windowDays: number;
@@ -299,12 +606,22 @@ interface GenerateHiggsfieldVideoInput {
   contentItemId: string;
   prompt?: string;
   style?: string;
-  duration?: number;
+  /**
+   * Seconds, 4-15. Named to match content_items.duration_seconds and to keep it
+   * distinct from GenerateVideoScriptInput.duration, which paces a spoken
+   * script and defaults to 30. Omitted falls back to the item's stored value,
+   * then to HIGGSFIELD_DEFAULT_DURATION.
+   */
+  durationSeconds?: number;
+  /** Force an angle instead of letting the market decide. Admin override. */
+  angle?: CreativeAngle;
 }
 
 interface GenerateCreativeBriefInput {
   contentItemId: string;
   concept?: string;
+  /** Force an angle instead of letting the market decide. Admin override. */
+  angle?: CreativeAngle;
 }
 
 interface RunQAInput {
@@ -392,6 +709,12 @@ export class EmberAgent extends BaseAgent {
   code = 'ember';
 
   protected anthropic: Anthropic;
+
+  /**
+   * Shared across instances: the market read is a property of the market, not of
+   * an agent instance, and the queue worker constructs Ember per job.
+   */
+  private static strategyCache: { at: number; strategy: CreativeStrategy } | null = null;
 
   constructor() {
     super();
@@ -1032,13 +1355,20 @@ Start your response with { directly.
    * carries no address or price column, so neighbourhoods and values come
    * from `bookings`.
    */
-  private async gatherTrendData(): Promise<TrendSnapshot> {
-    const since = new Date(Date.now() - TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  private async gatherTrendData(
+    windowDays: number = TREND_WINDOW_DAYS,
+  ): Promise<TrendSnapshot> {
+    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
+    // Ordered newest-first because of the 500-row cap below: unordered, a window
+    // wider than the cap returns an arbitrary 500 rows and the tallies describe
+    // whatever the planner happened to scan. The 7-day window never came close
+    // to the cap, but STRATEGY_WINDOW_DAYS can.
     const recentLeads = await db
       .select({ sourceChannel: leads.sourceChannel })
       .from(leads)
       .where(and(gte(leads.createdAt, since), eq(leads.leadType, 'b2c')))
+      .orderBy(desc(leads.createdAt))
       .limit(500);
 
     const recentBookings = await db
@@ -1051,6 +1381,7 @@ Start your response with { directly.
       })
       .from(bookings)
       .where(gte(bookings.createdAt, since))
+      .orderBy(desc(bookings.createdAt))
       .limit(500);
 
     const live = recentBookings.filter((b) => b.status !== 'cancelled');
@@ -1078,7 +1409,7 @@ Start your response with { directly.
     const hasStats = live.length >= TREND_MIN_BOOKINGS_FOR_STATS;
 
     return {
-      windowDays: TREND_WINDOW_DAYS,
+      windowDays,
       leadCount: recentLeads.length,
       leadSources: topCounts(recentLeads.map((l) => l.sourceChannel), 3),
       bookingCount: live.length,
@@ -1088,6 +1419,63 @@ Start your response with { directly.
       averagePrice: hasStats ? averagePrice : null,
       hasStats,
     };
+  }
+
+  /**
+   * Research the market, then pick the angle — the step that used to be missing.
+   *
+   * Reuses gatherTrendData over a 90-day window rather than running a second
+   * researcher, so there is one definition of "what the Calgary market is doing"
+   * and the trend copy and the video creative cannot disagree about it.
+   */
+  private async buildCreativeStrategy(): Promise<CreativeStrategy> {
+    const cached = EmberAgent.strategyCache;
+    if (cached && Date.now() - cached.at < STRATEGY_CACHE_MS) {
+      return cached.strategy;
+    }
+
+    const now = new Date();
+    let snapshot: TrendSnapshot | null = null;
+    try {
+      snapshot = await this.gatherTrendData(STRATEGY_WINDOW_DAYS);
+    } catch (err) {
+      // A research failure must not block the render. Season alone still beats
+      // the generic prompt this replaced.
+      logger.warn({ err }, '[Ember] market research failed — season-only strategy');
+    }
+
+    const topArea = snapshot?.topAreas[0] ?? null;
+    const topLoad = snapshot?.loadSizes[0] ?? null;
+    const bookingCount = snapshot?.bookingCount ?? 0;
+
+    const strategy = selectCreativeAngle({
+      season: seasonFor(now),
+      area: topArea?.label ?? null,
+      // Share of bucketable moves, not of all moves — bucketArea returns null for
+      // any address that matches no known area, and those are not in the tally.
+      areaShare:
+        topArea && bookingCount > 0 ? topArea.count / bookingCount : 0,
+      moveTypeKey: topLoad?.label ?? null,
+      bookingCount,
+      leadCount: snapshot?.leadCount ?? 0,
+      hasDemandSignal: snapshot?.hasStats ?? false,
+      now,
+    });
+    strategy.windowDays = snapshot?.windowDays ?? 0;
+
+    logger.info(
+      {
+        angle: strategy.angle,
+        season: strategy.season,
+        area: strategy.area,
+        moveType: strategy.moveType,
+        scores: strategy.scores,
+      },
+      '[Ember] creative strategy selected',
+    );
+
+    EmberAgent.strategyCache = { at: Date.now(), strategy };
+    return strategy;
   }
 
   /** Render the snapshot as prompt-safe lines; omits anything we cannot back. */
@@ -1800,14 +2188,35 @@ Start your response with { directly.
       'description',
     );
 
+    // Research first. The brief is where the angle is fixed, and
+    // generateHiggsfieldVideo composes its prompt from these fields — so
+    // deciding here is what keeps the footage, the caption and the CTA arguing
+    // the same thing instead of three unrelated ideas.
+    const strategy = await this.resolveStrategy(existing, input.angle);
+    const direction = ANGLE_DIRECTION[strategy.angle];
+
     const systemPrompt = `You are Ember Lane, LervIT's creative director.
 Write a directorial brief for a piece of video/social content.
 
 ${LERVIT_BRAND}
 
+MARKET RESEARCH — this is the market this piece is for:
+- City: ${strategy.city}
+- Most active area: ${strategy.area ?? 'no single area leading'}
+- Typical move right now: ${strategy.moveType ?? 'mixed'}
+- Season: ${strategy.season}
+
+CHOSEN ANGLE — ${direction.label}. Do not substitute a different angle.
+- What it has to do: ${direction.intent}
+- Visual direction: ${direction.visual}
+- The line to land: ${direction.callout}
+
+Every field below must serve that angle. A brief that would read the same for
+any other angle is wrong.
+
 Output STRICT JSON only — no prose, no markdown fence:
 {
-  "concept": "one-sentence creative concept",
+  "concept": "one-sentence creative concept, built on the chosen angle",
   "mood": "adjectives describing tone",
   "palette": ["#hex1", "#hex2"],
   "visualStyle": "one sentence — camera, lighting, composition",
@@ -1818,7 +2227,9 @@ Output STRICT JSON only — no prose, no markdown fence:
 
     const userMessage = `Brief the visual/tonal direction for: ${concept}
 Platform: ${item.platform ?? 'social'}
-Type: ${item.type}`;
+Type: ${item.type}
+Angle: ${direction.label}
+Market: ${strategy.city}${strategy.area ? ` (${strategy.area})` : ''}, ${strategy.season} season`;
 
     const raw = await this.callAnthropic(systemPrompt, userMessage, 800);
 
@@ -1830,7 +2241,10 @@ Type: ${item.type}`;
     }
 
     // Merge into existing brief rather than replacing (createCampaign put concept/week/etc there).
-    const merged = { ...existing, ...parsed };
+    // marketStrategy is stored alongside so the decision is auditable in the
+    // admin preview, and so the render reuses this angle rather than re-deciding
+    // against a market that may have moved on since the brief was written.
+    const merged = { ...existing, ...parsed, marketStrategy: strategy };
 
     await db
       .update(contentItems)
@@ -1840,8 +2254,37 @@ Type: ${item.type}`;
     return {
       generated: true,
       contentItemId: input.contentItemId,
+      angle: strategy.angle,
+      rationale: strategy.rationale,
       brief: merged,
     };
+  }
+
+  /**
+   * The angle for a piece, in precedence order: an explicit override, then the
+   * one already recorded on the brief, then a fresh market read.
+   *
+   * Reusing the stored decision matters — a brief written in August under an
+   * urgency angle must not be rendered in November against a price angle, which
+   * is what re-deciding at render time would do.
+   */
+  private async resolveStrategy(
+    brief: any,
+    override?: CreativeAngle,
+  ): Promise<CreativeStrategy> {
+    if (override && ANGLE_DIRECTION[override]) {
+      const strategy = await this.buildCreativeStrategy();
+      return {
+        ...strategy,
+        angle: override,
+        rationale: `${ANGLE_DIRECTION[override].label}: set explicitly by the caller`,
+      };
+    }
+
+    const stored = brief?.marketStrategy as CreativeStrategy | undefined;
+    if (stored?.angle && ANGLE_DIRECTION[stored.angle]) return stored;
+
+    return this.buildCreativeStrategy();
   }
 
   async generateHeygenVideo(input: GenerateHeygenVideoInput, options?: AgentRunOptions) {
@@ -1940,6 +2383,13 @@ Type: ${item.type}`;
 
     const brief = (item.creativeBrief ?? {}) as any;
 
+    // Research the market and fix the angle before composing anything. This
+    // used to go straight to a fixed "Calgary urban environment" string, so
+    // every render in the system was shot in the same nowhere-in-particular
+    // regardless of who was actually buying that month.
+    const strategy = await this.resolveStrategy(brief, input.angle);
+    const direction = ANGLE_DIRECTION[strategy.angle];
+
     // Seedance is text-to-video: the prompt describes what the camera SEES.
     // Compose it from the brief's visual fields rather than the 80-char plan
     // concept alone. Dialogue and on-screen text are suppressed — the model
@@ -1951,7 +2401,10 @@ Type: ${item.type}`;
       Array.isArray(brief?.palette) && brief.palette.length
         ? `Colour palette: ${brief.palette.join(', ')}`
         : null,
-      'Calgary urban environment',
+      // The angle's camera and action direction, and the real place/season it
+      // is set in — both derived from the market read, not hardcoded.
+      direction.visual,
+      marketSetting(strategy),
       'Professional cinematography',
       'No text overlays',
       'No dialogue',
@@ -1960,22 +2413,47 @@ Type: ${item.type}`;
       .map((part) => String(part).trim().replace(/\.$/, ''))
       .join('. ');
 
+    // Even a caller-supplied prompt gets the angle and setting appended, so an
+    // ad-hoc submit is still market-aware rather than falling back to the old
+    // fixed "premium, urban Calgary" tail.
     const prompt =
-      input.prompt ?? (visualPrompt || 'Calgary moving lifestyle, cinematic, professional');
+      input.prompt
+        ? [
+            input.prompt.trim().replace(/\.$/, ''),
+            direction.visual,
+            marketSetting(strategy),
+            'Professional lighting',
+            'No text overlays',
+            'No dialogue',
+          ].join('. ')
+        : visualPrompt || 'Calgary moving lifestyle, cinematic, professional';
 
+    // An explicit request wins; otherwise reuse whatever length this item was
+    // last submitted at, so a resubmit after a failed render reproduces the
+    // same video rather than silently switching to the default. Clamped here
+    // with the same function the provider uses, so the row records the number
+    // the API is actually given.
+    const durationSeconds = clampDuration(input.durationSeconds ?? item.durationSeconds);
+
+    // Record the angle on the brief when it came from a fresh read rather than
+    // from the brief itself, so the item carries the decision its footage was
+    // shot for and a later resubmit reuses it.
     await db
       .update(contentItems)
-      .set({ status: 'generating', updatedAt: new Date() })
+      .set({
+        status: 'generating',
+        durationSeconds,
+        creativeBrief: { ...brief, marketStrategy: strategy },
+        updatedAt: new Date(),
+      })
       .where(eq(contentItems.id, input.contentItemId));
 
     try {
       const job = await higgsfieldProvider.createVideo({
-        // The composed prompt already carries the cinematic/Calgary framing;
-        // only a caller-supplied raw prompt still needs it appended.
-        prompt: input.prompt
-          ? `${prompt}. Cinematic, premium, urban Calgary. Professional lighting.`
-          : prompt,
-        duration: input.duration ?? 5,
+        // Both branches above already carry the angle direction and the market
+        // setting, so nothing is appended here any more.
+        prompt,
+        duration: durationSeconds,
         platform: item.platform ?? undefined,
       });
 
@@ -1996,7 +2474,12 @@ Type: ${item.type}`;
         'ember.higgsfield_video_submitted',
         'agent',
         'ember',
-        { contentItemId: input.contentItemId, jobId: job.jobId },
+        {
+          contentItemId: input.contentItemId,
+          jobId: job.jobId,
+          durationSeconds,
+          angle: strategy.angle,
+        },
         'agent',
       );
 
@@ -2004,6 +2487,9 @@ Type: ${item.type}`;
         submitted: true,
         contentItemId: input.contentItemId,
         jobId: job.jobId,
+        durationSeconds,
+        angle: strategy.angle,
+        rationale: strategy.rationale,
         status: 'processing' as const,
       };
     } catch (err: any) {

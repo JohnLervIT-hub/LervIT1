@@ -1,5 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  clampDuration,
+  HIGGSFIELD_DEFAULT_DURATION,
+  HIGGSFIELD_MAX_DURATION,
+  HIGGSFIELD_MIN_DURATION,
+} from "@shared/video";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -300,10 +306,23 @@ export function EmberCard() {
               onClick={() => {
                 const contentItemId = window.prompt("Content item ID?");
                 if (!contentItemId) return;
+                const raw = window.prompt(
+                  `Length in seconds (${HIGGSFIELD_MIN_DURATION}-${HIGGSFIELD_MAX_DURATION})?`,
+                  String(HIGGSFIELD_DEFAULT_DURATION),
+                );
+                // Cancelled, blank or non-numeric: send nothing and let the
+                // server resolve the length, rather than guessing here. Blank
+                // is checked before Number(), which reads "" as 0 and would
+                // otherwise clamp an empty box down to the 4s minimum.
+                const text = raw?.trim() ?? "";
+                const parsed = text === "" ? NaN : Number(text);
+                const durationSeconds = Number.isFinite(parsed)
+                  ? clampDuration(parsed)
+                  : undefined;
                 trigger.mutate({
                   action: "generate_higgsfield_video",
                   dryRun: false,
-                  input: { contentItemId },
+                  input: { contentItemId, durationSeconds },
                 });
               }}
               disabled={trigger.isPending}

@@ -1732,3 +1732,8 @@ ALTER TABLE content_items
 ALTER TABLE social_posts
   ADD COLUMN IF NOT EXISTS platform_post_id text,
   ADD COLUMN IF NOT EXISTS failure_reason   text;
+
+-- Requested Higgsfield render length. DEFAULT mirrors HIGGSFIELD_DEFAULT_DURATION
+-- in shared/video.ts (migrations/0035_content_items_duration_seconds.sql).
+ALTER TABLE content_items
+  ADD COLUMN IF NOT EXISTS duration_seconds integer DEFAULT 10;
