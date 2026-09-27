@@ -162,6 +162,10 @@ export function createNovaBridge(
         ? `${greeting} You started booking with us but didn't complete payment. Want me to send the link again?`
         : context?.callType === 'mover_cold_intro'
         ? `${greeting} I'm reaching out to see if you'd be open to a quick chat about partnering with us on moves in Calgary.`
+        : context?.callType === 'review_request'
+        ? `${greeting} We just completed your move and wanted to make sure everything went smoothly. Got a minute to share how it went?`
+        : context?.callType === 'mover_dispatch'
+        ? `${greeting} I'm calling about a move job coming up that matches your area. Got 30 seconds to hear the details?`
         : `${greeting} How can I help you today?`;
 
     const goal = context?.resume
@@ -174,6 +178,10 @@ export function createNovaBridge(
         // Paired with the cold-intro opener above: without this the call pitches
         // a partnership and then asks the mover for their own pickup address.
         ? 'Gauge interest in partnering on Calgary moves and book a follow-up chat.'
+        : context?.callType === 'review_request'
+        ? 'Get feedback on the move and request a Google review if satisfied.'
+        : context?.callType === 'mover_dispatch'
+        ? 'Share job details and confirm mover availability and interest.'
         : 'Help customer with their move. Get pickup and dropoff addresses.';
 
     // Only with a leadId: report_objection writes to that lead row and 400s
