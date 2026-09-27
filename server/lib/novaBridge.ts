@@ -159,8 +159,10 @@ export function createNovaBridge(
       : context?.callType === 'lead_conversion'
         ? `${greeting} You reached out about a move${contextInfo ? ' — ' + contextInfo : ''}. Still planning that move?`
         : context?.callType === 'payment_recovery'
-        ? `${greeting} You started booking a move but didn't complete payment. Want me to send the link again?`
-        : `${greeting} You wanted to chat about your move. How can I help?`;
+        ? `${greeting} You started booking with us but didn't complete payment. Want me to send the link again?`
+        : context?.callType === 'mover_cold_intro'
+        ? `${greeting} I'm reaching out to see if you'd be open to a quick chat about partnering with us on moves in Calgary.`
+        : `${greeting} How can I help you today?`;
 
     const goal = context?.resume
       ? context.resume.goal
@@ -168,6 +170,10 @@ export function createNovaBridge(
         ? 'Book the move live on this call. Offer LERVIT10 if they hesitate.'
         : context?.callType === 'payment_recovery'
         ? 'Get customer to complete payment at lervit.com'
+        : context?.callType === 'mover_cold_intro'
+        // Paired with the cold-intro opener above: without this the call pitches
+        // a partnership and then asks the mover for their own pickup address.
+        ? 'Gauge interest in partnering on Calgary moves and book a follow-up chat.'
         : 'Help customer with their move. Get pickup and dropoff addresses.';
 
     // Only with a leadId: report_objection writes to that lead row and 400s
@@ -211,6 +217,7 @@ export function createNovaBridge(
         conversation_config_override: {
           agent: {
             prompt: { prompt },
+            first_message: firstMessage,
             language: 'en',
           },
           tts: {
