@@ -90,7 +90,7 @@ class HeyGenProvider {
         script: input.script,
         resolution: '720p',
         aspect_ratio: input.aspectRatio ?? '9:16',
-        engine: { name: input.engine ?? 'avatar_iii' },
+        engine: { type: input.engine ?? 'avatar_iii' },
       }),
     });
 
