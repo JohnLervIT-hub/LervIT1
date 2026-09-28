@@ -59,7 +59,7 @@ export function isOutOfHoursReason(reason: unknown): reason is OutOfHoursReason 
 }
 
 const VEHICLE_LABELS: Record<string, string> = {
-  A: 'SUV',
+  A: 'car / SUV',
   B: 'pickup truck',
   C: 'cargo van',
   E: 'moving truck',

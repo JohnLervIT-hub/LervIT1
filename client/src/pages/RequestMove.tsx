@@ -166,6 +166,24 @@ function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+// Vehicle tiers, ranked smallest → largest. A load's vehicle is the max tier
+// across its identified items. VEHICLE_TIER_KEYS order must match the ranks.
+const VEHICLE_LABELS: Record<string, string> = {
+  car: 'Car / SUV',
+  pickup: 'Pickup Truck',
+  van: 'Cargo Van',
+  truck: 'Moving Truck',
+};
+const VEHICLE_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+const VEHICLE_TIER_KEYS = ['car', 'pickup', 'van', 'truck'] as const;
+
+// Highest vehicle tier required by the load, or null when nothing is identified.
+function maxVehicleTier(items: IdentifiedItem[]): string | null {
+  if (items.length === 0) return null;
+  const maxRank = items.reduce((m, it) => Math.max(m, VEHICLE_RANK[it.vehicleType || 'car'] ?? 0), 0);
+  return VEHICLE_TIER_KEYS[maxRank];
+}
+
 export default function RequestMove() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -318,13 +336,7 @@ export default function RequestMove() {
     }
     quoteSaveInFlight.current = true;
 
-    const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
-    const tiers = ['car', 'pickup', 'van', 'truck'] as const;
-    const maxTier = identifiedItems.reduce(
-      (m, it) => Math.max(m, VEHICLE_TIER_RANK[it.vehicleType || 'car'] ?? 0),
-      0,
-    );
-    const vehicleType = identifiedItems.length > 0 ? tiers[maxTier] : null;
+    const vehicleType = maxVehicleTier(identifiedItems);
 
     fetch('/api/quotes', {
       method: 'POST',
@@ -380,19 +392,7 @@ export default function RequestMove() {
         try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
       })();
 
-      const VEHICLE_LABELS: Record<string, string> = {
-        car: 'SUV',
-        pickup: 'Pickup Truck',
-        van: 'Cargo Van',
-        truck: 'Moving Truck',
-      };
-      const VEHICLE_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
-      const tiers = ['car', 'pickup', 'van', 'truck'] as const;
-      const maxTier = identifiedItems.reduce(
-        (m, it) => Math.max(m, VEHICLE_RANK[it.vehicleType || 'car'] ?? 0),
-        0,
-      );
-      const vehicleKey = identifiedItems.length > 0 ? tiers[maxTier] : null;
+      const vehicleKey = maxVehicleTier(identifiedItems);
       const distanceKm = priceBreakdown?.distanceKm || estimateDistance;
 
       const quoteContext = {

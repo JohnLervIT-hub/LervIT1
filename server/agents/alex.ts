@@ -43,6 +43,19 @@ type QuoteAddresses = {
   pickupAddress: string | null;
   dropoffAddress: string | null;
   shortId: string | null;
+  vehicleType: string | null;
+};
+
+// quotes.vehicleType stores the raw tier key the quote form derived from the
+// vision result ('car' | 'pickup' | 'van' | 'truck') — NOT Nova's A/B/C/E
+// vehicle classes, so these labels can't be shared with nova.ts. Nullable in
+// the DB (legacy quotes, and item-less quotes post null), so every read needs
+// a fallback.
+const QUOTE_VEHICLE_LABELS: Record<string, string> = {
+  car: 'Car / SUV',
+  pickup: 'Pickup Truck',
+  van: 'Cargo Van',
+  truck: 'Moving Truck',
 };
 
 async function fetchQuoteAddresses(quoteId: string | null | undefined): Promise<QuoteAddresses | null> {
@@ -53,6 +66,7 @@ async function fetchQuoteAddresses(quoteId: string | null | undefined): Promise<
         pickupAddress: quotes.pickupAddress,
         dropoffAddress: quotes.dropoffAddress,
         shortId: quotes.shortId,
+        vehicleType: quotes.vehicleType,
       })
       .from(quotes)
       .where(eq(quotes.id, quoteId))
@@ -242,7 +256,11 @@ export class AlexAgent extends BaseAgent {
     const hasQuote = notes.includes('Quote:');
     const price = notes.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
     const items = notes.match(/Items: ([^\n]+)/)?.[1];
-    const vehicle = notes.match(/Vehicle: ([^\n]+)/)?.[1];
+    // Live quote wins; the notes regex covers leads captured before quoteContext
+    // carried a vehicle label (and Scout-scraped leads with no quote at all).
+    const vehicle =
+      QUOTE_VEHICLE_LABELS[quoteAddresses?.vehicleType ?? ''] ??
+      notes.match(/Vehicle: ([^\n]+)/)?.[1];
     const movers = notes.match(/Movers: (\d+)/)?.[1];
 
     const raw = await this.callClaude(
@@ -430,6 +448,10 @@ Dropoff area: ${dropoffArea ?? 'not available'}`,
     } else if (lead.contactEmail) {
       channel = 'email';
       const isLast = touchNumber === 4;
+      // Email only — the SMS branch above is capped at 60 chars and can't carry this.
+      const touchVehicle =
+        QUOTE_VEHICLE_LABELS[quoteAddresses?.vehicleType ?? ''] ??
+        lead.notes?.match(/Vehicle: ([^\n]+)/)?.[1];
       const raw = await this.callClaude(
         `You are Alex Morgan from LervIT Calgary.
 Write a ${isLast ? 'final' : 'follow-up'} email.
@@ -438,6 +460,7 @@ Warm, brief, not pushy. 2-3 paragraphs.
 Format: first line "SUBJECT: <subject>", blank line, then the body.`,
         `Lead context: ${lead.notes ?? 'Calgary move inquiry'}
 Touch number: ${touchNumber} of 4
+Vehicle: ${touchVehicle ?? 'appropriate vehicle'}
 Quote link: ${bookingLink}
 ${lead.quoteId ? '(This link reopens their exact saved quote.)' : ''}`,
         ALEX_EMAIL_MODEL,
