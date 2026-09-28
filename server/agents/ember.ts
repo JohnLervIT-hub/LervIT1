@@ -322,9 +322,36 @@ const EXTERNAL_SIGNAL_FAILURE_TTL_MS = 10 * 60 * 1000;
 /** Matches the timeout scout.ts and ryan.ts use on their outbound fetches. */
 const EXTERNAL_FETCH_TIMEOUT_MS = 8_000;
 
-const TRENDS_KEYWORD = 'calgary movers';
 const TRENDS_GEO = 'CA-AB';
-const TRENDS_TIME = 'now 7-d';
+
+/**
+ * Two queries, because one can't serve both fields (all figures measured
+ * 2026-09-28, CA-AB):
+ *
+ *   'calgary movers' / now 7-d    -> score 1/100, no rising terms. Below Trends'
+ *                                    reporting threshold at hour resolution, so
+ *                                    the original config scored nothing even when
+ *                                    the fetch succeeded.
+ *   'calgary movers' / today 12-m -> score 76/100, still no rising terms. City-level
+ *                                    keywords don't populate relatedsearches.
+ *   'movers' / today 3-m          -> score 26/100 AND real rising terms, including
+ *                                    price-shaped ones ("cheap long distance movers").
+ *   'moving' / today 12-m         -> score 89 but junk terms ("self moving chess
+ *                                    board"), which would poison the brief prompt.
+ *
+ * So: the narrow keyword drives the score, the broader one drives the terms.
+ */
+const TRENDS_SCORE_QUERY = { keyword: 'calgary movers', time: 'today 12-m' };
+const TRENDS_TERMS_QUERY = { keyword: 'movers', time: 'today 3-m' };
+
+/**
+ * Warmed Trends cookie. The API answers 429 to a cold client — NOT because of IP
+ * reputation, which is why proxying doesn't fix it (and ScrapingBee 400s every
+ * *.google.com URL anyway, see commit ad56c89). One GET of the Trends homepage
+ * yields the cookie that makes the same request return 200.
+ */
+let trendsCookie: { value: string; expiresAt: number } | null = null;
+const TRENDS_COOKIE_TTL_MS = 30 * 60 * 1000;
 
 /** Trends and PromptHero both serve these paths to browsers, not to API clients. */
 const BROWSER_HEADERS = {
@@ -345,6 +372,40 @@ const PROMPT_STYLE_KEYWORDS = new Set([
   'silhouette', 'reflective', 'textured',
 ]);
 
+/**
+ * One GET of the Trends homepage to collect the consent cookie the API requires.
+ * Cached 30min. Returns '' when no cookie came back — the API calls still go out,
+ * they just get the old 429, which the caller treats as a normal failure.
+ */
+async function warmTrendsCookie(): Promise<string> {
+  if (trendsCookie && Date.now() < trendsCookie.expiresAt) return trendsCookie.value;
+
+  const res = await fetch('https://trends.google.com/trends/?geo=CA', {
+    headers: BROWSER_HEADERS,
+    signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
+  });
+  // Node 18.14+ exposes every Set-Cookie separately; a single joined header would
+  // lose all but one cookie.
+  const value = res.headers
+    .getSetCookie()
+    .map((line) => line.split(';')[0])
+    .filter(Boolean)
+    .join('; ');
+
+  trendsCookie = { value, expiresAt: Date.now() + TRENDS_COOKIE_TTL_MS };
+  logger.info({ cookies: value ? value.split('; ').length : 0 }, '[Ember] Trends cookie warmed');
+  return value;
+}
+
+/** Trends rejects API calls that don't look like they came from the explore UI. */
+function trendsHeaders(cookie: string): Record<string, string> {
+  return {
+    ...BROWSER_HEADERS,
+    Referer: 'https://trends.google.com/trends/explore',
+    ...(cookie ? { Cookie: cookie } : {}),
+  };
+}
+
 /** Google Trends prefixes its JSON with `)]}'` to defeat JSON hijacking. */
 function parseTrendsJson(raw: string): any {
   const start = raw.indexOf('{');
@@ -352,9 +413,12 @@ function parseTrendsJson(raw: string): any {
   return JSON.parse(raw.slice(start));
 }
 
-async function fetchTrendsWidgets(): Promise<any[]> {
+async function fetchTrendsWidgets(
+  query: { keyword: string; time: string },
+  cookie: string,
+): Promise<any[]> {
   const req = {
-    comparisonItem: [{ keyword: TRENDS_KEYWORD, geo: TRENDS_GEO, time: TRENDS_TIME }],
+    comparisonItem: [{ keyword: query.keyword, geo: TRENDS_GEO, time: query.time }],
     category: 0,
     property: '',
   };
@@ -362,23 +426,23 @@ async function fetchTrendsWidgets(): Promise<any[]> {
     'https://trends.google.com/trends/api/explore?hl=en-US&tz=-360&req=' +
     encodeURIComponent(JSON.stringify(req));
   const res = await fetch(url, {
-    headers: BROWSER_HEADERS,
+    headers: trendsHeaders(cookie),
     signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
   });
-  // Trends answers 429 to most datacenter IPs without a consent cookie.
-  if (!res.ok) throw new Error(`Trends explore ${res.status}`);
+  // 429 here means the cookie warmup didn't take.
+  if (!res.ok) throw new Error(`Trends explore ${res.status} (${query.keyword})`);
   const widgets = parseTrendsJson(await res.text())?.widgets;
   if (!Array.isArray(widgets)) throw new Error('Trends explore returned no widgets');
   return widgets;
 }
 
 /** Fetch one widget's data. `path` differs per widget — multiline vs relatedsearches. */
-async function fetchTrendsWidget(path: string, widget: any): Promise<any> {
+async function fetchTrendsWidget(path: string, widget: any, cookie: string): Promise<any> {
   const url =
     `https://trends.google.com/trends/api/widgetdata/${path}?hl=en-US&tz=-360&req=` +
     `${encodeURIComponent(JSON.stringify(widget.request))}&token=${encodeURIComponent(widget.token)}`;
   const res = await fetch(url, {
-    headers: BROWSER_HEADERS,
+    headers: trendsHeaders(cookie),
     signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`Trends ${path} ${res.status}`);
@@ -411,21 +475,39 @@ function extractRisingQueries(related: any): string[] {
     .slice(0, 5);
 }
 
-/** Explore + both widgets, as one unit — a token failure sinks the whole read. */
+/**
+ * The whole Trends read: one cookie warmup, then the score query and the terms
+ * query. Each query's own widget fetch is independent, so a missing
+ * relatedsearches payload never voids a good score.
+ */
 async function fetchTrendSignals(): Promise<{ trendScore: number; trendingTerms: string[] }> {
-  const widgets = await fetchTrendsWidgets();
-  const timeseries = widgets.find((w: any) => w?.id === 'TIMESERIES');
-  const relatedQueries = widgets.find((w: any) => w?.id === 'RELATED_QUERIES');
+  const cookie = await warmTrendsCookie();
 
-  // Independent of each other: missing related queries must not void the score.
-  const [multiline, related] = await Promise.allSettled([
-    timeseries ? fetchTrendsWidget('multiline', timeseries) : Promise.resolve(null),
-    relatedQueries ? fetchTrendsWidget('relatedsearches', relatedQueries) : Promise.resolve(null),
+  const [scoreResult, termsResult] = await Promise.allSettled([
+    (async () => {
+      const widgets = await fetchTrendsWidgets(TRENDS_SCORE_QUERY, cookie);
+      const timeseries = widgets.find((w: any) => w?.id === 'TIMESERIES');
+      if (!timeseries) return 0;
+      return averageTrendScore(await fetchTrendsWidget('multiline', timeseries, cookie));
+    })(),
+    (async () => {
+      const widgets = await fetchTrendsWidgets(TRENDS_TERMS_QUERY, cookie);
+      const relatedQueries = widgets.find((w: any) => w?.id === 'RELATED_QUERIES');
+      if (!relatedQueries) return [];
+      return extractRisingQueries(
+        await fetchTrendsWidget('relatedsearches', relatedQueries, cookie),
+      );
+    })(),
   ]);
 
+  // Both halves failing is a real Trends outage; the caller turns that into null.
+  if (scoreResult.status === 'rejected' && termsResult.status === 'rejected') {
+    throw scoreResult.reason;
+  }
+
   return {
-    trendScore: multiline.status === 'fulfilled' ? averageTrendScore(multiline.value) : 0,
-    trendingTerms: related.status === 'fulfilled' ? extractRisingQueries(related.value) : [],
+    trendScore: scoreResult.status === 'fulfilled' ? scoreResult.value : 0,
+    trendingTerms: termsResult.status === 'fulfilled' ? termsResult.value : [],
   };
 }
 
