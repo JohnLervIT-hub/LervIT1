@@ -291,6 +291,255 @@ const ANGLE_TIE_BREAK: readonly CreativeAngle[] = [
   'urgency', 'local_trust', 'price_anchor', 'social_proof',
 ];
 
+/**
+ * Demand signals read from outside our own booking data.
+ *
+ * Both sources are unofficial: Google Trends' internal JSON endpoints (the ones
+ * pytrends drives) and PromptHero's rendered HTML. Neither is a supported API,
+ * so every field here is best-effort and the whole fetch is non-fatal — see
+ * fetchExternalSignals.
+ */
+export interface ExternalSignals {
+  /** 0-100, Google Trends interest over time, averaged over the last 7 points. */
+  trendScore: number;
+  /** Related rising queries, top 5. */
+  trendingTerms: string[];
+  /** Style keywords scraped from PromptHero, top 5 unique. */
+  promptStyles: string[];
+  /** True when interest is high enough that proof-led angles should win. */
+  socialProofBump: boolean;
+}
+
+/**
+ * `signals: null` caches a FAILURE, so a 429 from Trends doesn't make every
+ * render re-pay three slow HTTP round-trips. Failures expire sooner than
+ * successes.
+ */
+let externalSignalCache: { signals: ExternalSignals | null; expiresAt: number } | null = null;
+
+const EXTERNAL_SIGNAL_TTL_MS = 60 * 60 * 1000;
+const EXTERNAL_SIGNAL_FAILURE_TTL_MS = 10 * 60 * 1000;
+/** Matches the timeout scout.ts and ryan.ts use on their outbound fetches. */
+const EXTERNAL_FETCH_TIMEOUT_MS = 8_000;
+
+const TRENDS_KEYWORD = 'calgary movers';
+const TRENDS_GEO = 'CA-AB';
+const TRENDS_TIME = 'now 7-d';
+
+/** Trends and PromptHero both serve these paths to browsers, not to API clients. */
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'en-CA,en;q=0.9',
+} as const;
+
+/** Terms in a rising query that mean the market is shopping on price. */
+const PRICE_INTENT_TERMS = ['price', 'cost', 'cheap', 'affordable'];
+
+/** Style words worth forwarding to a text-to-video prompt. */
+const PROMPT_STYLE_KEYWORDS = new Set([
+  'cinematic', 'dramatic', 'golden', 'aerial', 'moody', 'vibrant', 'minimal',
+  'atmospheric', 'ethereal', 'gritty', 'warm', 'soft', 'backlit', 'bokeh',
+  'anamorphic', 'telephoto', 'wide', 'handheld', 'documentary', 'editorial',
+  'volumetric', 'overcast', 'sunlit', 'hazy', 'crisp', 'muted', 'saturated',
+  'silhouette', 'reflective', 'textured',
+]);
+
+/** Google Trends prefixes its JSON with `)]}'` to defeat JSON hijacking. */
+function parseTrendsJson(raw: string): any {
+  const start = raw.indexOf('{');
+  if (start < 0) throw new Error('no JSON object in Trends response');
+  return JSON.parse(raw.slice(start));
+}
+
+async function fetchTrendsWidgets(): Promise<any[]> {
+  const req = {
+    comparisonItem: [{ keyword: TRENDS_KEYWORD, geo: TRENDS_GEO, time: TRENDS_TIME }],
+    category: 0,
+    property: '',
+  };
+  const url =
+    'https://trends.google.com/trends/api/explore?hl=en-US&tz=-360&req=' +
+    encodeURIComponent(JSON.stringify(req));
+  const res = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
+  });
+  // Trends answers 429 to most datacenter IPs without a consent cookie.
+  if (!res.ok) throw new Error(`Trends explore ${res.status}`);
+  const widgets = parseTrendsJson(await res.text())?.widgets;
+  if (!Array.isArray(widgets)) throw new Error('Trends explore returned no widgets');
+  return widgets;
+}
+
+/** Fetch one widget's data. `path` differs per widget — multiline vs relatedsearches. */
+async function fetchTrendsWidget(path: string, widget: any): Promise<any> {
+  const url =
+    `https://trends.google.com/trends/api/widgetdata/${path}?hl=en-US&tz=-360&req=` +
+    `${encodeURIComponent(JSON.stringify(widget.request))}&token=${encodeURIComponent(widget.token)}`;
+  const res = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Trends ${path} ${res.status}`);
+  return parseTrendsJson(await res.text());
+}
+
+/** Mean of the last 7 timeline points, 0-100. */
+function averageTrendScore(multiline: any): number {
+  const timeline = multiline?.default?.timelineData;
+  if (!Array.isArray(timeline) || timeline.length === 0) return 0;
+  const values = timeline
+    .slice(-7)
+    .map((point: any) => Number(point?.value?.[0]))
+    .filter((n: number) => Number.isFinite(n));
+  if (values.length === 0) return 0;
+  const mean = values.reduce((a: number, b: number) => a + b, 0) / values.length;
+  return Math.max(0, Math.min(100, Math.round(mean)));
+}
+
+/** Rising queries from the relatedsearches payload, top 5. */
+function extractRisingQueries(related: any): string[] {
+  const lists = related?.default?.rankedList;
+  if (!Array.isArray(lists)) return [];
+  // The rising list is usually index 1; fall back to whatever is present.
+  const ranked = lists[1]?.rankedKeyword ?? lists[0]?.rankedKeyword;
+  if (!Array.isArray(ranked)) return [];
+  return ranked
+    .map((k: any) => (typeof k?.query === 'string' ? k.query.trim() : ''))
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+/** Explore + both widgets, as one unit — a token failure sinks the whole read. */
+async function fetchTrendSignals(): Promise<{ trendScore: number; trendingTerms: string[] }> {
+  const widgets = await fetchTrendsWidgets();
+  const timeseries = widgets.find((w: any) => w?.id === 'TIMESERIES');
+  const relatedQueries = widgets.find((w: any) => w?.id === 'RELATED_QUERIES');
+
+  // Independent of each other: missing related queries must not void the score.
+  const [multiline, related] = await Promise.allSettled([
+    timeseries ? fetchTrendsWidget('multiline', timeseries) : Promise.resolve(null),
+    relatedQueries ? fetchTrendsWidget('relatedsearches', relatedQueries) : Promise.resolve(null),
+  ]);
+
+  return {
+    trendScore: multiline.status === 'fulfilled' ? averageTrendScore(multiline.value) : 0,
+    trendingTerms: related.status === 'fulfilled' ? extractRisingQueries(related.value) : [],
+  };
+}
+
+/**
+ * Style keywords off PromptHero's search page.
+ *
+ * PromptHero is a Next.js app and serves no `data-prompt` attributes (verified
+ * 2026-09-28: 0 matches in 1.4MB of HTML). The prompt bodies ship inside the RSC
+ * flight payload as escaped `\"prompt\":\"...\"` JSON, so that is read first and
+ * the `data-prompt` form is kept as a fallback in case the markup changes back.
+ *
+ * Either way this is a scrape of an unversioned page, so a markup change silently
+ * yields an empty list rather than an error — callers must treat [] as normal.
+ * Only prompt bodies are read, never the page's meta tags: those echo our own
+ * search query back, which would score our input as if it were a signal.
+ */
+async function fetchPromptStyles(): Promise<string[]> {
+  const res = await fetch('https://prompthero.com/search?q=moving+home+cinematic', {
+    headers: { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml' },
+    signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`PromptHero ${res.status}`);
+  const html = await res.text();
+
+  const styles: string[] = [];
+  const seen = new Set<string>();
+  // Flight payload first, then the legacy attribute form.
+  const patterns = [/\\"prompt\\":\\"([^"]{0,2000})/g, /data-prompt=["']([^"']+)["']/gi];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(html)) !== null) {
+      const body = match[1];
+      // Lazy RSC references ("$9b") carry no text.
+      if (/^\$[0-9a-f]+\\?$/.test(body)) continue;
+      for (const word of body.toLowerCase().split(/[^a-z]+/)) {
+        if (!PROMPT_STYLE_KEYWORDS.has(word) || seen.has(word)) continue;
+        seen.add(word);
+        styles.push(word === 'golden' ? 'golden hour' : word);
+        if (styles.length >= 5) return styles;
+      }
+    }
+  }
+  return styles;
+}
+
+/**
+ * Best-effort market signals from Google Trends + PromptHero.
+ *
+ * Returns null on ANY failure — both sources are unofficial and Trends rate-limits
+ * datacenter IPs hard, so null is the expected result in production more often
+ * than not. Never throws; callers fall back to booking-data-only scoring.
+ */
+export async function fetchExternalSignals(): Promise<ExternalSignals | null> {
+  if (externalSignalCache && Date.now() < externalSignalCache.expiresAt) {
+    return externalSignalCache.signals;
+  }
+
+  // The two sources are fetched independently on purpose. Trends answers 429 to
+  // most datacenter IPs, and nesting the PromptHero call behind it meant one
+  // rate-limit threw away the style read too. Only an all-sources failure is null.
+  const [trends, prompts] = await Promise.allSettled([
+    fetchTrendSignals(),
+    fetchPromptStyles(),
+  ]);
+
+  if (trends.status === 'rejected' && prompts.status === 'rejected') {
+    logger.warn(
+      {
+        trendsErr: trends.reason instanceof Error ? trends.reason.message : trends.reason,
+        promptsErr: prompts.reason instanceof Error ? prompts.reason.message : prompts.reason,
+      },
+      '[Ember] external signals unavailable — scoring on booking data alone',
+    );
+    externalSignalCache = {
+      signals: null,
+      expiresAt: Date.now() + EXTERNAL_SIGNAL_FAILURE_TTL_MS,
+    };
+    return null;
+  }
+
+  if (trends.status === 'rejected') {
+    logger.warn(
+      { err: trends.reason instanceof Error ? trends.reason.message : trends.reason },
+      '[Ember] Google Trends unavailable — style signals only',
+    );
+  }
+  if (prompts.status === 'rejected') {
+    logger.warn(
+      { err: prompts.reason instanceof Error ? prompts.reason.message : prompts.reason },
+      '[Ember] PromptHero unavailable — trend signals only',
+    );
+  }
+
+  const trendScore = trends.status === 'fulfilled' ? trends.value.trendScore : 0;
+  const signals: ExternalSignals = {
+    trendScore,
+    trendingTerms: trends.status === 'fulfilled' ? trends.value.trendingTerms : [],
+    promptStyles: prompts.status === 'fulfilled' ? prompts.value : [],
+    socialProofBump: trendScore >= 50,
+  };
+
+  externalSignalCache = { signals, expiresAt: Date.now() + EXTERNAL_SIGNAL_TTL_MS };
+  logger.info(
+    {
+      trendScore,
+      trendingTerms: signals.trendingTerms.length,
+      promptStyles: signals.promptStyles.length,
+    },
+    '[Ember] external signals fetched',
+  );
+  return signals;
+}
+
 export interface CreativeStrategy {
   angle: CreativeAngle;
   /** Why this angle won, in one line, for the admin UI and the audit log. */
@@ -308,6 +557,10 @@ export interface CreativeStrategy {
   leadCount: number;
   /** False when the window is too thin to read anything but the season. */
   hasDemandSignal: boolean;
+  /** Trends/PromptHero read, or null when those sources were unreachable. */
+  externalSignals?: ExternalSignals | null;
+  /** Scraped style words, prompt-ready ("cinematic, golden hour"). */
+  promptStyleHint?: string;
   decidedAt: string;
 }
 
@@ -330,6 +583,7 @@ export function selectCreativeAngle(market: {
   bookingCount: number;
   leadCount: number;
   hasDemandSignal: boolean;
+  externalSignals?: ExternalSignals | null;
   now?: Date;
 }): CreativeStrategy {
   const scores: Record<CreativeAngle, number> = {
@@ -393,6 +647,34 @@ export function selectCreativeAngle(market: {
     }
   }
 
+  // External demand. Search interest says the market is in-market NOW, which is an
+  // urgency argument the booking window can't make on its own; rising price-shaped
+  // queries say the same buyers are comparing on cost.
+  const ext = market.externalSignals;
+  if (ext) {
+    if (ext.trendScore >= 60) {
+      scores.urgency += 2;
+      reasons.urgency.push(`Calgary moving search interest at ${ext.trendScore}/100`);
+    } else if (ext.trendScore >= 30) {
+      scores.urgency += 1;
+      reasons.urgency.push(`Calgary moving search interest rising (${ext.trendScore}/100)`);
+    }
+
+    if (ext.socialProofBump) {
+      scores.social_proof += 2;
+      reasons.social_proof.push('search demand is high — crowded market, proof decides');
+    }
+
+    const priceTerm = ext.trendingTerms.find((term) => {
+      const lower = term.toLowerCase();
+      return PRICE_INTENT_TERMS.some((needle) => lower.includes(needle));
+    });
+    if (priceTerm) {
+      scores.price_anchor += 2;
+      reasons.price_anchor.push(`"${priceTerm}" is a rising search — buyers are costing it out`);
+    }
+  }
+
   const angle = (Object.keys(scores) as CreativeAngle[]).reduce((best, candidate) => {
     if (scores[candidate] > scores[best]) return candidate;
     if (scores[candidate] < scores[best]) return best;
@@ -429,6 +711,10 @@ export function selectCreativeAngle(market: {
     bookingCount: market.bookingCount,
     leadCount: market.leadCount,
     hasDemandSignal: market.hasDemandSignal,
+    externalSignals: ext ?? null,
+    promptStyleHint: ext?.promptStyles.length
+      ? ext.promptStyles.slice(0, 3).join(', ')
+      : undefined,
     decidedAt: (market.now ?? new Date()).toISOString(),
   };
 }
@@ -1436,12 +1722,21 @@ Start your response with { directly.
 
     const now = new Date();
     let snapshot: TrendSnapshot | null = null;
-    try {
-      snapshot = await this.gatherTrendData(STRATEGY_WINDOW_DAYS);
-    } catch (err) {
+    // Our own data and the external read are independent, so they overlap rather
+    // than queue. fetchExternalSignals never rejects; gatherTrendData still can.
+    const [snapshotResult, externalSignals] = await Promise.all([
+      this.gatherTrendData(STRATEGY_WINDOW_DAYS).then(
+        (value) => ({ ok: true as const, value }),
+        (err) => ({ ok: false as const, err }),
+      ),
+      fetchExternalSignals(),
+    ]);
+    if (snapshotResult.ok) {
+      snapshot = snapshotResult.value;
+    } else {
       // A research failure must not block the render. Season alone still beats
       // the generic prompt this replaced.
-      logger.warn({ err }, '[Ember] market research failed — season-only strategy');
+      logger.warn({ err: snapshotResult.err }, '[Ember] market research failed — season-only strategy');
     }
 
     const topArea = snapshot?.topAreas[0] ?? null;
@@ -1459,6 +1754,7 @@ Start your response with { directly.
       bookingCount,
       leadCount: snapshot?.leadCount ?? 0,
       hasDemandSignal: snapshot?.hasStats ?? false,
+      externalSignals,
       now,
     });
     strategy.windowDays = snapshot?.windowDays ?? 0;
@@ -1470,6 +1766,8 @@ Start your response with { directly.
         area: strategy.area,
         moveType: strategy.moveType,
         scores: strategy.scores,
+        trendScore: strategy.externalSignals?.trendScore ?? null,
+        promptStyleHint: strategy.promptStyleHint ?? null,
       },
       '[Ember] creative strategy selected',
     );
@@ -2209,7 +2507,13 @@ MARKET RESEARCH — this is the market this piece is for:
 CHOSEN ANGLE — ${direction.label}. Do not substitute a different angle.
 - What it has to do: ${direction.intent}
 - Visual direction: ${direction.visual}
-- The line to land: ${direction.callout}
+- The line to land: ${direction.callout}${
+  strategy.promptStyleHint ? `\n- Style hint: ${strategy.promptStyleHint}` : ''
+}${
+  strategy.externalSignals?.trendingTerms.length
+    ? `\n- Trending search terms (weave in naturally): ${strategy.externalSignals.trendingTerms.join(', ')}`
+    : ''
+}
 
 Every field below must serve that angle. A brief that would read the same for
 any other angle is wrong.
@@ -2405,6 +2709,7 @@ Market: ${strategy.city}${strategy.area ? ` (${strategy.area})` : ''}, ${strateg
       // is set in — both derived from the market read, not hardcoded.
       direction.visual,
       marketSetting(strategy),
+      strategy.promptStyleHint ? `Style: ${strategy.promptStyleHint}` : null,
       'Professional cinematography',
       'No text overlays',
       'No dialogue',
