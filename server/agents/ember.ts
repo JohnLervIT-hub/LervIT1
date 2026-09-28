@@ -622,6 +622,222 @@ export async function fetchExternalSignals(): Promise<ExternalSignals | null> {
   return signals;
 }
 
+// ---------------------------------------------------------------------------
+// Meta Marketing API — paid distribution for a chosen creative angle.
+//
+// Every object is created PAUSED. Nothing here starts spending on its own; a
+// human still has to unpause the campaign in Ads Manager.
+// ---------------------------------------------------------------------------
+
+const META_GRAPH_VERSION = 'v19.0';
+const META_TIMEOUT_MS = 20_000;
+
+/** Calgary's Meta targeting key. Verify with /search?type=adgeolocation if geo looks wrong. */
+const META_CALGARY_CITY_KEY = '2563573';
+
+/**
+ * META_AD_ACCOUNT_ID is stored WITH its `act_` prefix (act_<digits>),
+ * so interpolating `act_${id}` would produce `act_act_...` and 400. Normalise.
+ */
+function metaAdAccountPath(): string {
+  const raw = process.env.META_AD_ACCOUNT_ID?.trim();
+  if (!raw) throw new Error('META_AD_ACCOUNT_ID is not set');
+  return raw.startsWith('act_') ? raw : `act_${raw}`;
+}
+
+function metaAccessToken(): string {
+  const token = process.env.META_ACCESS_TOKEN?.trim();
+  if (!token) throw new Error('META_ACCESS_TOKEN is not set');
+  return token;
+}
+
+/**
+ * POST to the Graph API as form-encoded, which is what the Marketing API expects
+ * for nested params (targeting, object_story_spec) passed as JSON strings.
+ *
+ * Meta returns 200 with an `error` object in some failure modes, so the body is
+ * checked regardless of status. The thrown message carries Meta's own
+ * error_user_msg/message plus its code, because "400 Bad Request" alone is
+ * unactionable against this API.
+ */
+async function metaPost(
+  edge: string,
+  params: Record<string, string>,
+  step: string,
+): Promise<any> {
+  const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${edge}?access_token=${encodeURIComponent(metaAccessToken())}`;
+  const form = new URLSearchParams(params);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      signal: AbortSignal.timeout(META_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw new Error(
+      `Meta ${step} failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // Non-JSON body — surface a bounded slice rather than the whole page.
+    throw new Error(`Meta ${step} returned non-JSON (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  if (!res.ok || json?.error) {
+    const e = json?.error ?? {};
+    const detail = [
+      e.error_user_msg,
+      e.message,
+      e.error_user_title,
+      e.code ? `code ${e.code}` : null,
+      e.error_subcode ? `subcode ${e.error_subcode}` : null,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+    throw new Error(`Meta ${step} failed (${res.status}): ${detail || text.slice(0, 300)}`);
+  }
+  return json;
+}
+
+/**
+ * Upload a video by URL to get the video_id that video_data requires.
+ *
+ * object_story_spec.video_data takes a video_id, NOT a URL — a raw videoUrl in
+ * that field is rejected. Meta pulls the file itself from `file_url`.
+ */
+async function metaUploadVideo(videoUrl: string): Promise<string> {
+  const res = await metaPost(
+    `${metaAdAccountPath()}/advideos`,
+    { file_url: videoUrl },
+    'video upload',
+  );
+  const videoId = res?.id;
+  if (!videoId) throw new Error('Meta video upload returned no id');
+  return String(videoId);
+}
+
+/**
+ * Create a PAUSED traffic campaign, ad set, creative and ad for one piece of copy.
+ *
+ * Returns the three ids so the caller can record what it made. Throws with Meta's
+ * own error text on the first failing step — partial objects are left in place
+ * rather than rolled back, because a half-built campaign is easier to inspect in
+ * Ads Manager than a silently deleted one.
+ */
+export async function launchEmberCampaign(params: {
+  headline: string;
+  body: string;
+  videoUrl?: string;
+  imageUrl?: string;
+  dailyBudgetCents: number;
+  targetCity?: string;
+}): Promise<{ campaignId: string; adSetId: string; adId: string }> {
+  const account = metaAdAccountPath();
+  const pageId = process.env.META_PAGE_ID?.trim();
+  if (!pageId) throw new Error('META_PAGE_ID is not set');
+
+  if (!Number.isFinite(params.dailyBudgetCents) || params.dailyBudgetCents < 100) {
+    // Meta's floor for a daily budget is currency-dependent but never below ~$1.
+    throw new Error(`dailyBudgetCents must be >= 100, got ${params.dailyBudgetCents}`);
+  }
+
+  const city = params.targetCity ?? 'Calgary';
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const landing = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
+
+  // 1. Campaign.
+  const campaign = await metaPost(
+    `${account}/campaigns`,
+    {
+      name: `Ember — ${params.headline} — ${stamp}`,
+      objective: 'OUTCOME_TRAFFIC',
+      status: 'PAUSED',
+      // Required by the API since v13; [] means none of the regulated categories.
+      // Revisit if these ads ever target housing specifically.
+      special_ad_categories: JSON.stringify([]),
+    },
+    'campaign create',
+  );
+  const campaignId = String(campaign.id);
+
+  // 2. Ad set.
+  const adSet = await metaPost(
+    `${account}/adsets`,
+    {
+      name: `Ember ad set — ${city} — ${stamp}`,
+      campaign_id: campaignId,
+      daily_budget: String(Math.round(params.dailyBudgetCents)),
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: 'LINK_CLICKS',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      targeting: JSON.stringify({
+        geo_locations: { cities: [{ key: META_CALGARY_CITY_KEY }] },
+      }),
+      status: 'PAUSED',
+    },
+    'ad set create',
+  );
+  const adSetId = String(adSet.id);
+
+  // 3. Creative — video if we have one, else a link ad with the image.
+  const objectStorySpec: Record<string, unknown> = { page_id: pageId };
+  if (params.videoUrl) {
+    const videoId = await metaUploadVideo(params.videoUrl);
+    objectStorySpec.video_data = {
+      video_id: videoId,
+      message: params.body,
+      title: params.headline,
+      ...(params.imageUrl ? { image_url: params.imageUrl } : {}),
+      call_to_action: { type: 'LEARN_MORE', value: { link: landing } },
+    };
+  } else {
+    objectStorySpec.link_data = {
+      link: landing,
+      message: params.body,
+      name: params.headline,
+      ...(params.imageUrl ? { picture: params.imageUrl } : {}),
+      call_to_action: { type: 'LEARN_MORE' },
+    };
+  }
+
+  const creative = await metaPost(
+    `${account}/adcreatives`,
+    {
+      name: `Ember creative — ${stamp}`,
+      object_story_spec: JSON.stringify(objectStorySpec),
+    },
+    'ad creative create',
+  );
+  const creativeId = String(creative.id);
+
+  // 4. Ad.
+  const ad = await metaPost(
+    `${account}/ads`,
+    {
+      name: `Ember ad — ${params.headline} — ${stamp}`,
+      adset_id: adSetId,
+      creative: JSON.stringify({ creative_id: creativeId }),
+      status: 'PAUSED',
+    },
+    'ad create',
+  );
+
+  logger.info(
+    { campaignId, adSetId, adId: ad.id, creativeId, city, dailyBudgetCents: params.dailyBudgetCents },
+    '[Ember] Meta campaign created (PAUSED)',
+  );
+
+  return { campaignId, adSetId, adId: String(ad.id) };
+}
+
 export interface CreativeStrategy {
   angle: CreativeAngle;
   /** Why this angle won, in one line, for the admin UI and the audit log. */
@@ -840,6 +1056,32 @@ export function marketSetting(strategy: CreativeStrategy): string {
 // cached briefly rather than re-queried per video. generateTrendPost can submit
 // several renders in one run.
 const STRATEGY_CACHE_MS = 15 * 60 * 1000;
+
+/**
+ * Auto-launch is OFF unless EMBER_AUTO_CAMPAIGN is exactly 'true'.
+ *
+ * Deliberately NOT keyed on META_ACCESS_TOKEN alone: that token will be set in
+ * Railway for anything else that touches Meta, and the moment it is, a
+ * token-only condition would start creating real ad objects with no further
+ * action from anyone.
+ */
+function autoCampaignEnabled(): boolean {
+  return process.env.EMBER_AUTO_CAMPAIGN?.trim() === 'true';
+}
+
+/** Daily budget for auto-launched campaigns, in cents. Default $20/day. */
+function autoCampaignBudgetCents(): number {
+  const raw = Number(process.env.EMBER_AUTO_CAMPAIGN_BUDGET_CENTS);
+  return Number.isFinite(raw) && raw >= 100 ? Math.round(raw) : 2000;
+}
+
+/**
+ * UTC day of the last auto-launch. buildCreativeStrategy is a 15-minute-cached
+ * READ called from both the brief path and the video path, so without this an
+ * ordinary day of content work would create a campaign per cache miss — up to
+ * ~96 campaign/ad-set/ad triples, each carrying a daily budget.
+ */
+let lastAutoCampaignDay: string | null = null;
 
 // Longer than TREND_WINDOW_DAYS: a weekly window is the right lens for "what
 // happened this week" copy, but too jumpy to steer creative strategy on.
@@ -1855,7 +2097,60 @@ Start your response with { directly.
     );
 
     EmberAgent.strategyCache = { at: Date.now(), strategy };
+    await this.maybeAutoLaunchCampaign(strategy);
     return strategy;
+  }
+
+  /**
+   * Optionally put paid spend behind a high-demand read.
+   *
+   * Gated four ways — explicit opt-in flag, token present, trendScore >= 60, and
+   * at most one launch per UTC day. Non-fatal: a Meta failure must never break a
+   * render, so this only ever logs.
+   *
+   * Copy comes from ANGLE_DIRECTION[angle].callout, which is the one
+   * customer-facing line the strategy actually owns. CreativeStrategy has no
+   * headline/body fields — the real ad copy is generated later, in the
+   * directorial brief, which is not available at this point.
+   */
+  private async maybeAutoLaunchCampaign(strategy: CreativeStrategy): Promise<void> {
+    const trendScore = strategy.externalSignals?.trendScore ?? 0;
+    if (!autoCampaignEnabled() || trendScore < 60) return;
+    if (!process.env.META_ACCESS_TOKEN?.trim()) {
+      logger.warn('[Ember] auto-campaign enabled but META_ACCESS_TOKEN is unset — skipping');
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (lastAutoCampaignDay === today) return;
+
+    const direction = ANGLE_DIRECTION[strategy.angle];
+    const where = strategy.area && strategy.area !== strategy.city
+      ? `${strategy.area}, ${strategy.city}`
+      : strategy.city;
+
+    // Claim the day BEFORE awaiting, so two concurrent renders can't both launch.
+    lastAutoCampaignDay = today;
+    try {
+      const result = await launchEmberCampaign({
+        headline: direction.callout,
+        body: `Moving in ${where}? ${direction.callout} See your price in under a minute.`,
+        dailyBudgetCents: autoCampaignBudgetCents(),
+        targetCity: strategy.city,
+      });
+      logger.info(
+        { ...result, angle: strategy.angle, trendScore },
+        '[Ember] auto-launched Meta campaign (PAUSED — needs manual unpause)',
+      );
+    } catch (err) {
+      // Release the day so a transient Meta failure doesn't block tomorrow's... or
+      // rather today's retry on the next cache miss.
+      lastAutoCampaignDay = null;
+      logger.warn(
+        { err: err instanceof Error ? err.message : err, angle: strategy.angle, trendScore },
+        '[Ember] auto-campaign launch failed — continuing without paid distribution',
+      );
+    }
   }
 
   /** Render the snapshot as prompt-safe lines; omits anything we cannot back. */
