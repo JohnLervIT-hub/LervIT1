@@ -169,7 +169,7 @@ function capitalizeFirst(str: string): string {
 // Vehicle tiers, ranked smallest → largest. A load's vehicle is the max tier
 // across its identified items. VEHICLE_TIER_KEYS order must match the ranks.
 const VEHICLE_LABELS: Record<string, string> = {
-  car: 'Car / SUV',
+  car: 'SUV',
   pickup: 'Pickup Truck',
   van: 'Cargo Van',
   truck: 'Moving Truck',

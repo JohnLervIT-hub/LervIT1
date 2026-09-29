@@ -92,7 +92,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
       borderColor: 'border-blue-200 dark:border-blue-800'
     };
     const carRec = { 
-      vehicle: 'Car/SUV', 
+      vehicle: 'SUV', 
       loadSize: 'Small Load', 
       description: '0-20 ft³',
       gradient: 'from-green-500 to-emerald-500',

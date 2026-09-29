@@ -52,7 +52,7 @@ type QuoteAddresses = {
 // the DB (legacy quotes, and item-less quotes post null), so every read needs
 // a fallback.
 const QUOTE_VEHICLE_LABELS: Record<string, string> = {
-  car: 'Car / SUV',
+  car: 'SUV',
   pickup: 'Pickup Truck',
   van: 'Cargo Van',
   truck: 'Moving Truck',
