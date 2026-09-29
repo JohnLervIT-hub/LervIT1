@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // Vehicle type display names aligned with Vision Engine categories
 const VEHICLE_DISPLAY_NAMES: Record<string, string> = {
-  car: "SUV / Small Vehicle",
+  car: "SUV",
   van: "Cargo Van",
   pickup: "Pickup Truck",
   truck: "Moving Truck",

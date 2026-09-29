@@ -31,7 +31,7 @@ const PAGE_SIZE = 12;
 
 // Vehicle type filter options with display name and normalized DB values
 const VEHICLE_TYPE_FILTERS = [
-  { display: "SUV / Small Vehicle", dbValues: ["car", "suv", "small"] },
+  { display: "SUV", dbValues: ["car", "suv", "small"] },
   { display: "Pickup Truck", dbValues: ["pickup", "pickup truck"] },
   { display: "Cargo Van", dbValues: ["van", "cargo van"] },
   { display: "Moving Truck", dbValues: ["truck", "moving truck", "large truck"] },
