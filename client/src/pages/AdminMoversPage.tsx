@@ -284,7 +284,10 @@ export default function AdminMoversPage() {
     const matchesSearch = 
       m.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.vehicleType?.toLowerCase().includes(searchTerm.toLowerCase());
+      m.vehicleType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      // Also match the friendly label ("SUV"), guarded so getVehicleDisplayName's
+      // "Not set" fallback can't match vehicle-less movers.
+      (!!m.vehicleType && getVehicleDisplayName(m.vehicleType).toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = 
       statusFilter === "all" ||
