@@ -245,6 +245,14 @@ export function createNovaBridge(
           conversation: {
             client_events: ['audio', 'interruption', 'agent_response'],
           },
+          // No turn-taking config here. `asr.turn_detection` (mode /
+          // silence_duration_ms / threshold) is OpenAI Realtime's shape, not
+          // ElevenLabs'; theirs is conversation_config.turn — turn_eagerness
+          // plus turn_timeout in *seconds*, min 1, so 900ms isn't expressible.
+          // And `turn` is not on the override allowlist, so a block here would
+          // be dropped silently exactly like tts.output_format above. Nova's
+          // "let the customer finish their thought" pause is set on the agent
+          // in the ElevenLabs console.
         },
       }),
     );
