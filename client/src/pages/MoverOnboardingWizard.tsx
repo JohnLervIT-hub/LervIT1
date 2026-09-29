@@ -141,7 +141,7 @@ You have read and understood these terms
 You agree to participate as an independent contractor in the Early Access pilot`;
 
 const VEHICLE_TYPES = [
-  { value: "car", label: "SUV / Small Vehicle", description: "Small moves, single items" },
+  { value: "car", label: "SUV", description: "Small moves, single items" },
   { value: "pickup", label: "Pickup Truck", description: "Medium furniture, moderate loads" },
   { value: "van", label: "Cargo Van", description: "Large furniture, multiple rooms" },
   { value: "truck", label: "Moving Truck", description: "Full house moves" },
