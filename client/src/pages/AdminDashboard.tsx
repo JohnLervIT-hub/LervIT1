@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { getVehicleDisplayName } from "@/lib/utils";
 
 const OperationsDashboard = lazy(() => import("@/pages/OperationsDashboard"));
 import { XavierBriefCard } from "@/components/XavierBriefCard";
@@ -1387,7 +1388,7 @@ export default function AdminDashboard() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold truncate">{mover.user?.name || "Unknown Mover"}</p>
                           <p className="text-xs text-muted-foreground truncate">{mover.user?.email}</p>
-                          <p className="text-xs text-muted-foreground">{mover.vehicleType} · {mover.totalMoves} moves</p>
+                          <p className="text-xs text-muted-foreground">{getVehicleDisplayName(mover.vehicleType)} · {mover.totalMoves} moves</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-sm font-semibold tabular-nums text-muted-foreground">{parseFloat(mover.rating).toFixed(1)}★</span>
@@ -1725,7 +1726,7 @@ export default function AdminDashboard() {
                         <p className="font-semibold">{selectedBooking.mover.user?.name || selectedBooking.mover.name || "Assigned"}</p>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                           {selectedBooking.mover.vehicleType && (
-                            <span>{selectedBooking.mover.vehicleType}</span>
+                            <span>{getVehicleDisplayName(selectedBooking.mover.vehicleType)}</span>
                           )}
                           {selectedBooking.mover.rating && (
                             <span>{parseFloat(selectedBooking.mover.rating).toFixed(1)}★</span>

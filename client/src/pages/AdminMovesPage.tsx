@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { getVehicleDisplayName } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -610,7 +611,7 @@ export default function AdminMovesPage() {
                     <span className="text-sm text-muted-foreground">Currently:</span>
                     <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
                       <Truck className="w-3 h-3 mr-1" />
-                      {editingBooking.mover.name} - {editingBooking.mover.vehicleType}
+                      {editingBooking.mover.name} - {getVehicleDisplayName(editingBooking.mover.vehicleType)}
                     </Badge>
                   </div>
                 )}
@@ -622,7 +623,7 @@ export default function AdminMovesPage() {
                     <SelectContent>
                       {availableMovers?.filter(m => m.id !== editingBooking?.mover?.id).map((mover) => (
                         <SelectItem key={mover.id} value={mover.id}>
-                          {mover.name} - {mover.vehicleType} ({mover.totalMoves} moves)
+                          {mover.name} - {getVehicleDisplayName(mover.vehicleType)} ({mover.totalMoves} moves)
                         </SelectItem>
                       ))}
                       {(!availableMovers || availableMovers.filter(m => m.id !== editingBooking?.mover?.id).length === 0) && (
