@@ -1469,7 +1469,7 @@ export default function MoverDashboard() {
           <>
             <Separator />
             <div>
-              <p className="text-sm font-medium mb-1">Additional Details</p>
+              <p className="text-sm font-medium mb-1">Customer Instructions</p>
               <p className="text-sm text-muted-foreground">{booking.description}</p>
             </div>
           </>
