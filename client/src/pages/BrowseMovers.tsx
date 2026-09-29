@@ -156,7 +156,11 @@ export default function BrowseMovers() {
     let result = movers.filter((mover: any) => {
       const searchLower = searchQuery.toLowerCase();
       const nameMatch = mover.user?.name?.toLowerCase().includes(searchLower);
-      const vehicleMatch = mover.vehicleType?.toLowerCase().includes(searchLower);
+      // Match the raw DB value and the friendly label ("SUV"), so the search box
+      // agrees with the vehicle filter. Guarded: getVehicleDisplayName's "Not set"
+      // fallback would otherwise match stray letters for vehicle-less movers.
+      const vehicleMatch = mover.vehicleType?.toLowerCase().includes(searchLower) ||
+        (!!mover.vehicleType && getVehicleDisplayName(mover.vehicleType).toLowerCase().includes(searchLower));
       if (!nameMatch && !vehicleMatch) return false;
       
       if (selectedVehicleTypes.length > 0) {

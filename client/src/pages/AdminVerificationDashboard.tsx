@@ -16,7 +16,7 @@ import { Search, Eye, CheckCircle, XCircle, Clock, AlertTriangle, FileText, Cale
 import { format } from "date-fns";
 import { AdminRowLayout, AdminRowCell, AdminRowPrimary, AdminRowProgress, AdminRowMobileExtras } from "@/components/admin/AdminRowLayout";
 import { ClickToCall } from "@/components/ClickToCall";
-import { cn } from "@/lib/utils";
+import { cn, getVehicleDisplayName } from "@/lib/utils";
 
 interface Driver {
   driverId: string;
@@ -632,7 +632,7 @@ export default function AdminVerificationDashboard() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <div className="text-sm text-muted-foreground">Type</div>
-                          <div className="font-medium">{driverDetail.driver.vehicleType}</div>
+                          <div className="font-medium">{getVehicleDisplayName(driverDetail.driver.vehicleType)}</div>
                         </div>
                         {driverDetail.driver.vehicleColor && (
                           <div>

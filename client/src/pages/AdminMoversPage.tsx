@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
+import { getVehicleDisplayName } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -432,7 +433,7 @@ export default function AdminMoversPage() {
                           <div className="text-xs text-muted-foreground">{m.user?.email || "No email"}</div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{m.vehicleType || "Not specified"}</Badge>
+                          <Badge variant="outline">{m.vehicleType ? getVehicleDisplayName(m.vehicleType) : "Not specified"}</Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
