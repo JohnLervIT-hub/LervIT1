@@ -1561,17 +1561,34 @@ export default function MoverDashboard() {
               {/* Start Trip - Confirmed status AND assigned to this mover (not available jobs) */}
               {booking.status === "confirmed" && booking.moverId && !showActions && (
                 <>
-                  <Button
-                    variant="default"
-                    onClick={() => startTripMutation.mutate(booking.id)}
-                    disabled={startTripMutation.isPending || hasActiveTrip}
-                    data-testid={`button-start-trip-${booking.id}`}
-                    className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
-                    title={hasActiveTrip ? "Complete your current trip before starting another" : undefined}
-                  >
-                    <Truck className="w-4 h-4 mr-2" />
-                    {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
-                  </Button>
+                  {(() => {
+                    const today = new Date();
+                    const moveDate = booking.preferredDate ? new Date(booking.preferredDate) : null;
+                    const isMoveDateToday = moveDate
+                      ? today.getFullYear() === moveDate.getFullYear() &&
+                        today.getMonth() === moveDate.getMonth() &&
+                        today.getDate() === moveDate.getDate()
+                      : false;
+                    return (
+                      <Button
+                        variant="default"
+                        onClick={() => startTripMutation.mutate(booking.id)}
+                        disabled={startTripMutation.isPending || hasActiveTrip || !isMoveDateToday}
+                        data-testid={`button-start-trip-${booking.id}`}
+                        className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600"
+                        title={
+                          hasActiveTrip
+                            ? "Complete your current trip before starting another"
+                            : !isMoveDateToday
+                            ? "Available on move day"
+                            : undefined
+                        }
+                      >
+                        <Truck className="w-4 h-4 mr-2" />
+                        {startTripMutation.isPending ? "Starting..." : hasActiveTrip ? "Trip in Progress" : "Head to Pickup"}
+                      </Button>
+                    );
+                  })()}
                   <Button
                     variant="outline"
                     onClick={() => setCancelJobDialogBookingId(booking.id)}
