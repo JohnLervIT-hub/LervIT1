@@ -15,12 +15,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import LoadSizeSelector from "@/components/LoadSizeSelector";
 import ImageUpload from "@/components/ImageUpload";
 import { CustomAddressInput, cleanAddress } from "@/components/CustomAddressInput";
 import { PricingSummary } from "@/components/PricingSummary";
-import { IdentifiedItemsList } from "@/components/IdentifiedItemsList";
-import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2 } from "lucide-react";
+import { DetectedItemsSummary } from "@/components/DetectedItemsSummary";
+import { MapPin, Calendar, FileText, CheckCircle, TrendingUp, Package, DollarSign, Weight, Users, Clock, Sparkles, Camera, Loader2, Info, Scan, CreditCard, Truck, AlertTriangle, AlertCircle, Star, X, Tag, Gift, CheckCircle2, Phone } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { useLocation, useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -34,7 +33,9 @@ import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
-import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
+// saveDraft dropped with the step-2 photo gate: the anonymous path now reaches
+// step 3, where the auth check persists pendingBooking before redirecting.
+import { loadDraft, clearDraft } from "@/lib/bookingDraft";
 
 // Tiered handling premiums by complexity.
 // Rates mirror PRICING_CONFIG.HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY in shared/pricing.ts.
@@ -44,6 +45,24 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // Minimum booking lead time. Mirrors the server-side guard in POST /api/bookings —
 // the input `min` only discourages a bad date, it does not enforce one.
 const MIN_LEAD_TIME_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Contact validation for the confirmation step. Deliberately permissive — the
+ * point is to stop an empty or obviously-wrong value reaching a mover, not to
+ * adjudicate exotic-but-valid addresses.
+ */
+function isValidEmail(value: string): boolean {
+  const trimmed = value.trim();
+  // One @, something either side, a dot in the domain, no whitespace.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+/** Canadian numbers are 10 digits, or 11 with the country code. */
+function isValidPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 11) return digits.startsWith('1');
+  return digits.length === 10;
+}
 
 const BOOKING_IDEM_KEY_STORAGE = 'lervit_booking_idem_key';
 
@@ -226,6 +245,11 @@ export default function RequestMove() {
   const [step, setStep] = useState(1);
   const [contactCaptured, setContactCaptured] = useState(false);
   const [capturedContact, setCapturedContact] = useState<{ name: string; phone: string; email: string } | null>(null);
+  // Confirmation-step contact details. Required before submitting: a booking with
+  // no reachable phone leaves the assigned mover unable to make contact.
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [confirmPhone, setConfirmPhone] = useState('');
+  const [confirmContactTouched, setConfirmContactTouched] = useState(false);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const quoteSaveInFlight = useRef(false);
   // Format a Date as YYYY-MM-DDTHH:MM in the user's LOCAL timezone
@@ -1255,8 +1279,11 @@ export default function RequestMove() {
           // (e.g. older items detected before premiumKey wiring, or non-premium items).
           heavyItemFeeOverride: hasKeyedPremiums ? undefined : getItemTypePremium(identifiedItems),
         };
+        const breakdown = calculatePrice(priceInputs);
+        // Spans boxes->apartment while the volume is unmeasured, so it is NOT
+        // `breakdown` at either end — breakdown sits on whatever tier loadSize
+        // happens to hold, which the customer no longer picks.
         const range = calculatePriceRange(priceInputs);
-        const breakdown = range.max;
         // countHeavyItems retained for legacy telemetry only.
         void countHeavyItems(identifiedItems);
         // Blank the breakdown on step 1 only until the vision engine has
@@ -1270,8 +1297,8 @@ export default function RequestMove() {
           setPriceRange(null);
         } else {
           setPriceBreakdown(breakdown);
-          // `range.max` IS `breakdown`, so a measured volume collapses the range
-          // to a single number and isRange goes false — no need to check here.
+          // A measured volume collapses the range (isRange false), so the
+          // display switches back to the single price on its own.
           setPriceRange(range);
         }
         setPricingError(null);
@@ -1284,6 +1311,25 @@ export default function RequestMove() {
       setPriceRange(null);
     }
   }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, identifiedItems]);
+
+  // Prefill the confirmation contact from the account, then the lead-capture
+  // details, without clobbering anything already typed.
+  useEffect(() => {
+    setConfirmEmail(prev => prev || user?.email || capturedContact?.email || '');
+    setConfirmPhone(prev => prev || user?.phone || capturedContact?.phone || '');
+  }, [user?.email, user?.phone, capturedContact?.email, capturedContact?.phone]);
+
+  const confirmEmailError = !confirmEmail.trim()
+    ? 'Email is required to send your quote.'
+    : !isValidEmail(confirmEmail)
+      ? 'Enter a valid email address.'
+      : null;
+  const confirmPhoneError = !confirmPhone.trim()
+    ? 'Phone number is required so your mover can reach you.'
+    : !isValidPhone(confirmPhone)
+      ? 'Enter a 10-digit phone number.'
+      : null;
+  const contactDetailsComplete = !confirmEmailError && !confirmPhoneError;
 
   // Hard lock: whenever the calculator forces 2 movers, sync local selection.
   useEffect(() => {
@@ -1527,7 +1573,28 @@ export default function RequestMove() {
       }
 
       const result = await response.json();
-      const newItems = (result.items || []) as IdentifiedItem[];
+      // fullSceneConfirmed is response-only (never a column): the vision pass
+      // reports whether the photo shows the whole room / pile or just a close-up.
+      const returned = (result.items || []) as (IdentifiedItem & { fullSceneConfirmed?: boolean })[];
+
+      // A close-up can be identified but not measured — there is no way to know
+      // what else is in the room — so it is dropped rather than priced as if it
+      // were the whole load. Only an explicit false rejects, so a vision outage
+      // or an older server (no such field) still accepts every photo.
+      const partialShots = returned.filter(i => i.fullSceneConfirmed === false);
+      const newItems = returned.filter(i => i.fullSceneConfirmed !== false);
+
+      if (partialShots.length > 0) {
+        const rejectedUrls = new Set(partialShots.map(i => i.photoUrl));
+        rejectedUrls.forEach(url => { if (url) analyzedUrlsRef.current.delete(url); });
+        // Pull them back out of the grid so the customer can see which to replace.
+        setImages(prev => prev.filter(url => !rejectedUrls.has(url)));
+        toast({
+          title: partialShots.length === 1 ? "Photo too close up" : "Photos too close up",
+          description: "Please upload a photo of the full room or pile — close-ups can't be measured.",
+          variant: "destructive",
+        });
+      }
 
       // Merge with the ref (always current, avoids stale closure from async gap).
       const merged = [...identifiedItemsRef.current, ...newItems];
@@ -1723,30 +1790,10 @@ export default function RequestMove() {
     setImages(newUrls);
   };
 
-  // Called by IdentifiedItemsList when the user corrects an item. Patches the
-  // item in place and re-runs the same recalculation the removal path uses, so
-  // load size, mover count, vehicle class and the live price all follow the
-  // correction immediately.
-  const handleUpdateItem = (photoUrl: string, patch: Partial<IdentifiedItem>) => {
-    const next = identifiedItemsRef.current.map(item =>
-      item.photoUrl === photoUrl ? { ...item, ...patch } : item
-    );
-    identifiedItemsRef.current = next;
-    setIdentifiedItems(next);
-    recalcFromItems(next);
-  };
-
-  // Called by IdentifiedItemsList when the user taps the X on an item row
-  const handleRemoveItem = (photoUrl: string) => {
-    analyzedUrlsRef.current.delete(photoUrl);
-    const filtered = identifiedItemsRef.current.filter(item => item.photoUrl !== photoUrl);
-    identifiedItemsRef.current = filtered;
-    setIdentifiedItems(filtered);
-    // Recalculate pricing state immediately from the new item list
-    recalcFromItems(filtered);
-    // Also remove the photo from the upload grid
-    setImages(prev => prev.filter(url => url !== photoUrl));
-  };
+  // handleUpdateItem / handleRemoveItem removed with the editable item list:
+  // per-row edits and deletes were customer-controlled price inputs. Removing a
+  // photo from the upload grid still drops its item — handleImagesChange above
+  // does that cleanup, so nothing is lost.
 
   // Apply AI recommendations to booking form
   const handleApplyAIRecommendations = () => {
@@ -1817,7 +1864,7 @@ export default function RequestMove() {
     });
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     // Step 1: Validate addresses (MANDATORY)
     if (step === 1) {
       if (!pickupAddress || pickupAddress.trim() === "") {
@@ -1889,54 +1936,18 @@ export default function RequestMove() {
       }
     }
 
-    // Step 2: Validate photos (MANDATORY)
-    if (step === 2) {
-      if (!images || images.length === 0) {
-        // For unauthenticated users, save data and redirect to login
-        // They can upload photos after logging in
-        if (!user) {
-          toast({
-            title: "Login Required",
-            description: "Please log in to upload photos and complete your booking.",
-            variant: "destructive",
-          });
-          
-          // Save current progress using bookingDraft module
-          const draftData: BookingDraftData = {
-            pickupAddress,
-            dropoffAddress,
-            pickupDifficulty,
-            dropoffDifficulty,
-            loadSize,
-            heavyItem,
-            numberOfMovers,
-            description,
-            images: [],
-            date: ""
-          };
-          saveDraft(preSelectedMoverId, draftData);
-          
-          // Build redirect URL with essential data encoded (survives storage clearing)
-          const params = new URLSearchParams();
-          if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
-          params.set('pickup', pickupAddress);
-          params.set('dropoff', dropoffAddress);
-          params.set('pickupAccess', pickupDifficulty || '');
-          params.set('dropoffAccess', dropoffDifficulty || '');
-          params.set('loadSize', loadSize);
-          params.set('resumeStep', '2');
-          const returnPath = `/request-move?${params.toString()}`;
-          setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
-          return;
-        }
-        
-        toast({
-          title: "Photos required",
-          description: "Please upload at least one photo of your items to continue.",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Step 2: photos are STRONGLY encouraged but no longer mandatory.
+    //
+    // They used to block the step, which pushed anonymous visitors into a login
+    // redirect just to get past it. Without photos there is no measured volume,
+    // so the customer carries on against a range and the price is settled on
+    // site — said out loud here and on the pricing card, not left implied.
+    // The login redirect still happens, at step 3, where it belongs.
+    if (step === 2 && (!images || images.length === 0)) {
+      toast({
+        title: "Continuing without photos",
+        description: "We'll show an estimated range and confirm the final price on-site. Upload photos any time for an exact quote.",
+      });
     }
 
     if (step < 3) {
@@ -1968,6 +1979,19 @@ export default function RequestMove() {
         toast({
           title: "Pick a later time",
           description: "Your move must be booked at least 2 hours from now.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Contact details. The submit button is already disabled without them;
+      // this catches a stale render or a keyboard submit, and reveals the inline
+      // errors for a customer who never focused the fields.
+      if (!contactDetailsComplete) {
+        setConfirmContactTouched(true);
+        toast({
+          title: "Contact details needed",
+          description: confirmEmailError ?? confirmPhoneError ?? "Please add your email and phone.",
           variant: "destructive",
         });
         return;
@@ -2054,6 +2078,21 @@ export default function RequestMove() {
           try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
         })(),
       };
+      // The booking carries no phone of its own — a mover reads it from the
+      // customer's user row — so a number typed here has to land there or the
+      // field was theatre. Non-fatal: a failed write must not lose the booking.
+      const normalizedPhone = confirmPhone.replace(/\D/g, '');
+      if (normalizedPhone && normalizedPhone !== (user.phone ?? '').replace(/\D/g, '')) {
+        try {
+          await apiRequest("PATCH", "/api/users/profile", { phone: confirmPhone.trim() });
+        } catch {
+          toast({
+            title: "Couldn't save your phone number",
+            description: "We'll still book the move — please check your profile afterwards.",
+          });
+        }
+      }
+
       createBookingMutation.mutate(bookingData);
     }
   };
@@ -2727,8 +2766,21 @@ export default function RequestMove() {
                         Upload Photos of Your Items
                       </Label>
                       <p className="text-sm text-muted-foreground mb-3">
-                        At least one photo required - Our AI will automatically analyze your items
+                        Photos are how we measure your load and price it exactly. Show the
+                        full room or pile — close-ups can't be measured.
                       </p>
+                      {images.length === 0 && (
+                        <div
+                          className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 mb-3"
+                          data-testid="notice-photos-optional"
+                        >
+                          <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                            You can continue without photos — we'll quote a range and confirm
+                            the final price on-site.
+                          </p>
+                        </div>
+                      )}
                       <ImageUpload 
                         value={images}
                         onImagesChange={handleImagesChange} 
@@ -2753,15 +2805,11 @@ export default function RequestMove() {
                         </div>
                       )}
                       
-                      {/* Show results after analysis completes */}
+                      {/* Read-only: the measured volume IS the quote, so the
+                          customer no longer edits quantities or sizes here. */}
                       {!isIdentifyingItems && identifiedItems.length > 0 && (
                         <div className="mt-4">
-                          <IdentifiedItemsList
-                            items={identifiedItems}
-                            isLoading={false}
-                            onRemoveItem={handleRemoveItem}
-                            onUpdateItem={handleUpdateItem}
-                          />
+                          <DetectedItemsSummary items={identifiedItems} />
                         </div>
                       )}
                     </div>
@@ -2769,22 +2817,14 @@ export default function RequestMove() {
                     {/* Load details - show manual selection only when AI hasn't detected items */}
                     {!isIdentifyingItems && (
                       <>
-                        {/* Only show load size selector if AI hasn't recommended one */}
-                        {identifiedItems.length === 0 && (
-                          <div>
-                            <Label className="text-base font-semibold mb-4 block">
-                              Select Load Size
-                            </Label>
-                            <LoadSizeSelector
-                              selectedSize={loadSize}
-                              onSelectSize={(size) => {
-                                setLoadSize(size);
-                                setAiDetectedVolume(undefined);
-                              }}
-                            />
-                          </div>
-                        )}
-                        
+                        {/*
+                          Load size is no longer customer-selectable: volume comes
+                          from the vision engine. `loadSize` stays in state as the
+                          pre-photo fallback for calculatePrice (and is still sent
+                          with the booking), it just isn't rendered — a customer
+                          picking "medium" was choosing a price input by guessing
+                          at a number they had no way to estimate.
+                        */}
                         {/* Show heavy items toggle only when AI hasn't detected items */}
                         {identifiedItems.length === 0 && (
                           <div className="border-t pt-6">
@@ -3212,6 +3252,80 @@ export default function RequestMove() {
                 isLoggedIn={!!user}
                 onContactCapture={handleContactCapture}
               />
+
+              {/* Contact details — required before submitting, but deliberately
+                  BELOW the price: the customer sees what the move costs first,
+                  then gives us a way to reach them. */}
+              {step === 3 && (
+                <Card data-testid="confirm-contact">
+                  <CardContent className="pt-5 space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Phone className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm">Where can we reach you?</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Your mover needs these to confirm the job.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Read-only once it comes from the account: the account
+                        email is the login identity and changing it needs
+                        re-verification, which nothing here can do. Leaving it
+                        editable would accept a change and silently discard it. */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="confirm-email" className="text-sm">Email</Label>
+                      <Input
+                        id="confirm-email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        placeholder="you@example.com"
+                        value={confirmEmail}
+                        onChange={(e) => setConfirmEmail(e.target.value)}
+                        onBlur={() => setConfirmContactTouched(true)}
+                        readOnly={!!user?.email}
+                        className={user?.email ? 'bg-muted/50 text-muted-foreground' : undefined}
+                        aria-invalid={confirmContactTouched && !!confirmEmailError}
+                        data-testid="input-confirm-email"
+                      />
+                      {user?.email ? (
+                        <p className="text-xs text-muted-foreground">
+                          Your quote goes to your account email. Change it in your profile.
+                        </p>
+                      ) : confirmContactTouched && confirmEmailError ? (
+                        <p className="text-xs text-destructive" data-testid="error-confirm-email">
+                          {confirmEmailError}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="confirm-phone" className="text-sm">Phone</Label>
+                      <Input
+                        id="confirm-phone"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        placeholder="(403) 555-0123"
+                        value={confirmPhone}
+                        onChange={(e) => setConfirmPhone(e.target.value)}
+                        onBlur={() => setConfirmContactTouched(true)}
+                        aria-invalid={confirmContactTouched && !!confirmPhoneError}
+                        data-testid="input-confirm-phone"
+                      />
+                      {confirmContactTouched && confirmPhoneError && (
+                        <p className="text-xs text-destructive" data-testid="error-confirm-phone">
+                          {confirmPhoneError}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between gap-4">
                   <Button
@@ -3233,7 +3347,11 @@ export default function RequestMove() {
                     onClick={handleNext}
                     className="flex-1"
                     data-testid="button-next"
-                    disabled={createBookingMutation.isPending || isIdentifyingItems}
+                    disabled={
+                      createBookingMutation.isPending ||
+                      isIdentifyingItems ||
+                      (step === 3 && !contactDetailsComplete)
+                    }
                   >
                     {step === 3 && createBookingMutation.isPending ? (
                       <>

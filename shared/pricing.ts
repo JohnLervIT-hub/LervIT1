@@ -152,16 +152,17 @@ export const PRICING_CONFIG = {
 } as const;
 
 /**
- * Lower bound for a pre-vision price range — the 'boxes' tier.
+ * Ends of the load-size ladder, used to bracket an unmeasured load.
  *
- * Indicative, not a guarantee: a genuinely tiny load prices below it (the
- * booking that prompted this measured 9.11 ft³ and settled under the floor).
- * That is the safe direction to be wrong — undershooting the quoted minimum is
- * a pleasant surprise, whereas exceeding the quoted maximum is the trust
- * damage, and the maximum is the load-size guess we were already showing. The
- * accompanying copy must stay non-committal for exactly this reason.
+ * The floor is indicative, not a guarantee: a genuinely tiny load prices below
+ * it (the booking that prompted this measured 9.11 ft³, under the 15 ft³ 'boxes'
+ * tier, and settled beneath the bracket). That is the safe direction to be
+ * wrong — undershooting the quoted minimum is a pleasant surprise, whereas
+ * exceeding the quoted maximum is the trust damage. The copy rendering the
+ * bracket stays non-committal for exactly this reason.
  */
-export const FALLBACK_VOLUME_FLOOR_CUFT = PRICING_CONFIG.loadSizeVolumes.boxes;
+export const LOAD_SIZE_FLOOR_TIER = 'boxes';
+export const LOAD_SIZE_CEILING_TIER = 'apartment';
 
 // ===== VEHICLE CLASS CATALOG (display metadata) =====
 // Volume ranges use *adjusted* ft³ (raw × packingFactor) to line up with
@@ -487,26 +488,32 @@ export interface PriceRange {
 /**
  * Bracket a price whose volume is still a guess.
  *
- * The load-size dropdown maps to a single ft³ figure ('medium' = 80), and that
- * figure sets the vehicle class, the base fee and the per-km rate. When the
- * photos come back it is replaced by a measurement that can be an order of
- * magnitude off — one real booking quoted $124.79 on the 80 ft³ 'medium'
- * default and settled at $60.76 on a measured 9.11 ft³. Showing the guess as a
- * single confident number is what makes that feel like a bait and switch, so
- * pre-vision the UI shows this bracket instead.
+ * Once the volume is measured there is nothing to bracket — both ends are the
+ * real price and `isRange` is false.
  *
- * max is the load-size guess (what we would have shown before). min is the
- * boxes-tier floor, or the measurement itself once we have one — in which case
- * both ends agree and `isRange` is false.
+ * Before then the bracket spans the load-size tiers END TO END ('boxes' ->
+ * 'apartment'). It deliberately does NOT bracket floor..selected-tier: the load
+ * size is no longer something the customer picks, so the tier a price happens to
+ * be sitting on is an internal default and carries no information about the
+ * actual load. Presenting a narrow band around that default would be a
+ * confident-looking number wearing a range's clothes — one real booking quoted
+ * $124.79 off the 80 ft³ 'medium' default and settled at $60.76 on a measured
+ * 9.11 ft³.
+ *
+ * Access fees still apply at both ends (they are known independently of volume).
+ * Item premiums cannot be known without the photos, so neither end includes
+ * them — this brackets the load, not the invoice.
  */
 export function calculatePriceRange(
   params: Parameters<typeof calculatePrice>[0],
 ): PriceRange {
-  const max = calculatePrice(params);
-  const floorVolume = max.volumeSource === 'detected'
-    ? max.rawVolume
-    : Math.min(FALLBACK_VOLUME_FLOOR_CUFT, max.rawVolume);
-  const min = calculatePrice({ ...params, volumeCuft: floorVolume });
+  const asGiven = calculatePrice(params);
+  if (asGiven.volumeSource === 'detected') {
+    return { min: asGiven, max: asGiven, isRange: false };
+  }
+  const withoutVolume = { ...params, volumeCuft: undefined };
+  const min = calculatePrice({ ...withoutVolume, loadSize: LOAD_SIZE_FLOOR_TIER });
+  const max = calculatePrice({ ...withoutVolume, loadSize: LOAD_SIZE_CEILING_TIER });
   return { min, max, isRange: min.total !== max.total };
 }
 

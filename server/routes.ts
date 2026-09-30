@@ -11535,12 +11535,15 @@ Respond with VALID JSON only:
               confidence: result.confidence.toString() as any,
               sourceMetadata: result.sourceMetadata,
             });
-            items.push(identifiedItem);
+            items.push({ ...identifiedItem, fullSceneConfirmed: result.fullSceneConfirmed });
           } else {
             items.push({
               id: `temp-${index}`,
               photoUrl,
               processingStatus: 'completed',
+              // Close-up / partial shot. Surfaced so the quote flow can reject
+              // the photo instead of pricing a fragment of a room.
+              fullSceneConfirmed: result.fullSceneConfirmed,
               itemName: result.itemName,
               category: result.category,
               weightKg: result.weightKg.toString(),

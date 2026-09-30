@@ -242,6 +242,21 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, priceRan
           "space-y-4 transition-all duration-500",
           shouldGate && "blur-sm pointer-events-none select-none opacity-60"
         )}>
+        {showRange && (
+          <div className="flex items-start gap-2.5 rounded-lg bg-muted/50 px-3 py-2.5" data-testid="pricing-range-explainer">
+            <Package className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {breakdown.distanceKm ? `${breakdown.distanceKm} km trip. ` : ''}
+              The fees depend on how much you're moving. Upload photos and we'll
+              measure the load for an exact price.
+            </p>
+          </div>
+        )}
+
+        {/* Every row below is volume-derived — the vehicle class sets the base
+            fee AND the per-km rate — so while the volume is a guess they would
+            itemise an internal default the customer never chose. */}
+        {!showRange && (<>
         <div className="space-y-2">
           {visibleFees.map((item) => (
             <div
@@ -296,6 +311,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, priceRan
             <span className="text-sm font-semibold text-primary tabular-nums">${breakdown.moverAddition.toFixed(2)}</span>
           </div>
         )}
+        </>)}
 
         {hasPromo && (
           <div className="flex items-center justify-between py-2 px-3 bg-green-500/10 rounded-lg border border-green-500/20" data-testid="fee-promo-discount">
@@ -400,7 +416,7 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, priceRan
               className="relative mt-2.5 text-[11px] leading-snug text-primary-foreground/80"
               data-testid="text-price-range-note"
             >
-              Final price confirmed after photo analysis
+              Depending on load. Upload photos for an exact quote.
             </p>
           )}
           {volumeConfirmed && breakdown.total > 0 && (

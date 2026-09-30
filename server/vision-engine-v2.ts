@@ -237,6 +237,11 @@ export interface VisionEngineResult {
   // qualifies for a special-handling surcharge (piano, refrigerator, hot tub…).
   // Null for standard household items.
   premiumKey?: string | null;
+  // False when the photo is a close-up or partial shot. Such a photo can be
+  // identified but not measured — there is no way to know what else is in the
+  // room — so the quote flow rejects it rather than pricing a fragment.
+  // Defaults true, including when vision is unavailable.
+  fullSceneConfirmed: boolean;
 }
 
 /**
@@ -617,6 +622,8 @@ interface VisionDetectionResult {
   };
   estimatedWeight?: number;
   quantity?: number;
+  /** False for a close-up or partial shot — see the fullScene prompt field. */
+  fullScene?: boolean;
 }
 
 /**
@@ -750,6 +757,14 @@ QUANTITY FIELD:
 For sets or counted items, include quantity.
 Example: dining chairs detected = 6
 
+FRAMING CHECK — answer this as well:
+Does this image show the full room, or the full pile of items to be moved, so
+that the whole load is visible? Or is it a close-up / partial shot of one item
+or part of a scene? A close-up cannot be measured for a move: there is no way
+to tell what else is in the room or how much there is in total.
+Set "fullScene": true for a full room or full pile, false for a close-up or
+partial shot. When genuinely unsure, answer true.
+
 Return ONLY valid JSON (no markdown):
 {
   "itemName": "detailed descriptive name",
@@ -758,7 +773,8 @@ Return ONLY valid JSON (no markdown):
   "confidence": 0.0-1.0,
   "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
   "estimatedWeight": number in kg,
-  "quantity": number (default 1)
+  "quantity": number (default 1),
+  "fullScene": true or false
 }`
           },
           {
@@ -793,6 +809,9 @@ Return ONLY valid JSON (no markdown):
     estimatedDimensions: result.estimatedDimensions,
     estimatedWeight: result.estimatedWeight,
     quantity: typeof result.quantity === 'number' ? result.quantity : undefined,
+    // Fail open: only an explicit false rejects the photo. A model that omits
+    // the field, or an OpenAI outage, must not block every upload.
+    fullScene: result.fullScene === false ? false : true,
   };
 }
 
@@ -936,6 +955,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,  // Keep original name with quantity
         category: item.category,
         subcategory: item.subcategory,
+        fullSceneConfirmed: visionResult.fullScene !== false,
         quantity,
         dimensions: {
           length_cm: item.dimensions_cm.length,  // Per-item dimensions
@@ -1050,6 +1070,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,
         category: visionResult.category,
         subcategory: visionResult.subcategory,
+        fullSceneConfirmed: visionResult.fullScene !== false,
         quantity,
         dimensions: {
           length_cm: corrected.length_cm,  // Per-item dimensions
@@ -1102,6 +1123,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
       itemName: 'Unidentified Item',
       category: 'Other',
       subcategory: 'Unknown',
+      // The framing was never assessed, so this must not reject the upload.
+      fullSceneConfirmed: true,
       quantity: 1,
       dimensions: {
         length_cm: fallbackDims.length_cm,
@@ -1145,6 +1168,7 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
   insuranceLevel: 'standard' | 'medium' | 'high' | 'premium';
   confidence: number;
   sourceMetadata: string;
+  fullSceneConfirmed: boolean;
 } {
   // Map category to legacy format
   let legacyCategory: 'Furniture' | 'Appliance' | 'Fragile' | 'Oversized' | 'Bulky' | 'Electronics' | 'Other' = 'Other';
@@ -1186,6 +1210,9 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
     recommendedMovers: v2Result.movers_required,
     insuranceLevel: v2Result.insurance_level,
     confidence: v2Result.confidence,
+    // Not persisted as a column: a rejected photo never becomes an item row, so
+    // this only has to survive as far as the HTTP response.
+    fullSceneConfirmed: v2Result.fullSceneConfirmed !== false,
     sourceMetadata: JSON.stringify({
       visionEngine: '2.0',
       source: v2Result.source,
