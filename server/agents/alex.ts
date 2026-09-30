@@ -6,6 +6,9 @@
  *                           on the closer-d BullMQ queue with 24/48/72h delays.
  *   - `send_touch`        : execute one delayed touch (2/3/4). Marks cold at 4.
  *   - `recover_abandoned` : one-off recovery email for an abandoned booking.
+ *   - `cancellation_recovery`     : win-back email the moment a customer cancels,
+ *                           + a follow-up SMS scheduled 48h out on closer-d.
+ *   - `cancellation_recovery_sms` : the delayed half of the above.
  *
  * Emails are persona-branded ("Alex Morgan | LervIT <alex.morgan@lervit.com>") so we use
  * Resend directly rather than notificationService.sendEmail (which forces
@@ -18,7 +21,7 @@ import { BaseAgent, type AgentRunOptions } from './base';
 import { db } from '../db';
 import { leads, bookings, users, quotes } from '@shared/schema';
 import { emitEvent } from '../events';
-import { notificationService, sendResendEmail, EMAIL_SENDERS } from '../notifications';
+import { notificationService, sendResendEmail, formatCalgaryDate, EMAIL_SENDERS } from '../notifications';
 import { logger } from '../logger';
 import { createAgentQueue, QUEUE_NAMES } from './queue';
 import { hasSmsConsent } from '../lib/smsConsent';
@@ -35,6 +38,11 @@ const TOUCH_DELAY_MS: Record<2 | 3 | 4, number> = {
   3: 48 * 60 * 60 * 1000,
   4: 72 * 60 * 60 * 1000,
 };
+
+// Post-cancellation SMS lands two days out: long enough that it doesn't read as
+// a pitch stapled to the cancellation email, short enough to catch a move that
+// got rescheduled rather than called off.
+const CANCELLATION_SMS_DELAY_MS = 48 * 60 * 60 * 1000;
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -78,6 +86,11 @@ async function fetchQuoteAddresses(quoteId: string | null | undefined): Promise<
   }
 }
 
+// users has no firstName column — only `name` — so every greeting derives from it.
+function firstNameOf(name: string | null | undefined): string {
+  return name?.trim().split(/\s+/)[0] || 'there';
+}
+
 function trimArea(address: string | null | undefined): string | null {
   if (!address) return null;
   return address.split(',')[0]?.trim() || null;
@@ -94,16 +107,24 @@ function bookingLinkFor(baseUrl: string, lead: { quoteId: string | null }, quote
 const SMS_STOP_SUFFIX = ' Reply STOP to opt out or HELP for info.';
 const SMS_PREFIX = 'Hi, Alex from LervIT here! ';
 
-// Compose an SMS from Claude-generated body + a deterministic booking link + opt-out
-// suffix, respecting the 160-char GSM-7 single-segment budget. Strips non-GSM
-// characters so smart quotes / em-dashes don't silently force UCS-2 encoding.
-export function buildAlexSms(claudeBody: string, bookingLink: string, prefix: string = SMS_PREFIX): string {
-  const cleanBody = claudeBody
+// Fold a message down to plain ASCII. A single non-GSM character (a smart quote,
+// an em-dash, an emoji) silently flips the whole message to UCS-2, which cuts the
+// per-segment budget from 153 characters to 67.
+function toGsm7(text: string): string {
+  return text
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/[–—]/g, '-')
     .replace(/[^\x00-\x7F]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
     .trim();
+}
+
+// Compose an SMS from Claude-generated body + a deterministic booking link + opt-out
+// suffix, respecting the 160-char GSM-7 single-segment budget. Strips non-GSM
+// characters so smart quotes / em-dashes don't silently force UCS-2 encoding.
+export function buildAlexSms(claudeBody: string, bookingLink: string, prefix: string = SMS_PREFIX): string {
+  const cleanBody = toGsm7(claudeBody);
 
   const separator = '\n';
   const reserved = prefix.length + separator.length + bookingLink.length + SMS_STOP_SUFFIX.length;
@@ -117,6 +138,83 @@ export function buildAlexSms(claudeBody: string, bookingLink: string, prefix: st
   return `${prefix}${truncatedBody}${separator}${bookingLink}${SMS_STOP_SUFFIX}`;
 }
 
+/**
+ * Post-cancellation win-back copy.
+ *
+ * Deliberately NOT Claude-generated, unlike the rest of Alex's outreach: this
+ * email goes out seconds after a customer cancelled, often on a bad day (see
+ * the "Personal emergency" branch). The wording is reviewed copy and stays
+ * reviewed copy — a model paraphrasing sympathy here is all downside.
+ */
+const CANCELLATION_REASON_PARAGRAPHS: Record<string, string> = {
+  'Plans changed':
+    "If your plans come back together, we're here whenever you need us.",
+  'Found another moving company':
+    "We hope your move goes smoothly! If you ever want to compare or need a backup, we're always here.",
+  'Mover is taking too long':
+    "We're sorry for the wait — this isn't the experience we want for you. We're actively working to improve response times and would love to make it right if you give us another chance.",
+  'Wrong move details entered':
+    "If you'd like to rebook with the correct details, it only takes a moment at lervit.com.",
+  'Personal emergency':
+    "We hope everything is okay. When you're ready, we're here to help with your move — no rush.",
+  Other:
+    "We'd love to hear how we could have done better. Feel free to reply to this email anytime.",
+};
+
+const CANCELLATION_REASON_FALLBACK = CANCELLATION_REASON_PARAGRAPHS.Other;
+
+export interface CancellationRecoveryContext {
+  firstName: string;
+  moveDate: string;
+  cancellationReason?: string | null;
+  cancellationComments?: string | null;
+}
+
+export function buildCancellationRecoveryEmail(
+  ctx: CancellationRecoveryContext,
+): { subject: string; body: string } {
+  const reasonParagraph =
+    CANCELLATION_REASON_PARAGRAPHS[(ctx.cancellationReason ?? '').trim()] ??
+    CANCELLATION_REASON_FALLBACK;
+
+  // Free-text the customer typed into the exit survey — the only untrusted input
+  // that has ever reached an Alex email body, which is why sendAlexEmail now
+  // HTML-escapes before wrapping paragraphs.
+  const comments = ctx.cancellationComments?.trim();
+  const commentsParagraph = comments
+    ? `\n\nYou mentioned: '${comments}' — thank you for sharing that with us.`
+    : '';
+
+  const body = `Hi ${ctx.firstName},
+
+We noticed you cancelled your upcoming move scheduled for ${ctx.moveDate}. We completely understand that plans change, and we want to make sure your experience with LervIT was a positive one.
+
+${reasonParagraph}${commentsParagraph}
+
+If you ever need moving help in the future, we'd love to be your first call. You can rebook anytime at lervit.com — it takes less than 2 minutes.
+
+Warm regards,
+The LervIT Team
+Calgary's trusted moving platform`;
+
+  return { subject: `We're sorry to see you go, ${ctx.firstName} 💙`, body };
+}
+
+// The 48h follow-up. Win-back marketing to a former customer rather than a
+// transactional booking update, so it carries SMS_STOP_SUFFIX like Alex's other
+// outreach. The trailing 📦 is dropped by toGsm7 — keeping it would push a
+// 156-character message to three UCS-2 segments for one emoji.
+//
+// Unlike buildAlexSms this does not truncate: the copy is fixed, so only the
+// first name varies, and a name over 9 characters spills into a second GSM-7
+// segment. Two segments beats cutting somebody's name in half.
+export function buildCancellationRecoverySms(firstName: string): string {
+  const body =
+    `Hey ${firstName}, just checking in — if your moving plans are back on, ` +
+    `we're ready to help. Book in 2 minutes at lervit.com`;
+  return toGsm7(body) + SMS_STOP_SUFFIX;
+}
+
 interface ConvertLeadInput {
   leadId: string;
   channelOverride?: 'email' | 'sms';
@@ -126,6 +224,14 @@ interface SendTouchInput {
   touchNumber: number;
 }
 interface RecoverAbandonedInput {
+  bookingId: string;
+}
+interface CancellationRecoveryInput {
+  bookingId: string;
+  cancellationReason?: string | null;
+  cancellationComments?: string | null;
+}
+interface CancellationRecoverySmsInput {
   bookingId: string;
 }
 
@@ -148,6 +254,10 @@ export class AlexAgent extends BaseAgent {
           return this.recoverAbandonedBulk(options);
         }
         return this.recoverAbandoned(input as RecoverAbandonedInput, options);
+      case 'cancellation_recovery':
+        return this.cancellationRecovery(input as CancellationRecoveryInput, options);
+      case 'cancellation_recovery_sms':
+        return this.cancellationRecoverySms(input as CancellationRecoverySmsInput, options);
       default:
         throw new Error(`Alex: unknown action "${action}"`);
     }
@@ -561,6 +671,130 @@ Complete link: ${(process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim()}/
     return { success: true, delivered };
   }
 
+  /**
+   * Win-back email the moment a customer cancels, plus a 48h SMS follow-up
+   * queued on closer-d. Triggered from the customer-cancel PATCH.
+   */
+  private async cancellationRecovery(
+    { bookingId, cancellationReason, cancellationComments }: CancellationRecoveryInput,
+    options: AgentRunOptions = {},
+  ) {
+    // Dedupe: one recovery per booking per day. A cancel PATCH can legitimately
+    // be replayed (client retry, admin re-cancel) and each replay re-triggers us.
+    const dedupe = await wasContactedToday({
+      entityId: bookingId,
+      entityType: 'booking',
+      eventTypes: ['booking.cancellation_recovery_sent'],
+    });
+    if (dedupe.contacted) {
+      return { skipped: true, reason: 'already_recovered_today', lastEvent: dedupe.lastEvent };
+    }
+
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+    if (!booking) return { skipped: true, reason: 'booking not found' };
+    const [customer] = await db.select().from(users).where(eq(users.id, booking.customerId)).limit(1);
+    if (!customer?.email) return { skipped: true, reason: 'no customer email' };
+
+    const firstName = firstNameOf(customer.name);
+    const { subject, body } = buildCancellationRecoveryEmail({
+      firstName,
+      moveDate: formatCalgaryDate(booking.preferredDate, 'your scheduled date'),
+      cancellationReason,
+      cancellationComments,
+    });
+
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [bookingId],
+        preview: {
+          to: customer.email,
+          channel: 'email',
+          subject,
+          body,
+          smsIn48h: customer.phone ? buildCancellationRecoverySms(firstName) : null,
+        },
+      };
+    }
+
+    const delivered = await sendAlexEmail(customer.email, subject, body);
+
+    // Schedule the 48h SMS. No phone means no follow-up — and no queue means no
+    // delay primitive at all, so log loudly rather than sending it immediately.
+    let smsScheduled = false;
+    if (customer.phone) {
+      const queue = createAgentQueue(QUEUE_NAMES.CLOSER_D);
+      if (queue) {
+        try {
+          await queue.add(
+            'cancellation_recovery_sms',
+            { bookingId },
+            { delay: CANCELLATION_SMS_DELAY_MS },
+          );
+          smsScheduled = true;
+        } catch (err) {
+          logger.error({ err, bookingId }, 'Alex.cancellationRecovery: failed to schedule 48h SMS');
+        }
+      } else {
+        logger.warn({ bookingId }, 'Alex.cancellationRecovery: closer-d queue unavailable — 48h SMS not scheduled');
+      }
+    }
+
+    await emitEvent('booking.cancellation_recovery_sent', 'booking', bookingId, {
+      agentName: this.name,
+      customerId: booking.customerId,
+      cancellationReason: cancellationReason ?? null,
+      delivered,
+      smsScheduled,
+    });
+
+    return { success: true, delivered, smsScheduled };
+  }
+
+  /** The delayed half of cancellation_recovery — runs 48h after the cancel. */
+  private async cancellationRecoverySms(
+    { bookingId }: CancellationRecoverySmsInput,
+    options: AgentRunOptions = {},
+  ) {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+    if (!booking) return { skipped: true, reason: 'booking not found' };
+
+    // Two days is long enough for the customer to have rebooked. Texting "if your
+    // plans are back on" to somebody who already booked again reads as a system
+    // that isn't paying attention.
+    if (booking.status !== 'cancelled') {
+      logger.info({ bookingId, status: booking.status }, 'Alex.cancellationRecoverySms: no longer cancelled — skipping');
+      return { skipped: true, reason: `booking is ${booking.status}` };
+    }
+
+    const [customer] = await db.select().from(users).where(eq(users.id, booking.customerId)).limit(1);
+    if (!customer?.phone) return { skipped: true, reason: 'no customer phone' };
+
+    const message = buildCancellationRecoverySms(firstNameOf(customer.name));
+
+    if (options.dryRun) {
+      return {
+        dryRun: true,
+        wouldContact: [bookingId],
+        preview: { to: customer.phone, channel: 'sms', body: message },
+      };
+    }
+
+    const delivered = await notificationService.sendSMS({
+      to: customer.phone,
+      message,
+      type: 'booking_update',
+    });
+
+    await emitEvent('booking.cancellation_recovery_sms_sent', 'booking', bookingId, {
+      agentName: this.name,
+      customerId: booking.customerId,
+      delivered,
+    });
+
+    return { success: true, channel: 'sms', delivered };
+  }
+
   private async sendManualSms(lead: typeof leads.$inferSelect, options: AgentRunOptions = {}) {
     if (!lead.contactPhone) return { skipped: true, reason: 'no_contact_phone' };
 
@@ -653,6 +887,15 @@ Dropoff area: ${dropoffArea ?? 'not available'}`,
   }
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function parseSubjectAndBody(raw: string, fallbackSubject: string): { subject: string; body: string } {
   const lines = raw.split(/\r?\n/);
   const subjectIdx = lines.findIndex(l => l.trim().toUpperCase().startsWith('SUBJECT:'));
@@ -673,11 +916,14 @@ async function sendAlexEmail(to: string, subject: string, body: string): Promise
     logger.warn('Alex: RESEND_API_KEY not set — email skipped');
     return false;
   }
+  // Bodies reaching here are plain text (Claude drafts, and the cancellation
+  // template's echoed customer comment), so escape before wrapping: the comment
+  // is customer-typed and must not be able to inject markup into the email.
   const paragraphs = body
     .split(/\n\s*\n/)
     .map(p => p.trim())
     .filter(Boolean)
-    .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+    .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
     .join('');
   const appBase = (process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim();
   const header = `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1f5f9;">

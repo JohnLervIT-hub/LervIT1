@@ -5602,7 +5602,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cancellationAnswers: z.record(z.any()).optional(),
       });
       let updates = validateBody(updateSchema, req.body);
-      
+
+      // Set only on a customer cancellation, and read after the booking row is
+      // actually written — Alex's win-back must not fire on a cancel that failed.
+      let cancelSurvey: { reason: string | null; comments: string | null } | null = null;
+
       // If moverId is being set (direct job acceptance), verify authorization
       if (updates.moverId) {
         if (!requireUser(req, res)) return;
@@ -5720,6 +5724,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Exit survey. The column is text, so the answers object is stored
           // as JSON. Kept out of the update on any other transition.
+          // Captured as an object first: the Alex trigger below needs the free-text
+          // comment, and by the next line `updates.cancellationAnswers` is a string.
+          cancelSurvey = {
+            reason: updates.cancellationReason ?? null,
+            comments: typeof updates.cancellationAnswers?.comments === 'string'
+              ? updates.cancellationAnswers.comments
+              : null,
+          };
           if (updates.cancellationAnswers !== undefined) {
             (updates as any).cancellationAnswers = JSON.stringify(updates.cancellationAnswers);
           }
@@ -5898,6 +5910,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updatedAt: new Date().toISOString(),
           });
         } catch (_) {}
+      }
+
+      // Alex's post-cancellation win-back: reason-aware email now, SMS 48h out.
+      // Deliberately NOT awaited. It sends an email and enqueues a delayed BullMQ
+      // job, and `queue.add` does not time out against an unreachable Redis — a
+      // customer's cancel confirmation must never wait on either.
+      if (cancelSurvey && booking.status === BOOKING_STATUSES.CANCELLED) {
+        void (async () => {
+          try {
+            const { alex } = await import('./agents/alex');
+            await alex.run('cancellation_recovery', {
+              bookingId: booking.id,
+              cancellationReason: cancelSurvey.reason,
+              cancellationComments: cancelSurvey.comments,
+            });
+          } catch (alexErr) {
+            logEvent.error(
+              'cancellation_recovery_trigger_failed',
+              alexErr instanceof Error ? alexErr : new Error('alex error'),
+              { bookingId: booking.id },
+            );
+          }
+        })();
       }
 
       res.json(booking);
@@ -16945,6 +16980,22 @@ Respond with VALID JSON only:
         const result = await alex.run(
           'recover_abandoned',
           bookingId ? { bookingId: String(bookingId) } : {},
+          { dryRun },
+        );
+        return res.json({ ok: true, action, dryRun, result });
+      }
+      if (action === 'cancellation_recovery' || action === 'cancellation_recovery_sms') {
+        const bookingId = req.body?.bookingId ?? req.body?.input?.bookingId;
+        if (!bookingId) return res.status(400).json({ error: 'bookingId required' });
+        // Reason/comments are optional overrides for previewing a specific branch
+        // of the template; the live trigger passes the real exit-survey answers.
+        const result = await alex.run(
+          action,
+          {
+            bookingId: String(bookingId),
+            cancellationReason: req.body?.cancellationReason ?? req.body?.input?.cancellationReason ?? null,
+            cancellationComments: req.body?.cancellationComments ?? req.body?.input?.cancellationComments ?? null,
+          },
           { dryRun },
         );
         return res.json({ ok: true, action, dryRun, result });
