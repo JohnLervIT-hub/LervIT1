@@ -4,6 +4,7 @@ import { and, eq, gte } from 'drizzle-orm';
 import { getBaseUrl } from './utils/urls';
 import { db } from './db';
 import { businessEvents } from '@shared/schema';
+import { calculatePrice } from '@shared/pricing';
 
 // Calgary timezone used for all date formatting in emails, SMS, and logs
 const CALGARY_TZ = 'America/Edmonton';
@@ -113,6 +114,48 @@ export interface SMSNotification {
     // keyword response is a carrier obligation, not outreach — it must never be
     // dropped by the 1/hr budget. Bounded by the inbound message itself.
     | 'help_reply';
+}
+
+/**
+ * Did the photos move the price far enough from the pre-photo estimate to be
+ * worth explaining?
+ *
+ * Recomputed from the booking's own inputs with the volume withheld, rather
+ * than diffed against the saved quote row: that row is a one-shot snapshot
+ * taken the first time a price existed, so it also drifts when the customer
+ * changes the mover count. Withholding only the volume isolates the one thing
+ * the note claims to explain — the photos.
+ *
+ * False when there is nothing to explain: no measured volume, missing inputs,
+ * or a move inside the tolerance.
+ */
+const PRICE_DRIFT_TOLERANCE = 0.20;
+
+function photosMovedThePrice(booking: Partial<Booking>): boolean {
+  const num = (v: unknown): number | null => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+    return Number.isFinite(n) ? n : null;
+  };
+  const detectedVolume = num(booking.aiDetectedVolumeCuft);
+  const distanceKm = num(booking.distance);
+  // No measurement means the customer was only ever shown the estimate.
+  if (!detectedVolume || detectedVolume <= 0 || !distanceKm || !booking.loadSize) return false;
+
+  try {
+    const inputs = {
+      distanceKm,
+      loadSize: booking.loadSize,
+      pickupDifficulty: booking.pickupDifficulty,
+      dropoffDifficulty: booking.dropoffDifficulty,
+      numberOfMovers: booking.numberOfMovers ?? 1,
+    };
+    const estimate = calculatePrice(inputs).total;
+    if (estimate <= 0) return false;
+    const measured = calculatePrice({ ...inputs, volumeCuft: detectedVolume }).total;
+    return Math.abs(measured - estimate) / estimate > PRICE_DRIFT_TOLERANCE;
+  } catch {
+    return false;
+  }
 }
 
 // Helper function to extract first name from full name
@@ -516,6 +559,18 @@ class NotificationService {
   async sendBookingConfirmation(customer: User, booking: Partial<Booking>): Promise<void> {
     const subject = `Booking Confirmed - Move #${booking.id?.slice(0, 8)}`;
     const formattedDate = formatCalgaryDate(booking.preferredDate, 'TBD');
+
+    // The quote a customer sees before uploading photos is priced off the
+    // load-size bucket. When the photos move it more than the tolerance, say so
+    // here rather than leaving them to spot it on the receipt.
+    const priceRow = booking.price
+      ? `<li><strong>Total:</strong> $${Number(booking.price).toFixed(2)} CAD</li>`
+      : '';
+    const driftNote = photosMovedThePrice(booking)
+      ? `<p style="color:#555555;font-size:15px;line-height:23px;margin:0 0 30px 0;padding:14px 16px;background-color:#f1f8f4;border-left:3px solid #4CAF50;">
+                Your final price reflects the actual items detected in your photos, which differed from the initial estimate.
+              </p>`
+      : '';
     
     const body = `
 <!DOCTYPE html>
@@ -544,8 +599,10 @@ class NotificationService {
                 <li><strong>Dropoff:</strong> ${booking.dropoffAddress}</li>
                 <li><strong>Date:</strong> ${formattedDate}</li>
                 <li><strong>Load Size:</strong> ${booking.loadSize}</li>
+                ${priceRow}
               </ul>
-              
+
+              ${driftNote}
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0 0 20px 0;">You'll receive another email once a mover accepts your job.</p>
               <p style="color:#555555;font-size:16px;line-height:24px;margin:0;">Thanks for choosing LervIT!</p>
             </td>

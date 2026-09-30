@@ -1743,3 +1743,12 @@ ALTER TABLE social_posts
 -- in shared/video.ts (migrations/0035_content_items_duration_seconds.sql).
 ALTER TABLE content_items
   ADD COLUMN IF NOT EXISTS duration_seconds integer DEFAULT 10;
+
+-- Per-attempt booking idempotency key (migrations/0037_bookings_idempotency_key.sql).
+-- Partial unique index: historical rows are all NULL and must not collide.
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS idempotency_key text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS bookings_customer_idempotency_key_unique
+  ON bookings (customer_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

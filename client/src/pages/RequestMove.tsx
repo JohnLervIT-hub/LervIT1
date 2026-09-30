@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
-import { calculatePrice, PRICING_CONFIG, type PriceBreakdown, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { calculatePrice, calculatePriceRange, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
@@ -44,6 +44,35 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // Minimum booking lead time. Mirrors the server-side guard in POST /api/bookings —
 // the input `min` only discourages a bad date, it does not enforce one.
 const MIN_LEAD_TIME_MS = 2 * 60 * 60 * 1000;
+
+const BOOKING_IDEM_KEY_STORAGE = 'lervit_booking_idem_key';
+
+/**
+ * Per-attempt idempotency key for POST /api/bookings.
+ *
+ * Stable for the tab session: a second submit reuses it, so the server hands
+ * back the booking the first submit created instead of a twin. It deliberately
+ * is NOT rotated after a successful create — the server only replays an UNPAID
+ * booking, so once payment lands the same key naturally starts a new booking.
+ *
+ * sessionStorage throws in some privacy modes, and crypto.randomUUID needs a
+ * secure context; both fall back rather than blocking the submit.
+ */
+function getBookingIdempotencyKey(): string {
+  const mint = () =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `k-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  try {
+    const existing = sessionStorage.getItem(BOOKING_IDEM_KEY_STORAGE);
+    if (existing) return existing;
+    const key = mint();
+    sessionStorage.setItem(BOOKING_IDEM_KEY_STORAGE, key);
+    return key;
+  } catch {
+    return mint();
+  }
+}
 
 const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = { slight: 5, moderate: 10, high: 15, very_high: 30 };
 const HEAVY_ITEM_PREMIUM_CAP = 150;
@@ -317,10 +346,14 @@ export default function RequestMove() {
     numberOfMovers: 1,
     forcedTwoMovers: false,
     itemPremiums: [],
+    volumeSource: 'default',
     distanceKm: 0,
     perKmRate: 0,
   });
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(emptyBreakdown());
+  // Bracket shown in place of the headline number until the vision engine
+  // measures the load. Null once the volume is real (or before any price exists).
+  const [priceRange, setPriceRange] = useState<PriceRange | null>(null);
   const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
 
@@ -756,7 +789,9 @@ export default function RequestMove() {
 
   const createBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      const res = await apiRequest("POST", "/api/bookings", bookingData);
+      const res = await apiRequest("POST", "/api/bookings", bookingData, {
+        "X-Idempotency-Key": getBookingIdempotencyKey(),
+      });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Unable to create booking. Please try again.');
@@ -1207,7 +1242,7 @@ export default function RequestMove() {
             premiumKey: (i as { premiumKey?: string | null }).premiumKey ?? null,
           }));
         const hasKeyedPremiums = detectedItems.some(d => !!d.premiumKey);
-        const breakdown = calculatePrice({
+        const priceInputs = {
           distanceKm: estimateDistance,
           loadSize,
           pickupDifficulty,
@@ -1219,7 +1254,9 @@ export default function RequestMove() {
           // Legacy fallback only fires when the vision engine emitted no keyed premiums
           // (e.g. older items detected before premiumKey wiring, or non-premium items).
           heavyItemFeeOverride: hasKeyedPremiums ? undefined : getItemTypePremium(identifiedItems),
-        });
+        };
+        const range = calculatePriceRange(priceInputs);
+        const breakdown = range.max;
         // countHeavyItems retained for legacy telemetry only.
         void countHeavyItems(identifiedItems);
         // Blank the breakdown on step 1 only until the vision engine has
@@ -1230,8 +1267,12 @@ export default function RequestMove() {
           const step1Preview = emptyBreakdown();
           step1Preview.distanceKm = breakdown.distanceKm;
           setPriceBreakdown(step1Preview);
+          setPriceRange(null);
         } else {
           setPriceBreakdown(breakdown);
+          // `range.max` IS `breakdown`, so a measured volume collapses the range
+          // to a single number and isRange goes false — no need to check here.
+          setPriceRange(range);
         }
         setPricingError(null);
       } catch (error) {
@@ -1240,6 +1281,7 @@ export default function RequestMove() {
       }
     } else {
       setPriceBreakdown(emptyBreakdown());
+      setPriceRange(null);
     }
   }, [step, estimateDistance, loadSize, pickupDifficulty, dropoffDifficulty, heavyItem, numberOfMovers, pickupAddress, dropoffAddress, aiDetectedVolume, identifiedItems]);
 
@@ -1901,6 +1943,12 @@ export default function RequestMove() {
       setStep(step + 1);
       window.scrollTo({ top: 0, behavior: "instant" });
     } else {
+      // The button's `disabled` binding reads isPending, which React Query only
+      // flips once the mutation has started — two clicks inside one tick both
+      // get through. The server's idempotency key would collapse them anyway;
+      // this stops the second request from being made at all.
+      if (createBookingMutation.isPending) return;
+
       // Validate date before submission
       if (!date) {
         toast({
@@ -3154,6 +3202,7 @@ export default function RequestMove() {
             <div className="flex flex-col gap-4 lg:sticky lg:top-20">
               <PricingSummary
                 breakdown={priceBreakdown}
+                priceRange={priceRange}
                 isCalculating={isCalculatingPrice}
                 error={pricingError}
                 showPromoInput={false}

@@ -4390,6 +4390,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // ── Idempotency ──────────────────────────────────────────────────────
+      // Header-only, never a body field: whoever picks the key picks which row
+      // comes back, so it must not be attacker-chosen alongside a forged
+      // customerId. Scoped to the authenticated user either way.
+      //
+      // Only an UNPAID booking is replayed. That scope is what lets one key live
+      // for the whole tab session: a repeat submit before payment is the
+      // double-submit we are collapsing, while a submit after the first booking
+      // was paid is a genuinely new move and must get its own row.
+      const idempotencyKey = typeof req.headers['x-idempotency-key'] === 'string'
+        ? req.headers['x-idempotency-key'].trim().slice(0, 200)
+        : null;
+      if (idempotencyKey) {
+        const [existing] = await db
+          .select()
+          .from(bookings)
+          .where(and(
+            eq(bookings.customerId, user.id),
+            eq(bookings.idempotencyKey, idempotencyKey),
+          ))
+          .limit(1);
+        if (existing && existing.paymentStatus !== 'succeeded') {
+          logEvent.booking('idempotent_replay', {
+            bookingId: existing.id,
+            customerId: user.id,
+            paymentStatus: existing.paymentStatus,
+          });
+          return res.json({
+            ...existing,
+            idempotentReplay: true,
+            message: "Booking already created. Please complete payment to find movers.",
+          });
+        }
+      }
+
       // Validate booking data - customerId will be added from authenticated user
       const bookingData = validateBody(
         insertBookingSchema.extend({
@@ -4622,7 +4657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create booking with geocoded data, price breakdown, and AI metadata
       // SECURITY: Use authenticated user's ID, not from request body
       // If preSelectedMoverId is provided, store it for direct assignment after payment
-      const booking = await storage.createBooking({
+      const createBookingRow = () => storage.createBooking({
         customerId: user.id,
         pickupAddress: bookingData.pickupAddress,
         dropoffAddress: bookingData.dropoffAddress,
@@ -4669,13 +4704,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         discountReason: discountReason,
         moverBalanceOwed: toDecimalString(moverBalanceOwed),
         notifiedAt: new Date(),
+        ...(idempotencyKey && { idempotencyKey }),
         ...(utmSource && { utmSource }),
         ...(utmMedium && { utmMedium }),
         ...(utmCampaign && { utmCampaign }),
         ...(sourceChannel && { sourceChannel }),
         ...(landingPage && { landingPage }),
       } as any);
-      
+
+      // The pre-flight lookup above closes the common case (a second submit
+      // after the first finished). Two truly concurrent submits both pass it, so
+      // the partial unique index is the real guard — the loser lands here and is
+      // handed the winner's row rather than a 400.
+      let booking: Awaited<ReturnType<typeof createBookingRow>>;
+      try {
+        booking = await createBookingRow();
+      } catch (insertErr) {
+        // Drizzle re-throws the driver error, but a wrapper would keep the
+        // original on `cause` — check both, and match on `constraint` (set by
+        // node-postgres) before falling back to the message text.
+        const pgErr = (insertErr as { code?: string; constraint?: string; cause?: unknown })?.code
+          ? (insertErr as { code?: string; constraint?: string })
+          : ((insertErr as { cause?: { code?: string; constraint?: string } })?.cause ?? {});
+        const isDuplicateKey =
+          !!idempotencyKey &&
+          String(pgErr.code ?? '') === '23505' &&
+          (pgErr.constraint === 'bookings_customer_idempotency_key_unique' ||
+            String((insertErr as Error)?.message ?? '').includes('bookings_customer_idempotency_key_unique'));
+        if (!isDuplicateKey) throw insertErr;
+        const [raced] = await db
+          .select()
+          .from(bookings)
+          .where(and(
+            eq(bookings.customerId, user.id),
+            eq(bookings.idempotencyKey, idempotencyKey),
+          ))
+          .limit(1);
+        if (!raced) throw insertErr;
+        logEvent.booking('idempotent_insert_race', {
+          bookingId: raced.id,
+          customerId: user.id,
+        });
+        return res.json({
+          ...raced,
+          idempotentReplay: true,
+          message: "Booking already created. Please complete payment to find movers.",
+        });
+      }
+
       // Increment promo usage count if promo applied
       if (promoCode && discountAmount > 0) {
         await storage.updateUser(user.id, { 

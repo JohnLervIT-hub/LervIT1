@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, numeric, integer, boolean, doublePrecision, unique, index, date, time, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, numeric, integer, boolean, doublePrecision, unique, uniqueIndex, index, date, time, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -281,6 +281,12 @@ export const bookings = pgTable("bookings", {
   cancellationReason: text("cancellation_reason"),
   cancellationAnswers: text("cancellation_answers"),
 
+  // Client-generated per-attempt key (X-Idempotency-Key). Collapses a
+  // double-submit onto one booking instead of creating a twin. Scoped by the
+  // unique index below to (customer, key) so one customer's key can never
+  // surface another's booking.
+  idempotencyKey: text("idempotency_key"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -290,6 +296,11 @@ export const bookings = pgTable("bookings", {
   paymentStatusIdx: index("bookings_payment_status_idx").on(table.paymentStatus),
   sourceChannelIdx: index("bookings_source_channel_idx").on(table.sourceChannel),
   slaDeadlineIdx: index("bookings_sla_deadline_idx").on(table.slaDeadlineAt),
+  // Partial unique: only rows that carry a key participate, so the millions of
+  // historical NULLs don't collide with each other.
+  idempotencyKeyUnique: uniqueIndex("bookings_customer_idempotency_key_unique")
+    .on(table.customerId, table.idempotencyKey)
+    .where(sql`idempotency_key IS NOT NULL`),
 }));
 
 export const messages = pgTable("messages", {
@@ -384,6 +395,10 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   // text, so validating the request against it rejected every booking that
   // carried identified items.
   detectedItems: true,
+  // Header-only (X-Idempotency-Key). Omitted so a body field cannot set it:
+  // a caller who could choose the stored key could probe for, and be handed
+  // back, a booking created by an earlier request.
+  idempotencyKey: true,
 }).extend({
   // Override preferredDate to accept ISO date strings from the frontend
   preferredDate: z.string().or(z.date()).transform((val) => new Date(val)),

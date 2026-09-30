@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Calculator, TrendingUp, Zap, Package, MapPin, Truck, Sparkles, Gift, Tag, X, Loader2, CheckCircle2, CheckCircle, Lock, User, Phone, Mail, Shield, Star, ArrowRight, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import type { PriceBreakdown } from "@shared/pricing";
+import type { PriceBreakdown, PriceRange } from "@shared/pricing";
 import { PRICING_CONFIG } from "@shared/pricing";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -28,6 +28,12 @@ interface PromoState {
 
 interface PricingSummaryProps {
   breakdown: PriceBreakdown | null;
+  /**
+   * Bracket to show while the volume is still a load-size guess. Supplying it
+   * swaps the headline number for a range; once `breakdown.volumeSource` is
+   * 'detected' the range collapses and the single price is shown instead.
+   */
+  priceRange?: PriceRange | null;
   isCalculating?: boolean;
   error?: string | null;
   className?: string;
@@ -39,7 +45,7 @@ interface PricingSummaryProps {
   isLoggedIn?: boolean;
 }
 
-export const PricingSummary = memo(function PricingSummary({ breakdown, isCalculating, error, className, showPromoInput = false, appliedPromo, onPromoApplied, onContactCapture, contactCaptured = false, isLoggedIn = false }: PricingSummaryProps) {
+export const PricingSummary = memo(function PricingSummary({ breakdown, priceRange, isCalculating, error, className, showPromoInput = false, appliedPromo, onPromoApplied, onContactCapture, contactCaptured = false, isLoggedIn = false }: PricingSummaryProps) {
   const { user } = useAuth();
   const [promoInput, setPromoInput] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
@@ -119,8 +125,13 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
     );
   }
 
+  // A load-size volume is a bucket default, not a measurement — say so on the
+  // line item as well as on the headline, so the two never disagree.
+  const volumeConfirmed = breakdown.volumeSource === 'detected';
   const loadSizeLabel = breakdown.rawVolume > 0
-    ? `Load (${breakdown.rawVolume.toFixed(0)} ft³ × $${PRICING_CONFIG.volumeRate.toFixed(2)})`
+    ? volumeConfirmed
+      ? `Load (${breakdown.rawVolume.toFixed(0)} ft³ × $${PRICING_CONFIG.volumeRate.toFixed(2)})`
+      : `Load (~${breakdown.rawVolume.toFixed(0)} ft³ est. × $${PRICING_CONFIG.volumeRate.toFixed(2)})`
     : "Load";
 
   const distanceLabel = breakdown.distanceKm
@@ -199,6 +210,13 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
   const hasPromo = appliedPromo?.valid;
   const discountMultiplier = hasPromo ? (1 - appliedPromo.discountPercent / 100) : 1;
   const discountedTotal = breakdown.total * discountMultiplier;
+
+  // Show a bracket only while the volume is unmeasured AND the two ends actually
+  // differ — a 'boxes' load already sits on the floor, so its range collapses.
+  const showRange = !volumeConfirmed && !!priceRange?.isRange && breakdown.total > 0;
+  // Whole dollars: cents on a number this uncertain imply precision we lack.
+  const rangeLow = Math.floor((priceRange?.min.total ?? 0) * discountMultiplier);
+  const rangeHigh = Math.ceil((priceRange?.max.total ?? 0) * discountMultiplier);
 
   const shouldGate = !contactCaptured && !isLoggedIn && breakdown.total > 0 && !!onContactCapture;
 
@@ -347,10 +365,16 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
           <div className="relative flex items-center justify-between">
             <div>
               <p className="text-xs text-primary-foreground/80 mb-1">
-                {hasPromo ? "Estimated (With Promo)" : "Estimated Total"}
+                {showRange
+                  ? (hasPromo ? "Estimated Range (With Promo)" : "Estimated Range")
+                  : (hasPromo ? "Estimated (With Promo)" : "Estimated Total")}
               </p>
               <div className="flex items-baseline gap-1 flex-wrap">
-                {hasPromo ? (
+                {showRange ? (
+                  <span className="text-3xl font-bold tracking-tight" data-testid="text-price-range">
+                    ${rangeLow} – ${rangeHigh}
+                  </span>
+                ) : hasPromo ? (
                   <>
                     <span className="text-lg line-through text-primary-foreground/50 mr-1">
                       ${breakdown.total.toFixed(2)}
@@ -368,9 +392,26 @@ export const PricingSummary = memo(function PricingSummary({ breakdown, isCalcul
               </div>
             </div>
             <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
-              {hasPromo ? <Gift className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
+              {showRange ? <Package className="w-6 h-6" /> : hasPromo ? <Gift className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
             </div>
           </div>
+          {showRange && (
+            <p
+              className="relative mt-2.5 text-[11px] leading-snug text-primary-foreground/80"
+              data-testid="text-price-range-note"
+            >
+              Final price confirmed after photo analysis
+            </p>
+          )}
+          {volumeConfirmed && breakdown.total > 0 && (
+            <div
+              className="relative mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1"
+              data-testid="badge-volume-confirmed"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              <span className="text-[11px] font-medium">Based on your items</span>
+            </div>
+          )}
         </div>
         </div>
         {shouldGate && onContactCapture && (

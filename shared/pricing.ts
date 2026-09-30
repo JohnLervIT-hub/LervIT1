@@ -23,10 +23,18 @@ export interface PriceBreakdown {
   numberOfMovers: number;
   forcedTwoMovers: boolean;
   itemPremiums: { name: string; key: string | null; fee: number }[];
+  // Where rawVolume came from. 'detected' means the vision engine measured the
+  // load; the other two mean we guessed from the load-size dropdown (or nothing
+  // at all). A guessed volume drives the vehicle class, and therefore the base
+  // fee AND the per-km rate, so a quote built on one can move a long way once
+  // the photos land — the UI must not present it as a firm number.
+  volumeSource: VolumeSource;
   // Display helpers retained for existing UI callers
   distanceKm: number;
   perKmRate: number;
 }
+
+export type VolumeSource = 'detected' | 'load_size_fallback' | 'default';
 
 export interface VehicleClassConfig {
   class: VehicleClass;
@@ -142,6 +150,18 @@ export const PRICING_CONFIG = {
   // Platform commission (15% for Uber-style payout)
   platformFeePercent: 15.00,
 } as const;
+
+/**
+ * Lower bound for a pre-vision price range — the 'boxes' tier.
+ *
+ * Indicative, not a guarantee: a genuinely tiny load prices below it (the
+ * booking that prompted this measured 9.11 ft³ and settled under the floor).
+ * That is the safe direction to be wrong — undershooting the quoted minimum is
+ * a pleasant surprise, whereas exceeding the quoted maximum is the trust
+ * damage, and the maximum is the load-size guess we were already showing. The
+ * accompanying copy must stay non-committal for exactly this reason.
+ */
+export const FALLBACK_VOLUME_FLOOR_CUFT = PRICING_CONFIG.loadSizeVolumes.boxes;
 
 // ===== VEHICLE CLASS CATALOG (display metadata) =====
 // Volume ranges use *adjusted* ft³ (raw × packingFactor) to line up with
@@ -362,9 +382,12 @@ export function calculatePrice({
   const cfg = PRICING_CONFIG;
 
   // STEP 1 — Raw volume
-  const rawVolume = (typeof volumeCuft === 'number' && volumeCuft > 0)
-    ? volumeCuft
-    : (loadSize != null ? cfg.loadSizeVolumes[loadSize] : undefined) ?? 40;
+  const hasDetectedVolume = typeof volumeCuft === 'number' && volumeCuft > 0;
+  const loadSizeVolume = loadSize != null ? cfg.loadSizeVolumes[loadSize] : undefined;
+  const rawVolume = hasDetectedVolume ? volumeCuft : loadSizeVolume ?? 40;
+  const volumeSource: VolumeSource = hasDetectedVolume
+    ? 'detected'
+    : loadSizeVolume != null ? 'load_size_fallback' : 'default';
 
   // STEP 2 — Adjusted volume (packing factor)
   const adjustedVolume = rawVolume * cfg.packingFactor;
@@ -448,9 +471,43 @@ export function calculatePrice({
     numberOfMovers: effectiveMovers,
     forcedTwoMovers,
     itemPremiums: itemPremiumsList.map(i => ({ name: i.name, key: i.key, fee: round2(i.fee) })),
+    volumeSource,
     distanceKm: Math.round(distanceKm * 10) / 10,
     perKmRate,
   };
+}
+
+export interface PriceRange {
+  min: PriceBreakdown;
+  max: PriceBreakdown;
+  /** False when the two ends collapse to the same number — show one price. */
+  isRange: boolean;
+}
+
+/**
+ * Bracket a price whose volume is still a guess.
+ *
+ * The load-size dropdown maps to a single ft³ figure ('medium' = 80), and that
+ * figure sets the vehicle class, the base fee and the per-km rate. When the
+ * photos come back it is replaced by a measurement that can be an order of
+ * magnitude off — one real booking quoted $124.79 on the 80 ft³ 'medium'
+ * default and settled at $60.76 on a measured 9.11 ft³. Showing the guess as a
+ * single confident number is what makes that feel like a bait and switch, so
+ * pre-vision the UI shows this bracket instead.
+ *
+ * max is the load-size guess (what we would have shown before). min is the
+ * boxes-tier floor, or the measurement itself once we have one — in which case
+ * both ends agree and `isRange` is false.
+ */
+export function calculatePriceRange(
+  params: Parameters<typeof calculatePrice>[0],
+): PriceRange {
+  const max = calculatePrice(params);
+  const floorVolume = max.volumeSource === 'detected'
+    ? max.rawVolume
+    : Math.min(FALLBACK_VOLUME_FLOOR_CUFT, max.rawVolume);
+  const min = calculatePrice({ ...params, volumeCuft: floorVolume });
+  return { min, max, isRange: min.total !== max.total };
 }
 
 /** Calculate mover earnings after platform commission. */
