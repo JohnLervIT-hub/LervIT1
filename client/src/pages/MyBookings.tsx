@@ -20,6 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { BOOKING_STATUSES } from "@shared/schema";
 import { format, isValid } from "date-fns";
 
@@ -117,6 +119,9 @@ export default function MyBookings() {
   // State for edit booking dialog
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [cancelDialogBookingId, setCancelDialogBookingId] = useState<string | null>(null);
+  const [cancelStep, setCancelStep] = useState<1 | 2>(1);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [comments, setComments] = useState("");
 
   // State for status timeline dialog (partner bookings)
   const [timelineBookingId, setTimelineBookingId] = useState<string | null>(null);
@@ -282,8 +287,16 @@ export default function MyBookings() {
   };
 
   const cancelBookingMutation = useMutation({
-    mutationFn: async (bookingId: string) => {
-      return apiRequest("PATCH", `/api/bookings/${bookingId}`, { status: "cancelled" });
+    mutationFn: async ({ bookingId, cancellationReason, cancellationAnswers }: {
+      bookingId: string;
+      cancellationReason: string;
+      cancellationAnswers: { comments: string };
+    }) => {
+      return apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+        status: "cancelled",
+        cancellationReason,
+        cancellationAnswers,
+      });
     },
     onSuccess: () => {
       // Invalidate all booking-related queries
@@ -294,7 +307,7 @@ export default function MyBookings() {
         title: "Booking cancelled",
         description: "Your booking has been cancelled successfully.",
       });
-      setCancelDialogBookingId(null);
+      closeCancelDialog();
     },
     onError: (error: Error) => {
       // A failed cancel used to be completely silent: the button stopped
@@ -304,23 +317,39 @@ export default function MyBookings() {
         description: error.message,
         variant: "destructive",
       });
-      setCancelDialogBookingId(null);
+      closeCancelDialog();
     },
   });
 
-  // Statuses the server refuses to cancel: the four in-progress ones plus the
-  // two terminal ones (server/routes.ts, customer cancellation block).
-  const NON_CANCELLABLE_STATUSES: string[] = [
-    BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
-    BOOKING_STATUSES.LOADING,
-    BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
-    BOOKING_STATUSES.UNLOADING,
-    BOOKING_STATUSES.COMPLETED,
-    BOOKING_STATUSES.CANCELLED,
-    // Legacy alias still present on older rows; treated as en_route_to_pickup
-    // everywhere else.
-    'in_transit',
+  // Self-serve cancellation is offered for exactly these three. The server is
+  // more permissive (it refuses only the four in-progress statuses), but
+  // anything past `confirmed` is a job a mover has already begun preparing for,
+  // so it goes through support instead.
+  const CANCELLABLE_STATUSES: string[] = [
+    BOOKING_STATUSES.PENDING,
+    BOOKING_STATUSES.PENDING_PAYMENT,
+    BOOKING_STATUSES.CONFIRMED,
   ];
+
+  // Mover is en route: no self-serve cancel, show a call-support notice.
+  // 'in_transit' is the legacy alias, treated as en_route_to_pickup elsewhere.
+  const EN_ROUTE_STATUSES: string[] = [BOOKING_STATUSES.EN_ROUTE_TO_PICKUP, 'in_transit'];
+
+  const CANCELLATION_REASONS = [
+    "Plans changed",
+    "Found another moving company",
+    "Mover is taking too long",
+    "Wrong move details entered",
+    "Personal emergency",
+    "Other",
+  ];
+
+  const closeCancelDialog = () => {
+    setCancelDialogBookingId(null);
+    setCancelStep(1);
+    setSelectedReason("");
+    setComments("");
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -1057,10 +1086,10 @@ export default function MyBookings() {
                         Edit Booking
                       </Button>
                     )}
-                    {!NON_CANCELLABLE_STATUSES.includes(booking.status) && (
+                    {CANCELLABLE_STATUSES.includes(booking.status) && (
                       <Button
                         variant="destructive"
-                        onClick={() => setCancelDialogBookingId(booking.id)}
+                        onClick={() => { setCancelStep(1); setSelectedReason(""); setComments(""); setCancelDialogBookingId(booking.id); }}
                         disabled={cancelBookingMutation.isPending}
                         data-testid={`button-cancel-${booking.id}`}
                       >
@@ -1069,6 +1098,21 @@ export default function MyBookings() {
                           : <XCircle className="w-4 h-4 mr-2" />}
                         Cancel Booking
                       </Button>
+                    )}
+                    {EN_ROUTE_STATUSES.includes(booking.status) && (
+                      <p
+                        className="flex items-start gap-2 text-sm text-muted-foreground"
+                        data-testid={`text-cancel-unavailable-${booking.id}`}
+                      >
+                        <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                          {/* No support phone number exists anywhere in config, so this
+                              uses the support address the server's own emails already
+                              give out. Swap in a number once one is configured. */}
+                          Your mover is on the way. To cancel, please contact support at{" "}
+                          <a href="mailto:support@lervit.com" className="underline">support@lervit.com</a>.
+                        </span>
+                      </p>
                     )}
                     {booking.mover && booking.status !== "cancelled" && booking.status !== "completed" && (
                       <Button
@@ -1274,29 +1318,104 @@ export default function MyBookings() {
 
       <AlertDialog
         open={cancelDialogBookingId !== null}
-        onOpenChange={(open) => { if (!open) setCancelDialogBookingId(null); }}
+        onOpenChange={(open) => { if (!open) closeCancelDialog(); }}
       >
         <AlertDialogContent data-testid="dialog-cancel-booking">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel your move?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will cancel your booking and issue a full refund. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-cancel">Keep my booking</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (cancelDialogBookingId) cancelBookingMutation.mutate(cancelDialogBookingId);
-              }}
-              disabled={cancelBookingMutation.isPending}
-              data-testid="button-confirm-cancel"
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {cancelBookingMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Cancel booking
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {cancelStep === 1 ? (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Before you go — why are you cancelling?</AlertDialogTitle>
+                <AlertDialogDescription>Your feedback helps us improve.</AlertDialogDescription>
+              </AlertDialogHeader>
+
+              <div className="space-y-4 py-2">
+                <RadioGroup
+                  value={selectedReason}
+                  onValueChange={setSelectedReason}
+                  className="space-y-2"
+                >
+                  {CANCELLATION_REASONS.map((reason) => (
+                    <div key={reason} className="flex items-center gap-3">
+                      <RadioGroupItem
+                        value={reason}
+                        id={`cancel-reason-${reason}`}
+                        data-testid={`radio-cancel-reason-${reason.toLowerCase().replace(/\s+/g, '-')}`}
+                      />
+                      <Label htmlFor={`cancel-reason-${reason}`} className="font-normal cursor-pointer">
+                        {reason}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+
+                <Textarea
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="Anything else you'd like us to know? (optional)"
+                  rows={3}
+                  data-testid="textarea-cancel-comments"
+                />
+              </div>
+
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-keep-booking">Keep My Booking</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    // AlertDialogAction closes the dialog by default; step 1
+                    // only advances, so the close has to be suppressed.
+                    e.preventDefault();
+                    setCancelStep(2);
+                  }}
+                  disabled={!selectedReason}
+                  data-testid="button-cancel-continue"
+                >
+                  Continue
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          ) : (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel your move?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You will receive a full refund. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setCancelStep(1)}
+                  disabled={cancelBookingMutation.isPending}
+                  data-testid="button-cancel-go-back"
+                >
+                  Go Back
+                </Button>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    // Hold the dialog open for the round trip: the server
+                    // issues a Stripe refund inline, so this can take a couple
+                    // of seconds. onSuccess/onError close and reset it. Without
+                    // this the dialog vanished instantly and the spinner below
+                    // never rendered.
+                    e.preventDefault();
+                    if (cancelDialogBookingId) {
+                      cancelBookingMutation.mutate({
+                        bookingId: cancelDialogBookingId,
+                        cancellationReason: selectedReason,
+                        cancellationAnswers: { comments },
+                      });
+                    }
+                  }}
+                  disabled={cancelBookingMutation.isPending}
+                  data-testid="button-confirm-cancel"
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {cancelBookingMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Confirm Cancellation
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>

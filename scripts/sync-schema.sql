@@ -1686,6 +1686,12 @@ ALTER TABLE "bookings"
   ADD COLUMN IF NOT EXISTS "auto_routed_at"   timestamp,
   ADD COLUMN IF NOT EXISTS "routing_attempts" integer NOT NULL DEFAULT 0;
 
+-- Cancellation exit survey (see migrations/0036_bookings_cancellation_feedback.sql).
+-- cancellation_answers is a JSON blob held as text, like source_metadata.
+ALTER TABLE "bookings"
+  ADD COLUMN IF NOT EXISTS "cancellation_reason"  text,
+  ADD COLUMN IF NOT EXISTS "cancellation_answers" text;
+
 -- Google Business Profile review sync (see migrations/0027_google_reviews.sql).
 -- Separate from `reviews`: that table's booking_id/customer_id are NOT NULL
 -- FKs and it feeds mover rating averages, which Google reviews would skew.

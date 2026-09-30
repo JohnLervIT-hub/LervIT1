@@ -5595,6 +5595,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currentLatitude: z.number().optional(),
         currentLongitude: z.number().optional(),
         locationUpdatedAt: z.date().optional(),
+        // Exit survey from the customer cancel flow. Only persisted on an
+        // actual cancellation (below) — this schema strips unknown keys, so
+        // without these two entries the answers were silently dropped.
+        cancellationReason: z.string().max(200).optional(),
+        cancellationAnswers: z.record(z.any()).optional(),
       });
       let updates = validateBody(updateSchema, req.body);
       
@@ -5713,6 +5718,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(403).json({ error: "You are not authorized to cancel this booking" });
           }
 
+          // Exit survey. The column is text, so the answers object is stored
+          // as JSON. Kept out of the update on any other transition.
+          if (updates.cancellationAnswers !== undefined) {
+            (updates as any).cancellationAnswers = JSON.stringify(updates.cancellationAnswers);
+          }
+          logEvent.booking('customer_cancellation_reason', {
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            previousStatus: booking.status,
+            reason: updates.cancellationReason ?? null,
+            hadMover: !!booking.moverId,
+          });
+
           // 2. Block cancellation once the trip is physically in progress
           const inProgressStatuses = [
             BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
@@ -5808,7 +5826,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (updates as any).startedAt = new Date();
         }
       }
-      
+
+      // The survey only belongs to a cancellation. Dropping it on every other
+      // transition keeps a mover's status PATCH from writing a cancellation
+      // reason onto a live booking.
+      if (updates.status !== BOOKING_STATUSES.CANCELLED) {
+        delete (updates as any).cancellationReason;
+        delete (updates as any).cancellationAnswers;
+      }
+
       const booking = await storage.updateBooking(req.params.id, updates as any);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });

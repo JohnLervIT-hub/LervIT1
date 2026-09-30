@@ -273,6 +273,14 @@ export const bookings = pgTable("bookings", {
   autoRoutedAt: timestamp("auto_routed_at"),
   routingAttempts: integer("routing_attempts").default(0).notNull(),
 
+  // Why the customer cancelled, captured by the exit survey in MyBookings.
+  // `cancellationAnswers` is a JSON blob (free-text comments today, room for
+  // structured follow-ups later), stored as text to match the other JSON
+  // payload columns in this schema (identified_items.source_metadata,
+  // in_app_notifications.metadata).
+  cancellationReason: text("cancellation_reason"),
+  cancellationAnswers: text("cancellation_answers"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
