@@ -30,7 +30,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus, Building2, Phone } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Calendar, ArrowLeft, Search, CheckCircle, Clock, XCircle, Truck, Edit, MapPin, Loader2, CreditCard, AlertTriangle, Send, UserPlus, Building2, Phone, UserMinus } from "lucide-react";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -101,6 +111,7 @@ export default function AdminMovesPage() {
   const [editDropoff, setEditDropoff] = useState("");
   const [selectedMoverId, setSelectedMoverId] = useState<string>("");
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [page, setPage] = useState(0);
 
   // Reset to first page when filters change
@@ -241,6 +252,44 @@ export default function AdminMovesPage() {
       bookingId: editingBooking.id,
       moverId: selectedMoverId,
     });
+  };
+
+  const reassignMoverMutation = useMutation({
+    mutationFn: async ({ bookingId, expectedMoverId }: { bookingId: string; expectedMoverId: string }) => {
+      // apiRequest resolves to the raw Response, so the body has to be read
+      // here for onSuccess to see `dispatched`.
+      const res = await apiRequest("POST", `/api/admin/bookings/${bookingId}/reassign-mover`, {
+        expectedMoverId,
+        reason: 'admin_reassign',
+        autoDispatch: true,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/available-movers"] });
+      toast({
+        title: "Mover reassigned — job back in dispatch queue",
+        description: typeof data?.dispatched === 'number'
+          ? `${data.dispatched} nearby mover${data.dispatched === 1 ? '' : 's'} notified.`
+          : "No movers were notified — dispatch found no match.",
+      });
+      setReassignDialogOpen(false);
+      setEditingBooking(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Reassignment Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleConfirmReassign = () => {
+    const expectedMoverId = editingBooking?.mover?.id;
+    if (!editingBooking || !expectedMoverId) return;
+    reassignMoverMutation.mutate({ bookingId: editingBooking.id, expectedMoverId });
   };
 
   const routeToPartnerMutation = useMutation({
@@ -705,6 +754,20 @@ export default function AdminMovesPage() {
                 <XCircle className="w-4 h-4 mr-1" />
                 Refunded
               </Button>
+              {editingBooking?.mover?.id && editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setReassignDialogOpen(true)}
+                  disabled={reassignMoverMutation.isPending}
+                  data-testid="button-reassign-mover"
+                  className="border-amber-500 text-amber-600"
+                >
+                  {reassignMoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <UserMinus className="w-4 h-4 mr-1" />
+                  Reassign Mover
+                </Button>
+              )}
               {(editingBooking?.status === 'pending' || editingBooking?.status === 'pending_payment' || !editingBooking?.mover?.id) && editingBooking?.status !== 'completed' && editingBooking?.status !== 'cancelled' && (
                 <Button
                   variant="outline"
@@ -742,6 +805,30 @@ export default function AdminMovesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
+        <AlertDialogContent data-testid="dialog-reassign-mover">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reassign Mover?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will detach {editingBooking?.mover?.name || 'the current mover'} and re-dispatch
+              the job to the next available mover. The customer will be notified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-reassign">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmReassign}
+              disabled={reassignMoverMutation.isPending}
+              data-testid="button-confirm-reassign"
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {reassignMoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Reassign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

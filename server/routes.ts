@@ -10661,6 +10661,14 @@ Respond with VALID JSON only:
         slaDeadlineAt: adminSla.slaDeadlineAt,
       });
 
+      // Swapping one mover for another: the outgoing mover's hold names a
+      // booking they are no longer on, and nothing downstream will ever pass
+      // that booking id again, so the hold has to be cleared here or they stay
+      // offline and invisible to dispatch forever.
+      if (booking.moverId && booking.moverId !== moverId) {
+        await releaseMoverFromBooking(booking.moverId, bookingId);
+      }
+
       // Only holds a mover who was online to begin with; assigning someone who
       // is offline leaves no hold, so finishing the job will not put them back
       // in the pool against their wishes.
@@ -10773,6 +10781,178 @@ Respond with VALID JSON only:
     } catch (error) {
       logEvent.error('admin_manual_assignment', error);
       res.status(500).json({ error: "Failed to assign mover" });
+    }
+  });
+
+  // Admin-only: detach the assigned mover mid-job and put the booking back in
+  // the dispatch queue.
+  //
+  // Deliberately bypasses BOOKING_STATUS_TRANSITIONS: the table has no edge from
+  // en_route_to_pickup back to pending, and adding one would also hand movers a
+  // way to un-start their own trips through PATCH /api/bookings/:id. The mover's
+  // own cancel path (`/mover-cancel`) resets to pending the same way.
+  app.post("/api/admin/bookings/:bookingId/reassign-mover", async (req: Request, res: Response) => {
+    const { bookingId } = req.params;
+    try {
+      if (!requireAdmin(req, res)) return;
+      const user = (req as any).user;
+
+      const { expectedMoverId, reason, autoDispatch } = validateBody(z.object({
+        expectedMoverId: z.string().min(1),
+        reason: z.string().optional(),
+        autoDispatch: z.boolean().optional().default(true),
+      }), req.body);
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      if (booking.status === BOOKING_STATUSES.COMPLETED || booking.status === BOOKING_STATUSES.CANCELLED) {
+        return res.status(400).json({ error: `Cannot reassign a ${booking.status} booking` });
+      }
+      if (!booking.moverId) {
+        return res.status(400).json({ error: "This booking has no assigned mover to reassign" });
+      }
+
+      const outgoingMoverId = booking.moverId;
+
+      // COMPARE-AND-SWAP: guards against two admins reassigning at once and
+      // against racing a mover's own accept. Also makes a double-clicked button
+      // idempotent — the second call finds moverId already null and 409s.
+      //
+      // startedAt / GPS / SLA are cleared because they describe the OUTGOING
+      // mover's trip. Left in place, the next mover inherits a start instant
+      // they never drove, and the customer's tracking map keeps showing the
+      // removed mover's last ping.
+      const [swapped] = await db
+        .update(bookings)
+        .set({
+          moverId: null,
+          status: BOOKING_STATUSES.PENDING,
+          preSelectedMoverId: null,
+          startedAt: null,
+          currentLatitude: null,
+          currentLongitude: null,
+          locationUpdatedAt: null,
+          expectedCompletionAt: null,
+          slaDeadlineAt: null,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(bookings.id, bookingId),
+          eq(bookings.moverId, expectedMoverId),
+        ))
+        .returning();
+
+      if (!swapped) {
+        return res.status(409).json({ error: "Mover already changed, refresh and retry" });
+      }
+
+      // Hand the outgoing mover their availability back. Only true when the
+      // pipeline was the one that took them offline for THIS booking, so a
+      // mover who was assigned while offline stays offline.
+      const returnedToPool = await releaseMoverFromBooking(outgoingMoverId, bookingId);
+
+      // Every notification row for this booking has to go, not just the
+      // outgoing mover's. The dispatch insert is onConflictDoNothing() against
+      // unique(bookingId, moverId) while notifyMover still pushes on every
+      // channel, so a stale row means a mover gets pinged and then cannot
+      // accept (410 expired / 400 already declined).
+      await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
+
+      // Notify the outgoing mover — releaseMoverFromBooking is DB bookkeeping
+      // only and tells them nothing.
+      const outgoingMover = await storage.getMover(outgoingMoverId);
+      const outgoingMoverUser = outgoingMover ? await storage.getUser(outgoingMover.userId) : undefined;
+      const removalMessage = "Your assigned job has been reassigned by admin. You are no longer needed for this booking.";
+      if (outgoingMover) {
+        try {
+          await storage.createNotification({
+            userId: outgoingMover.userId,
+            type: 'booking_update',
+            title: 'Job Reassigned',
+            message: removalMessage,
+            bookingId: booking.id,
+            actionUrl: '/mover-dashboard',
+            isRead: false,
+          });
+        } catch (notifErr) {
+          logEvent.error('admin_reassign_outgoing_notification_failed', notifErr instanceof Error ? notifErr : new Error('notification error'), { bookingId, moverId: outgoingMoverId });
+        }
+      }
+      if (outgoingMoverUser?.phone) {
+        try {
+          await notificationService.sendSMS({
+            to: outgoingMoverUser.phone,
+            message: `LervIT: ${removalMessage}`,
+            type: 'booking_update',
+          });
+        } catch (smsErr) {
+          logEvent.error('admin_reassign_outgoing_sms_failed', smsErr instanceof Error ? smsErr : new Error('sms error'), { bookingId, moverId: outgoingMoverId });
+        }
+      } else {
+        logger.warn({ bookingId, moverId: outgoingMoverId }, 'Outgoing mover has no phone — reassignment SMS skipped');
+      }
+
+      // Notify the customer (mirrors the mover-cancel path).
+      const customer = await storage.getUser(booking.customerId);
+      if (customer) {
+        await storage.createNotification({
+          userId: customer.id,
+          type: 'booking_update',
+          title: 'Your Mover Was Changed',
+          message: "We've updated your mover. Your move is still on track and a new mover is being assigned.",
+          bookingId: booking.id,
+          actionUrl: '/my-bookings',
+          isRead: false,
+        });
+
+        try {
+          await notificationService.sendEmail({
+            to: customer.email,
+            subject: "Update on your LervIT booking",
+            body: `<p>Hi ${customer.name},</p><p>We've updated your mover. Your move is still on track and a new mover is being assigned.</p><p>You'll receive a notification as soon as your new mover is confirmed. If you have any concerns, please contact us at <a href="mailto:support@lervit.com">support@lervit.com</a>.</p><p>The LervIT Team</p>`,
+            type: 'booking_confirmation',
+          });
+        } catch (emailErr) {
+          logEvent.error('admin_reassign_customer_email_failed', emailErr instanceof Error ? emailErr : new Error('email error'), { bookingId });
+        }
+      }
+
+      // Re-dispatch. This NOTIFIES up to 5 nearby movers and waits for one to
+      // accept — it does not assign. Hard-assigning instead would skip the
+      // single-active-job guard on the accept path and could double-book.
+      let dispatched: number | false = false;
+      if (autoDispatch) {
+        const refreshedBooking = await storage.getBooking(bookingId);
+        if (refreshedBooking) {
+          try {
+            const result = await dispatchJobToMovers(refreshedBooking, { excludeMoverId: outgoingMoverId });
+            dispatched = result.dispatched;
+          } catch (dispatchErr) {
+            logEvent.error('admin_reassign_redispatch_failed', dispatchErr instanceof Error ? dispatchErr : new Error('dispatch error'), { bookingId });
+          }
+        }
+      }
+
+      logEvent.booking('admin_reassign_mover', {
+        bookingId,
+        outgoingMoverId,
+        reason,
+        returnedToPool,
+        dispatched,
+        adminUserId: user.id,
+      });
+
+      res.json({
+        success: true,
+        booking: swapped,
+        returnedToPool,
+        dispatched,
+      });
+    } catch (error) {
+      logEvent.error('admin_reassign_mover', error instanceof Error ? error : new Error('Unknown error'), { bookingId });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to reassign mover" });
     }
   });
 
