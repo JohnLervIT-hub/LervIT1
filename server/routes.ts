@@ -10860,6 +10860,16 @@ Respond with VALID JSON only:
       // accept (410 expired / 400 already declined).
       await db.delete(jobNotifications).where(eq(jobNotifications.bookingId, bookingId));
 
+      // Drop the outgoing mover's performance row. It was stamped with
+      // acceptedAt when they took the job and has no completion, so leaving it
+      // credits them with a move they never ran in the per-mover analytics.
+      // The replacement mover gets their own row from the accept path.
+      await db.delete(moverPerformanceTable)
+        .where(and(
+          eq(moverPerformanceTable.moverId, outgoingMoverId),
+          eq(moverPerformanceTable.bookingId, bookingId),
+        ));
+
       // Notify the outgoing mover — releaseMoverFromBooking is DB bookkeeping
       // only and tells them nothing.
       const outgoingMover = await storage.getMover(outgoingMoverId);
