@@ -629,11 +629,11 @@ export async function fetchExternalSignals(): Promise<ExternalSignals | null> {
 // human still has to unpause the campaign in Ads Manager.
 // ---------------------------------------------------------------------------
 
-const META_GRAPH_VERSION = 'v19.0';
+const META_GRAPH_VERSION = 'v21.0';
 const META_TIMEOUT_MS = 20_000;
 
 /** Calgary's Meta targeting key. Verify with /search?type=adgeolocation if geo looks wrong. */
-const META_CALGARY_CITY_KEY = '2563573';
+const META_CALGARY_CITY_KEY = '292501'; // GeoNames ID for Calgary, AB (was 2563573 which resolves elsewhere)
 
 /**
  * META_AD_ACCOUNT_ID is stored WITH its `act_` prefix (act_<digits>),
