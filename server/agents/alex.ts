@@ -91,6 +91,44 @@ function firstNameOf(name: string | null | undefined): string {
   return name?.trim().split(/\s+/)[0] || 'there';
 }
 
+/**
+ * The `Quote:` line in lead.notes, and whether it is a real price or a bracket.
+ *
+ * POST /api/leads/capture writes one of two forms, because a price computed
+ * before the photos is the load-size bucket's price rather than the move's:
+ *   confirmed -> "Quote: $124.79 CAD (confirmed by photo analysis)"
+ *   estimate  -> "Quote: Est. $48–$193 depending on load (photos not yet reviewed)"
+ *
+ * Outreach must never state an unconfirmed figure as a quote — that is how a
+ * $124.79 email turned into a $54.68 invoice.
+ */
+type QuoteNote =
+  /** Vision measured the load; this figure is safe to call a quote. */
+  | { kind: 'confirmed'; display: string }
+  /** Not measured. `display` is a bracket to show, or null when the note holds
+   *  only a bare figure we must not restate at all. */
+  | { kind: 'estimate'; display: string | null };
+
+export function parseQuoteNote(notes: string | null | undefined): QuoteNote | null {
+  const line = notes?.match(/^Quote: (.+)$/m)?.[1]?.trim();
+  if (!line) return null;
+
+  const bracket = line.match(/\$[\d,]+\s*[–-]\s*\$[\d,]+/);
+  // Collapse whitespace: the SMS path has ~60 characters to work in.
+  if (bracket) return { kind: 'estimate', display: bracket[0].replace(/\s+/g, '') };
+
+  const figure = line.match(/^\$[\d.]+(?:\s*CAD)?/);
+  if (!figure) return null;
+  if (/confirmed by photo analysis/i.test(line)) {
+    return { kind: 'confirmed', display: figure[0] };
+  }
+  // Legacy note, written before provenance was recorded: a bare figure that may
+  // well be a load-size fallback. Flagged as an estimate with nothing to quote,
+  // so outreach drops the money rather than restating a number that may be 2x
+  // the invoice. Errs cautious on the minority that were actually measured.
+  return { kind: 'estimate', display: null };
+}
+
 function trimArea(address: string | null | undefined): string | null {
   if (!address) return null;
   return address.split(',')[0]?.trim() || null;
@@ -364,7 +402,14 @@ export class AlexAgent extends BaseAgent {
 
     const notes = lead.notes ?? '';
     const hasQuote = notes.includes('Quote:');
-    const price = notes.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
+    const quoteNote = parseQuoteNote(notes);
+    // The one instruction in this prompt that must not be paraphrased: an
+    // unmeasured price may only ever appear as a bracket, never as "your quote".
+    const priceDirective = quoteNote?.kind === 'confirmed'
+      ? `${quoteNote.display} — measured from their photos. You may refer to it as "your quote of ${quoteNote.display}".`
+      : quoteNote?.display
+        ? `NOT CONFIRMED — their photos have not been analysed yet. If you mention money at all, use this exact phrasing and nothing else: "your estimate of ${quoteNote.display} (confirmed after photo review)". Never state a single figure, and never call it a quote or a final price.`
+        : `NOT CONFIRMED and no safe figure to quote. Do NOT mention any dollar amount anywhere in this email. Talk about the move itself and invite them to get their exact price after a photo review.`;
     const items = notes.match(/Items: ([^\n]+)/)?.[1];
     // Live quote wins; the notes regex covers leads captured before quoteContext
     // carried a vehicle label (and Scout-scraped leads with no quote at all).
@@ -390,7 +435,7 @@ Pickup area: ${pickupArea ?? 'not available'}
 Dropoff area: ${dropoffArea ?? 'not available'}
 ${hasQuote ? `
 QUOTE DETAILS (reference these specifically):
-  Price: ${price ?? 'see quote'}
+  Price: ${priceDirective}
   Items: ${items ?? 'household items'}
   Vehicle: ${vehicle ?? 'appropriate vehicle'}
   ${movers ? `Movers needed: ${movers}` : ''}
@@ -526,12 +571,18 @@ Write a conversion email. Include:
 
     if (smsAllowed) {
       channel = 'sms';
-      const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
+      const smsQuote = parseQuoteNote(lead.notes);
       // Budget: 160 - prefix(28) - newline(1) - link(~30) - stop(40) ≈ 60
       const claudeBody = await this.callClaude(
         `Write an SMS body only (no greeting, no URL, no opt-out language).
 Length: STRICTLY under 60 characters.
-${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
+${smsQuote?.kind === 'confirmed'
+          ? `Reference their quote of ${smsQuote.display}.`
+          : smsQuote?.display
+            // A bracket, not a price: "est. $48-$193" fits the budget where the
+            // full "(confirmed after photo review)" caveat does not.
+            ? `Their price is NOT confirmed yet. If you mention money, write exactly "est. ${smsQuote.display}" — never a single figure.`
+            : 'Follow up on their move quote. Do NOT mention any dollar amount.'}
 Mention promo code LERVIT10 for 10% off if it fits within the character budget.
 The greeting "Hi, Alex from LervIT here! ", a booking link, and "Reply STOP to opt out or HELP for info." are appended automatically — do NOT include them.
 IMPORTANT: Never invent or guess neighborhood names, street names, or addresses. Only reference locations that appear below.
@@ -821,12 +872,18 @@ Complete link: ${(process.env.APP_BASE_URL ?? 'https://app.lervit.com').trim()}/
     const bookingLink = bookingLinkFor(baseUrl, lead, quoteAddresses);
     const pickupArea = trimArea(quoteAddresses?.pickupAddress);
     const dropoffArea = trimArea(quoteAddresses?.dropoffAddress);
-    const smsPrice = lead.notes?.match(/Quote: (\$[\d.]+(?:\s*CAD)?)/)?.[1];
+    const smsQuote = parseQuoteNote(lead.notes);
 
     const claudeBody = await this.callClaude(
       `Write an SMS body only (no greeting, no URL, no opt-out language).
 Length: STRICTLY under 60 characters.
-${smsPrice ? `Reference their quote of ${smsPrice}.` : 'Follow up on their move quote.'}
+${smsQuote?.kind === 'confirmed'
+          ? `Reference their quote of ${smsQuote.display}.`
+          : smsQuote?.display
+            // A bracket, not a price: "est. $48-$193" fits the budget where the
+            // full "(confirmed after photo review)" caveat does not.
+            ? `Their price is NOT confirmed yet. If you mention money, write exactly "est. ${smsQuote.display}" — never a single figure.`
+            : 'Follow up on their move quote. Do NOT mention any dollar amount.'}
 Mention promo code LERVIT10 for 10% off if it fits within the character budget.
 The greeting "Hi, Alex from LervIT here! ", a booking link, and "Reply STOP to opt out or HELP for info." are appended automatically — do NOT include them.
 IMPORTANT: Never invent or guess neighborhood names, street names, or addresses. Only reference locations that appear below.

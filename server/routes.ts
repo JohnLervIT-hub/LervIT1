@@ -131,6 +131,41 @@ function formatPhoneNumber(phone: string): string {
 
 // Helper to mask full address for privacy - only show city/area
 // Strips street numbers/addresses but keeps city and province
+/**
+ * Price bracket for a lead whose volume has not been measured yet.
+ *
+ * Spans the load-size tiers end to end ('boxes' -> 'apartment') at the lead's
+ * OWN distance and mover count, rather than a flat pair of numbers: distance is
+ * priced per km and the rate itself changes with the vehicle class, so one
+ * hard-coded bracket is wrong for most leads in one direction or the other.
+ *
+ * Access fees and item premiums are unknown at capture time and therefore
+ * excluded, so this is a bracket on the load, not a cap on the invoice — the
+ * copy that renders it has to stay explicitly provisional.
+ */
+const LEAD_ESTIMATE_BRACKET_FALLBACK = '$50–$350';
+
+async function estimateBracketForLead(
+  distanceKmRaw: string | null | undefined,
+  numberOfMovers: number | undefined,
+): Promise<string> {
+  const distanceKm = parseFloat(String(distanceKmRaw ?? ''));
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+    return LEAD_ESTIMATE_BRACKET_FALLBACK;
+  }
+  try {
+    const { calculatePrice } = await import("@shared/pricing");
+    const movers = numberOfMovers === 2 ? 2 : 1;
+    const low = calculatePrice({ distanceKm, loadSize: 'boxes', numberOfMovers: movers }).total;
+    const high = calculatePrice({ distanceKm, loadSize: 'apartment', numberOfMovers: movers }).total;
+    if (!(high > low)) return LEAD_ESTIMATE_BRACKET_FALLBACK;
+    return `$${Math.floor(low)}–$${Math.ceil(high)}`;
+  } catch (err) {
+    logger.warn({ err, distanceKmRaw }, 'estimateBracketForLead: falling back to static bracket');
+    return LEAD_ESTIMATE_BRACKET_FALLBACK;
+  }
+}
+
 function maskAddressForPrivacy(location: string | null): string {
   if (!location) return "Calgary, AB";
   
@@ -16678,6 +16713,9 @@ Respond with VALID JSON only:
             numberOfMovers?: number;
             pickupAddress?: string | null;
             dropoffAddress?: string | null;
+            // Optional provenance for totalPrice, mirroring PriceBreakdown.volumeSource.
+            // Absent from older clients, hence the items-based fallback below.
+            volumeSource?: string | null;
           }
         : null;
       const quoteId = typeof body.quoteId === 'string' && body.quoteId ? body.quoteId : null;
@@ -16691,7 +16729,25 @@ Respond with VALID JSON only:
       if (notes) notesLines.push(notes);
       if (quoteContext?.pickupAddress) notesLines.push(`Pickup: ${quoteContext.pickupAddress}`);
       if (quoteContext?.dropoffAddress) notesLines.push(`Dropoff: ${quoteContext.dropoffAddress}`);
-      if (quoteContext?.totalPrice) notesLines.push(`Quote: ${quoteContext.totalPrice}`);
+      // A price computed before the photos is the load-size bucket's price, not
+      // the move's. Written as a single figure it became "your quote of $124.79"
+      // in Alex's outreach, and the real booking landed at $54.68. Only a
+      // vision-measured price is recorded as a firm number; anything else is
+      // recorded as a bracket, and alex.ts words the email off that distinction.
+      const priceIsVisionConfirmed = quoteContext?.volumeSource
+        ? quoteContext.volumeSource === 'detected'
+        // No provenance sent: items present means the vision engine ran, which is
+        // the only condition under which totalPrice used a measured volume.
+        : !!quoteContext?.items;
+      if (quoteContext?.totalPrice && priceIsVisionConfirmed) {
+        notesLines.push(`Quote: ${quoteContext.totalPrice} (confirmed by photo analysis)`);
+      } else if (quoteContext?.totalPrice) {
+        const bracket = await estimateBracketForLead(
+          quoteContext?.distanceKm,
+          quoteContext?.numberOfMovers,
+        );
+        notesLines.push(`Quote: Est. ${bracket} depending on load (photos not yet reviewed)`);
+      }
       if (quoteContext?.items) notesLines.push(`Items: ${quoteContext.items}`);
       if (quoteContext?.vehicleLabel) notesLines.push(`Vehicle: ${quoteContext.vehicleLabel}`);
       if (quoteContext?.distanceKm) notesLines.push(`Distance: ${quoteContext.distanceKm}km`);
