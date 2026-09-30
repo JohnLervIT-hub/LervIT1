@@ -470,6 +470,12 @@ export default function RequestMove() {
         numberOfMovers: numberOfMovers ?? 1,
         pickupAddress: pickupAddress || null,
         dropoffAddress: dropoffAddress || null,
+        // Access types ('ground' | 'basement' | 'stairs' | 'elevator', empty
+        // until step 2 collects them). The card's bracket includes the access
+        // fee; without these the server's bracket could not, so Alex's email
+        // quoted a different range for the same move.
+        pickupDifficulty: pickupDifficulty || null,
+        dropoffDifficulty: dropoffDifficulty || null,
       };
 
       const res = await apiRequest("POST", "/api/leads/capture", {
