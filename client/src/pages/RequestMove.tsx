@@ -248,6 +248,11 @@ export default function RequestMove() {
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPhone, setConfirmPhone] = useState('');
   const [confirmContactTouched, setConfirmContactTouched] = useState(false);
+  // Persistent inline error for the mandatory-photos gate. A toast alone was
+  // invisible on mobile (it rendered behind the fixed header) and vanishes
+  // anyway, leaving no standing explanation for why Next did nothing.
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoSectionRef = useRef<HTMLDivElement>(null);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const quoteSaveInFlight = useRef(false);
   // Format a Date as YYYY-MM-DDTHH:MM in the user's LOCAL timezone
@@ -1791,6 +1796,7 @@ export default function RequestMove() {
       setIdentifiedItems(filtered);
       recalcFromItems(filtered);
     }
+    if (newUrls.length > 0) setPhotoError(null);
     setImages(newUrls);
   };
 
@@ -1987,9 +1993,15 @@ export default function RequestMove() {
           return;
         }
 
+        const message = "Please upload at least one photo to get your exact quote.";
+        setPhotoError(message);
+        // The toast is transient and, before the z-index fix, was hidden behind
+        // the fixed header entirely. Bring the persistent inline error into view
+        // so there is always a visible reason Next did nothing.
+        photoSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         toast({
           title: "Photos required",
-          description: "Please upload at least one photo of your items to continue.",
+          description: message,
           variant: "destructive",
         });
         return;
@@ -2807,7 +2819,7 @@ export default function RequestMove() {
                     </div>
                     ============================================================ */}
 
-                    <div>
+                    <div ref={photoSectionRef} className="scroll-mt-24">
                       <Label className="text-base font-semibold mb-2 block">
                         Upload Photos of Your Items
                       </Label>
@@ -2822,6 +2834,21 @@ export default function RequestMove() {
                         onAnalyze={handleAutoAnalyze}
                         maxImages={10} 
                       />
+
+                      {/* Sits directly under the upload zone, not at the top of
+                          the page, so it cannot end up behind the fixed header
+                          at any scroll position. */}
+                      {photoError && (
+                        <div
+                          className="mt-3 flex items-start gap-2.5 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5"
+                          role="alert"
+                          aria-live="polite"
+                          data-testid="error-photos-required"
+                        >
+                          <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                          <p className="text-sm text-destructive leading-relaxed">{photoError}</p>
+                        </div>
+                      )}
                       
                       {/* Show analyzing status when AI is processing in background */}
                       {isIdentifyingItems && (
