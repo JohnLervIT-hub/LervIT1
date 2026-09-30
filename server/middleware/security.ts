@@ -14,7 +14,7 @@
  */
 
 import cors from 'cors';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../logger';
 
@@ -179,6 +179,24 @@ export const visionApiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false }, // Behind Replit proxy
+  // Key on the session for signed-in callers, IP only for anonymous ones.
+  // Keyed purely on IP, everyone behind one NAT — an office, a campus, mobile
+  // carrier CGNAT — shared a single 20/hour budget, so one customer's photo
+  // session could lock out strangers. A signed-in customer now gets their own
+  // budget wherever they connect from.
+  //
+  // The anonymous fallback goes through `ipKeyGenerator` rather than using
+  // `req.ip` directly: it groups IPv6 callers by subnet, which is what the
+  // default generator does and what v8's validation expects. Returning a raw
+  // IPv6 address here would let one client rotate addresses within its own /64.
+  //
+  // authMiddleware (server/routes.ts) runs before this route's middleware, so
+  // the session is already resolved. Reading session.userId rather than
+  // req.user keeps the key stable even if the user row lookup failed.
+  keyGenerator: (req) => {
+    const userId = (req as any).session?.userId;
+    return userId ? `user:${userId}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+  },
   handler: (req, res) => {
     logger.warn({
       ip: req.ip,
