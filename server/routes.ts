@@ -134,34 +134,44 @@ function formatPhoneNumber(phone: string): string {
 /**
  * Price bracket for a lead whose volume has not been measured yet.
  *
- * Spans the load-size tiers end to end ('boxes' -> 'apartment') at the lead's
- * OWN distance and mover count, rather than a flat pair of numbers: distance is
- * priced per km and the rate itself changes with the vehicle class, so one
- * hard-coded bracket is wrong for most leads in one direction or the other.
+ * Goes through the SAME calculatePriceRange the quote card uses, so the figure
+ * in Alex's email and the figure on the card come from one implementation
+ * instead of two that drift. It previously called calculatePrice twice here
+ * with its own boxes/apartment ends.
  *
- * Access fees and item premiums are unknown at capture time and therefore
- * excluded, so this is a bracket on the load, not a cap on the invoice — the
- * copy that renders it has to stay explicitly provisional.
+ * Access fees are passed through when the caller has them and are the one
+ * remaining reason the two brackets can differ: the card knows the access types
+ * (step 2 collects them) and adds e.g. +$12 for stairs at BOTH ends, whereas
+ * /api/leads/capture is not currently sent them. Every other input matches.
+ * Item premiums need the photos and so are in neither — this brackets the load,
+ * not the invoice, and the copy rendering it stays provisional.
  */
 const LEAD_ESTIMATE_BRACKET_FALLBACK = '$50–$350';
 
-async function estimateBracketForLead(
-  distanceKmRaw: string | null | undefined,
-  numberOfMovers: number | undefined,
-): Promise<string> {
-  const distanceKm = parseFloat(String(distanceKmRaw ?? ''));
+async function estimateBracketForLead(opts: {
+  distanceKm: string | null | undefined;
+  numberOfMovers: number | undefined;
+  pickupDifficulty?: string | null;
+  dropoffDifficulty?: string | null;
+}): Promise<string> {
+  const distanceKm = parseFloat(String(opts.distanceKm ?? ''));
   if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
     return LEAD_ESTIMATE_BRACKET_FALLBACK;
   }
   try {
-    const { calculatePrice } = await import("@shared/pricing");
-    const movers = numberOfMovers === 2 ? 2 : 1;
-    const low = calculatePrice({ distanceKm, loadSize: 'boxes', numberOfMovers: movers }).total;
-    const high = calculatePrice({ distanceKm, loadSize: 'apartment', numberOfMovers: movers }).total;
-    if (!(high > low)) return LEAD_ESTIMATE_BRACKET_FALLBACK;
-    return `$${Math.floor(low)}–$${Math.ceil(high)}`;
+    const { calculatePriceRange } = await import("@shared/pricing");
+    // volumeCuft omitted on purpose: that is what makes calculatePriceRange
+    // bracket the load-size tiers end to end rather than return a single price.
+    const { min, max, isRange } = calculatePriceRange({
+      distanceKm,
+      numberOfMovers: opts.numberOfMovers === 2 ? 2 : 1,
+      pickupDifficulty: opts.pickupDifficulty ?? null,
+      dropoffDifficulty: opts.dropoffDifficulty ?? null,
+    });
+    if (!isRange) return LEAD_ESTIMATE_BRACKET_FALLBACK;
+    return `$${Math.floor(min.total)}–$${Math.ceil(max.total)}`;
   } catch (err) {
-    logger.warn({ err, distanceKmRaw }, 'estimateBracketForLead: falling back to static bracket');
+    logger.warn({ err, distanceKm: opts.distanceKm }, 'estimateBracketForLead: falling back to static bracket');
     return LEAD_ESTIMATE_BRACKET_FALLBACK;
   }
 }
@@ -16719,6 +16729,12 @@ Respond with VALID JSON only:
             // Optional provenance for totalPrice, mirroring PriceBreakdown.volumeSource.
             // Absent from older clients, hence the items-based fallback below.
             volumeSource?: string | null;
+            // Access types, so the bracket here matches the one on the quote
+            // card. The card has had these since step 2; the capture payload
+            // does not send them yet, and until it does the two brackets differ
+            // by exactly the access fee.
+            pickupDifficulty?: string | null;
+            dropoffDifficulty?: string | null;
           }
         : null;
       const quoteId = typeof body.quoteId === 'string' && body.quoteId ? body.quoteId : null;
@@ -16745,10 +16761,12 @@ Respond with VALID JSON only:
       if (quoteContext?.totalPrice && priceIsVisionConfirmed) {
         notesLines.push(`Quote: ${quoteContext.totalPrice} (confirmed by photo analysis)`);
       } else if (quoteContext?.totalPrice) {
-        const bracket = await estimateBracketForLead(
-          quoteContext?.distanceKm,
-          quoteContext?.numberOfMovers,
-        );
+        const bracket = await estimateBracketForLead({
+          distanceKm: quoteContext?.distanceKm,
+          numberOfMovers: quoteContext?.numberOfMovers,
+          pickupDifficulty: quoteContext?.pickupDifficulty,
+          dropoffDifficulty: quoteContext?.dropoffDifficulty,
+        });
         notesLines.push(`Quote: Est. ${bracket} depending on load (photos not yet reviewed)`);
       }
       if (quoteContext?.items) notesLines.push(`Items: ${quoteContext.items}`);
