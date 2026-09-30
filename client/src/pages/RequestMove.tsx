@@ -41,6 +41,10 @@ import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/b
 // high (large appliances, gym equipment, massage chairs): $15/item
 // very_high (pianos, hot tubs, pool tables, safes, motorcycles): $30/item
 // Cap: $150 total — no booking is ever charged more than this in handling fees alone.
+// Minimum booking lead time. Mirrors the server-side guard in POST /api/bookings —
+// the input `min` only discourages a bad date, it does not enforce one.
+const MIN_LEAD_TIME_MS = 2 * 60 * 60 * 1000;
+
 const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = { slight: 5, moderate: 10, high: 15, very_high: 30 };
 const HEAVY_ITEM_PREMIUM_CAP = 150;
 
@@ -382,8 +386,9 @@ export default function RequestMove() {
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState(false);
   const [aiDetectedVolume, setAiDetectedVolume] = useState<number | undefined>(undefined);
   // Vehicle class the AI derived for the whole load ('car' | 'pickup' | 'van' | 'truck').
-  // Sent with the booking as aiRecommendedVehicle so dispatch filters on the vision
-  // result instead of re-deriving a vehicle from loadSize alone.
+  // Local preview only — it is NO LONGER sent with the booking. The server
+  // re-derives the recommended vehicle from the summed item volumes, because a
+  // client-supplied value set the vehicle class and therefore the base fee.
   const [aiRecommendedVehicle, setAiRecommendedVehicle] = useState<string | undefined>(undefined);
 
   const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
@@ -1893,6 +1898,20 @@ export default function RequestMove() {
         return;
       }
 
+      // `min` on the input is advisory — several browsers still accept a typed
+      // value below it, and it is trivially removed. The server rejects these
+      // too; this is here so the customer gets a readable message instead of a
+      // 400 toast.
+      const chosen = new Date(date);
+      if (isNaN(chosen.getTime()) || chosen.getTime() < Date.now() + MIN_LEAD_TIME_MS) {
+        toast({
+          title: "Pick a later time",
+          description: "Your move must be booked at least 2 hours from now.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Check authentication before allowing booking submission
       if (!user) {
         toast({
@@ -1939,19 +1958,24 @@ export default function RequestMove() {
         images: images.length > 0 ? images : null,
         preferredDate: new Date(date).toISOString(),
         preSelectedMoverId: preSelectedMoverId || undefined,
-        aiDetectedVolumeCuft: aiDetectedVolume || undefined,
-        aiRecommendedVehicle: aiRecommendedVehicle || undefined,
         heavyItemCount: countHeavyItems(identifiedItems),
-        // Preferred: keyed premiums from Vision Engine 2.0 (server sums via
-        // PRICING_CONFIG.itemPremiums). Legacy heavyItemFeeOverride is only
-        // honored when no keyed premiums are present, so we send both.
+        // The server derives volume, recommended vehicle and the legacy handling
+        // premium from this list and ignores any aggregate we send, so the
+        // per-item figures it needs have to travel with it. aiDetectedVolumeCuft
+        // / aiRecommendedVehicle / heavyItemFeeOverride are deliberately not
+        // sent — they were customer-controllable price inputs.
         detectedItems: identifiedItems
           .filter(i => i.processingStatus === 'completed')
           .map(i => ({
             itemName: i.itemName ?? 'Item',
             premiumKey: (i as { premiumKey?: string | null }).premiumKey ?? null,
+            volumeCuft: i.volumeCuft,
+            weightKg: i.weightKg,
+            handlingComplexity: i.handlingComplexity,
+            dimensionsLcm: i.dimensionsLcm,
+            dimensionsWcm: i.dimensionsWcm,
+            dimensionsHcm: i.dimensionsHcm,
           })),
-        heavyItemFeeOverride: getItemTypePremium(identifiedItems),
         promoCode: appliedPromo?.code || undefined,
         quoteId: quoteId ?? (() => {
           try { return sessionStorage.getItem('lervit_quote_id'); } catch { return null; }
@@ -2856,12 +2880,19 @@ export default function RequestMove() {
                           <Label htmlFor="date" className="text-sm font-medium text-muted-foreground mb-2 block">
                             Date & Time
                           </Label>
+                          {/*
+                            datetime-local compares `min` against the browser's LOCAL
+                            clock, so this has to be a local wall-clock string —
+                            toISOString() would shift it by the UTC offset and block
+                            valid times for anyone west of Greenwich.
+                          */}
                           <Input
                             id="date"
                             type="datetime-local"
                             className="h-12 text-base"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
+                            min={toLocalDT(new Date(Date.now() + MIN_LEAD_TIME_MS))}
                             data-testid="input-move-date"
                           />
                         </div>
@@ -3106,29 +3137,45 @@ export default function RequestMove() {
                 isLoggedIn={!!user}
                 onContactCapture={handleContactCapture}
               />
-              <div className="flex justify-between gap-4">
-                <Button
-                  variant="outline"
-                  onClick={handleBack}
-                  className="hover-elevate active-elevate-2 flex-1"
-                  data-testid="button-back"
-                  disabled={createBookingMutation.isPending}
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={handleNext}
-                  className="flex-1"
-                  data-testid="button-next"
-                  disabled={createBookingMutation.isPending}
-                >
-                  {step === 3 && createBookingMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Finding Movers...
-                    </>
-                  ) : step === 3 ? "Find Movers" : "Next"}
-                </Button>
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleBack}
+                    className="hover-elevate active-elevate-2 flex-1"
+                    data-testid="button-back"
+                    disabled={createBookingMutation.isPending}
+                  >
+                    Back
+                  </Button>
+                  {/*
+                    Advancing mid-analysis used to be possible: `images` is set the
+                    moment the upload resolves, while the vision engine is still
+                    running, so a fast click reached step 3 and submitted with the
+                    default loadSize and no aiDetectedVolume.
+                  */}
+                  <Button
+                    onClick={handleNext}
+                    className="flex-1"
+                    data-testid="button-next"
+                    disabled={createBookingMutation.isPending || isIdentifyingItems}
+                  >
+                    {step === 3 && createBookingMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Finding Movers...
+                      </>
+                    ) : step === 3 ? "Find Movers" : "Next"}
+                  </Button>
+                </div>
+                {isIdentifyingItems && (
+                  <p
+                    className="text-xs text-muted-foreground text-center"
+                    data-testid="text-analyzing-hint"
+                  >
+                    Analysing your items, please wait...
+                  </p>
+                )}
               </div>
             </div>
           )}

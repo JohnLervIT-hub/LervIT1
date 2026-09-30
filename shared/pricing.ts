@@ -281,6 +281,39 @@ export const VEHICLE_CAPACITY_RANGES = {
   E: { min: 251, max: 800, typical: 500 },
 } as const;
 
+/**
+ * Legacy per-item handling premium, keyed by `handlingComplexity`. Only used as
+ * a fallback when the vision engine emitted no keyed `premiumKey` values.
+ *
+ * Lives here rather than in the booking form because the server derives this
+ * itself now — a client-supplied `heavyItemFeeOverride` was a price input the
+ * customer controlled.
+ *
+ * NOTE: `toIdentificationResult` normalizes 'slight' -> 'low' and
+ * 'moderate' -> 'medium' before persisting, so in practice only the 'high' and
+ * 'very_high' keys are ever hit. The unreachable keys are kept so the table
+ * still matches the values it was written against.
+ */
+export const HEAVY_ITEM_PREMIUMS_TIERED: Record<string, number> = {
+  slight: 5,
+  moderate: 10,
+  high: 15,
+  very_high: 30,
+};
+
+export const HEAVY_ITEM_PREMIUM_CAP = 150;
+
+/** Sum the legacy handling premiums for a set of items, capped. */
+export function sumHandlingPremiums(
+  items: Array<{ handlingComplexity?: string | null }>,
+): number {
+  let total = 0;
+  for (const item of items) {
+    total += HEAVY_ITEM_PREMIUMS_TIERED[item.handlingComplexity || ''] ?? 0;
+  }
+  return Math.min(total, HEAVY_ITEM_PREMIUM_CAP);
+}
+
 export function getVehicleClassConfig(vehicleClass: VehicleClass): VehicleClassConfig {
   return VEHICLE_CLASSES[vehicleClass];
 }

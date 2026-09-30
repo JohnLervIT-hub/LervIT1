@@ -55,19 +55,39 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
   const maxRecommendedMovers = completedItems.length > 0 
     ? Math.max(...completedItems.map(item => item.recommendedMovers || 1))
     : 1;
+  // Must match RequestMove's hasHeavyItems exactly — this list drives the badge
+  // the customer reads, while RequestMove drives what they are billed for. The
+  // weight arm was missing here, so a 35 kg item with 'medium' complexity showed
+  // "SUV" while the booking priced a Pickup.
   const hasHighComplexity = completedItems.some(item => 
-    item.handlingComplexity === 'high' || item.handlingComplexity === 'very_high'
+    item.handlingComplexity === 'high' ||
+    item.handlingComplexity === 'very_high' ||
+    parseFloat(item.weightKg || '0') > 30
   );
+
+  // Longest single edge across all items. A 2.4 m item can be low-volume and
+  // low-weight yet still need a van; RequestMove applies this override and this
+  // component did not.
+  const maxDimension = completedItems.length > 0
+    ? Math.max(...completedItems.map(item => Math.max(
+        parseFloat(String(item.dimensionsLcm || 0)),
+        parseFloat(String(item.dimensionsWcm || 0)),
+        parseFloat(String(item.dimensionsHcm || 0)),
+      )))
+    : 0;
   
   // Vehicle thresholds matching shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
-  // CAR_MAX: 20 ft³, PICKUP_MAX: 165 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
+  // CAR_MAX: 54 ft³, PICKUP_MAX: 136 ft³, VAN_MAX: 318 ft³, >318 ft³ → Truck
+  // (the ranges quoted here and in the cards below were stale: they read
+  // 20/165/300 while the constants have been 54/136/318, so every band shown to
+  // the customer was wrong and 166-180 ft³ fell in a gap between two cards)
   // WEIGHT BUMPS: max +1 tier from volume-based tier (pickup ~600kg, van ~900kg payload)
   // COMPLEXITY OVERRIDE: high/very_high items in small loads → at least Pickup Truck
   const getVehicleRecommendation = () => {
     const truckRec = { 
       vehicle: 'Moving Truck', 
       loadSize: 'Apartment Move', 
-      description: '300+ ft³',
+      description: '319+ ft³',
       gradient: 'from-red-500 to-orange-500',
       bgColor: 'bg-red-50 dark:bg-red-950/30',
       textColor: 'text-red-700 dark:text-red-400',
@@ -76,7 +96,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const vanRec = { 
       vehicle: 'Cargo Van', 
       loadSize: 'Large Load', 
-      description: '181-300 ft³',
+      description: '137-318 ft³',
       gradient: 'from-orange-500 to-amber-500',
       bgColor: 'bg-orange-50 dark:bg-orange-950/30',
       textColor: 'text-orange-700 dark:text-orange-400',
@@ -85,7 +105,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const pickupRec = { 
       vehicle: 'Pickup Truck', 
       loadSize: 'Medium Load', 
-      description: '21-165 ft³',
+      description: '55-136 ft³',
       gradient: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-50 dark:bg-blue-950/30',
       textColor: 'text-blue-700 dark:text-blue-400',
@@ -94,7 +114,7 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     const carRec = { 
       vehicle: 'SUV', 
       loadSize: 'Small Load', 
-      description: '0-20 ft³',
+      description: '0-54 ft³',
       gradient: 'from-green-500 to-emerald-500',
       bgColor: 'bg-green-50 dark:bg-green-950/30',
       textColor: 'text-green-700 dark:text-green-400',
@@ -115,6 +135,10 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
     if (totalWeight > 600 && recIndex < 3)      recIndex = Math.min(volumeRecIndex + 1, 3);
     else if (totalWeight > 300 && recIndex < 2) recIndex = Math.min(volumeRecIndex + 1, 2);
     else if (totalWeight > 100 && recIndex < 1) recIndex = Math.min(volumeRecIndex + 1, 1);
+
+    // Dimension override, then complexity — same order as RequestMove.
+    if (maxDimension > 200 && recIndex < 2)      recIndex = 2;
+    else if (maxDimension > 150 && recIndex < 1) recIndex = 1;
 
     // Apply complexity override: heavy items in small loads need at least a pickup
     if (hasHighComplexity && recIndex < 1) recIndex = 1;

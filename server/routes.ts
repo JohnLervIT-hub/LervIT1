@@ -81,6 +81,8 @@ import {
   calculatePartnerNet,
   vehicleClassFromVehicleType,
   vehicleTypeFromClass,
+  getVehicleClassFromVolume,
+  sumHandlingPremiums,
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
 import he from "he";
@@ -210,6 +212,10 @@ function requireUser(req: Request, res: Response): boolean {
   }
   return true;
 }
+
+// Minimum booking lead time. Mirrored by MIN_LEAD_TIME_MS in RequestMove.tsx,
+// which only sets the picker's `min` — this is the enforcing copy.
+const MIN_BOOKING_LEAD_TIME_MS = 2 * 60 * 60 * 1000;
 
 function requireAdmin(req: Request, res: Response): boolean {
   const user = (req as any).user;
@@ -4394,6 +4400,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { ...req.body, customerId: user.id }
       );
       
+      // Reject past-dated and too-soon bookings. Without this a customer could
+      // book for a date already gone, pay, and have cancelPastDatedBookings
+      // silently close the booking out from under them.
+      const preferredDateValue = new Date(bookingData.preferredDate as any);
+      const minPreferredDate = new Date(Date.now() + MIN_BOOKING_LEAD_TIME_MS);
+      if (isNaN(preferredDateValue.getTime()) || preferredDateValue < minPreferredDate) {
+        return res.status(400).json({ error: "Move date must be at least 2 hours from now." });
+      }
+
       // Extract and validate preSelectedMoverId for later use (after payment)
       let validatedPreSelectedMoverId: string | null = null;
       if (bookingData.preSelectedMoverId) {
@@ -4443,18 +4458,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         source: drivingDistanceResult.success ? 'google_maps' : 'haversine_fallback',
       });
       const distance = drivingDistanceResult.distanceKm;
-      const aiDetectedVolumeCuft = typeof req.body.aiDetectedVolumeCuft === 'number' ? req.body.aiDetectedVolumeCuft : undefined;
       const heavyItemCount = typeof req.body.heavyItemCount === 'number' ? req.body.heavyItemCount : undefined;
-      const heavyItemFeeOverride = typeof req.body.heavyItemFeeOverride === 'number' ? req.body.heavyItemFeeOverride : undefined;
-      // Preferred premium input: keyed itemPremiums from Vision Engine 2.0.
+
+      // ── Item-derived pricing inputs ──────────────────────────────────────
+      // `aiDetectedVolumeCuft`, `aiRecommendedVehicle` and `heavyItemFeeOverride`
+      // used to be read straight off the body. All three are price inputs:
+      // volume picks the vehicle class and therefore the base fee, and dispatch
+      // reads the stored volume back to decide which movers even qualify. A
+      // posted `aiDetectedVolumeCuft: 1` bought an apartment move at Class A.
+      //
+      // They are now derived here from the item list and the client's own
+      // values are discarded. `detectedItems` entries are whitelisted to the
+      // fields the vision engine produces; anything else is dropped.
+      //
+      // NOTE: `volumeCuft` / `weightKg` as persisted by the vision engine are
+      // already quantity-inclusive totals (see `toIdentificationResult` —
+      // per-item figures live in sourceMetadata), so they are summed directly
+      // and NOT multiplied by a quantity.
       const rawDetectedItems = Array.isArray(req.body.detectedItems) ? req.body.detectedItems : [];
+      const toNum = (v: unknown): number => {
+        const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      };
       const detectedItems = rawDetectedItems
         .filter((it: any) => it && typeof it.itemName === 'string')
         .map((it: any) => ({
           itemName: it.itemName as string,
           premiumKey: typeof it.premiumKey === 'string' ? it.premiumKey : null,
+          volumeCuft: toNum(it.volumeCuft),
+          weightKg: toNum(it.weightKg),
+          handlingComplexity: typeof it.handlingComplexity === 'string' ? it.handlingComplexity : null,
+          dimensionsLcm: toNum(it.dimensionsLcm),
+          dimensionsWcm: toNum(it.dimensionsWcm),
+          dimensionsHcm: toNum(it.dimensionsHcm),
         }));
       const hasKeyedPremiums = detectedItems.some((d: { premiumKey: string | null }) => !!d.premiumKey);
+
+      const summedVolumeCuft = detectedItems.reduce(
+        (sum: number, it: { volumeCuft: number }) => sum + it.volumeCuft,
+        0,
+      );
+      // Leave null rather than defaulting to 0 when nothing was detected, so
+      // calculatePrice falls back to the loadSize estimate instead of pricing a
+      // zero-volume move.
+      const aiDetectedVolumeCuft = summedVolumeCuft > 0 ? summedVolumeCuft : undefined;
+      // Canonical mapping, not a second copy of the thresholds: raw <=54 -> car,
+      // <=136 -> pickup, <=318 -> van, else truck.
+      const derivedRecommendedVehicle = aiDetectedVolumeCuft !== undefined
+        ? vehicleTypeFromClass(getVehicleClassFromVolume(aiDetectedVolumeCuft))
+        : undefined;
+      const heavyItemFeeOverride = detectedItems.length > 0
+        ? sumHandlingPremiums(detectedItems)
+        : undefined;
+
+      if (
+        typeof req.body.aiDetectedVolumeCuft === 'number' &&
+        aiDetectedVolumeCuft !== undefined &&
+        Math.abs(req.body.aiDetectedVolumeCuft - aiDetectedVolumeCuft) > 1
+      ) {
+        logEvent.booking('client_volume_mismatch_ignored', {
+          customerId: user.id,
+          clientVolumeCuft: req.body.aiDetectedVolumeCuft,
+          serverVolumeCuft: aiDetectedVolumeCuft,
+          itemCount: detectedItems.length,
+        });
+      }
       const priceBreakdown = calculatePrice({
         distanceKm: distance,
         loadSize: bookingData.loadSize,
@@ -4551,7 +4619,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(validatedPreSelectedMoverId && { preSelectedMoverId: validatedPreSelectedMoverId }), // Store validated pre-selected mover for direct assignment after payment
         ...(bookingData.images && { images: bookingData.images }),
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
-        ...(bookingData.aiRecommendedVehicle && { aiRecommendedVehicle: bookingData.aiRecommendedVehicle }),
+        // Derived from the summed item volumes above, not from the request body.
+        ...(derivedRecommendedVehicle && { aiRecommendedVehicle: derivedRecommendedVehicle }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
         // Persist the measured volume, not just the loadSize bucket it was
         // rounded into: dispatch reads it back to pick the vehicle class.
@@ -11161,17 +11230,23 @@ Respond with VALID JSON only:
   // Supports pre-booking identification (without bookingId) or post-booking identification (with bookingId)
   app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
     try {
+      // Auth used to be enforced only inside the `if (bookingId)` branch below,
+      // which left the whole endpoint open whenever bookingId was omitted — and
+      // the booking form omits it, because analysis runs before the booking
+      // exists. That made unauthenticated GPT-4o vision calls against arbitrary
+      // image URLs reachable by anyone, bounded only by the generic
+      // 1000-per-15-min API limiter.
+      if (!requireUser(req, res)) return;
+      const user = (req as any).user;
+
       const { bookingId, photoUrls, async: useAsync = true } = req.body;
-      
+
       if (!photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
         return res.status(400).json({ error: "photoUrls array required" });
       }
-      
-      const user = (req as any).user;
-      
-      // If bookingId provided, require authentication and verify ownership
+
+      // If bookingId provided, also verify ownership
       if (bookingId) {
-        if (!requireUser(req, res)) return;
         const booking = await storage.getBooking(bookingId);
         if (!booking) {
           return res.status(404).json({ error: "Booking not found" });

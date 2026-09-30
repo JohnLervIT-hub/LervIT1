@@ -142,6 +142,11 @@ export default function CustomerDashboard() {
     queryKey: ["/api/bookings"],
     enabled: !!user?.id,
     retry: 2,
+    // Without this the customer's own dashboard never updated: a mover could
+    // accept, drive, load and complete while this page still read
+    // "Finding your mover" until a manual refresh. Matches the 30s cadence
+    // MoverDashboard and AdminMovesPage already use.
+    refetchInterval: 30000,
   });
 
   // Show welcome tutorial for new customers who haven't completed onboarding

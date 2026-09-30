@@ -10,6 +10,17 @@ import { MapPin, Calendar, Package, DollarSign, MessageCircle, Star, ChevronDown
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogHeader } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { BOOKING_STATUSES } from "@shared/schema";
 import { format, isValid } from "date-fns";
 
 import { useLocation } from "wouter";
@@ -105,6 +116,7 @@ export default function MyBookings() {
   
   // State for edit booking dialog
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [cancelDialogBookingId, setCancelDialogBookingId] = useState<string | null>(null);
 
   // State for status timeline dialog (partner bookings)
   const [timelineBookingId, setTimelineBookingId] = useState<string | null>(null);
@@ -282,8 +294,33 @@ export default function MyBookings() {
         title: "Booking cancelled",
         description: "Your booking has been cancelled successfully.",
       });
+      setCancelDialogBookingId(null);
+    },
+    onError: (error: Error) => {
+      // A failed cancel used to be completely silent: the button stopped
+      // spinning and nothing else happened, including when the refund failed.
+      toast({
+        title: "Could not cancel",
+        description: error.message,
+        variant: "destructive",
+      });
+      setCancelDialogBookingId(null);
     },
   });
+
+  // Statuses the server refuses to cancel: the four in-progress ones plus the
+  // two terminal ones (server/routes.ts, customer cancellation block).
+  const NON_CANCELLABLE_STATUSES: string[] = [
+    BOOKING_STATUSES.EN_ROUTE_TO_PICKUP,
+    BOOKING_STATUSES.LOADING,
+    BOOKING_STATUSES.EN_ROUTE_TO_DROPOFF,
+    BOOKING_STATUSES.UNLOADING,
+    BOOKING_STATUSES.COMPLETED,
+    BOOKING_STATUSES.CANCELLED,
+    // Legacy alias still present on older rows; treated as en_route_to_pickup
+    // everywhere else.
+    'in_transit',
+  ];
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -1020,14 +1057,16 @@ export default function MyBookings() {
                         Edit Booking
                       </Button>
                     )}
-                    {(booking.status === "pending" || booking.status === "pending_payment") && (
+                    {!NON_CANCELLABLE_STATUSES.includes(booking.status) && (
                       <Button
                         variant="destructive"
-                        onClick={() => cancelBookingMutation.mutate(booking.id)}
+                        onClick={() => setCancelDialogBookingId(booking.id)}
                         disabled={cancelBookingMutation.isPending}
                         data-testid={`button-cancel-${booking.id}`}
                       >
-                        {cancelBookingMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
+                        {cancelBookingMutation.isPending && cancelDialogBookingId === booking.id
+                          ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          : <XCircle className="w-4 h-4 mr-2" />}
                         Cancel Booking
                       </Button>
                     )}
@@ -1232,6 +1271,34 @@ export default function MyBookings() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={cancelDialogBookingId !== null}
+        onOpenChange={(open) => { if (!open) setCancelDialogBookingId(null); }}
+      >
+        <AlertDialogContent data-testid="dialog-cancel-booking">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel your move?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will cancel your booking and issue a full refund. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-cancel">Keep my booking</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (cancelDialogBookingId) cancelBookingMutation.mutate(cancelDialogBookingId);
+              }}
+              disabled={cancelBookingMutation.isPending}
+              data-testid="button-confirm-cancel"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cancelBookingMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Cancel booking
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
