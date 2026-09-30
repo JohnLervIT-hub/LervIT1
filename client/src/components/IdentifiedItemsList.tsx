@@ -1,10 +1,73 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, X, DollarSign } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, Package, Weight, Ruler, Truck, Users, AlertCircle, Sparkles, CheckCircle2, Box, X, DollarSign, Pencil } from "lucide-react";
 import type { IdentifiedItem } from "@shared/schema";
 import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
-import { memo } from "react";
+import { memo, useState } from "react";
+
+/** cm³ -> ft³, matching calculateVolumeFt3 in server/vision-engine-v2.ts. */
+function volumeFt3FromCm(lengthCm: number, widthCm: number, heightCm: number): number {
+  return Math.round((lengthCm * widthCm * heightCm / 28316.8) * 100) / 100;
+}
+
+/**
+ * Per-item figures and quantity live in `sourceMetadata` as JSON, not as
+ * columns — `volumeCuft` and `weightKg` on the row are quantity-inclusive
+ * TOTALS (see toIdentificationResult). Editing has to work in per-item terms
+ * and re-multiply, or a quantity change would silently do nothing.
+ */
+function readItemMeta(item: IdentifiedItem): {
+  quantity: number;
+  perItemVolumeFt3: number;
+  perItemWeightKg: number;
+  userCorrected: boolean;
+} {
+  let parsed: any = {};
+  try {
+    parsed = item.sourceMetadata ? JSON.parse(item.sourceMetadata) : {};
+  } catch {
+    parsed = {};
+  }
+  const quantity = Number(parsed.quantity) > 0 ? Math.floor(Number(parsed.quantity)) : 1;
+  const totalVolume = parseFloat(item.volumeCuft || '0');
+  const totalWeight = parseFloat(item.weightKg || '0');
+  return {
+    quantity,
+    // Fall back to dividing the total, so items analysed before per-item
+    // figures were recorded still edit correctly.
+    perItemVolumeFt3: Number(parsed.perItemVolumeFt3) > 0
+      ? Number(parsed.perItemVolumeFt3)
+      : (quantity > 0 ? totalVolume / quantity : totalVolume),
+    perItemWeightKg: Number(parsed.perItemWeightKg) > 0
+      ? Number(parsed.perItemWeightKg)
+      : (quantity > 0 ? totalWeight / quantity : totalWeight),
+    userCorrected: parsed.userCorrected === true,
+  };
+}
+
+function writeItemMeta(
+  item: IdentifiedItem,
+  next: { quantity: number; perItemVolumeFt3: number; perItemWeightKg: number },
+): string {
+  let parsed: any = {};
+  try {
+    parsed = item.sourceMetadata ? JSON.parse(item.sourceMetadata) : {};
+  } catch {
+    parsed = {};
+  }
+  return JSON.stringify({ ...parsed, ...next, userCorrected: true });
+}
 
 // Tiered handling premiums — must stay in sync with shared/pricing.ts HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY
 const ITEM_PREMIUMS: Record<string, number> = { slight: 5, moderate: 10, high: 15, very_high: 30 };
@@ -20,10 +83,87 @@ interface IdentifiedItemsListProps {
   isLoading?: boolean;
   /** Called when the user removes an item; receives the item's photoUrl */
   onRemoveItem?: (photoUrl: string) => void;
+  /**
+   * Called when the user corrects an item. Receives the item's photoUrl and a
+   * patch to merge. Omit to render the list read-only.
+   */
+  onUpdateItem?: (photoUrl: string, patch: Partial<IdentifiedItem>) => void;
+}
+
+/** Draft state for the edit dialog. Strings so partially-typed input is kept. */
+interface ItemDraft {
+  photoUrl: string;
+  itemName: string;
+  quantity: string;
+  lengthCm: string;
+  widthCm: string;
+  heightCm: string;
+  weightKg: string;
 }
 
 // Memoized component to prevent unnecessary re-renders
-export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, isLoading, onRemoveItem }: IdentifiedItemsListProps) {
+export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, isLoading, onRemoveItem, onUpdateItem }: IdentifiedItemsListProps) {
+  const [draft, setDraft] = useState<ItemDraft | null>(null);
+
+  const openEditor = (item: IdentifiedItem) => {
+    const meta = readItemMeta(item);
+    setDraft({
+      photoUrl: item.photoUrl,
+      itemName: item.itemName ?? '',
+      quantity: String(meta.quantity),
+      lengthCm: item.dimensionsLcm ? String(parseFloat(item.dimensionsLcm)) : '',
+      widthCm: item.dimensionsWcm ? String(parseFloat(item.dimensionsWcm)) : '',
+      heightCm: item.dimensionsHcm ? String(parseFloat(item.dimensionsHcm)) : '',
+      // Shown and edited per item, not as the row total.
+      weightKg: meta.perItemWeightKg ? String(Math.round(meta.perItemWeightKg * 10) / 10) : '',
+    });
+  };
+
+  const draftItem = draft ? items.find((i) => i.photoUrl === draft.photoUrl) : undefined;
+
+  // Live preview of the totals the correction will produce, so the customer can
+  // see a quantity change land before they commit it.
+  const draftTotals = (() => {
+    if (!draft) return null;
+    const qty = Math.max(1, Math.floor(Number(draft.quantity) || 1));
+    const l = Number(draft.lengthCm) || 0;
+    const w = Number(draft.widthCm) || 0;
+    const h = Number(draft.heightCm) || 0;
+    const perWeight = Number(draft.weightKg) || 0;
+    const perVolume = l > 0 && w > 0 && h > 0
+      ? volumeFt3FromCm(l, w, h)
+      : (draftItem ? readItemMeta(draftItem).perItemVolumeFt3 : 0);
+    return {
+      qty,
+      perVolume,
+      totalVolume: Math.round(perVolume * qty * 100) / 100,
+      totalWeight: Math.round(perWeight * qty * 10) / 10,
+    };
+  })();
+
+  const saveDraft = () => {
+    if (!draft || !draftItem || !draftTotals || !onUpdateItem) return;
+    const { qty, perVolume, totalVolume, totalWeight } = draftTotals;
+    const l = Number(draft.lengthCm) || 0;
+    const w = Number(draft.widthCm) || 0;
+    const h = Number(draft.heightCm) || 0;
+
+    onUpdateItem(draft.photoUrl, {
+      itemName: draft.itemName.trim() || draftItem.itemName,
+      ...(l > 0 && { dimensionsLcm: String(l) }),
+      ...(w > 0 && { dimensionsWcm: String(w) }),
+      ...(h > 0 && { dimensionsHcm: String(h) }),
+      volumeCuft: String(totalVolume),
+      weightKg: String(totalWeight),
+      sourceMetadata: writeItemMeta(draftItem, {
+        quantity: qty,
+        perItemVolumeFt3: perVolume,
+        perItemWeightKg: totalWeight / qty,
+      }),
+    });
+    setDraft(null);
+  };
+
   if (isLoading) {
     return (
       <Card className="overflow-hidden" data-testid="card-identified-items-loading">
@@ -243,6 +383,17 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                               <Box className="h-3 w-3 mr-1" />
                               {item.category}
                             </Badge>
+                            {readItemMeta(item).quantity > 1 && (
+                              <Badge variant="secondary" className="text-xs font-medium" data-testid={`badge-quantity-${index}`}>
+                                x{readItemMeta(item).quantity}
+                              </Badge>
+                            )}
+                            {readItemMeta(item).userCorrected && (
+                              <Badge variant="outline" className="text-xs font-medium" data-testid={`badge-corrected-${index}`}>
+                                <Pencil className="h-3 w-3 mr-1" />
+                                You edited this
+                              </Badge>
+                            )}
                             {item.handlingComplexity && item.handlingComplexity !== 'standard' && (
                               <Badge 
                                 variant={complexityStyle.variant}
@@ -255,19 +406,34 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
                             )}
                           </div>
                         </div>
-                        {onRemoveItem && (
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="flex-shrink-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => onRemoveItem(item.photoUrl)}
-                            data-testid={`button-remove-item-${index}`}
-                            aria-label={`Remove ${item.itemName} from analysis`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex flex-shrink-0 items-center">
+                          {onUpdateItem && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => openEditor(item)}
+                              data-testid={`button-edit-item-${index}`}
+                              aria-label={`Correct ${item.itemName}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {onRemoveItem && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => onRemoveItem(item.photoUrl)}
+                              data-testid={`button-remove-item-${index}`}
+                              aria-label={`Remove ${item.itemName} from analysis`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       
                       {/* Specs Grid */}
@@ -383,6 +549,131 @@ export const IdentifiedItemsList = memo(function IdentifiedItemsList({ items, is
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={draft !== null} onOpenChange={(open) => { if (!open) setDraft(null); }}>
+        <DialogContent data-testid="dialog-edit-item">
+          <DialogHeader>
+            <DialogTitle>Correct this item</DialogTitle>
+            <DialogDescription>
+              Dimensions and weight are per item. We multiply them by the quantity to
+              work out the space your move needs.
+            </DialogDescription>
+          </DialogHeader>
+
+          {draft && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-item-name">Item</Label>
+                <Input
+                  id="edit-item-name"
+                  value={draft.itemName}
+                  onChange={(e) => setDraft({ ...draft, itemName: e.target.value })}
+                  placeholder="e.g. Two-seat sofa"
+                  data-testid="input-edit-item-name"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-qty">How many?</Label>
+                  <Input
+                    id="edit-item-qty"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    value={draft.quantity}
+                    onChange={(e) => setDraft({ ...draft, quantity: e.target.value })}
+                    data-testid="input-edit-item-quantity"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-weight">Weight each (kg)</Label>
+                  <Input
+                    id="edit-item-weight"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.5"
+                    value={draft.weightKg}
+                    onChange={(e) => setDraft({ ...draft, weightKg: e.target.value })}
+                    data-testid="input-edit-item-weight"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Size each (cm)</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  <Input
+                    aria-label="Length in centimetres"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    placeholder="Length"
+                    value={draft.lengthCm}
+                    onChange={(e) => setDraft({ ...draft, lengthCm: e.target.value })}
+                    data-testid="input-edit-item-length"
+                  />
+                  <Input
+                    aria-label="Width in centimetres"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    placeholder="Width"
+                    value={draft.widthCm}
+                    onChange={(e) => setDraft({ ...draft, widthCm: e.target.value })}
+                    data-testid="input-edit-item-width"
+                  />
+                  <Input
+                    aria-label="Height in centimetres"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    placeholder="Height"
+                    value={draft.heightCm}
+                    onChange={(e) => setDraft({ ...draft, heightCm: e.target.value })}
+                    data-testid="input-edit-item-height"
+                  />
+                </div>
+              </div>
+
+              {draftTotals && (
+                <div
+                  className="rounded-lg border bg-muted/40 p-3 text-sm"
+                  data-testid="text-edit-item-preview"
+                >
+                  <span className="text-muted-foreground">New total for this line: </span>
+                  <span className="font-semibold">
+                    {draftTotals.totalVolume.toFixed(1)} ft³
+                  </span>
+                  <span className="text-muted-foreground"> and </span>
+                  <span className="font-semibold">
+                    {draftTotals.totalWeight.toFixed(0)} kg
+                  </span>
+                  {draftTotals.qty > 1 && (
+                    <span className="text-muted-foreground"> ({draftTotals.qty} x {draftTotals.perVolume.toFixed(1)} ft³)</span>
+                  )}
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                Your mover sees the corrected figures. If the load is bigger than
+                described on the day, the price may need to change.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDraft(null)} data-testid="button-cancel-edit-item">
+              Cancel
+            </Button>
+            <Button onClick={saveDraft} data-testid="button-save-edit-item">
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });

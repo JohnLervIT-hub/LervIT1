@@ -1681,6 +1681,19 @@ export default function RequestMove() {
     setImages(newUrls);
   };
 
+  // Called by IdentifiedItemsList when the user corrects an item. Patches the
+  // item in place and re-runs the same recalculation the removal path uses, so
+  // load size, mover count, vehicle class and the live price all follow the
+  // correction immediately.
+  const handleUpdateItem = (photoUrl: string, patch: Partial<IdentifiedItem>) => {
+    const next = identifiedItemsRef.current.map(item =>
+      item.photoUrl === photoUrl ? { ...item, ...patch } : item
+    );
+    identifiedItemsRef.current = next;
+    setIdentifiedItems(next);
+    recalcFromItems(next);
+  };
+
   // Called by IdentifiedItemsList when the user taps the X on an item row
   const handleRemoveItem = (photoUrl: string) => {
     analyzedUrlsRef.current.delete(photoUrl);
@@ -1975,6 +1988,18 @@ export default function RequestMove() {
             dimensionsLcm: i.dimensionsLcm,
             dimensionsWcm: i.dimensionsWcm,
             dimensionsHcm: i.dimensionsHcm,
+            // Flags a line the customer corrected by hand, so the server can
+            // log it and the mover's manifest can show it. Customer edits move
+            // the price, so they need an audit trail.
+            userCorrected: (() => {
+              try {
+                return i.sourceMetadata
+                  ? JSON.parse(i.sourceMetadata).userCorrected === true
+                  : false;
+              } catch {
+                return false;
+              }
+            })(),
           })),
         promoCode: appliedPromo?.code || undefined,
         quoteId: quoteId ?? (() => {
@@ -2687,6 +2712,7 @@ export default function RequestMove() {
                             items={identifiedItems}
                             isLoading={false}
                             onRemoveItem={handleRemoveItem}
+                            onUpdateItem={handleUpdateItem}
                           />
                         </div>
                       )}

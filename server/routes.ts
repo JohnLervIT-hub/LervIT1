@@ -4492,6 +4492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dimensionsLcm: toNum(it.dimensionsLcm),
           dimensionsWcm: toNum(it.dimensionsWcm),
           dimensionsHcm: toNum(it.dimensionsHcm),
+          userCorrected: it.userCorrected === true,
         }));
       const hasKeyedPremiums = detectedItems.some((d: { premiumKey: string | null }) => !!d.premiumKey);
 
@@ -4511,6 +4512,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const heavyItemFeeOverride = detectedItems.length > 0
         ? sumHandlingPremiums(detectedItems)
         : undefined;
+
+      // Hand-corrected lines move the price, so record that they happened. The
+      // figures themselves still originate on the client either way — this is
+      // an audit trail, not a control.
+      const correctedItemCount = detectedItems.filter(
+        (it: { userCorrected: boolean }) => it.userCorrected,
+      ).length;
+      if (correctedItemCount > 0) {
+        logEvent.booking('customer_corrected_items', {
+          customerId: user.id,
+          correctedItemCount,
+          itemCount: detectedItems.length,
+          serverVolumeCuft: aiDetectedVolumeCuft ?? null,
+        });
+      }
 
       if (
         typeof req.body.aiDetectedVolumeCuft === 'number' &&
