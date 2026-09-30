@@ -154,6 +154,35 @@ export const paymentLimiter = rateLimit({
   },
 });
 
+// Vision/photo-analysis rate limit (20 per hour).
+//
+// POST /api/ai/items/identify is reachable unauthenticated when no bookingId is
+// supplied — the pre-booking quote flow analyses photos before an account
+// exists — and every call is a paid GPT-4o vision request against a
+// caller-supplied image URL. generalApiLimiter's 1000/15min is far too loose to
+// bound that, so this route gets its own budget.
+//
+// 20/hour is generous for a real customer: the booking form caps uploads at 10
+// photos and batches them per upload event, so a full session is a handful of
+// requests.
+export const visionApiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: isProduction ? 20 : 200,
+  message: { error: 'Too many photo analysis requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }, // Behind Replit proxy
+  handler: (req, res) => {
+    logger.warn({
+      ip: req.ip,
+      path: req.path,
+      userId: (req as any).session?.userId,
+      event: 'vision_rate_limit_exceeded'
+    }, 'Vision rate limit exceeded');
+    res.status(429).json({ error: 'Too many photo analysis requests. Please try again later.' });
+  },
+});
+
 // Phone verification rate limit (5 per 15 minutes - prevent brute force)
 export const phoneVerificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

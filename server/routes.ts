@@ -52,6 +52,7 @@ import { insertUserSchema, insertMoverSchema, insertBookingSchema, insertMessage
 import { notifySitemapRegenerate } from "./utils/sitemap";
 import { canvaProvider } from "./providers/canva";
 import { adminAuditMiddleware } from "./middleware/adminAudit";
+import { visionApiLimiter } from "./middleware/security";
 import { analyzeTicket, getQuickResponses } from "./ai-support-analyzer";
 import { z } from "zod";
 import { eq, and, notInArray, sql, desc, inArray, lt, or, isNull, isNotNull, gte, lte, ne, ilike } from "drizzle-orm";
@@ -11228,7 +11229,7 @@ Respond with VALID JSON only:
   // POST /api/ai/items/identify - Identify items from photos (ASYNC mode for performance)
   // Creates pending items immediately and processes in background
   // Supports pre-booking identification (without bookingId) or post-booking identification (with bookingId)
-  app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
+  app.post("/api/ai/items/identify", visionApiLimiter, async (req: Request, res: Response) => {
     try {
       const { bookingId, photoUrls, async: useAsync = true } = req.body;
 
@@ -11243,11 +11244,10 @@ Respond with VALID JSON only:
       // and sends no bookingId, so requiring a session here would break
       // anonymous quotes.
       //
-      // TRADE-OFF: the no-bookingId branch is therefore an unauthenticated
-      // GPT-4o vision call against caller-supplied image URLs. The only bound
-      // on it is `generalApiLimiter` (1000 requests / 15 min / IP, mounted on
-      // /api in server/index.ts) — loose for a paid model call. A dedicated
-      // tighter limiter on this route is the follow-up.
+      // The no-bookingId branch is therefore an unauthenticated GPT-4o vision
+      // call against caller-supplied image URLs. It is bounded by
+      // `visionApiLimiter` on this route (20/hour/IP) rather than only by the
+      // app-wide 1000/15min budget.
       if (bookingId) {
         if (!requireUser(req, res)) return;
         const booking = await storage.getBooking(bookingId);
