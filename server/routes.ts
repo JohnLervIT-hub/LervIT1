@@ -11230,23 +11230,26 @@ Respond with VALID JSON only:
   // Supports pre-booking identification (without bookingId) or post-booking identification (with bookingId)
   app.post("/api/ai/items/identify", async (req: Request, res: Response) => {
     try {
-      // Auth used to be enforced only inside the `if (bookingId)` branch below,
-      // which left the whole endpoint open whenever bookingId was omitted — and
-      // the booking form omits it, because analysis runs before the booking
-      // exists. That made unauthenticated GPT-4o vision calls against arbitrary
-      // image URLs reachable by anyone, bounded only by the generic
-      // 1000-per-15-min API limiter.
-      if (!requireUser(req, res)) return;
-      const user = (req as any).user;
-
       const { bookingId, photoUrls, async: useAsync = true } = req.body;
 
       if (!photoUrls || !Array.isArray(photoUrls) || photoUrls.length === 0) {
         return res.status(400).json({ error: "photoUrls array required" });
       }
 
-      // If bookingId provided, also verify ownership
+      const user = (req as any).user;
+
+      // Auth is gated on `bookingId`, not applied to the whole endpoint: the
+      // pre-booking quote/lead flow analyses photos before an account exists
+      // and sends no bookingId, so requiring a session here would break
+      // anonymous quotes.
+      //
+      // TRADE-OFF: the no-bookingId branch is therefore an unauthenticated
+      // GPT-4o vision call against caller-supplied image URLs. The only bound
+      // on it is `generalApiLimiter` (1000 requests / 15 min / IP, mounted on
+      // /api in server/index.ts) — loose for a paid model call. A dedicated
+      // tighter limiter on this route is the follow-up.
       if (bookingId) {
+        if (!requireUser(req, res)) return;
         const booking = await storage.getBooking(bookingId);
         if (!booking) {
           return res.status(404).json({ error: "Booking not found" });
