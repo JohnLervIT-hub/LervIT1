@@ -33,9 +33,7 @@ import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
 import twoMoversPoster from "@assets/generated_images/two_movers_poster_image.png";
-// saveDraft dropped with the step-2 photo gate: the anonymous path now reaches
-// step 3, where the auth check persists pendingBooking before redirecting.
-import { loadDraft, clearDraft } from "@/lib/bookingDraft";
+import { saveDraft, loadDraft, clearDraft, type BookingDraftData } from "@/lib/bookingDraft";
 
 // Tiered handling premiums by complexity.
 // Rates mirror PRICING_CONFIG.HEAVY_ITEM_PREMIUMS_BY_COMPLEXITY in shared/pricing.ts.
@@ -1936,18 +1934,60 @@ export default function RequestMove() {
       }
     }
 
-    // Step 2: photos are STRONGLY encouraged but no longer mandatory.
+    // Step 2: photos are MANDATORY.
     //
-    // They used to block the step, which pushed anonymous visitors into a login
-    // redirect just to get past it. Without photos there is no measured volume,
-    // so the customer carries on against a range and the price is settled on
-    // site — said out loud here and on the pricing card, not left implied.
-    // The login redirect still happens, at step 3, where it belongs.
-    if (step === 2 && (!images || images.length === 0)) {
-      toast({
-        title: "Continuing without photos",
-        description: "We'll show an estimated range and confirm the final price on-site. Upload photos any time for an exact quote.",
-      });
+    // The vision engine is the only thing that measures the load, and the
+    // measured volume is what the quote is. Letting a booking through without
+    // photos means pricing it off a load-size default nobody chose — which is
+    // the failure this whole flow exists to remove, not a degraded mode to
+    // offer. The pre-photo range on the card is a preview, not an alternative.
+    if (step === 2) {
+      if (!images || images.length === 0) {
+        // For unauthenticated users, save data and redirect to login
+        // They can upload photos after logging in
+        if (!user) {
+          toast({
+            title: "Login Required",
+            description: "Please log in to upload photos and complete your booking.",
+            variant: "destructive",
+          });
+
+          // Save current progress using bookingDraft module
+          const draftData: BookingDraftData = {
+            pickupAddress,
+            dropoffAddress,
+            pickupDifficulty,
+            dropoffDifficulty,
+            loadSize,
+            heavyItem,
+            numberOfMovers,
+            description,
+            images: [],
+            date: ""
+          };
+          saveDraft(preSelectedMoverId, draftData);
+
+          // Build redirect URL with essential data encoded (survives storage clearing)
+          const params = new URLSearchParams();
+          if (preSelectedMoverId) params.set('moverId', preSelectedMoverId);
+          params.set('pickup', pickupAddress);
+          params.set('dropoff', dropoffAddress);
+          params.set('pickupAccess', pickupDifficulty || '');
+          params.set('dropoffAccess', dropoffDifficulty || '');
+          params.set('loadSize', loadSize);
+          params.set('resumeStep', '2');
+          const returnPath = `/request-move?${params.toString()}`;
+          setLocation(`/login?redirect=${encodeURIComponent(returnPath)}`);
+          return;
+        }
+
+        toast({
+          title: "Photos required",
+          description: "Please upload at least one photo of your items to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (step < 3) {
@@ -2766,21 +2806,10 @@ export default function RequestMove() {
                         Upload Photos of Your Items
                       </Label>
                       <p className="text-sm text-muted-foreground mb-3">
-                        Photos are how we measure your load and price it exactly. Show the
-                        full room or pile — close-ups can't be measured.
+                        At least one photo required — photos are how we measure your
+                        load and price it exactly. Show the full room or pile;
+                        close-ups can't be measured.
                       </p>
-                      {images.length === 0 && (
-                        <div
-                          className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 mb-3"
-                          data-testid="notice-photos-optional"
-                        >
-                          <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                            You can continue without photos — we'll quote a range and confirm
-                            the final price on-site.
-                          </p>
-                        </div>
-                      )}
                       <ImageUpload 
                         value={images}
                         onImagesChange={handleImagesChange} 
