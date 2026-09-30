@@ -89,7 +89,14 @@ export const generalApiLimiter = rateLimit({
   skip: (req) => {
     // Skip rate limiting for health checks and session check (called on every page load/navigation)
     // Note: when mounted at /api, req.path is /auth/me (prefix stripped by Express)
-    return req.path === '/health' || req.path === '/auth/me' || req.path === '/nova/webhook';
+    //
+    // /ai/items/identify is exempt because it carries its own, much tighter
+    // visionApiLimiter (20/hour) — photo analysis should not also burn the
+    // caller's general 1000-request budget.
+    return req.path === '/health'
+      || req.path === '/auth/me'
+      || req.path === '/nova/webhook'
+      || req.path === '/ai/items/identify';
   },
   handler: (req, res) => {
     logger.warn({ 
