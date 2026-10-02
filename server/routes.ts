@@ -11578,16 +11578,27 @@ Respond with VALID JSON only:
           console.error(`[Vision Engine 2.0] Error processing photo ${photoUrl?.substring(0, 80)}:`, error?.message || error);
           if (error?.stack) console.error(`[Vision Engine 2.0] Stack:`, error.stack);
           
+          // A FULL_SCENE_REJECTED photo is not an engine failure: the image is
+          // unusable (blurred / unidentifiable) and the fix is a replacement
+          // photo, so flag it for the client instead of reporting a crash.
+          const needsReplacement = error?.code === 'FULL_SCENE_REJECTED'
+            || error?.message === 'FULL_SCENE_REJECTED';
+          const errorMessage = needsReplacement
+            ? "We couldn't tell what's in this photo. Please replace it with a clearer one."
+            : (error?.message || 'Unknown error');
+
           items.push({
             id: `temp-${results.indexOf(settled)}`,
             photoUrl,
             processingStatus: 'failed',
-            errorMessage: error?.message || 'Unknown error',
+            needsReplacement,
+            errorMessage,
           });
           
           errors.push({
             photoUrl,
-            error: error?.message || 'Unknown error',
+            needsReplacement,
+            error: errorMessage,
           });
         }
       }

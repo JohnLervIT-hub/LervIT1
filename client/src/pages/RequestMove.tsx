@@ -1586,24 +1586,33 @@ export default function RequestMove() {
       // reports whether the photo shows the whole room / pile or just a close-up.
       const returned = (result.items || []) as (IdentifiedItem & { fullSceneConfirmed?: boolean })[];
 
-      // A close-up can be identified but not measured — there is no way to know
-      // what else is in the room — so it is dropped rather than priced as if it
-      // were the whole load. Only an explicit false rejects, so a vision outage
-      // or an older server (no such field) still accepts every photo.
-      const partialShots = returned.filter(i => i.fullSceneConfirmed === false);
-      const newItems = returned.filter(i => i.fullSceneConfirmed !== false);
+      // The server flags a photo it could not read at all (blurred, unidentifiable)
+      // with needsReplacement. Framing is no longer a rejection reason: a room-wide
+      // shot and a close-up of a real item are both accepted and priced.
+      const serverErrors = (result.errors || []) as { photoUrl?: string; needsReplacement?: boolean }[];
+      const rejectedUrls = new Set(
+        serverErrors.filter(e => e.needsReplacement).map(e => e.photoUrl).filter(Boolean) as string[]
+      );
 
-      if (partialShots.length > 0) {
-        const rejectedUrls = new Set(partialShots.map(i => i.photoUrl));
-        rejectedUrls.forEach(url => { if (url) analyzedUrlsRef.current.delete(url); });
-        // Pull them back out of the grid so the customer can see which to replace.
-        setImages(prev => prev.filter(url => !rejectedUrls.has(url)));
+      if (rejectedUrls.size > 0) {
+        // Keep the photos in the grid — the customer needs to see WHICH ones to
+        // replace — but drop them from the analysed set so that replacing one
+        // triggers a fresh analysis pass instead of being skipped as "seen".
+        rejectedUrls.forEach(url => { analyzedUrlsRef.current.delete(url); });
         toast({
-          title: partialShots.length === 1 ? "Photo too close up" : "Photos too close up",
-          description: "Please upload a photo of the full room or pile — close-ups can't be measured.",
+          title: rejectedUrls.size === 1 ? "Photo unclear" : `${rejectedUrls.size} photos unclear`,
+          description: rejectedUrls.size === 1
+            ? "We couldn't tell what's in one of your photos. Please replace it with a clearer one."
+            : `We couldn't tell what's in ${rejectedUrls.size} of your photos. Please replace them with clearer ones.`,
           variant: "destructive",
         });
       }
+
+      // Rejected photos must not reach the pricing maths as failed placeholders.
+      const successfulNewItems = returned.filter(
+        i => !(i.photoUrl && rejectedUrls.has(i.photoUrl))
+      );
+      const newItems = successfulNewItems;
 
       // Merge with the ref (always current, avoids stale closure from async gap).
       const merged = [...identifiedItemsRef.current, ...newItems];
