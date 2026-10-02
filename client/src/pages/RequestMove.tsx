@@ -2886,7 +2886,11 @@ export default function RequestMove() {
                           customer no longer edits quantities or sizes here. */}
                       {!isIdentifyingItems && identifiedItems.length > 0 && (
                         <div className="mt-4">
-                          <DetectedItemsSummary items={identifiedItems} />
+                          <DetectedItemsSummary
+                            items={identifiedItems}
+                            vehicle={aiRecommendedVehicle}
+                            movers={numberOfMovers}
+                          />
                         </div>
                       )}
                     </div>
