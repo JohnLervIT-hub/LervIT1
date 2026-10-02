@@ -623,7 +623,7 @@ interface VisionDetectionResult {
   };
   estimatedWeight?: number;
   quantity?: number;
-  /** False for a close-up or partial shot — see the fullScene prompt field. */
+  /** False only when the item is genuinely unidentifiable — see the fullScene prompt field. */
   fullScene?: boolean;
 }
 
@@ -654,7 +654,8 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
 Analyze this image and identify the item with maximum detail.
 
 ITEM IDENTIFICATION:
-Identify the PRIMARY item occupying ≥85% of the visual frame.
+Identify the PRIMARY item in the image — the most prominent/dominant item.
+A room-wide shot showing many items is fine: pick the dominant one.
 
 For FURNITURE SETS (dining table with chairs, bed with headboard, sofa with ottoman):
 - Identify the DOMINANT item as the primary
@@ -758,13 +759,21 @@ QUANTITY FIELD:
 For sets or counted items, include quantity.
 Example: dining chairs detected = 6
 
-FRAMING CHECK — answer this as well:
-Does this image show the full room, or the full pile of items to be moved, so
-that the whole load is visible? Or is it a close-up / partial shot of one item
-or part of a scene? A close-up cannot be measured for a move: there is no way
-to tell what else is in the room or how much there is in total.
-Set "fullScene": true for a full room or full pile, false for a close-up or
-partial shot. When genuinely unsure, answer true.
+USABILITY CHECK — answer this as well:
+"fullScene" asks one thing only: can you tell what the item actually IS?
+Set "fullScene": true — the default — whenever you can identify a real item.
+That INCLUDES:
+• a wide room-wide shot with many items in it
+• a tight close-up of a single item
+• a full pile, a stack of boxes, a partial view of a large item
+Set "fullScene": false ONLY when the photo is unusable because the item is
+genuinely unidentifiable, i.e. ALL you can honestly say is "I cannot tell what
+this is":
+• too blurred, dark or out of focus to recognise
+• only a tiny fragment / sliver of something, with no identifiable object
+• no household or furniture item present at all
+Framing is NOT a reason to answer false. Being a close-up is NOT a reason to
+answer false. When in any doubt whatsoever, answer true.
 
 Return ONLY valid JSON (no markdown):
 {
@@ -775,7 +784,7 @@ Return ONLY valid JSON (no markdown):
   "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
   "estimatedWeight": number in kg,
   "quantity": number (default 1),
-  "fullScene": true or false
+  "fullScene": true   // default true; false ONLY if the item is unidentifiable
 }`
           },
           {
@@ -909,6 +918,14 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     
     // STEP 2: Detect item using Vision API
     const visionResult = await detectItemWithVision(imageBase64);
+
+    // STEP 2.1: Reject unusable photos BEFORE either cache is written. Caching a
+    // rejection would pin the photo to a permanent failure, so the customer's
+    // replacement of the same URL could never be re-analysed.
+    if (visionResult.fullScene === false) {
+      console.warn('[Vision Engine 2.0] Photo rejected as unidentifiable:', photoUrl.slice(-40));
+      throw Object.assign(new Error('FULL_SCENE_REJECTED'), { code: 'FULL_SCENE_REJECTED' });
+    }
     
     // STEP 2.5: Apply category correction (fix AI misclassifications)
     const categoryCorrection = correctCategory(visionResult.itemName, visionResult.category);
@@ -956,7 +973,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,  // Keep original name with quantity
         category: item.category,
         subcategory: item.subcategory,
-        fullSceneConfirmed: visionResult.fullScene !== false,
+        // Always true here: an unusable photo already threw at STEP 2.1.
+        fullSceneConfirmed: true,
         quantity,
         dimensions: {
           length_cm: item.dimensions_cm.length,  // Per-item dimensions
@@ -1071,7 +1089,8 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,
         category: visionResult.category,
         subcategory: visionResult.subcategory,
-        fullSceneConfirmed: visionResult.fullScene !== false,
+        // Always true here: an unusable photo already threw at STEP 2.1.
+        fullSceneConfirmed: true,
         quantity,
         dimensions: {
           length_cm: corrected.length_cm,  // Per-item dimensions
@@ -1115,6 +1134,11 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     return result;
     
   } catch (error: any) {
+    // A rejected photo is a real, actionable outcome — not an engine failure.
+    // It must propagate so the caller can ask for a replacement, instead of
+    // being absorbed into the generic 'Unidentified Item' fallback below.
+    if (error?.code === 'FULL_SCENE_REJECTED') throw error;
+
     logEvent.error('vision_engine', error, { photoUrl });
     
     // Return fallback result
