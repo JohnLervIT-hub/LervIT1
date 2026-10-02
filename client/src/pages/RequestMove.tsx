@@ -1695,6 +1695,12 @@ export default function RequestMove() {
           title: toastTitle,
           description: ft3Label + " - " + capitalizeFirst(recommendedLoadSize) + " load (" + recommendedVehicle + "), " + moversLabel + heavyLabel,
         });
+      } else if (newItems.every(function(i) { return i.processingStatus === 'failed'; })) {
+        toast({
+          title: "Vision Analysis Failed",
+          description: "AI could not process your photos. Please select load details manually below.",
+          variant: "destructive",
+        });
       } else if (newItems.length === 0) {
         toast({
           title: "Identification Complete",

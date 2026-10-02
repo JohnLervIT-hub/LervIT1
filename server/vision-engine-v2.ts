@@ -326,8 +326,9 @@ async function imageToBase64(imagePath: string): Promise<string> {
       const objectFile = await objectStorageService.getObjectEntityFile(imagePath);
       const [downloadedBuffer] = await objectFile.download();
       buffer = Buffer.from(downloadedBuffer);
-    } catch (error) {
-      console.error('[Vision Engine 2.0] Object Storage download failed:', error);
+    } catch (error: any) {
+      console.error('[Vision Engine 2.0] Object Storage download failed for path:', imagePath, '— error:', error?.message || error);
+      if (error?.stack) console.error('[Vision Engine 2.0] Storage stack:', error.stack);
       throw new Error('Failed to download image from storage. Please try uploading again.');
     }
   }

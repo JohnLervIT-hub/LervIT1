@@ -11500,8 +11500,9 @@ Respond with VALID JSON only:
       const { identifyItemV2, toIdentificationResult } = await import('./vision-engine-v2');
       
       console.log(`[Vision Engine 2.0] SYNC: Processing ${photoUrls.length} photos in parallel...`);
+      console.log(`[Vision Engine 2.0] First photoUrl format: ${String(photoUrls[0]).substring(0, 100)}`);
       const startTime = Date.now();
-      
+
       // Process ALL photos in parallel for speed using Vision Engine 2.0
       const results = await Promise.allSettled(
         photoUrls.map(async (photoUrl: string, i: number) => {
@@ -11574,7 +11575,8 @@ Respond with VALID JSON only:
         } else {
           const error = settled.reason;
           const photoUrl = photoUrls[results.indexOf(settled)];
-          console.error(`[Vision Engine 2.0] Error processing photo:`, error);
+          console.error(`[Vision Engine 2.0] Error processing photo ${photoUrl?.substring(0, 80)}:`, error?.message || error);
+          if (error?.stack) console.error(`[Vision Engine 2.0] Stack:`, error.stack);
           
           items.push({
             id: `temp-${results.indexOf(settled)}`,
@@ -11602,7 +11604,9 @@ Respond with VALID JSON only:
         },
       });
     } catch (error: any) {
-      console.error('[Vision Engine 2.0] Route error:', error);
+      console.error('[Vision Engine 2.0] Route error:', error?.message || error);
+      if (error?.stack) console.error('[Vision Engine 2.0] Route stack:', error.stack);
+      console.error('[Vision Engine 2.0] photoUrls at failure:', JSON.stringify(req.body?.photoUrls));
       res.status(500).json({ error: "Failed to identify items" });
     }
   });
