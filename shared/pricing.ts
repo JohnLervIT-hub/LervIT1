@@ -231,6 +231,35 @@ export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
   return 'A';
 }
 
+/**
+ * Longest-side length, in cm, past which a load stops being an SUV job.
+ *
+ * Volume alone cannot see length: a 203cm king mattress is 34.6 raw ft³ and a
+ * 219cm 98-inch TV is 3.9, so both class as A on volume while fitting in no
+ * SUV. This floor only ever lifts A → B. It never touches B, C or E, so volume
+ * stays decisive for every larger load, and weight never enters vehicle
+ * selection at all.
+ */
+export const LENGTH_FLOOR_CM = 150;
+
+/**
+ * Vehicle class from raw volume, with the longest-side floor applied.
+ *
+ * This is the canonical mapping for anything customer-facing: both
+ * calculatePrice and the booking flow's recommendation card call it, so the
+ * displayed vehicle and the charged class cannot drift apart.
+ */
+export function getVehicleClassFromVolumeAndLength(
+  rawVolumeCuft: number,
+  maxLengthCm?: number | null,
+): VehicleClass {
+  const volumeClass = getVehicleClassFromVolume(rawVolumeCuft);
+  if (volumeClass === 'A' && typeof maxLengthCm === 'number' && maxLengthCm > LENGTH_FLOOR_CM) {
+    return 'B';
+  }
+  return volumeClass;
+}
+
 /** Map manual load size → vehicle class via the volume estimate. */
 export function getVehicleClassFromLoadSize(loadSize: string): VehicleClass {
   const rawVolume = PRICING_CONFIG.loadSizeVolumes[loadSize] ?? 40;
@@ -349,7 +378,8 @@ export function getAllVehicleClasses(): VehicleClassConfig[] {
  * Steps:
  *  1. Raw volume — AI-detected `volumeCuft` if present, else map `loadSize` → volume.
  *  2. Adjusted volume — raw × packingFactor (for vehicle matching only).
- *  3. Vehicle class — from raw volume via getVehicleClassFromVolume.
+ *  3. Vehicle class — from raw volume via getVehicleClassFromVolumeAndLength,
+ *     so a long-but-light item (mattress, large TV) cannot class as an SUV.
  *  4a. Item premiums — sum from detectedItems[].premiumKey, or legacy heavyItem fallback.
  *  4b. Force 2 movers when rawVolume > threshold OR any always-heavy premium key present.
  *  5–7. Base + distance + load fees.
@@ -366,9 +396,12 @@ export function calculatePrice({
   heavyItem,
   heavyItemFeeOverride,
   detectedItems,
+  maxLengthCm,
 }: {
   volumeCuft?: number | null;
   loadSize?: string | null;
+  /** Longest side across detected items, in cm. Applies the A→B length floor. */
+  maxLengthCm?: number | null;
   distanceKm: number;
   numberOfMovers?: number;
   pickupDifficulty?: string | null;
@@ -393,8 +426,8 @@ export function calculatePrice({
   // STEP 2 — Adjusted volume (packing factor)
   const adjustedVolume = rawVolume * cfg.packingFactor;
 
-  // STEP 3 — Vehicle class
-  const vehicleClass = getVehicleClassFromVolume(rawVolume);
+  // STEP 3 — Vehicle class (volume, with the longest-side floor)
+  const vehicleClass = getVehicleClassFromVolumeAndLength(rawVolume, maxLengthCm);
 
   // STEP 4a — Item premiums (needed before force-2-movers so heavy items count).
   const itemPremiumsList: { name: string; key: string | null; fee: number }[] = [];

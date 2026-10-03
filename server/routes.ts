@@ -83,6 +83,7 @@ import {
   vehicleClassFromVehicleType,
   vehicleTypeFromClass,
   getVehicleClassFromVolume,
+  getVehicleClassFromVolumeAndLength,
   sumHandlingPremiums,
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
@@ -4584,10 +4585,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // calculatePrice falls back to the loadSize estimate instead of pricing a
       // zero-volume move.
       const aiDetectedVolumeCuft = summedVolumeCuft > 0 ? summedVolumeCuft : undefined;
+      // Longest side across the load. Floors Class A -> B for a long-but-light
+      // item (mattress, large TV) that no SUV can carry. Derived here, like the
+      // volume, so the client cannot post a dimension that lowers the class.
+      const maxLengthCm = detectedItems.reduce(
+        (max: number, it: { dimensionsLcm: number; dimensionsWcm: number; dimensionsHcm: number }) =>
+          Math.max(max, it.dimensionsLcm, it.dimensionsWcm, it.dimensionsHcm),
+        0,
+      );
       // Canonical mapping, not a second copy of the thresholds: raw <=54 -> car,
       // <=136 -> pickup, <=318 -> van, else truck.
       const derivedRecommendedVehicle = aiDetectedVolumeCuft !== undefined
-        ? vehicleTypeFromClass(getVehicleClassFromVolume(aiDetectedVolumeCuft))
+        ? vehicleTypeFromClass(
+            getVehicleClassFromVolumeAndLength(aiDetectedVolumeCuft, maxLengthCm),
+          )
         : undefined;
       const heavyItemFeeOverride = detectedItems.length > 0
         ? sumHandlingPremiums(detectedItems)
@@ -4628,6 +4639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         heavyItem: bookingData.heavyItem || false,
         numberOfMovers: bookingData.numberOfMovers,
         volumeCuft: aiDetectedVolumeCuft,
+        maxLengthCm,
         detectedItems,
         // Legacy fallback only when the vision engine emitted no keyed premiums.
         heavyItemFeeOverride: hasKeyedPremiums ? undefined : heavyItemFeeOverride,

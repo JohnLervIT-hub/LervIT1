@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
-import { calculatePrice, calculatePriceRange, getVehicleClassFromVolume, vehicleTypeFromClass, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
+import { calculatePrice, calculatePriceRange, getVehicleClassFromVolumeAndLength, vehicleTypeFromClass, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
 import { getLoadSizeFromVolume } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
@@ -236,6 +236,16 @@ const TRUCK_REQUIRED_ITEMS = [
   'billiard',
   'motorcycle',
 ] as const;
+
+/** Longest side, in cm, across every identified item. 0 when nothing is known. */
+function maxLengthCm(items: IdentifiedItem[]): number {
+  return items.reduce((max, item) => Math.max(
+    max,
+    parseFloat(String(item.dimensionsLcm || 0)),
+    parseFloat(String(item.dimensionsWcm || 0)),
+    parseFloat(String(item.dimensionsHcm || 0)),
+  ), 0);
+}
 
 function requiresTruck(items: IdentifiedItem[]): boolean {
   return items.some((item) => {
@@ -1309,6 +1319,11 @@ export default function RequestMove() {
           heavyItem,
           numberOfMovers,
           volumeCuft: aiDetectedVolume,
+          // Longest side floors Class A → B, so the quote agrees with the
+          // vehicle shown on the recommendation card.
+          maxLengthCm: maxLengthCm(
+            identifiedItems.filter(i => i.processingStatus === 'completed'),
+          ),
           detectedItems,
           // Legacy fallback only fires when the vision engine emitted no keyed premiums
           // (e.g. older items detected before premiumKey wiring, or non-premium items).
@@ -1674,7 +1689,9 @@ export default function RequestMove() {
         // its volume says.
         const recommendedVehicle = requiresTruck(completedAll)
           ? 'truck'
-          : vehicleTypeFromClass(getVehicleClassFromVolume(totalVolume));
+          : vehicleTypeFromClass(
+              getVehicleClassFromVolumeAndLength(totalVolume, maxLengthCm(completedAll)),
+            );
         const recommendedLoadSize = getLoadSizeFromVolume(totalVolume);
 
         setAiDetectedVolume(totalVolume);
@@ -1750,10 +1767,12 @@ export default function RequestMove() {
       parseFloat(item.weightKg || '0') > 30
     );
 
-    // Volume-only class, plus the specialty truck exception.
+    // Volume class + longest-side floor, plus the specialty truck exception.
     const recommendedVehicle = requiresTruck(completedItems)
       ? 'truck'
-      : vehicleTypeFromClass(getVehicleClassFromVolume(totalVolume));
+      : vehicleTypeFromClass(
+          getVehicleClassFromVolumeAndLength(totalVolume, maxLengthCm(completedItems)),
+        );
 
     setAiDetectedVolume(totalVolume);
     setAiRecommendedVehicle(recommendedVehicle);
@@ -1800,10 +1819,12 @@ export default function RequestMove() {
       parseFloat(item.weightKg || '0') > 30
     );
 
-    // Volume-only class, plus the specialty truck exception.
+    // Volume class + longest-side floor, plus the specialty truck exception.
     const recommendedVehicle = requiresTruck(completedItems)
       ? 'truck'
-      : vehicleTypeFromClass(getVehicleClassFromVolume(totalVolume));
+      : vehicleTypeFromClass(
+          getVehicleClassFromVolumeAndLength(totalVolume, maxLengthCm(completedItems)),
+        );
     const recommendedLoadSize = getLoadSizeFromVolume(totalVolume);
 
     setAiDetectedVolume(totalVolume);
