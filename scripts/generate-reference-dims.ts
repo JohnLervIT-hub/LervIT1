@@ -61,7 +61,7 @@ function generateBlock(): { text: string; count: number; sectionCount: number } 
   for (const g of GROUP_ORDER) buckets.set(g, []);
   for (const item of FURNITURE_DATABASE) buckets.get(groupOf(item))!.push(item);
 
-  const out: string[] = ['REFERENCE DIMENSIONS (use these):'];
+  const out: string[] = ['REFERENCE DIMENSIONS (plausibility anchors only — if the photo shows something different, trust the photo):'];
   let sectionCount = 0;
   for (const g of GROUP_ORDER) {
     const items = buckets.get(g)!;

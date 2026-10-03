@@ -53,7 +53,7 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
 
 // AUTOGEN:REF_DIMS:START — regenerate with: npm run generate:dims (source: shared/furniture-database.ts)
-const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (use these):
+const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (plausibility anchors only — if the photo shows something different, trust the photo):
 
 BEDS:
 • Twin bed frame (standard): ~191×99×40cm, 35kg
@@ -740,12 +740,14 @@ REGULAR SOFA BED TIERS:
 • FULL/DOUBLE (3-seat sleeper): 3 seat cushions, standard size. ~200×95×85cm, 75kg
 • QUEEN (large sleeper): 3-4 seat cushions, wider/deeper frame. ~230×100×90cm, 95kg
 
-SECTIONAL SOFA BED TIERS:
-• SMALL (2-piece L-shaped with sleeper): 3-4 cushions, pull-out + chaise. ~250×170×85cm, 110kg
-• MEDIUM (3-piece L-shaped with sleeper + storage): 4-5 cushions, deep seats, storage chaise. ~290×200×90cm, 145kg
-• LARGE (4+ piece L/U-shaped with sleeper + storage): 6+ cushions, oversized. ~340×220×90cm, 180kg
+SECTIONAL SOFA BED:
+Report shape only in "itemName": "L-shaped sectional sofa bed" or "U-shaped
+sectional sofa bed".
+Do NOT include Small/Medium/Large in the name. Size is determined downstream from
+"estimatedDimensions".
+Measure the full footprint including the chaise/storage section.
 
-Include "sofa bed" in the item name (e.g., "Medium sectional sofa bed", "Queen sofa bed").
+Include "sofa bed" in the item name (e.g., "L-shaped sectional sofa bed", "Queen sofa bed").
 
 DIMENSION ESTIMATION — reason from what is in the frame:
 - Use room context clues: door frames (~200cm tall), ceiling height (~240cm),
@@ -835,6 +837,10 @@ Return ONLY valid JSON (no markdown):
         ],
       },
     ],
+    // Enforced server-side, so a preamble or a markdown fence can no longer reach
+    // JSON.parse. Requires the literal word "JSON" in the prompt, which the
+    // "Return ONLY valid JSON" line below supplies — do not remove it.
+    response_format: { type: 'json_object' },
     max_tokens: 700,  // five extra fields + a sentence of reasoning no longer fit in 500
     temperature: 0,
     seed: 42,
