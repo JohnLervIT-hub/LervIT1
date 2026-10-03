@@ -437,7 +437,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     // took it at 0.778 — a 57ft3 row answering for an 81ft3 one.
     category: 'Sofa',
     subcategory: 'Recliner',
-    keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'electric', 'power'],
+    // No 'electric': a reclining sofa being electric is not what identifies
+    // it, and the token let "Black folding electric treadmill" match this row
+    // over the actual treadmill. Every other 'electric' row carries the word
+    // in its own name (Standing desk, Stove / Range), where it is doing real work.
+    keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'power'],
     dimensions_cm: { length: 230, width: 100, height: 100 },
     volume_ft3: calcVolume(230, 100, 100),
     weight_kg: 110,
@@ -2088,7 +2092,13 @@ export function findBestMatch(
   // every sofa-bed row unreachable while 'sofa' still matched, handing the win to
   // the first ordinary sofa in the array.
   const nameLower = itemName.toLowerCase().replace(/sofa[\s-]?bed/g, 'sofa bed');
-  const allWords = nameLower.split(/\s+/).filter(w => w.length > 2);
+  // Length >= 2, not > 2. 'TV' and 'AC' were being discarded outright, so
+  // "large TV" collapsed to just ["large"] and confidently matched "Large
+  // L-shaped sectional sofa" at 1.000 — 258.72 ft3 quoted for a television.
+  // Safe because a word under 4 chars can only ever EXACT match: the partial
+  // branch below requires both sides to be 4+, which is what kept 'ac' from
+  // matching 'accent'.
+  const allWords = nameLower.split(/\s+/).filter(w => w.length >= 2);
 
   // Only words that SOME row can match count toward the denominator.
   //
