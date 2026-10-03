@@ -1980,7 +1980,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   },
   {
     item_id: 'MOTORCYCLE_HEAVY_001',
-    name: 'Motorcycle (touring / Harley-Davidson)',
+    // Brand out of the display name — this is the only row that carried one, and
+    // the name is customer-facing on the quote. 'harley' and 'davidson' stay in
+    // the keywords, which is where brand belongs: they help the matcher catch
+    // what the vision model says without putting a trademark on an invoice.
+    name: 'Motorcycle (touring / full-dress bagger)',
     category: 'Other',
     subcategory: 'Vehicle',
     keywords: ['motorcycle', 'touring', 'harley', 'davidson', 'road king', 'ultra', 'electra glide', 'heavy cruiser', 'bagger'],
