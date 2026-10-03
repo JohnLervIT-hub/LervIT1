@@ -58,7 +58,7 @@ const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (use these):
 
 BEDS:
 • Twin bed frame (standard): ~191×99×40cm, 35kg
-• Twin bed frame with storage drawers: ~191×99×43cm, 55kg
+• Twin bed frame with storage drawers: ~200×107×42cm, 55kg
 • Full/Double bed frame: ~191×137×40cm, 45kg
 • Queen bed frame: ~203×152×40cm, 55kg
 • Queen platform bed with headboard: ~210×165×110cm, 75kg
@@ -66,7 +66,7 @@ BEDS:
 • Bunk bed (twin over twin): ~200×100×170cm, 80kg
 • Crib / Toddler bed: ~130×70×100cm, 20kg
 • Daybed with trundle: ~200×100×90cm, 55kg
-• Twin mattress: ~191×99×20cm, 20kg
+• Twin mattress: ~191×99×25cm, 20kg
 • Full/Double mattress: ~191×137×22cm, 30kg
 • Queen mattress: ~203×152×25cm, 40kg
 • King mattress: ~203×193×25cm, 50kg
@@ -88,9 +88,12 @@ SOFAS:
 • Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~250×170×85cm, 110kg
 • Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~290×200×90cm, 145kg
 • Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~340×220×90cm, 180kg
+• Recliner sofa (3-seat): ~230×100×100cm, 110kg
+• Round cuddle sofa / snuggler: ~160×130×85cm, 85kg
+• Curved / crescent sofa (3-seat): ~280×120×85cm, 90kg
 
 TABLES:
-• Dining table (4-person): ~120×75×75cm, 35kg
+• Dining table (4-person): ~120×100×75cm, 35kg
 • Dining table (6-person): ~180×90×75cm, 50kg
 • Dining table (8-person): ~240×100×75cm, 70kg
 • Coffee table: ~120×60×45cm, 25kg
@@ -101,7 +104,6 @@ TABLES:
 • Standing desk (electric): ~150×75×125cm, 55kg
 
 CHAIRS:
-• Recliner sofa (3-seat): ~230×100×100cm, 110kg
 • Armchair / Accent chair: ~85×85×90cm, 30kg
 • Single recliner chair: ~90×85×100cm, 45kg
 • Dining chair: ~45×50×90cm, 8kg
@@ -124,8 +126,8 @@ STORAGE:
 APPLIANCES:
 • Refrigerator (standard top-freezer): ~75×70×170cm, 90kg
 • French door refrigerator: ~90×80×180cm, 130kg
-• Washing machine (front-load): ~60×65×85cm, 75kg
-• Clothes dryer: ~60×65×85cm, 55kg
+• Washing machine (front-load): ~68×84×99cm, 75kg
+• Clothes dryer: ~68×84×99cm, 55kg
 • Dishwasher: ~60×60×85cm, 45kg
 • Stove / Range (electric): ~76×70×115cm, 70kg
 • Microwave (countertop): ~50×40×30cm, 15kg
@@ -134,12 +136,12 @@ APPLIANCES:
 • Chest freezer: ~110×65×85cm, 55kg
 • Upright freezer: ~70×65×170cm, 80kg
 • Stove / Range (gas): ~76×70×115cm, 80kg
-• Washing machine (top-load): ~60×60×105cm, 65kg
-• Stacked washer/dryer combo: ~65×65×180cm, 130kg
-• Mini fridge / Bar fridge: ~48×45×50cm, 20kg
+• Washing machine (top-load): ~68×71×107cm, 65kg
+• Stacked washer/dryer combo: ~68×84×183cm, 130kg
+• Mini fridge / Bar fridge: ~48×52×85cm, 20kg
 • Wall oven: ~60×60×90cm, 55kg
 • Range hood / Exhaust hood: ~76×50×30cm, 15kg
-• Water heater (tank): ~50×50×150cm, 55kg
+• Water heater (tank): ~58×58×150cm, 55kg
 • Space heater / Portable heater: ~40×25×55cm, 8kg
 • Dehumidifier: ~40×30×60cm, 15kg
 • French door refrigerator (4-door, large): ~91×84×178cm, 138kg
@@ -187,7 +189,7 @@ SPECIALTY:
 • Pinball machine: ~140×69×192cm, 113kg
 • Arcade game cabinet (upright): ~76×61×178cm, 80kg
 • Motorcycle (standard / cruiser): ~220×80×110cm, 200kg
-• Motorcycle (touring / Harley-Davidson): ~240×95×120cm, 357kg
+• Motorcycle (touring / full-dress bagger): ~240×95×120cm, 357kg
 
 LUGGAGE:
 • Handbag / Purse: ~35×15×25cm, 2kg
