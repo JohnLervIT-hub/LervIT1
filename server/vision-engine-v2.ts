@@ -75,9 +75,9 @@ BEDS:
 SOFAS:
 • 2-seater loveseat sofa: ~150×85×85cm, 45kg
 • 3-seater sofa: ~210×90×85cm, 70kg
-• Small L-shaped sectional sofa (2-piece, apartment-size): ~250×213×85cm, 70kg
-• Medium L-shaped sectional sofa (3-piece, standard): ~304×261×85cm, 120kg
-• Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized): ~383×289×90cm, 170kg
+• Small L-shaped sectional sofa: ~230×150×85cm, 70kg
+• Medium L-shaped sectional sofa: ~270×200×85cm, 120kg
+• Large L-shaped sectional sofa: ~370×220×90cm, 170kg
 • Small U-shaped sectional sofa (compact, 3-piece): ~280×200×85cm, 130kg
 • Medium U-shaped sectional sofa (standard, 4-5 piece): ~350×250×85cm, 180kg
 • Large U-shaped sectional sofa (oversized, 6+ piece): ~420×300×90cm, 240kg
