@@ -75,12 +75,6 @@ BEDS:
 SOFAS:
 • 2-seater loveseat sofa: ~150×85×85cm, 45kg
 • 3-seater sofa: ~210×90×85cm, 70kg
-• Small L-shaped sectional sofa: ~230×150×85cm, 70kg
-• Medium L-shaped sectional sofa: ~270×200×85cm, 120kg
-• Large L-shaped sectional sofa: ~370×220×90cm, 170kg
-• Small U-shaped sectional sofa (compact, 3-piece): ~280×200×85cm, 130kg
-• Medium U-shaped sectional sofa (standard, 4-5 piece): ~350×250×85cm, 180kg
-• Large U-shaped sectional sofa (oversized, 6+ piece): ~420×300×90cm, 240kg
 • Twin sofa bed (loveseat sleeper, pull-out twin): ~170×90×85cm, 55kg
 • Full/Double sofa bed (3-seat sleeper, pull-out double): ~200×95×85cm, 75kg
 • Queen sofa bed (large sleeper, pull-out queen): ~230×100×90cm, 95kg

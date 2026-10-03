@@ -51,15 +51,35 @@ function groupOf(item: FurnitureItem): Group {
   }
 }
 
+/**
+ * Rows deliberately withheld from the reference block.
+ *
+ * Sectionals (subcategory 'Sectional' — the three L rows and the three U rows)
+ * are reported shape-only in "itemName", so the size variant is chosen downstream
+ * from the model's own estimatedDimensions. Listing their dimensions here defeated
+ * that: GPT-4o copied the anchor verbatim (270×200×85) instead of measuring the
+ * photo, so every sectional arrived at 162.09ft3 and matched the Medium row
+ * whatever its real size. With no anchor to copy, the estimate has to come from
+ * visual cues, which is the only thing that can distinguish the three sizes.
+ *
+ * Everything else keeps its anchor: those rows are matched by NAME, so a copied
+ * dimension costs nothing and a plausibility check is worth having.
+ */
+function isWithheldFromReference(item: FurnitureItem): boolean {
+  return item.subcategory === 'Sectional';
+}
+
 function line(item: FurnitureItem): string {
   const { length: l, width: w, height: h } = item.dimensions_cm;
   return `• ${item.name}: ~${l}×${w}×${h}cm, ${item.weight_kg}kg`;
 }
 
 function generateBlock(): { text: string; count: number; sectionCount: number } {
+  const included = FURNITURE_DATABASE.filter(i => !isWithheldFromReference(i));
+
   const buckets = new Map<Group, FurnitureItem[]>();
   for (const g of GROUP_ORDER) buckets.set(g, []);
-  for (const item of FURNITURE_DATABASE) buckets.get(groupOf(item))!.push(item);
+  for (const item of included) buckets.get(groupOf(item))!.push(item);
 
   const out: string[] = ['REFERENCE DIMENSIONS (plausibility anchors only — if the photo shows something different, trust the photo):'];
   let sectionCount = 0;
@@ -71,7 +91,7 @@ function generateBlock(): { text: string; count: number; sectionCount: number } 
     out.push(g + ':');
     for (const item of items) out.push(line(item));
   }
-  return { text: out.join('\n'), count: FURNITURE_DATABASE.length, sectionCount };
+  return { text: out.join('\n'), count: included.length, sectionCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +107,7 @@ function escapeForTemplateLiteral(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 }
 
-function writeBlock(block: string): void {
+function writeBlock(block: string, count: number): void {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const targetPath = path.resolve(here, '..', TARGET_FILE);
   const source = fs.readFileSync(targetPath, 'utf8');
@@ -115,7 +135,11 @@ function writeBlock(block: string): void {
   }
 
   fs.writeFileSync(targetPath, next, 'utf8');
-  console.log(`[generator] Injected ${FURNITURE_DATABASE.length} items into ${TARGET_FILE}`);
+  const withheld = FURNITURE_DATABASE.length - count;
+  console.log(
+    `[generator] Injected ${count} items into ${TARGET_FILE}` +
+    (withheld > 0 ? ` (${withheld} withheld: see isWithheldFromReference)` : ''),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +149,7 @@ function writeBlock(block: string): void {
 const { text, count, sectionCount } = generateBlock();
 
 if (process.argv.includes('--write')) {
-  writeBlock(text);
+  writeBlock(text, count);
 } else {
   process.stdout.write(text + '\n');
   process.stderr.write(`\n[generator] ${count} items grouped into ${sectionCount} sections.\n`);
