@@ -11,7 +11,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { scaledVolume } from "@shared/volume-utils";
+import { scaledVolume, getMinPieceCount } from "@shared/volume-utils";
+import { FURNITURE_DATABASE } from "@shared/furniture-database";
 import { getVehicleDisplayName } from "@/lib/utils";
 import type { VehicleType } from "@shared/furniture-database";
 import type { IdentifiedItem } from "@shared/schema";
@@ -175,6 +176,36 @@ function readPieceCount(item: IdentifiedItem): number | null {
   return typeof n === "number" && n > 1 ? n : null;
 }
 
+/**
+ * Smallest count this row may be reduced to.
+ *
+ * identified_items has no subcategory column and its `itemName` is the vision
+ * model's phrasing, so the shape is read from the matched catalogue row where
+ * one is recorded, falling back to the stored name.
+ */
+function readMinPieceCount(item: IdentifiedItem): number {
+  let matchedId: string | undefined;
+  try {
+    const meta = item.sourceMetadata ? JSON.parse(item.sourceMetadata) : {};
+    matchedId = typeof meta.matchedItem === "string" ? meta.matchedItem : undefined;
+  } catch {
+    /* fall through to the stored name */
+  }
+  const row = matchedId
+    ? FURNITURE_DATABASE.find((f) => f.item_id === matchedId)
+    : undefined;
+  return row
+    ? getMinPieceCount(row.name, row.subcategory)
+    : getMinPieceCount(item.itemName ?? "");
+}
+
+/** "L" / "U", for the minimum explained in the dialog. Null when there is none. */
+function shapeLabel(minPieces: number): string | null {
+  if (minPieces >= 3) return "U";
+  if (minPieces === 2) return "L";
+  return null;
+}
+
 export const DetectedItemsSummary = memo(function DetectedItemsSummary({
   items,
   vehicle,
@@ -194,6 +225,7 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
     itemId: string;
     itemName: string;
     basePieces: number;
+    minPieces: number;
     requested: number;
     baseVolume: number;
   } | null>(null);
@@ -220,11 +252,18 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
     .map((item) => {
       const basePieces = readPieceCount(item);
       if (basePieces === null) return null;
+      const minPieces = Math.min(readMinPieceCount(item), basePieces);
+      // Nothing to choose between: an L-shaped 2-piece cannot go below 2, so a
+      // one-option dropdown would only invite a click that changes nothing.
+      if (basePieces <= minPieces) return null;
+      // Clamp, in case a selection predates a change to the minimum.
+      const stored = selected[item.id] ?? basePieces;
       return {
         item,
         basePieces,
+        minPieces,
         baseVolume: parseFloat(item.volumeCuft || "0") || 0,
-        current: selected[item.id] ?? basePieces,
+        current: Math.min(Math.max(stored, minPieces), basePieces),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -285,7 +324,7 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
         {/* Piece count — the one editable price input here, see the header note. */}
         {adjustable.length > 0 && (
           <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
-            {adjustable.map(({ item, basePieces, baseVolume, current }) => (
+            {adjustable.map(({ item, basePieces, minPieces, baseVolume, current }) => (
               <div
                 key={item.id}
                 className="flex items-center justify-between gap-3"
@@ -309,6 +348,7 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
                       itemId: item.id,
                       itemName: item.itemName?.trim() || "item",
                       basePieces,
+                      minPieces,
                       requested: Number(e.target.value),
                       baseVolume,
                     })
@@ -316,7 +356,10 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
                   className="h-9 shrink-0 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   data-testid={`select-piece-count-${item.id}`}
                 >
-                  {Array.from({ length: basePieces }, (_, i) => i + 1).map((n) => (
+                  {Array.from(
+                    { length: basePieces - minPieces + 1 },
+                    (_, i) => minPieces + i,
+                  ).map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -355,6 +398,12 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
                     </span>
                     . Your move estimate will be updated to reflect this.
                   </p>
+                  {pendingChange !== null && pendingChange.minPieces > 1 && (
+                    <p className="text-muted-foreground">
+                      Minimum for {shapeLabel(pendingChange.minPieces)}-shaped
+                      sectionals is {pendingChange.minPieces} pieces.
+                    </p>
+                  )}
                   <p className="rounded-md bg-amber-50 p-3 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                     ⚠️ If your mover arrives and finds a different number of pieces
                     than declared, they may cancel the job and retain 50% of the

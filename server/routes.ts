@@ -88,7 +88,7 @@ import {
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
 import { FURNITURE_DATABASE } from "@shared/furniture-database";
-import { scaledVolume } from "@shared/volume-utils";
+import { scaledVolume, getMinPieceCount } from "@shared/volume-utils";
 
 /** Mover-cancel reason that triggers the 50% piece-count discrepancy rule. */
 const PIECE_COUNT_DISCREPANCY_REASON = 'piece_count_discrepancy';
@@ -5645,6 +5645,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res
             .status(400)
             .json({ error: `pieceCount cannot exceed ${basePieces} for this item` });
+        }
+        // Shape floor, enforced here as well as in the dropdown: an L-shaped
+        // sectional is a run plus a return, a U-shaped one a run plus two, and
+        // the UI option list is not a security boundary.
+        const minPieces = Math.min(
+          getMinPieceCount(dbRow.name, dbRow.subcategory),
+          basePieces,
+        );
+        if (requested < minPieces) {
+          return res.status(400).json({
+            error: `pieceCount cannot be below ${minPieces} for this item shape`,
+          });
         }
 
         const baseVolume = Math.round(dbRow.volume_ft3 * quantity * 100) / 100;
