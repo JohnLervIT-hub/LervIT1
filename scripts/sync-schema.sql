@@ -1754,3 +1754,15 @@ ALTER TABLE bookings
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_customer_idempotency_key_unique
   ON bookings (customer_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ===== 0038: piece-count accountability =====
+-- Mirrors migrations/0038_piece_count_accountability.sql. sync-schema.sql is
+-- what actually runs on deploy (startup-migrate.js), so the columns must be here
+-- too or the feature ships against a database that lacks them.
+ALTER TABLE identified_items
+  ADD COLUMN IF NOT EXISTS piece_count integer DEFAULT NULL;
+
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS declared_piece_count              integer        DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS actual_piece_count_on_arrival     integer        DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS piece_count_discrepancy_payout    numeric(10, 2) DEFAULT NULL;

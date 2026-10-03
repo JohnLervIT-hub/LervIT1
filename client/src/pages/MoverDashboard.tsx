@@ -100,6 +100,8 @@ type IdentifiedItem = {
   vehicleType: string | null;
   recommendedMovers: number | null;
   handlingComplexity: string | null;
+  /** What the customer declared for a multi-piece item. Null = never declared. */
+  pieceCount: number | null;
 };
 
 function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
@@ -186,6 +188,19 @@ function IdentifiedItemsDisplay({ bookingId }: { bookingId: string }) {
                   {item.weightKg && (
                     <span className="text-xs font-medium text-muted-foreground">
                       {parseFloat(item.weightKg).toFixed(0)} kg
+                    </span>
+                  )}
+                  {/* Only when the customer actually declared a count. Null means
+                      they never did, and the discrepancy rule does not apply —
+                      showing a number here would imply a commitment they never
+                      made. */}
+                  {typeof item.pieceCount === 'number' && (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md"
+                      data-testid={`declared-pieces-${item.id}`}
+                    >
+                      Customer declared: {item.pieceCount}{' '}
+                      {item.pieceCount === 1 ? 'piece' : 'pieces'}
                     </span>
                   )}
                 </div>

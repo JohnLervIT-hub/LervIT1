@@ -87,6 +87,11 @@ import {
   sumHandlingPremiums,
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
+import { FURNITURE_DATABASE } from "@shared/furniture-database";
+import { scaledVolume } from "@shared/volume-utils";
+
+/** Mover-cancel reason that triggers the 50% piece-count discrepancy rule. */
+const PIECE_COUNT_DISCREPANCY_REASON = 'piece_count_discrepancy';
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -4574,6 +4579,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dimensionsWcm: toNum(it.dimensionsWcm),
           dimensionsHcm: toNum(it.dimensionsHcm),
           userCorrected: it.userCorrected === true,
+          pieceCount:
+            typeof it.pieceCount === 'number' && it.pieceCount > 0
+              ? Math.floor(it.pieceCount)
+              : null,
         }));
       const hasKeyedPremiums = detectedItems.some((d: { premiumKey: string | null }) => !!d.premiumKey);
 
@@ -4603,6 +4612,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const heavyItemFeeOverride = detectedItems.length > 0
         ? sumHandlingPremiums(detectedItems)
         : undefined;
+
+      // Declared piece count for the load: the sum of whatever the customer
+      // confirmed in the piece-count dialog. Null when they confirmed nothing,
+      // which is what exempts the booking from the 50% discrepancy rule.
+      // detectedItems is an untyped map result, so this is written as a loop
+      // rather than a generic reduce.
+      let declaredPieceCountTotal: number | null = null;
+      for (const it of detectedItems as { pieceCount: number | null }[]) {
+        if (it.pieceCount !== null) {
+          declaredPieceCountTotal = (declaredPieceCountTotal ?? 0) + it.pieceCount;
+        }
+      }
 
       // Hand-corrected lines move the price, so record that they happened. The
       // figures themselves still originate on the client either way — this is
@@ -4730,6 +4751,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
         // Derived from the summed item volumes above, not from the request body.
         ...(derivedRecommendedVehicle && { aiRecommendedVehicle: derivedRecommendedVehicle }),
+        // Summed from the piece counts the customer confirmed, never posted as a
+        // total. Stays absent when nothing was confirmed, so the booking is
+        // exempt from the 50% discrepancy rule.
+        ...(declaredPieceCountTotal !== null && { declaredPieceCount: declaredPieceCountTotal }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
         // Persist the measured volume, not just the loadSize bucket it was
         // rounded into: dispatch reads it back to pick the vehicle class.
@@ -5562,12 +5587,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mover cancels an accepted (confirmed) booking and triggers re-dispatch
+  // Customer confirms how many pieces of a multi-piece item are actually moving.
+  //
+  // This is the one price input the customer controls, overriding the read-only
+  // rule in DetectedItemsSummary (34e1603), and the UI shows the 50% discrepancy
+  // warning before every change. The volume is still recomputed HERE, from the
+  // stored row and the matched database row, never from a client-supplied number.
+  app.patch(
+    "/api/bookings/:bookingId/items/:itemId/piece-count",
+    async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+        const { bookingId, itemId } = req.params;
+
+        const parsed = z
+          .object({ pieceCount: z.number().int().min(1).max(20) })
+          .safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "pieceCount must be an integer 1-20" });
+        }
+        const requested = parsed.data.pieceCount;
+
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) return res.status(404).json({ error: "Booking not found" });
+        if (booking.customerId !== user.id && user.role !== "admin") {
+          return res.status(403).json({ error: "Not authorized" });
+        }
+
+        const items = await storage.getIdentifiedItemsByBooking(bookingId);
+        const row = items.find((i) => i.id === itemId);
+        if (!row) return res.status(404).json({ error: "Item not found on this booking" });
+
+        // basePieces and baseVolume come from the matched ground-truth row, not
+        // from volume_cuft — that column gets overwritten by this very endpoint,
+        // so reading it back would compound on every change.
+        let matchedId: string | undefined;
+        let quantity = 1;
+        try {
+          const meta = row.sourceMetadata ? JSON.parse(row.sourceMetadata) : {};
+          matchedId = typeof meta.matchedItem === "string" ? meta.matchedItem : undefined;
+          const q = Number(meta.quantity);
+          if (q > 0) quantity = Math.floor(q);
+        } catch {
+          /* unparseable metadata leaves the defaults */
+        }
+        const dbRow = matchedId
+          ? FURNITURE_DATABASE.find((f) => f.item_id === matchedId)
+          : undefined;
+        const basePieces = dbRow?.pieceCount;
+        if (!dbRow || !basePieces || basePieces <= 1) {
+          return res
+            .status(400)
+            .json({ error: "This item does not have an adjustable piece count" });
+        }
+        if (requested > basePieces) {
+          return res
+            .status(400)
+            .json({ error: `pieceCount cannot exceed ${basePieces} for this item` });
+        }
+
+        const baseVolume = Math.round(dbRow.volume_ft3 * quantity * 100) / 100;
+        const newVolume = scaledVolume(baseVolume, basePieces, requested);
+
+        await storage.updateIdentifiedItem(itemId, {
+          pieceCount: requested,
+          volumeCuft: newVolume.toString(),
+        });
+
+        // Re-sum the load and re-derive the class through the canonical helpers,
+        // so this path cannot drift from the one that priced the booking.
+        const refreshed = await storage.getIdentifiedItemsByBooking(bookingId);
+        const completed = refreshed.filter((i) => i.processingStatus === "completed");
+        const summed = completed.reduce(
+          (sum, i) => sum + (parseFloat(i.volumeCuft || "0") || 0),
+          0,
+        );
+        const maxLengthCm = completed.reduce(
+          (max, i) =>
+            Math.max(
+              max,
+              parseFloat(i.dimensionsLcm || "0") || 0,
+              parseFloat(i.dimensionsWcm || "0") || 0,
+              parseFloat(i.dimensionsHcm || "0") || 0,
+            ),
+          0,
+        );
+        const totalVolume = Math.round(summed * 100) / 100;
+        const vehicleClass = getVehicleClassFromVolumeAndLength(totalVolume, maxLengthCm);
+
+        // Sum of every piece count the customer has actually confirmed. Null
+        // while nothing has been confirmed, which keeps the booking exempt from
+        // the discrepancy rule.
+        const declaredTotal = refreshed.reduce<number | null>((acc, i) => {
+          if (typeof i.pieceCount !== "number") return acc;
+          return (acc ?? 0) + i.pieceCount;
+        }, null);
+
+        await storage.updateBooking(bookingId, {
+          aiDetectedVolumeCuft: totalVolume > 0 ? totalVolume.toString() : null,
+          aiRecommendedVehicle: vehicleTypeFromClass(vehicleClass),
+          declaredPieceCount: declaredTotal,
+        });
+
+        logEvent.booking("piece_count_declared", {
+          bookingId,
+          itemId,
+          matchedItem: matchedId ?? null,
+          basePieces,
+          declaredPieces: requested,
+          baseVolumeCuft: baseVolume,
+          itemVolumeCuft: newVolume,
+          totalVolumeCuft: totalVolume,
+          vehicleClass,
+        });
+
+        res.json({
+          itemId,
+          pieceCount: requested,
+          basePieces,
+          itemVolumeCuft: newVolume,
+          totalVolumeCuft: totalVolume,
+          vehicleClass,
+          vehicleType: vehicleTypeFromClass(vehicleClass),
+          declaredPieceCount: declaredTotal,
+        });
+      } catch (error) {
+        logEvent.error(
+          "piece_count_update_error",
+          error instanceof Error ? error : new Error("Unknown error"),
+          { bookingId: req.params.bookingId, itemId: req.params.itemId },
+        );
+        res.status(500).json({ error: "Failed to update piece count" });
+      }
+    },
+  );
+
   app.post("/api/bookings/:id/mover-cancel", async (req: Request, res: Response) => {
     try {
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
       const bookingId = req.params.id;
-      const { reason } = req.body as { reason?: string };
+      const { reason, actualPieceCount } = req.body as {
+        reason?: string;
+        actualPieceCount?: number;
+      };
 
       const booking = await storage.getBooking(bookingId);
       if (!booking) return res.status(404).json({ error: "Booking not found" });
@@ -5576,6 +5740,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mover = await storage.getMoverByUserId(user.id);
       if (!mover || booking.moverId !== mover.id) {
         return res.status(403).json({ error: "You are not assigned to this booking" });
+      }
+
+      // PIECE-COUNT DISCREPANCY. The customer declares a piece count for
+      // multi-piece items and is warned that a mismatch on arrival can cost them
+      // 50% of the booking fee. A mover claiming it must state what they counted.
+      const isPieceCountClaim = reason === PIECE_COUNT_DISCREPANCY_REASON;
+      let discrepancyPayout: number | null = null;
+      let actualCount: number | null = null;
+
+      if (isPieceCountClaim) {
+        const parsedCount = z.number().int().min(0).max(50).safeParse(actualPieceCount);
+        if (!parsedCount.success) {
+          return res.status(400).json({
+            error:
+              "actualPieceCount (integer 0-50) is required when cancelling for a piece count discrepancy",
+          });
+        }
+        actualCount = parsedCount.data;
+
+        const declared = booking.declaredPieceCount;
+        if (typeof declared !== "number") {
+          // Never declared anything, so there is nothing to have misdeclared.
+          // Falls through to the ordinary cancellation rules below.
+          logEvent.booking("piece_count_claim_no_declaration", {
+            bookingId,
+            moverId: mover.id,
+            actualPieceCount: actualCount,
+          });
+        } else if (actualCount !== declared) {
+          // "Booking fee" is read as the booking total. Confirm this is the
+          // intended base before this goes anywhere near a real payout — the
+          // alternatives on the row are baseFee and moverNetAmount.
+          const bookingFee = parseFloat(booking.price || "0") || 0;
+          discrepancyPayout = Math.round(bookingFee * 0.5 * 100) / 100;
+          logEvent.booking("piece_count_discrepancy_confirmed", {
+            bookingId,
+            moverId: mover.id,
+            declaredPieceCount: declared,
+            actualPieceCount: actualCount,
+            bookingFee,
+            payout: discrepancyPayout,
+          });
+        } else {
+          logEvent.booking("piece_count_claim_matched", {
+            bookingId,
+            moverId: mover.id,
+            declaredPieceCount: declared,
+            actualPieceCount: actualCount,
+          });
+        }
       }
 
       // Only allowed before the trip has started (confirmed status only)
@@ -5590,6 +5804,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         moverId: null,
         status: "pending",
         preSelectedMoverId: null,
+        ...(isPieceCountClaim
+          ? {
+              cancellationReason: PIECE_COUNT_DISCREPANCY_REASON,
+              actualPieceCountOnArrival: actualCount,
+              pieceCountDiscrepancyPayout:
+                discrepancyPayout === null ? null : discrepancyPayout.toString(),
+            }
+          : {}),
       });
 
       // They are no longer on this job, so the hold taken at acceptance goes back.
@@ -5643,7 +5865,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ message: "Booking cancelled and job re-dispatched to other movers" });
+      res.json({
+        message: "Booking cancelled and job re-dispatched to other movers",
+        ...(isPieceCountClaim
+          ? {
+              declaredPieceCount: booking.declaredPieceCount ?? null,
+              actualPieceCountOnArrival: actualCount,
+              // Recorded on the booking; no transfer is initiated here. Paying it
+              // out needs a Stripe Connect transfer through moverPayouts.
+              discrepancyPayout,
+            }
+          : {}),
+      });
     } catch (error) {
       logEvent.error('mover_cancel_job_error', error instanceof Error ? error : new Error('Unknown error'), { bookingId: req.params.id });
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to cancel booking" });

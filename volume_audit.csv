@@ -1,0 +1,75 @@
+#,item_name,category,db_volume_ft3,real_length_cm,real_width_cm,real_height_cm,real_volume_ft3,delta_pct,flag,source_url
+1,"Handbag / Purse",Luggage,0.46,27.9,10.2,17.8,0.18,-60.9,UNDER,https://rarepursuits.com/bag/style-guide/find-your-perfect-handbag-size
+2,"Messenger bag / Crossbody bag",Luggage,0.51,33,10.2,25.4,0.3,-41.2,UNDER,https://www.portlandleathergoods.com/pages/messenger-bag-dimensions
+3,"32-inch TV",Electronics,0.79,72.9,7.6,42.9,0.84,6.3,OK,https://screensizecomparison.org/guides/tv-size-chart/
+4,"40-inch TV",Electronics,1.23,90.9,8.4,52.1,1.4,13.8,OK,https://screensizecomparison.org/guides/tv-size-chart/
+5,"Moving box (small)",Other,1.27,41.6,32.1,32.1,1.51,18.9,OK,https://www.uhaul.com/MovingSupplies/Boxes/Standard-Sized-Moving-Boxes/Small-Moving-Box/?id=3245
+6,"43-inch TV",Electronics,1.37,97,6.6,55.9,1.26,-8,OK,https://screensizecomparison.org/guides/tv-size-chart/
+7,"Carry-on suitcase / Cabin luggage",Luggage,1.56,55.9,35.6,22.9,1.61,3.2,OK,https://travelpro.com/pages/travelpro%C2%AE-guide-to-luggage-size
+8,"Weekender bag / Travel bag",Luggage,1.7,50.8,27.9,27.9,1.4,-17.6,OK,https://www.amazon.com/Liter-Duffel-Women-Teens-Carry/dp/B085K3HNTR
+9,"Space heater / Portable heater",Appliance,1.94,17.1,20.7,56.5,0.71,-63.4,UNDER,https://lasko.com/products/lasko-1500w-electric-portable-oscillating-ceramic-space-heater-tower-with-digital-display-5538-gray
+10,"50-inch TV",Electronics,2.11,112,6.3,65,1.62,-23.2,UNDER,https://screensizecomparison.org/guides/tv-size-chart/
+11,"Microwave (countertop)",Appliance,2.12,61,32.7,30.8,2.17,2.4,OK,https://www.dimensions.com/element/ge-profile-countertop-microwave-oven-1-1-cu-ft
+12,"Duffel bag / Gym bag",Luggage,2.22,50.8,30.5,26.7,1.46,-34.2,UNDER,https://www.amazon.com/Sports-Duffel-Bag-inch-Travel/dp/B088R5PWTR
+13,"Desktop computer (tower)",Electronics,2.21,48.3,20.3,48.3,1.67,-24.4,UNDER,https://www.microcenter.com/site/mc-news/article/computer-case-sizes-explained.aspx
+14,"Dehumidifier",Appliance,2.54,40.6,31.1,62.9,2.8,10.2,OK,https://www.lowes.com/pd/Frigidaire-50-Pint-Large-Room-Dehumidifier-For-Basements-Crawlspaces-with-Built-In-Pump-ENERGY-STAR-Certified-White/5018956061
+15,"55-inch TV",Electronics,2.54,123.2,6.1,70.9,1.88,-26,UNDER,https://smarthomestarter.com/samsung-tv-dimensions-guide-true-length-and-width-of-all-sizes/
+16,"Backpack",Luggage,2.62,30.5,17.8,50.8,0.97,-63,UNDER,https://backpackies.com/blog/how-big-is-a-30-liter-backpack
+17,"Moving box (medium)",Other,2.83,46,45.7,40.6,3.01,6.4,OK,https://www.uhaul.com/MovingSupplies/Boxes/Standard-Sized-Moving-Boxes/Medium-Moving-Box/?id=2793
+18,"Medium suitcase",Luggage,3.03,63.5,43.2,25.4,2.46,-18.8,OK,https://mokobara.com/blogs/news/luggage-size-chart
+19,"Computer monitor (27-32 inch)",Electronics,3.09,61.1,20,45.4,1.96,-36.6,UNDER,https://www.dell.com/en-us/shop/dell-27-monitor-se2725hm/apd/210-bqkc/monitors-monitor-accessories
+20,"Mini fridge / Bar fridge",Appliance,3.81,48.3,47,85.1,6.82,79,OVER,https://www.avantiproducts.com/products/3-2-cu-ft-compact-refrigerator-4
+21,"Nightstand / Bedside table",Dresser,3.88,47,40,67.9,4.51,16.2,OK,https://www.dimensions.com/element/ikea-idanas-nightstand
+22,"Range hood / Exhaust hood",Appliance,4.03,76.2,48.3,16.5,2.14,-46.9,UNDER,https://www.whirlpool.com/blog/kitchen/range-hood-dimensions.html
+23,"Window air conditioner",Appliance,4.24,47.1,40,34,2.26,-46.7,UNDER,https://www.danby.com/en-us/products/window-air-conditioners-en-us/dac080eb7wdb/
+24,"65-inch TV",Electronics,4.35,145.3,6.1,83.6,2.62,-39.8,UNDER,https://smarthomestarter.com/samsung-tv-dimensions-guide-true-length-and-width-of-all-sizes/
+25,"Large suitcase",Luggage,4.58,71.1,45.7,30.5,3.5,-23.6,UNDER,https://mokobara.com/blogs/news/luggage-size-chart
+26,"Side table / End table",Table,4.86,50.8,45.7,61,5,2.9,OK,https://www.wayfair.com/sca/ideas-and-advice/guides/end-table-height-how-tall-should-your-side-table-be-T478
+27,"Portable air conditioner",Appliance,5.09,44.5,38.1,76.2,4.56,-10.4,OK,https://perfectaire.us/products/3port12000
+28,"Moving box (large)",Other,5.3,45.7,45.7,61,4.5,-15.1,OK,https://www.uhaul.com/MovingSupplies/Boxes/Standard-Sized-Moving-Boxes/Large-Moving-Box/?id=2753
+29,"75-inch TV",Electronics,5.75,166.9,6.1,95.8,3.44,-40.2,UNDER,https://smarthomestarter.com/samsung-tv-dimensions-guide-true-length-and-width-of-all-sizes/
+30,"Dining chair",Chair,7.15,49.5,53.3,91.4,8.52,19.2,OK,https://www.wayfair.com/sca/ideas-and-advice/rooms/how-to-choose-the-right-size-dining-chairs-T1082
+31,"85-inch TV",Electronics,8.9,189.2,6.1,108.2,4.41,-50.4,UNDER,https://smarthomestarter.com/samsung-tv-dimensions-guide-true-length-and-width-of-all-sizes/
+32,"Dishwasher",Appliance,10.81,61,61,88.9,11.68,8,OK,https://www.hunker.com/12003899/standard-sizes-for-kitchen-appliances/
+33,"Coffee table",Table,11.44,121.9,61,43.2,11.34,-0.9,OK,https://www.raymourflanigan.com/blog/expertise/guides/coffee-table-size-guide
+34,"Wall oven",Appliance,11.44,75.6,62.2,73.3,12.17,6.4,OK,https://www.dacor.com/us/products/cooking/built-in-oven/30-inch-single-wall-oven-transitional-silver-stainless-dob30t977ss/
+35,"Washing machine (front-load)",Appliance,11.71,68.6,83.8,99.1,20.12,71.8,OVER,https://www.maytag.com/blog/washers-and-dryers/washer-dryer-size.html
+36,"Clothes dryer",Appliance,11.71,68.6,78.7,99.1,18.89,61.3,OVER,https://www.whirlpool.com/blog/washers-and-dryers/laundry-sizing-guide.html
+37,"Console table / Entry table",Table,11.87,106.7,38.1,78.7,11.3,-4.8,OK,https://flowyline.com/blogs/for-diy-ers/console-table-dimensions
+38,"TV stand / Entertainment center",Storage,13.11,152.4,41.9,61,13.76,5,OK,https://www.amazon.com/SUNLIFER-TV-Stand-Entertainment-Adjustable/dp/B0CD3WMPS8
+39,"Water heater (tank)",Appliance,13.24,55.9,55.9,152.4,16.82,27,OVER,https://www.geappliances.com/appliance/GE-50-Gallon-Tall-Electric-Water-Heater-GE50T10BAM
+40,"Washing machine (top-load)",Appliance,13.35,68.6,69.8,109.2,18.47,38.4,OVER,https://www.maytag.com/blog/washers-and-dryers/washer-dryer-size.html
+41,"Twin mattress",Bed,13.36,190.5,96.5,25.4,16.49,23.4,OVER,https://casper.com/pages/mattress-size-comparison-guide
+42,"Barrel chair / Swivel chair",Chair,15.89,76.2,73.7,78.7,15.61,-1.8,OK,https://www.wayfair.com/furniture/sb2/barrel-swivel-accent-chairs-c416225-a469~281283-a3171~274858.html
+43,"Bookshelf (5-shelf)",Storage,15.26,86.4,31.8,188,18.24,19.5,OK,https://www.hunker.com/13403531/standard-bookcase-sizes/
+44,"Upholstered accent chair",Chair,17.61,77.5,80,88.9,19.46,10.5,OK,https://thesize.net/armchairs/
+45,"Office chair (ergonomic)",Chair,16.41,68.6,68.6,104.1,17.3,5.4,OK,https://www.hermanmiller.com/products/seating/office-chairs/aeron-chair/specs/
+46,"Tall dresser / Chest of drawers",Dresser,16.53,86.4,45.7,127,17.71,7.1,OK,https://designingidea.com/dresser-dimensions/
+47,"Lounge chair / Club chair",Chair,21.61,88.9,88.9,83.8,23.39,8.2,OK,https://thesize.net/armchairs/
+48,"Accent chair (wingback)",Chair,22.25,83.8,88.9,114.3,30.07,35.1,OVER,https://thesize.net/armchairs/
+49,"Full/Double mattress",Bed,20.33,190.5,137.2,25.4,23.44,15.3,OK,https://casper.com/pages/mattress-size-comparison-guide
+50,"Chest freezer",Appliance,21.46,81.5,55.1,85.1,13.5,-37.1,UNDER,https://www.geappliances.com/appliance/GE-7-0-Cu-Ft-Manual-Defrost-Chest-Freezer-FCM7STWW
+51,"Stove / Range (electric)",Appliance,21.61,76.2,66.7,119.4,21.43,-0.8,OK,https://aaappliancecenter.com/products/ge-30-inch-free-standing-electric-range-jb256rtss
+52,"Stove / Range (gas)",Appliance,21.61,76.2,66.7,119.4,21.43,-0.8,OK,https://easybear-appliancerepair.com/blog/electric-range-dimensions
+53,"Recliner chair",Chair,27.02,91.4,96.5,104.1,32.43,20,OK,https://designingidea.com/recliner-dimensions/
+54,"Gaming chair",Chair,22.5,66,66,132.1,20.32,-9.7,OK,https://chairsfx.com/computing-chair-advice/ultimate-gaming-chair-size-guide/
+55,"6-drawer dresser",Dresser,22.51,152.4,45.7,86.4,21.25,-5.6,OK,https://www.wayfair.com/sca/ideas-and-advice/rooms/dresser-dimensions-how-to-choose-the-right-one-T1079
+56,"Armchair / Accent chair",Chair,22.96,77.5,80,88.9,19.46,-15.2,OK,https://thesize.net/armchairs/
+57,"Dining table (4-person)",Table,23.84,121.9,91.4,76.2,29.98,25.8,OVER,https://flowyline.com/blogs/for-diy-ers/standard-dining-table-dimensions-the-size-guide
+58,"Twin bed frame (standard)",Bed,26.71,196.8,104.1,35.6,25.76,-3.6,OK,https://plankandbeam.com/products/twin-platform-bed
+59,"Stacked washer/dryer combo",Appliance,26.86,68.6,83.8,198.1,40.22,49.7,OVER,https://www.whirlpool.com/blog/washers-and-dryers/laundry-sizing-guide.html
+60,"Single recliner chair",Chair,27.02,91.4,96.5,104.1,32.43,20,OK,https://designingidea.com/recliner-dimensions/
+61,"Queen mattress",Bed,27.24,203.2,152.4,25.4,27.78,2,OK,https://casper.com/pages/mattress-size-comparison-guide
+62,"Upright freezer",Appliance,27.32,76.8,74,154.3,30.97,13.4,OK,https://www.amazon.com/16-cu-ft-Upright-Freezer/dp/B00UI16JCE
+63,"Twin bed frame with storage drawers",Bed,28.71,196.8,104.1,58.4,42.25,47.2,OVER,https://adirondackwoodshed.com/products/bedrooms/vrw-6-drawer-captains-bed/
+64,"Lawn mower (push)",Outdoor,29.13,143.3,56.6,102.6,29.39,0.9,OK,https://www.toro.com/en/product/21311
+65,"Office desk (standard)",Table,29.8,152.4,68.6,73.7,27.21,-8.7,OK,https://www.autonomous.ai/ourblog/standard-desk-dimensions-guide
+66,"Exercise bike / Stationary bike",Other,30.3,149.9,58.4,134.6,41.61,37.3,OVER,https://www.dimensions.com/element/peloton-bike
+67,"Refrigerator (standard top-freezer)",Appliance,31.52,76.2,76.5,168,34.58,9.7,OK,https://www.homedepot.com/p/Frigidaire-18-cu-ft-Top-Freezer-Refrigerator-in-White-FFTR1814TW/301693631
+68,"Crib / Toddler bed",Bed,32.14,138.4,77.5,101.6,38.48,19.7,OK,https://babyslittleplace.com/standard-size-baby-crib-measurements/
+69,"BBQ grill (propane)",Outdoor,34.11,131.6,67.6,117.3,36.85,8,OK,https://www.weber.com/US/en/gas/spirit/spirit-e-425-lp-blk/1500780.html
+70,"King mattress",Bed,34.59,203.2,193,25.4,35.18,1.7,OK,https://casper.com/pages/mattress-size-comparison-guide
+71,"Full/Double bed frame",Bed,36.96,200.7,147.3,35.6,37.17,0.6,OK,https://www.turmerry.com/blogs/dreamerry/bed-frame-sizes-and-dimensions-chart
+72,"Patio furniture set (4-piece)",Outdoor,38.14,132.1,67.3,78.7,54.77,43.6,OVER,https://www.chairus.com/products/4-piece-outdoor-wicker-patio-furniture-conversation-set
+73,"2-seater loveseat sofa",Sofa,38.27,167.6,91.4,86.4,46.74,22.1,OVER,https://sizehelper.com/loveseat-sofa-size-dimensions-chart-explained/
+74,"Round cuddle sofa / snuggler",Sofa,97.26,162.6,137.2,85.1,67.04,-31.1,UNDER,https://www.lovesac.com/snugg

@@ -1588,6 +1588,26 @@ export default function RequestMove() {
   // AI Product Identifier - Identify items from uploaded photos.
   // Only NEW (unanalyzed) photos are sent to the Vision Engine each time;
   // results are merged with existing items so previously-analyzed prices stay stable.
+  /**
+   * A confirmed piece count. There is no booking yet at this point in the flow,
+   * so nothing is PATCHed: the scaled volume goes onto the local row and rides
+   * along in the booking-creation payload, where the server recomputes the load
+   * from the posted items exactly as it does for any other detected line.
+   */
+  const handlePieceCountChange = (
+    itemId: string,
+    pieceCount: number,
+    scaledItemVolumeFt3: number,
+  ) => {
+    setIdentifiedItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId
+          ? { ...i, pieceCount, volumeCuft: scaledItemVolumeFt3.toFixed(2) }
+          : i,
+      ),
+    );
+  };
+
   const handleIdentifyItems = async (photoUrls?: string[], forceAll?: boolean) => {
     const allUrls = photoUrls || images;
 
@@ -2106,6 +2126,11 @@ export default function RequestMove() {
                 return false;
               }
             })(),
+            // Declared piece count, when the customer confirmed one. The server
+            // sums these onto bookings.declared_piece_count, which is what the
+            // mover sees and what the discrepancy rule compares against.
+            pieceCount:
+              typeof i.pieceCount === "number" ? i.pieceCount : null,
           })),
         promoCode: appliedPromo?.code || undefined,
         quoteId: quoteId ?? (() => {
@@ -2852,6 +2877,7 @@ export default function RequestMove() {
                             vehicle={aiRecommendedVehicle}
                             movers={numberOfMovers}
                             totalVolume={aiDetectedVolume}
+                            onPieceCountChange={handlePieceCountChange}
                           />
                         </div>
                       )}

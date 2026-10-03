@@ -1,0 +1,76 @@
+#,source,item_name,listed_volume_ft3,real_length_cm,real_width_cm,real_height_cm,real_volume_ft3,delta_pct,flag,source_url
+1,IKEA,"IKEA FLOTTEBO sofa bed (1-seat)",30.9,200,90,79,50.22,62.5,OVER,https://www.ikea.com/us/en/files/pdf/bd/76/bd765f83/flottebo_jan_2022_np.pdf
+2,DB,"Upright piano",41.32,147.3,61,139.7,44.33,7.3,OK,https://designingidea.com/piano-dimensions/
+3,DB,"Bicycle (adult)",41.95,177.8,61,106.7,40.87,-2.6,OK,https://permeantsbikes.com/bike-length-chart-complete-sizing-guide/
+4,DB,"Dining table (6-person)",42.91,182.9,91.4,76.2,44.99,4.8,OK,https://flowyline.com/blogs/for-diy-ers/standard-dining-table-dimensions-the-size-guide
+5,DB,"Queen bed frame",43.59,212.1,161.3,35.6,43.01,-1.3,OK,https://www.sleepfoundation.org/mattress-sizes/what-is-the-size-of-a-queen-bed-frame
+6,DB,"Queen adjustable bed base",43.87,202.4,151.9,38.1,41.37,-5.7,OK,https://www.sweetnight.com/blogs/news/adjustable-bed-sizes-dimensions
+7,IKEA,"IKEA SÖDERHAMN 2-seat sofa",44.87,186,99,83,53.97,20.3,OVER,https://www.ikea.com/in/en/files/pdf/10/a6/10a6e9e9/soderhamn_buying_guide_a-4-_noto.pdf
+8,DB,"French door refrigerator",45.77,90.8,76.2,177.8,43.44,-5.1,OK,https://www.dacor.com/us/products/refrigeration/french-door-refrigeration/36-inch-counter-depth-french-door-with-reveal-tm-door-silver-stainless-drf36c500sr/
+9,DB,"Twin sofa bed (loveseat sleeper, pull-out twin)",45.93,167.6,91.4,86.4,46.74,1.8,OK,https://www.meliusly.com/blogs/meliusly-blog/sleeper-sofa-dimensions
+10,IKEA,"IKEA BALKARP sofa bed (2-seat)",46.29,190,84,80,45.09,-2.6,OK,https://www.ikea.com/us/en/p/balkarp-sleeper-sofa-vissle-gray-50307936/
+11,DB,"French door refrigerator (4-door, large)",48.05,90.5,79.4,177.5,45.04,-6.3,OK,https://www.qualityappliancemn.com/product/caf-36-in-223-cu-ft-matte-white-counter-depth-french-door-refrigerator-cxe22dp4pw2-1157694
+12,DB,"Gun safe (large, 30+ gun capacity)",48.67,76.2,55.9,153.7,23.12,-52.5,UNDER,https://maximumsecurity.com/product/liberty-usa-30-gun-safe-e-lock-60-minute-fire/
+13,IKEA,"IKEA EKTORP 2-seat sofa",49.23,179,88,88,48.95,-0.6,OK,https://www.ikea.com/in/en/p/ektorp-2-seat-sofa-kilanda-light-beige-s29509026/
+14,DB,"Standing desk (electric)",49.66,152.4,76.2,127,52.08,4.9,OK,https://effydesk.com/en-us/blogs/news/standard-desk-size-dimensions
+15,DB,"Wardrobe / Armoire",50.85,121.9,61,213.4,56.04,10.2,OK,https://www.homelane.com/design-ideas/everything-you-need-to-know-about-wardrobe-measurements/
+16,DB,"Massage chair (zero gravity / full body)",51.21,149.9,74.9,109.2,43.3,-15.4,OK,https://www.costway.com/full-body-zero-gravity-massage-chair-sl-track-recliner-with-touch-screen.html
+17,IKEA,"IKEA KIVIK 2-seat sofa",52.91,189.9,94.9,82.9,52.76,-0.3,OK,https://www.ikea.com/us/en/p/kivik-loveseat-tibbleby-beige-gray-s89440595/
+18,IKEA,"IKEA HYLTARP 2-seat sofa",53.82,182,93,91,54.39,1.1,OK,https://www.ikea.com/au/en/files/pdf/82/ba/82bad941/hyltarp-buying-guide-fy24.pdf
+19,DB,"King adjustable bed base",55.06,203.2,193,38.1,52.77,-4.2,OK,https://www.sweetnight.com/blogs/news/adjustable-bed-sizes-dimensions
+20,DB,"King bed frame",55.34,212.1,201.9,35.6,53.84,-2.7,OK,https://purple.com/blog/bed-frame-sizes
+21,DB,"3-seater sofa",56.73,213.4,91.4,83.8,57.72,1.7,OK,https://us.koala.com/blogs/sofa-guides/3-seater-sofa-dimensions
+22,DB,"Full/Double sofa bed (3-seat sleeper, pull-out double)",57.03,195.6,92.7,86.4,55.32,-3,OK,https://www.meliusly.com/blogs/meliusly-blog/sleeper-sofa-dimensions
+23,IKEA,"IKEA SÖDERHAMN 3-seat sofa",58.14,198,99,83,57.46,-1.2,OK,https://www.ikea.com/in/en/files/pdf/10/a6/10a6e9e9/soderhamn_buying_guide_a-4-_noto.pdf
+24,IKEA,"IKEA EKTORP 3-seat sofa",59.62,218,88,88,59.62,0,OK,https://www.ikea.com/gb/en/p/ektorp-3-seat-sofa-karlshov-beige-multicolour-s49509006/
+25,IKEA,"IKEA HOLMSUND sofa bed (2-seat)",61.02,230,91,96,70.96,16.3,OK,https://www.ikea.com/us/en/p/holmsund-3-seat-sleeper-sofa-borgunda-beige-s49516931/
+26,IKEA,"IKEA KIVIK 3-seat sofa",63.49,228,94.9,82.9,63.34,-0.2,OK,https://www.ikea.com/us/en/p/kivik-sofa-gunnared-beige-s89499703/
+27,DB,"Daybed with trundle",63.57,201.9,106,76.2,57.59,-9.4,OK,https://www.mattressnut.com/size-of-a-trundle-bed/
+28,DB,"Dining table (8-person)",63.57,243.8,96.5,76.2,63.31,-0.4,OK,https://tribesigns.com/blogs/furniture-knowledge/dining-table-for-8-people-size-guide
+29,DB,"Pinball machine",65.5,139.7,71.1,191.8,67.28,2.7,OK,https://designingidea.com/pinball-machine-dimensions/
+30,IKEA,"IKEA NYHAMN sofa bed (3-seat)",65.67,200,97,90,61.66,-6.1,OK,https://www.ikea.com/us/en/p/nyhamn-sleeper-sofa-with-foam-mattress-knisa-gray-beige-s39306373/
+31,IKEA,"IKEA VILASUND sofa bed (2-seat)",65.69,162,88,71,35.74,-45.6,UNDER,https://www.ikea.com/pl/pl/p/vilasund-sofa-dwuosobowa-rozkladana-orrsta-jasnoszary-s29212365/
+32,IKEA,"IKEA FRIHETEN 3-seat sofa bed",66.32,225.1,105.1,82.9,69.26,4.4,OK,https://www.ikea.com/us/en/p/friheten-sleeper-sofa-skiftebo-dark-gray-90341151/
+33,IKEA,"IKEA HYLTARP 3-seat sofa",66.92,232,93,91,69.34,3.6,OK,https://www.ikea.com/au/en/files/pdf/82/ba/82bad941/hyltarp-buying-guide-fy24.pdf
+34,IKEA,"IKEA GRÖNLID 2-seat sofa",67.31,177,98,104,63.71,-5.3,OK,https://www.ikea.com/th/en/files/pdf/31/75/31751fa4/buyingguide_gronlid.pdf
+35,DB,"Motorcycle (standard / cruiser)",68.37,222.5,81.5,113.5,72.68,6.3,OK,https://powersportsguide.com/harley-davidson-dimensions/
+36,IKEA,"IKEA VIMLE 2-seat sofa",68.8,171,98,83,49.12,-28.6,UNDER,https://www.ikea.com/mx/en/files/pdf/e6/da/e6da6516/vimle-buying-guide.pdf
+37,IKEA,"IKEA FINNALA 3-seat sofa",70.86,241,98.1,85.1,71.05,0.3,OK,https://www.ikea.com/us/en/p/finnala-sofa-gunnared-beige-s19319060/
+38,DB,"L-shaped desk",71.51,182.9,147.3,76.2,72.5,1.4,OK,https://www.autonomous.ai/ourblog/a-guide-on-corner-desk-dimensions
+39,DB,"Queen sofa bed (large sleeper, pull-out queen)",73.1,215.9,96.5,86.4,63.57,-13,OK,https://www.suitablefurniture.com/queen-sleeper-sofa-dimensions/
+40,DB,"Treadmill",76.28,196.3,94,151.1,98.46,29.1,OVER,https://www.treadmillreviews.net/nordictrack-commercial-1750/
+41,IKEA,"IKEA EKTORP sofa w/ chaise",76.85,252,163,88,127.65,66.1,OVER,https://www.ikea.com/gb/en/p/ektorp-3-seat-sofa-with-chaise-longue-kilanda-light-beige-s99509042/
+42,IKEA,"IKEA KIVIK sofa w/ chaise",77.97,280,163,83,133.78,71.6,OVER,https://www.ikea.com/us/en/p/kivik-sofa-with-chaise-tibbleby-beige-gray-s79440586/
+43,DB,"Recliner sofa (3-seat)",81.22,228.6,96.5,96.5,75.18,-7.4,OK,https://colemanfurniture.com/resources/buying-guides/couch-dimensions
+44,IKEA,"IKEA VIMLE 3-seat sofa",82.34,241,98,83,69.23,-15.9,OK,https://www.ikea.com/mx/en/files/pdf/e6/da/e6da6516/vimle-buying-guide.pdf
+45,DB,"Baby grand piano",85.56,165.1,152.4,99.1,88.06,2.9,OK,https://pianopricepoint.com/pianos-categorized-by-size/baby-grand/
+46,IKEA,"IKEA GRÖNLID 3-seat sofa",88.9,247,98,104,88.9,0,OK,https://www.ikea.com/th/en/files/pdf/31/75/31751fa4/buyingguide_gronlid.pdf
+47,DB,"Motorcycle (touring / full-dress bagger)",96.62,261.6,101.6,139.7,131.12,35.7,OVER,https://powersportsguide.com/harley-davidson-dimensions/
+48,DB,"Round cuddle sofa / snuggler",62.44,162.6,137.2,85.1,67.04,7.4,OK,https://www.lovesac.com/snugg
+49,DB,"Grand piano (concert / full size)",98.85,271.8,152.4,99.1,144.97,46.7,OVER,https://www.musictoyourhome.com/blog/10-types-sizes-of-pianos-explained/
+50,DB,"Curved / crescent sofa (3-seat)",100.86,235,104.1,83.2,71.88,-28.7,UNDER,https://kindelfurniture.com/furniture/crescent-sofa-1
+51,DB,"Hot tub / Spa (4-person)",102.73,190.5,190.5,86.4,110.73,7.8,OK,https://www.hydropoolhottubs.com/Learning-Centre/Blogs/Average-4-Person-Hot-Tub-Dimensions-Explained
+52,DB,"Small L-shaped sectional sofa (2-piece, apartment-size)",103.56,228.6,228.6,86.4,159.45,54,OVER,https://www.seatcraft.com/blogs/news/sectional-sofa-size-guide
+53,DB,"Pool table / Billiard table (8-foot)",106.6,261.6,149.9,81.3,112.59,5.6,OK,https://www.dimensions.com/element/8-foot-billiards-pool-table
+54,IKEA,"IKEA VIMLE sofa w/ chaise",107.65,252,164,83,121.14,12.5,OK,https://www.ikea.com/mx/en/files/pdf/e6/da/e6da6516/vimle-buying-guide.pdf
+55,IKEA,"IKEA GRÖNLID sofa w/ chaise",108.34,258,164,104,155.4,43.4,OVER,https://www.ikea.com/kr/en/p/groenlid-3-seat-sofa-with-chaise-longue-ljungen-light-green-s49408842/
+56,IKEA,"IKEA FRIHETEN corner sofa bed",109.16,230,151,86,105.48,-3.4,OK,https://www.ikea.com/ca/en/p/friheten-corner-sofa-bed-with-storage-faringe-light-gray-s69517048/
+57,DB,"Bunk bed (twin over twin)",120.07,203.2,109.2,165.1,129.37,7.7,OK,https://www.mattressnut.com/size-of-bunk-bed/
+58,DB,"Small sectional sofa bed (2-piece L-shaped, pull-out sleeper)",127.57,229.9,151.1,86,105.5,-17.3,OK,https://www.ikea.com/us/en/p/friheten-sleeper-sectional-3-seat-w-storage-skiftebo-dark-gray-s69216757/
+59,DB,"Pool table / Billiard table (9-foot)",128.36,284.5,160,81.3,130.69,1.8,OK,https://www.brunswickbilliards.com/blogs/buying-guides-inspiration/room-size-requirements
+60,IKEA,"IKEA SÖDERHAMN sectional 4-seat",129.62,291,151,83,128.8,-0.6,OK,https://www.ikea.com/us/en/p/soederhamn-sectional-4-seat-with-chaise-viarp-beige-brown-s59567581/
+61,DB,"Queen platform bed with headboard",134.6,200.7,148.6,159.5,167.99,24.8,OVER,https://www.dreamcloudsleep.com/bed-frames/adjustable-bed-frame/size-queen
+62,DB,"Hot tub / Spa (6-person)",144.2,215.9,215.9,91.4,150.46,4.3,OK,https://heavenlyheatsaunas.com/blogs/wellness-insights/what-are-the-dimensions-of-a-6-person-hot-tub-standard-sizes
+63,DB,"Home gym / Multi-station weight machine",149.03,181.9,118.4,210.8,160.33,7.6,OK,https://myfitnessoutlet.com/blogs/hub/home-gym-space-requirements
+64,IKEA,"IKEA HOLMSUND corner sofa bed",150.97,230,151,96,117.74,-22,UNDER,https://www.ikea.com/ca/en/p/holmsund-corner-sofa-bed-borgunda-beige-s99516900/
+65,DB,"Medium L-shaped sectional sofa (3-piece, standard)",162.09,279.4,279.4,86.4,238.19,46.9,OVER,https://www.seatcraft.com/blogs/news/sectional-sofa-size-guide
+66,DB,"Small U-shaped sectional sofa (compact, 3-piece)",168.1,279.4,162.6,86.4,138.62,-17.5,OK,https://roomsketch3d.com/help/dimensions/sectional-sofa-dimensions
+67,DB,"Medium sectional sofa bed (3-piece L-shaped, pull-out sleeper + storage)",184.34,284.5,142.2,86.4,123.44,-33,UNDER,https://www.amazon.com/TROMIRY-U-Shaped-Sectional-Chenille-Apartment/dp/B0G6D2HVVV
+68,IKEA,"IKEA HYLTARP corner sofa",191.64,264,264,91,223.98,16.9,OK,https://www.ikea.com/au/en/files/pdf/82/ba/82bad941/hyltarp-buying-guide-fy24.pdf
+69,IKEA,"IKEA KIVIK corner sofa 4-seat",198.88,257,257,83,193.6,-2.7,OK,https://www.ikea.com/us/en/p/kivik-sectional-4-seat-corner-tibbleby-beige-gray-s69440474/
+70,DB,"Large sectional sofa bed (3-4 piece L/U-shaped, pull-out sleeper)",237.74,330.2,170.2,86.4,171.48,-27.9,UNDER,https://www.wayfair.com/furniture/sb1/sleeper-sectionals-c413893-a3061~13212.html
+71,IKEA,"IKEA VIMLE corner sofa 5-seat",252.65,330,249,83,240.85,-4.7,OK,https://www.ikea.com/mx/en/files/pdf/e6/da/e6da6516/vimle-buying-guide.pdf
+72,DB,"Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized)",258.72,330.2,330.2,91.4,351.93,36,OVER,https://designingidea.com/sectional-sofa-dimensions/
+73,IKEA,"IKEA FINNALA corner sofa 6-seat",259.92,330,249,85,246.65,-5.1,OK,https://www.ikea.com/mx/en/p/finnala-corner-sofa-5-seat-with-chaise-longue-gunnared-beige-s69319265/
+74,DB,"Medium U-shaped sectional sofa (standard, 4-5 piece)",262.65,335.3,274.3,86.4,280.63,6.8,OK,https://roomsketch3d.com/help/dimensions/sectional-sofa-dimensions
+75,DB,"Large U-shaped sectional sofa (oversized, 6+ piece)",400.47,406.4,304.8,91.4,399.83,-0.2,OK,https://designingidea.com/sectional-sofa-dimensions/

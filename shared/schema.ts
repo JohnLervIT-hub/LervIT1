@@ -288,6 +288,14 @@ export const bookings = pgTable("bookings", {
   // in_app_notifications.metadata).
   cancellationReason: text("cancellation_reason"),
   cancellationAnswers: text("cancellation_answers"),
+  // Piece-count accountability. `declaredPieceCount` is the sum the customer
+  // confirmed across multi-piece items; NULL means they never changed a
+  // default, which exempts the booking from the discrepancy rule.
+  // `actualPieceCountOnArrival` is what the mover counted when cancelling with
+  // reason 'piece_count_discrepancy', and the payout is what that earned them.
+  declaredPieceCount: integer("declared_piece_count"),
+  actualPieceCountOnArrival: integer("actual_piece_count_on_arrival"),
+  pieceCountDiscrepancyPayout: decimal("piece_count_discrepancy_payout", { precision: 10, scale: 2 }),
 
   // Client-generated per-attempt key (X-Idempotency-Key). Collapses a
   // double-submit onto one booking instead of creating a twin. Scoped by the
@@ -376,6 +384,11 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  // Server-derived: set by the piece-count endpoint and the mover-cancel flow,
+  // never posted. Leaving them in would make each one a required request field.
+  declaredPieceCount: true,
+  actualPieceCountOnArrival: true,
+  pieceCountDiscrepancyPayout: true,
   paymentStatus: true,
   stripePaymentIntentId: true,
   notifiedAt: true,
@@ -546,6 +559,11 @@ export const identifiedItems = pgTable("identified_items", {
   recommendedMovers: integer("recommended_movers"),
   insuranceLevel: text("insurance_level"),
   confidence: decimal("confidence", { precision: 3, scale: 2 }),
+  // Pieces the customer declares for a multi-piece item (sectionals, sofa beds).
+  // Seeded at scan time from FurnitureItem.pieceCount, then writable by the
+  // customer via PATCH .../piece-count. NULL means "never set" — the mover sees
+  // nothing and the 50% discrepancy rule does not apply.
+  pieceCount: integer("piece_count"),
   sourceMetadata: text("source_metadata"),
   processingStatus: text("processing_status").notNull().default("pending"),
   errorMessage: text("error_message"),
