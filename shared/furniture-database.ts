@@ -2144,7 +2144,7 @@ export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: n
  */
 export function getVehicleDisplayName(vehicle: VehicleType): string {
   switch (vehicle) {
-    case 'car': return 'SUV / Small Vehicle';
+    case 'car': return 'SUV';
     case 'van': return 'Cargo Van';
     case 'pickup': return 'Pickup Truck';
     case 'truck': return 'Moving Truck (Large)';

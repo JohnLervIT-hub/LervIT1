@@ -2890,6 +2890,7 @@ export default function RequestMove() {
                             items={identifiedItems}
                             vehicle={aiRecommendedVehicle}
                             movers={numberOfMovers}
+                            totalVolume={aiDetectedVolume}
                           />
                         </div>
                       )}
