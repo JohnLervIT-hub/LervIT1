@@ -1984,20 +1984,7 @@ export function searchItemsByKeywords(keywords: string[]): FurnitureItem[] {
  * IMPROVED: Prevents false positives like "accent chair" → "AC (air conditioner)"
  * by requiring longer word matches and prioritizing exact category matches.
  */
-/**
- * Best ground-truth row for a vision-supplied item name.
- *
- * `hintVolumeFt3` is the volume the vision model's own estimated dimensions
- * imply. Scores alone cannot separate the small/medium/large variants of one
- * product family — every "U-shaped sectional sofa" row earns an identical score
- * — so without the hint the winner is just whichever sits earliest in the array.
- * The hint breaks those exact ties by picking the size closest to what the model
- * actually measured.
- */
-export function findBestMatch(
-  itemName: string,
-  hintVolumeFt3?: number,
-): { item: FurnitureItem; similarity: number } | null {
+export function findBestMatch(itemName: string): { item: FurnitureItem; similarity: number } | null {
   const nameLower = itemName.toLowerCase();
   const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
   
@@ -2005,12 +1992,7 @@ export function findBestMatch(
   const hasChairHint = nameLower.includes('chair');
   const hasSofaHint = nameLower.includes('sofa') || nameLower.includes('couch');
   const hasBedHint = nameLower.includes('bed');
-  // 'desk' must not fire on "desktop": a 2.21 ft3 "Desktop computer (tower)"
-  // was earning the Table bonus and matching "Office desk (standard)" at
-  // 29.8 ft3, a 13x overestimate.
-  const hasTableHint =
-    nameLower.includes('table') ||
-    (nameLower.includes('desk') && !nameLower.includes('desktop'));
+  const hasTableHint = nameLower.includes('table') || nameLower.includes('desk');
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
@@ -2067,37 +2049,19 @@ export function findBestMatch(
     if (hasBedHint && item.category === 'Bed') matchCount += 2;
     if (hasTableHint && item.category === 'Table') matchCount += 2;
     
-    // Rank on the UNCLAMPED ratio. Clamping here with Math.min(..., 1) flattened
-    // every strong candidate to exactly 1.0, and because the comparison below is
-    // a strict `>`, the winner among them was whichever came first in the array.
-    // "U-shaped sectional sofa" scored 1.78 on the U-shaped rows and 1.22 on the
-    // L-shaped ones, yet returned "Small L-shaped sectional sofa (2-piece,
-    // apartment-size)" at 103.56 ft3 purely because L-shaped is listed earlier.
-    // The clamp now applies only to the similarity that is reported out.
-    let score = totalWeight > 0 ? matchCount / totalWeight : 0;
+    let similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
     
     // Apply category mismatch penalty
-    score = score * (1 - categoryMismatchPenalty);
+    similarity = similarity * (1 - categoryMismatchPenalty);
     
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = item;
-    } else if (
-      bestMatch !== null &&
-      hintVolumeFt3 !== undefined &&
-      Math.abs(score - bestScore) < 1e-9 &&
-      Math.abs(item.volume_ft3 - hintVolumeFt3) <
-        Math.abs(bestMatch.volume_ft3 - hintVolumeFt3)
-    ) {
-      // Genuine tie: prefer the size the vision estimate is closest to.
+    if (similarity > bestScore) {
+      bestScore = similarity;
       bestMatch = item;
     }
   }
   
   if (bestMatch && bestScore > 0.3) {  // Minimum threshold for a match
-    // Report a bounded similarity: SIMILARITY_THRESHOLD and the confidence
-    // surfaced to the customer both assume 0..1.
-    return { item: bestMatch, similarity: Math.min(bestScore, 1) };
+    return { item: bestMatch, similarity: bestScore };
   }
   
   return null;

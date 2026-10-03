@@ -1,6 +1,5 @@
 import { memo } from "react";
 import { CheckCircle2, Loader2, AlertCircle, Package } from "lucide-react";
-import { getVehicleDisplayName } from "@/lib/utils";
 import type { IdentifiedItem } from "@shared/schema";
 
 /**
@@ -40,41 +39,17 @@ export function describeItems(items: IdentifiedItem[]): string {
     .join(", ");
 }
 
-/**
- * Mean per-item confidence as a percentage, or null when nothing reported one.
- * Returned as null (not 0) so an engine that omits confidence hides the stat
- * instead of advertising "0%" accuracy on a perfectly good identification.
- */
-export function averageConfidencePct(items: IdentifiedItem[]): number | null {
-  const scores = items
-    .map((i) => parseFloat(i.confidence || "0"))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (scores.length === 0) return null;
-  return (scores.reduce((sum, n) => sum + n, 0) / scores.length) * 100;
-}
-
 export function totalVolumeFt3(items: IdentifiedItem[]): number {
   return items.reduce((sum, i) => sum + parseFloat(i.volumeCuft || "0"), 0);
 }
 
 interface DetectedItemsSummaryProps {
   items: IdentifiedItem[];
-  /**
-   * Vehicle tier key ('car' | 'pickup' | 'van' | 'truck') and mover count, both
-   * passed in rather than re-derived here. The caller already computes them —
-   * volume thresholds, weight and dimension bumps, and the per-item database
-   * vehicle floor — and the same values feed the price. A second derivation in
-   * this component would be a copy that silently drifts from the quote.
-   */
-  vehicle?: string | null;
-  movers?: number | null;
   className?: string;
 }
 
 export const DetectedItemsSummary = memo(function DetectedItemsSummary({
   items,
-  vehicle,
-  movers,
   className,
 }: DetectedItemsSummaryProps) {
   if (items.length === 0) return null;
@@ -86,7 +61,6 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
   const failed = items.filter((i) => i.processingStatus === "failed");
 
   const volume = totalVolumeFt3(completed);
-  const confidencePct = averageConfidencePct(completed);
 
   return (
     <div
@@ -109,54 +83,6 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
             </p>
             <p className="text-xs text-muted-foreground mt-1.5">
               Measured from your photos. Missed something? Add it in the notes below.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Recommendations — read-only. Restored from the pre-vision-first item
-          list, without the quantity steppers / size+weight fields that came with
-          it: these four are an account of what the photos measured, not inputs
-          the customer can turn to move the price. */}
-      {completed.length > 0 && (
-        <div
-          className="mt-3 pt-3 border-t border-border/60 grid grid-cols-2 sm:grid-cols-4 gap-3"
-          data-testid="detected-items-recommendations"
-        >
-          <div>
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
-              Total Volume
-            </p>
-            <p className="text-xl font-bold tabular-nums" data-testid="stat-total-volume">
-              {volume.toFixed(volume < 10 ? 1 : 0)}
-              <span className="text-sm font-medium text-muted-foreground"> ft³</span>
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
-              Vehicle
-            </p>
-            <p className="text-xl font-bold" data-testid="stat-vehicle">
-              {vehicle ? getVehicleDisplayName(vehicle) : "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
-              Movers
-            </p>
-            <p className="text-xl font-bold tabular-nums" data-testid="stat-movers">
-              {movers && movers > 0 ? movers : "—"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
-              AI Confidence
-            </p>
-            <p className="text-xl font-bold tabular-nums" data-testid="stat-confidence">
-              {confidencePct === null ? "—" : `${confidencePct.toFixed(0)}%`}
             </p>
           </div>
         </div>

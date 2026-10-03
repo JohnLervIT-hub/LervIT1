@@ -623,7 +623,7 @@ interface VisionDetectionResult {
   };
   estimatedWeight?: number;
   quantity?: number;
-  /** False only when the item is genuinely unidentifiable — see the fullScene prompt field. */
+  /** False for a close-up or partial shot — see the fullScene prompt field. */
   fullScene?: boolean;
 }
 
@@ -654,8 +654,7 @@ async function detectItemWithVision(imageBase64: string): Promise<VisionDetectio
 Analyze this image and identify the item with maximum detail.
 
 ITEM IDENTIFICATION:
-Identify the PRIMARY item in the image — the most prominent/dominant item.
-A room-wide shot showing many items is fine: pick the dominant one.
+Identify the PRIMARY item occupying ≥85% of the visual frame.
 
 For FURNITURE SETS (dining table with chairs, bed with headboard, sofa with ottoman):
 - Identify the DOMINANT item as the primary
@@ -670,23 +669,11 @@ IGNORE:
 - Items at edges clearly not the subject
 
 IDENTIFY:
-1. Item type (be specific: "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
+1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
 4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
 5. Material if visible (leather, fabric, wood, metal, glass)
-
-SECTIONAL SHAPE — DECIDE THIS FIRST, BEFORE SIZE:
-Count the ARMS/RETURNS that turn away from the longest run of seating:
-• ONE return (the seating turns a single corner, forming an "L") = L-SHAPED.
-• TWO returns, one at EACH end, facing each other across the room, so the
-  seating wraps three sides of the space = U-SHAPED. Sometimes sold as a "pit"
-  or "theater" sectional.
-Check this deliberately. A U-shaped sectional photographed from one end can look
-L-shaped because the far return is foreshortened or cropped — look for seating
-coming back toward the camera on BOTH sides. If you can see two opposing returns,
-it is U-SHAPED even when only part of the second one is visible.
-Do not default to L-shaped: state the shape you can actually see.
 
 SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine size tier):
 For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
@@ -771,21 +758,13 @@ QUANTITY FIELD:
 For sets or counted items, include quantity.
 Example: dining chairs detected = 6
 
-USABILITY CHECK — answer this as well:
-"fullScene" asks one thing only: can you tell what the item actually IS?
-Set "fullScene": true — the default — whenever you can identify a real item.
-That INCLUDES:
-• a wide room-wide shot with many items in it
-• a tight close-up of a single item
-• a full pile, a stack of boxes, a partial view of a large item
-Set "fullScene": false ONLY when the photo is unusable because the item is
-genuinely unidentifiable, i.e. ALL you can honestly say is "I cannot tell what
-this is":
-• too blurred, dark or out of focus to recognise
-• only a tiny fragment / sliver of something, with no identifiable object
-• no household or furniture item present at all
-Framing is NOT a reason to answer false. Being a close-up is NOT a reason to
-answer false. When in any doubt whatsoever, answer true.
+FRAMING CHECK — answer this as well:
+Does this image show the full room, or the full pile of items to be moved, so
+that the whole load is visible? Or is it a close-up / partial shot of one item
+or part of a scene? A close-up cannot be measured for a move: there is no way
+to tell what else is in the room or how much there is in total.
+Set "fullScene": true for a full room or full pile, false for a close-up or
+partial shot. When genuinely unsure, answer true.
 
 Return ONLY valid JSON (no markdown):
 {
@@ -796,7 +775,7 @@ Return ONLY valid JSON (no markdown):
   "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
   "estimatedWeight": number in kg,
   "quantity": number (default 1),
-  "fullScene": true   // default true; false ONLY if the item is unidentifiable
+  "fullScene": true or false
 }`
           },
           {
@@ -845,46 +824,13 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
   item?: FurnitureItem;
   similarity: number;
 } {
-  // The model's own estimated dimensions, as a volume, so the matcher can pick
-  // the right size variant when several rows score identically.
-  const est = visionResult.estimatedDimensions;
-  const hintVolumeFt3 =
-    est && est.length_cm > 0 && est.width_cm > 0 && est.height_cm > 0
-      ? (est.length_cm * est.width_cm * est.height_cm) / 28316.8
-      : undefined;
-
   // Use the item name to find best match
-  const match = findBestMatch(visionResult.itemName, hintVolumeFt3);
+  const match = findBestMatch(visionResult.itemName);
   
   if (match && match.similarity >= SIMILARITY_THRESHOLD) {
     console.log('[Vision Engine 2.0] Database match found:', 
       match.item.name, 
       `(similarity: ${(match.similarity * 100).toFixed(1)}%)`);
-    // A match replaces the model's dimensions outright, so a wildly different
-    // volume means we are about to quote a different object than the one in the
-    // photo. Log it rather than silently overwriting a good measurement.
-    if (hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
-      const ratio = match.item.volume_ft3 / hintVolumeFt3;
-      // Unconditional, so the hint is visible in Railway for every match and not
-      // only for the ones that trip the gate below. A ratio near 1.00 means the
-      // model's own measurement and the row it matched agree.
-      console.log(
-        '[Vision Engine 2.0] Volume hint:',
-        `${hintVolumeFt3.toFixed(1)}ft3, matched to: ${match.item.volume_ft3}ft3`,
-        `(ratio ${ratio.toFixed(2)})`,
-      );
-      // Upper bound at 1.5x rather than 2x: the overshoot worth catching is a
-      // tier above the one photographed (Small -> Medium L-shaped sectional is
-      // 1.57x), which a 2x gate let through. Log only, no auto-correction.
-      if (ratio > 1.5 || ratio < 0.5) {
-        console.warn(
-          '[Vision Engine 2.0] Match volume implausible vs vision estimate:',
-          `"${visionResult.itemName}" estimated ${hintVolumeFt3.toFixed(1)}ft3`,
-          `-> matched "${match.item.name}" at ${match.item.volume_ft3}ft3`,
-          `(${ratio.toFixed(2)}x)`,
-        );
-      }
-    }
     return {
       matched: true,
       item: match.item,
@@ -963,14 +909,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     
     // STEP 2: Detect item using Vision API
     const visionResult = await detectItemWithVision(imageBase64);
-
-    // STEP 2.1: Reject unusable photos BEFORE either cache is written. Caching a
-    // rejection would pin the photo to a permanent failure, so the customer's
-    // replacement of the same URL could never be re-analysed.
-    if (visionResult.fullScene === false) {
-      console.warn('[Vision Engine 2.0] Photo rejected as unidentifiable:', photoUrl.slice(-40));
-      throw Object.assign(new Error('FULL_SCENE_REJECTED'), { code: 'FULL_SCENE_REJECTED' });
-    }
     
     // STEP 2.5: Apply category correction (fix AI misclassifications)
     const categoryCorrection = correctCategory(visionResult.itemName, visionResult.category);
@@ -981,26 +919,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     // STEP 2.6: Detect quantity — prefer model-provided field, fall back to string parsing
     const quantityInfo = detectQuantity(visionResult.itemName);
     const quantity = visionResult.quantity ?? quantityInfo.quantity ?? 1;
-
-    // Volume is perItemVolume * quantity, and the model's `quantity` is taken on
-    // trust with no bounds check. The prompt names sectional tiers "(2-piece)",
-    // "(4-5 piece)", "(6+ piece)" and tells the model to count separable
-    // sections, so a 5-piece sectional reported as quantity 5 multiplies a
-    // 262 ft3 sofa into 1313 ft3 and a Moving Truck. detectQuantity cannot catch
-    // it — every numeric pattern there is ^-anchored, so "(4-5 piece)" parses as
-    // 1 — and a composite article is never photographed in multiples.
-    // Logged, not corrected, so the rate can be seen before changing any quote.
-    if (
-      quantity > 1 &&
-      quantityInfo.quantity === 1 &&
-      /sectional|sofa bed|sleeper/i.test(visionResult.itemName)
-    ) {
-      console.warn(
-        '[Vision Engine 2.0] Suspect quantity on a composite article:',
-        `"${visionResult.itemName}" quantity=${quantity} with no count in the name.`,
-        'Volume will be multiplied accordingly — likely a piece count, not an item count.',
-      );
-    }
 
     // Use single-item name for database matching if quantity > 1
     const matchName = quantity > 1 ? quantityInfo.singleItemName : visionResult.itemName;
@@ -1038,8 +956,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,  // Keep original name with quantity
         category: item.category,
         subcategory: item.subcategory,
-        // Always true here: an unusable photo already threw at STEP 2.1.
-        fullSceneConfirmed: true,
+        fullSceneConfirmed: visionResult.fullScene !== false,
         quantity,
         dimensions: {
           length_cm: item.dimensions_cm.length,  // Per-item dimensions
@@ -1154,8 +1071,7 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         itemName: visionResult.itemName,
         category: visionResult.category,
         subcategory: visionResult.subcategory,
-        // Always true here: an unusable photo already threw at STEP 2.1.
-        fullSceneConfirmed: true,
+        fullSceneConfirmed: visionResult.fullScene !== false,
         quantity,
         dimensions: {
           length_cm: corrected.length_cm,  // Per-item dimensions
@@ -1199,11 +1115,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     return result;
     
   } catch (error: any) {
-    // A rejected photo is a real, actionable outcome — not an engine failure.
-    // It must propagate so the caller can ask for a replacement, instead of
-    // being absorbed into the generic 'Unidentified Item' fallback below.
-    if (error?.code === 'FULL_SCENE_REJECTED') throw error;
-
     logEvent.error('vision_engine', error, { photoUrl });
     
     // Return fallback result

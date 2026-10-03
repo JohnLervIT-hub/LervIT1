@@ -28,7 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation as useGeoLocation } from "@/contexts/LocationContext";
 import { generatePriceExplanation, AI_FEATURES, type PhotoAnalysisResult } from "@shared/ai";
 import { calculatePrice, calculatePriceRange, PRICING_CONFIG, type PriceBreakdown, type PriceRange, type PickupDifficultyType, type DropoffDifficultyType } from "@shared/pricing";
-import { deriveLoadPlan } from "@/lib/load-plan";
+import { VEHICLE_VOLUME_THRESHOLDS } from "@shared/furniture-database";
 import singleMoverVideo from "@assets/generated_videos/single_mover_carrying_box.mp4";
 import twoMoversVideo from "@assets/generated_videos/two_movers_carrying_sofa.mp4";
 import singleMoverPoster from "@assets/generated_images/single_mover_poster_image.png";
@@ -216,26 +216,22 @@ function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Display labels for the vehicle tier keys. Tier ranking and ordering now live
-// in @/lib/load-plan alongside the cascade that produces them.
+// Vehicle tiers, ranked smallest → largest. A load's vehicle is the max tier
+// across its identified items. VEHICLE_TIER_KEYS order must match the ranks.
 const VEHICLE_LABELS: Record<string, string> = {
   car: 'SUV',
   pickup: 'Pickup Truck',
   van: 'Cargo Van',
   truck: 'Moving Truck',
 };
+const VEHICLE_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+const VEHICLE_TIER_KEYS = ['car', 'pickup', 'van', 'truck'] as const;
 
-/**
- * Highest vehicle tier required by the load, or null when nothing is identified.
- *
- * Runs the same cascade as the price and the summary card. It used to return the
- * max raw `vehicleType` tag and nothing else, which made the saved quote and the
- * lead email disagree with the card: a 230cm sectional showed "Cargo Van" on the
- * card (dimension bump) while the email told the mover "Pickup Truck" (raw tag).
- */
+// Highest vehicle tier required by the load, or null when nothing is identified.
 function maxVehicleTier(items: IdentifiedItem[]): string | null {
-  const completed = items.filter((it) => it.processingStatus === 'completed');
-  return deriveLoadPlan(completed)?.vehicle ?? null;
+  if (items.length === 0) return null;
+  const maxRank = items.reduce((m, it) => Math.max(m, VEHICLE_RANK[it.vehicleType || 'car'] ?? 0), 0);
+  return VEHICLE_TIER_KEYS[maxRank];
 }
 
 export default function RequestMove() {
@@ -454,12 +450,6 @@ export default function RequestMove() {
   // re-derives the recommended vehicle from the summed item volumes, because a
   // client-supplied value set the vehicle class and therefore the base fee.
   const [aiRecommendedVehicle, setAiRecommendedVehicle] = useState<string | undefined>(undefined);
-  // What the vision pass recommended for movers, kept separately because
-  // numberOfMovers is overwritten the moment the customer picks a different
-  // count. Without it the advisory below cannot tell "AI said 2, you chose 1"
-  // from "AI said 1" — heavyItem is true for a 35kg recliner the AI assigns a
-  // single mover, and for the manual Heavy Items toggle when no AI has run.
-  const [aiRecommendedMovers, setAiRecommendedMovers] = useState<number | undefined>(undefined);
 
   const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
     try {
@@ -1596,33 +1586,24 @@ export default function RequestMove() {
       // reports whether the photo shows the whole room / pile or just a close-up.
       const returned = (result.items || []) as (IdentifiedItem & { fullSceneConfirmed?: boolean })[];
 
-      // The server flags a photo it could not read at all (blurred, unidentifiable)
-      // with needsReplacement. Framing is no longer a rejection reason: a room-wide
-      // shot and a close-up of a real item are both accepted and priced.
-      const serverErrors = (result.errors || []) as { photoUrl?: string; needsReplacement?: boolean }[];
-      const rejectedUrls = new Set(
-        serverErrors.filter(e => e.needsReplacement).map(e => e.photoUrl).filter(Boolean) as string[]
-      );
+      // A close-up can be identified but not measured — there is no way to know
+      // what else is in the room — so it is dropped rather than priced as if it
+      // were the whole load. Only an explicit false rejects, so a vision outage
+      // or an older server (no such field) still accepts every photo.
+      const partialShots = returned.filter(i => i.fullSceneConfirmed === false);
+      const newItems = returned.filter(i => i.fullSceneConfirmed !== false);
 
-      if (rejectedUrls.size > 0) {
-        // Keep the photos in the grid — the customer needs to see WHICH ones to
-        // replace — but drop them from the analysed set so that replacing one
-        // triggers a fresh analysis pass instead of being skipped as "seen".
-        rejectedUrls.forEach(url => { analyzedUrlsRef.current.delete(url); });
+      if (partialShots.length > 0) {
+        const rejectedUrls = new Set(partialShots.map(i => i.photoUrl));
+        rejectedUrls.forEach(url => { if (url) analyzedUrlsRef.current.delete(url); });
+        // Pull them back out of the grid so the customer can see which to replace.
+        setImages(prev => prev.filter(url => !rejectedUrls.has(url)));
         toast({
-          title: rejectedUrls.size === 1 ? "Photo unclear" : `${rejectedUrls.size} photos unclear`,
-          description: rejectedUrls.size === 1
-            ? "We couldn't tell what's in one of your photos. Please replace it with a clearer one."
-            : `We couldn't tell what's in ${rejectedUrls.size} of your photos. Please replace them with clearer ones.`,
+          title: partialShots.length === 1 ? "Photo too close up" : "Photos too close up",
+          description: "Please upload a photo of the full room or pile — close-ups can't be measured.",
           variant: "destructive",
         });
       }
-
-      // Rejected photos must not reach the pricing maths as failed placeholders.
-      const successfulNewItems = returned.filter(
-        i => !(i.photoUrl && rejectedUrls.has(i.photoUrl))
-      );
-      const newItems = successfulNewItems;
 
       // Merge with the ref (always current, avoids stale closure from async gap).
       const merged = [...identifiedItemsRef.current, ...newItems];
@@ -1634,12 +1615,65 @@ export default function RequestMove() {
       );
 
       if (completedAll.length > 0) {
-        const plan = deriveLoadPlan(completedAll)!;
-        const totalVolume = plan.totalVolumeFt3;
-        const maxMovers = plan.movers;
-        const hasHeavyItems = plan.hasHeavyItems;
-        const recommendedLoadSize = plan.loadSize;
-        const recommendedVehicle  = plan.vehicle;
+        const totalVolume = completedAll.reduce(
+          function(sum, item) { return sum + parseFloat(item.volumeCuft || '0'); }, 0
+        );
+
+        const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+        const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
+        let tierIndex = 0;
+        if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)    tierIndex = 3;
+        else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
+        else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
+
+        const maxMovers = Math.max(
+          ...completedAll.map(function(item) { return item.recommendedMovers || 1; })
+        );
+
+        const itemTotalWeight = completedAll.reduce(
+          function(sum, item) { return sum + parseFloat(item.weightKg || '0'); }, 0
+        );
+        const hasHeavyItems = completedAll.some(function(item) {
+          return (
+            item.handlingComplexity === 'high' ||
+            item.handlingComplexity === 'very_high' ||
+            parseFloat(item.weightKg || '0') > 30
+          );
+        });
+
+        // Weight bumps: capped at +1 tier above volume-based tier.
+        // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
+        // Prevents single/dual heavy items from jumping straight to "Moving Truck".
+        const volumeTierIndex1 = tierIndex;
+        if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex1 + 1, 3);
+        else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex1 + 1, 2);
+        else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex1 + 1, 1);
+
+        const maxDimension = Math.max(
+          ...completedAll.map(function(item) {
+            return Math.max(
+              parseFloat(String(item.dimensionsLcm || 0)),
+              parseFloat(String(item.dimensionsWcm || 0)),
+              parseFloat(String(item.dimensionsHcm || 0))
+            );
+          })
+        );
+        if (maxDimension > 200 && tierIndex < 2)      tierIndex = 2;
+        else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
+        if (hasHeavyItems && tierIndex < 1)           tierIndex = 1;
+
+        // DATABASE VEHICLE FLOOR: honour the per-item vehicle assignment from the ground
+        // truth database. Items like a 450 kg hot tub are tagged vehicle='truck' in the DB;
+        // volume alone can't reflect that, so we take the highest vehicleType across all
+        // identified items and ensure we never recommend below it.
+        const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+        const maxDbTier = completedAll.reduce(
+          function(max, item) { return Math.max(max, VEHICLE_TIER_RANK[item.vehicleType || 'car'] ?? 0); }, 0
+        );
+        if (maxDbTier > tierIndex) tierIndex = maxDbTier;
+
+        const recommendedLoadSize = loadSizeTiers[tierIndex];
+        const recommendedVehicle  = vehicleTiers[tierIndex];
 
         // Use the actual detected volume for display consistency.
         // calculatePrice now takes the max of volume-based and loadSize-based vehicle class,
@@ -1649,7 +1683,6 @@ export default function RequestMove() {
 
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
-        setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
         setHeavyItem(hasHeavyItems);
         setHasAutoAnalyzed(true);
 
@@ -1700,22 +1733,62 @@ export default function RequestMove() {
       // Nothing left — reset to manual defaults
       setAiDetectedVolume(undefined);
       setAiRecommendedVehicle(undefined);
-      setAiRecommendedMovers(undefined);
       setLoadSize('medium');
       setNumberOfMovers(1);
       setHeavyItem(false);
       return;
     }
 
-    const plan = deriveLoadPlan(completedItems)!;
+    const totalVolume = completedItems.reduce(
+      (sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0
+    );
 
-    setAiDetectedVolume(plan.totalVolumeFt3);
-    setAiRecommendedVehicle(plan.vehicle);
+    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
+    let tierIndex = 0;
+    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
 
-    setLoadSize(plan.loadSize);
-    setNumberOfMovers(plan.movers > 1 ? 2 : 1);
-    setAiRecommendedMovers(plan.movers > 1 ? 2 : 1);
-    setHeavyItem(plan.hasHeavyItems);
+    const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
+    const itemTotalWeight = completedItems.reduce(
+      (sum, item) => sum + parseFloat(item.weightKg || '0'), 0
+    );
+    const hasHeavyItems = completedItems.some(item =>
+      item.handlingComplexity === 'high' ||
+      item.handlingComplexity === 'very_high' ||
+      parseFloat(item.weightKg || '0') > 30
+    );
+
+    const volumeTierIndex2 = tierIndex;
+    if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex2 + 1, 3);
+    else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex2 + 1, 2);
+    else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex2 + 1, 1);
+
+    const maxDim = Math.max(...completedItems.map(item =>
+      Math.max(
+        parseFloat(String(item.dimensionsLcm || 0)),
+        parseFloat(String(item.dimensionsWcm || 0)),
+        parseFloat(String(item.dimensionsHcm || 0))
+      )
+    ));
+    if (maxDim > 200 && tierIndex < 2)      tierIndex = 2;
+    else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
+    if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
+
+    // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
+    const VEHICLE_TIER_RANK2: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+    const maxDbTier2 = completedItems.reduce(
+      (max, item) => Math.max(max, VEHICLE_TIER_RANK2[item.vehicleType || 'car'] ?? 0), 0
+    );
+    if (maxDbTier2 > tierIndex) tierIndex = maxDbTier2;
+
+    setAiDetectedVolume(totalVolume);
+    setAiRecommendedVehicle(vehicleTiers[tierIndex]);
+
+    setLoadSize(loadSizeTiers[tierIndex]);
+    setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setHeavyItem(hasHeavyItems);
   };
 
   // Called by ImageUpload when images change (new uploads or grid removals)
@@ -1743,19 +1816,62 @@ export default function RequestMove() {
     const completedItems = identifiedItems.filter(item => item.processingStatus === 'completed');
     if (completedItems.length === 0) return;
     
-    const plan = deriveLoadPlan(completedItems)!;
-    const maxMovers = plan.movers;
-    const hasHeavyItems = plan.hasHeavyItems;
-    const recommendedLoadSize = plan.loadSize;
+    // Volume thresholds sourced from shared/furniture-database.ts VEHICLE_VOLUME_THRESHOLDS
+    // CAR_MAX: 20 ft³, PICKUP_MAX: 165 ft³, VAN_MAX: 300 ft³, >300 ft³ → Truck
+    const totalVolume = completedItems.reduce((sum, item) => sum + parseFloat(item.volumeCuft || '0'), 0);
+    const loadSizeTiers = ['boxes', 'medium', 'large', 'apartment'] as const;
+    const vehicleTiers  = ['car', 'pickup', 'van', 'truck'] as const;
+    let tierIndex = 0;
+    if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.VAN_MAX)         tierIndex = 3;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) tierIndex = 2;
+    else if (totalVolume > VEHICLE_VOLUME_THRESHOLDS.CAR_MAX)    tierIndex = 1;
+    
+    // Get max recommended movers
+    const maxMovers = Math.max(...completedItems.map(item => item.recommendedMovers || 1));
+    
+    // Check for heavy/complex items
+    const itemTotalWeight = completedItems.reduce((sum, item) => sum + parseFloat(item.weightKg || '0'), 0);
+    const hasHeavyItems = completedItems.some(item => 
+      item.handlingComplexity === 'high' || 
+      item.handlingComplexity === 'very_high' ||
+      parseFloat(item.weightKg || '0') > 30
+    );
+    
+    // Weight bumps: capped at +1 tier above volume-based tier.
+    // Real payload limits: pickup ~600 kg, van ~900 kg, truck 2000+ kg.
+    const volumeTierIndex3 = tierIndex;
+    if (itemTotalWeight > 600 && tierIndex < 3)      tierIndex = Math.min(volumeTierIndex3 + 1, 3);
+    else if (itemTotalWeight > 300 && tierIndex < 2) tierIndex = Math.min(volumeTierIndex3 + 1, 2);
+    else if (itemTotalWeight > 100 && tierIndex < 1) tierIndex = Math.min(volumeTierIndex3 + 1, 1);
+    
+    // DIMENSION OVERRIDE: Check max dimension across all items
+    const maxDimRecalc = Math.max(...completedItems.map(item => {
+      return Math.max(
+        parseFloat(String(item.dimensionsLcm || 0)),
+        parseFloat(String(item.dimensionsWcm || 0)),
+        parseFloat(String(item.dimensionsHcm || 0))
+      );
+    }));
+    if (maxDimRecalc > 200 && tierIndex < 2) tierIndex = 2;
+    else if (maxDimRecalc > 150 && tierIndex < 1) tierIndex = 1;
+    if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
+
+    // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
+    const VEHICLE_TIER_RANK3: Record<string, number> = { car: 0, pickup: 1, van: 2, truck: 3 };
+    const maxDbTier3 = completedItems.reduce(
+      (max, item) => Math.max(max, VEHICLE_TIER_RANK3[item.vehicleType || 'car'] ?? 0), 0
+    );
+    if (maxDbTier3 > tierIndex) tierIndex = maxDbTier3;
+    
+    const recommendedLoadSize = loadSizeTiers[tierIndex];
 
     // Use actual volume for display consistency; calculatePrice handles class via loadSize floor.
-    setAiDetectedVolume(plan.totalVolumeFt3);
-    setAiRecommendedVehicle(plan.vehicle);
+    setAiDetectedVolume(totalVolume);
+    setAiRecommendedVehicle(vehicleTiers[tierIndex]);
     
     // Apply recommendations
     setLoadSize(recommendedLoadSize);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
-    setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
     setHeavyItem(hasHeavyItems);
     
     toast({
@@ -2761,11 +2877,7 @@ export default function RequestMove() {
                           customer no longer edits quantities or sizes here. */}
                       {!isIdentifyingItems && identifiedItems.length > 0 && (
                         <div className="mt-4">
-                          <DetectedItemsSummary
-                            items={identifiedItems}
-                            vehicle={aiRecommendedVehicle}
-                            movers={numberOfMovers}
-                          />
+                          <DetectedItemsSummary items={identifiedItems} />
                         </div>
                       )}
                     </div>
@@ -2832,27 +2944,6 @@ export default function RequestMove() {
                               </Alert>
                             );
                           })()}
-
-                          {/* Soft advisory: the AI asked for 2 movers and the customer
-                              chose 1. Purely informational — the 1-mover button stays
-                              enabled, unlike the forcedTwoMovers lock above.
-                              Gated on aiRecommendedMovers === 2 rather than heavyItem
-                              alone, because heavyItem is true for a 35kg recliner the
-                              AI gives one mover, and for the manual Heavy Items toggle
-                              when no analysis has run — in both cases the copy's claim
-                              would be false. */}
-                          {!forcedTwoMovers && numberOfMovers === 1 && aiRecommendedMovers === 2 &&
-                            (heavyItem || aiRecommendedVehicle === 'van' || aiRecommendedVehicle === 'truck') && (
-                            <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" data-testid="alert-movers-advisory">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                              <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
-                                <strong>AI recommended 2 movers for this load.</strong> With 1 mover,
-                                you'll need to assist with carrying. Not recommended for heavy or
-                                large items.
-                              </AlertDescription>
-                            </Alert>
-                          )}
-
                           <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <button
                               type="button"
