@@ -171,7 +171,7 @@ export const LOAD_SIZE_CEILING_TIER = 'apartment';
 export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   A: {
     class: 'A',
-    name: 'SUV / Small Vehicle',
+    name: 'SUV',
     vehicleType: 'car',
     volumeRangeMin: 0,
     volumeRangeMax: 60,
@@ -204,7 +204,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
   },
   E: {
     class: 'E',
-    name: 'Moving Truck (Large)',
+    name: 'Moving Truck',
     vehicleType: 'truck',
     volumeRangeMin: 351,
     volumeRangeMax: 1000,

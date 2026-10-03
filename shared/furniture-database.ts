@@ -5,6 +5,8 @@
  * Items with high similarity matches bypass estimation and use these exact values.
  */
 
+import { VEHICLE_DISPLAY_NAMES } from './vehicle-labels';
+
 export interface FurnitureItem {
   item_id: string;
   name: string;
@@ -2074,7 +2076,7 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
  * Updated thresholds (2026):
  * Raw ft³ boundaries aligned with getVehicleClassFromVolume in shared/pricing.ts
  * (adjusted-volume thresholds of 60/150/350 divided by packingFactor 1.10):
- *   ≤54 ft³   → SUV / Small Vehicle (car)   - Single chair, few boxes  [Class A]
+ *   ≤54 ft³   → SUV (car)                   - Single chair, few boxes  [Class A]
  *   ≤136 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
  *   ≤318 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
  *   >318 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
@@ -2143,11 +2145,5 @@ export function getVehicleRecommendation(loadSize: LoadSizeCategory, weightKg: n
  * Human-readable vehicle name for UI display
  */
 export function getVehicleDisplayName(vehicle: VehicleType): string {
-  switch (vehicle) {
-    case 'car': return 'SUV';
-    case 'van': return 'Cargo Van';
-    case 'pickup': return 'Pickup Truck';
-    case 'truck': return 'Moving Truck (Large)';
-    default: return 'Vehicle';
-  }
+  return VEHICLE_DISPLAY_NAMES[vehicle] ?? 'Vehicle';
 }

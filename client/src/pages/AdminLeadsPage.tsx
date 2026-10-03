@@ -135,8 +135,9 @@ const MOVER_SOURCE_OPTIONS = [
   { value: "referral", label: "Referral" },
 ] as const;
 
+// Vehicle names must match VEHICLE_DISPLAY_NAMES in @shared/vehicle-labels.
 const MOVER_VEHICLE_OPTIONS = [
-  { value: "suv", label: "SUV / Car" },
+  { value: "suv", label: "SUV" },
   { value: "pickup", label: "Pickup Truck" },
   { value: "van", label: "Cargo Van" },
   { value: "truck", label: "Moving Truck" },

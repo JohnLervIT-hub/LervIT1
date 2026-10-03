@@ -19,8 +19,9 @@ import {
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
+// Vehicle names must match VEHICLE_DISPLAY_NAMES in @shared/vehicle-labels.
 const DRIVER_EARNINGS = {
-  car:    { min: 25,  max: 45,  label: 'SUV / Car' },
+  car:    { min: 25,  max: 45,  label: 'SUV' },
   pickup: { min: 45,  max: 100, label: 'Pickup Truck' },
   van:    { min: 55,  max: 150, label: 'Cargo Van' },
   truck:  { min: 150, max: 350, label: 'Moving Truck' },

@@ -11,15 +11,16 @@ import {
 } from '@/components/ui/select';
 import { X, Loader2, UserPlus } from 'lucide-react';
 
+// Vehicle names must match VEHICLE_DISPLAY_NAMES in @shared/vehicle-labels.
 const VEHICLE_OPTIONS = [
-  { value: 'car',    label: 'SUV / Car ($25–$45/job)' },
+  { value: 'car',    label: 'SUV ($25–$45/job)' },
   { value: 'pickup', label: 'Pickup Truck ($45–$100/job)' },
   { value: 'van',    label: 'Cargo Van ($55–$150/job)' },
   { value: 'truck',  label: 'Moving Truck ($150–$350/job)' },
 ] as const;
 
 const VEHICLE_TAG: Record<string, string> = {
-  car:    'Vehicle: SUV / Car',
+  car:    'Vehicle: SUV',
   pickup: 'Vehicle: Pickup Truck',
   van:    'Vehicle: Cargo Van',
   truck:  'Vehicle: Moving Truck',
