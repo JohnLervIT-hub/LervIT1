@@ -1766,3 +1766,9 @@ ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS declared_piece_count              integer        DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS actual_piece_count_on_arrival     integer        DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS piece_count_discrepancy_payout    numeric(10, 2) DEFAULT NULL;
+
+-- ===== 0039: piece-count discrepancy photo evidence =====
+-- IF NOT EXISTS is mandatory here: this file runs on every boot.
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS piece_count_evidence_photo_url   text      DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS piece_count_evidence_uploaded_at timestamp DEFAULT NULL;

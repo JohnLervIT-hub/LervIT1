@@ -296,6 +296,10 @@ export const bookings = pgTable("bookings", {
   declaredPieceCount: integer("declared_piece_count"),
   actualPieceCountOnArrival: integer("actual_piece_count_on_arrival"),
   pieceCountDiscrepancyPayout: decimal("piece_count_discrepancy_payout", { precision: 10, scale: 2 }),
+  // Evidence for that payout. Required before the amount is recorded — without
+  // it the mover's own count is the only input to a money decision.
+  pieceCountEvidencePhotoUrl: text("piece_count_evidence_photo_url"),
+  pieceCountEvidenceUploadedAt: timestamp("piece_count_evidence_uploaded_at"),
 
   // Client-generated per-attempt key (X-Idempotency-Key). Collapses a
   // double-submit onto one booking instead of creating a twin. Scoped by the
@@ -389,6 +393,8 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   declaredPieceCount: true,
   actualPieceCountOnArrival: true,
   pieceCountDiscrepancyPayout: true,
+  pieceCountEvidencePhotoUrl: true,
+  pieceCountEvidenceUploadedAt: true,
   paymentStatus: true,
   stripePaymentIntentId: true,
   notifiedAt: true,

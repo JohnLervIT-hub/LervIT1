@@ -5735,14 +5735,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  // Photo evidence for a piece-count discrepancy claim.
+  //
+  // A dedicated endpoint rather than /api/upload/images, which is
+  // unauthenticated and booking-agnostic: this photo decides a payout, so it is
+  // tied to the assigned mover and the booking it concerns. Same
+  // ObjectStorageService + optimizeImageBuffer pipeline, so it lands in the
+  // same bucket as every other booking photo.
+  app.post(
+    "/api/bookings/:bookingId/piece-count-evidence",
+    upload.single('photo'),
+    async (req: Request, res: Response) => {
+      try {
+        if (!requireUser(req, res)) return;
+        const user = (req as any).user;
+        const { bookingId } = req.params;
+
+        if (!req.file) return res.status(400).json({ error: "No photo uploaded" });
+
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+        const mover = await storage.getMoverByUserId(user.id);
+        if (!mover || booking.moverId !== mover.id) {
+          return res.status(403).json({ error: "You are not assigned to this booking" });
+        }
+
+        const objectStorageService = new ObjectStorageService();
+        let url: string;
+        try {
+          const rawBuffer = fs.readFileSync(req.file.path);
+          const optimized = await optimizeImageBuffer(
+            rawBuffer,
+            req.file.originalname,
+            req.file.mimetype,
+          );
+          url = await objectStorageService.uploadBuffer(
+            optimized.buffer,
+            optimized.filename,
+            optimized.mimetype,
+            user.id,
+          );
+          fs.unlinkSync(req.file.path);
+        } catch (uploadError) {
+          logEvent.error(
+            'piece_count_evidence_upload_failed',
+            uploadError instanceof Error ? uploadError : new Error('upload error'),
+            { bookingId, moverId: mover.id },
+          );
+          // Local fallback, same as /api/upload/images: a storage outage must not
+          // block a mover who is standing in front of the wrong load.
+          url = `/uploads/${req.file.filename}`;
+        }
+
+        logEvent.booking('piece_count_evidence_uploaded', {
+          bookingId,
+          moverId: mover.id,
+          url,
+        });
+
+        res.json({ url });
+      } catch (error) {
+        logEvent.error(
+          'piece_count_evidence_error',
+          error instanceof Error ? error : new Error('Unknown error'),
+          { bookingId: req.params.bookingId },
+        );
+        res.status(500).json({ error: "Failed to upload evidence photo" });
+      }
+    },
+  );
+
   app.post("/api/bookings/:id/mover-cancel", async (req: Request, res: Response) => {
     try {
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
       const bookingId = req.params.id;
-      const { reason, actualPieceCount } = req.body as {
+      const { reason, actualPieceCount, evidencePhotoUrl } = req.body as {
         reason?: string;
         actualPieceCount?: number;
+        evidencePhotoUrl?: string;
       };
 
       const booking = await storage.getBooking(bookingId);
@@ -5760,6 +5832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isPieceCountClaim = reason === PIECE_COUNT_DISCREPANCY_REASON;
       let discrepancyPayout: number | null = null;
       let actualCount: number | null = null;
+      let evidenceUrl: string | null = null;
 
       if (isPieceCountClaim) {
         const parsedCount = z.number().int().min(0).max(50).safeParse(actualPieceCount);
@@ -5770,6 +5843,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         actualCount = parsedCount.data;
+
+        // Evidence gate. Checked before anything is written, so a claim without
+        // a photo leaves the booking untouched rather than half-recorded.
+        const parsedUrl = z.string().trim().min(1).safeParse(evidencePhotoUrl);
+        if (!parsedUrl.success) {
+          return res.status(400).json({
+            error:
+              "evidencePhotoUrl is required when cancelling for a piece count discrepancy — upload a photo of the actual items first",
+          });
+        }
+        evidenceUrl = parsedUrl.data;
 
         const declared = booking.declaredPieceCount;
         if (typeof declared !== "number") {
@@ -5820,6 +5904,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? {
               cancellationReason: PIECE_COUNT_DISCREPANCY_REASON,
               actualPieceCountOnArrival: actualCount,
+              // Evidence and payout land in the same write: the amount is never
+              // stored without the photo that justifies it.
+              pieceCountEvidencePhotoUrl: evidenceUrl,
+              pieceCountEvidenceUploadedAt: new Date(),
               pieceCountDiscrepancyPayout:
                 discrepancyPayout === null ? null : discrepancyPayout.toString(),
             }
@@ -5883,6 +5971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? {
               declaredPieceCount: booking.declaredPieceCount ?? null,
               actualPieceCountOnArrival: actualCount,
+              evidencePhotoUrl: evidenceUrl,
               // Recorded on the booking; no transfer is initiated here. Paying it
               // out needs a Stripe Connect transfer through moverPayouts.
               discrepancyPayout,

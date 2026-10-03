@@ -584,10 +584,67 @@ export default function MoverDashboard() {
   }, [overlayJob, overlayCountdown]);
 
   const [cancelJobDialogBookingId, setCancelJobDialogBookingId] = useState<string | null>(null);
+  // Piece-count discrepancy claim. Off by default: an ordinary cancellation
+  // stays a one-click action and pays nothing.
+  const [isPieceCountClaim, setIsPieceCountClaim] = useState(false);
+  const [actualPieceCount, setActualPieceCount] = useState("");
+  const [evidencePhotoUrl, setEvidencePhotoUrl] = useState<string | null>(null);
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+
+  const resetCancelDialog = () => {
+    setCancelJobDialogBookingId(null);
+    setIsPieceCountClaim(false);
+    setActualPieceCount("");
+    setEvidencePhotoUrl(null);
+    setEvidenceUploading(false);
+    setEvidenceError(null);
+  };
+
+  const uploadEvidencePhoto = async (bookingId: string, file: File) => {
+    setEvidenceUploading(true);
+    setEvidenceError(null);
+    try {
+      const form = new FormData();
+      form.append("photo", file);
+      const res = await fetch(`/api/bookings/${bookingId}/piece-count-evidence`, {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Upload failed");
+      }
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error("Upload returned no URL");
+      setEvidencePhotoUrl(data.url);
+    } catch (err) {
+      setEvidencePhotoUrl(null);
+      setEvidenceError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  };
+
+  // Confirm stays disabled until a claim has both a count and a photo.
+  const claimReady =
+    !isPieceCountClaim ||
+    (actualPieceCount.trim() !== "" &&
+      Number.isInteger(Number(actualPieceCount)) &&
+      Number(actualPieceCount) >= 0 &&
+      evidencePhotoUrl !== null);
 
   const moverCancelMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      const response = await apiRequest("POST", `/api/bookings/${bookingId}/mover-cancel`, {});
+      const body = isPieceCountClaim
+        ? {
+            reason: "piece_count_discrepancy",
+            actualPieceCount: Number(actualPieceCount),
+            evidencePhotoUrl,
+          }
+        : {};
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/mover-cancel`, body);
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to cancel booking");
@@ -595,7 +652,7 @@ export default function MoverDashboard() {
       return response.json();
     },
     onSuccess: () => {
-      setCancelJobDialogBookingId(null);
+      resetCancelDialog();
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
       toast({
         title: "Job cancelled",
@@ -2066,7 +2123,7 @@ export default function MoverDashboard() {
         {/* ── Mover cancel confirmed job confirmation ───────────────────── */}
         <AlertDialog
           open={!!cancelJobDialogBookingId}
-          onOpenChange={(open) => { if (!open) setCancelJobDialogBookingId(null); }}
+          onOpenChange={(open) => { if (!open) resetCancelDialog(); }}
         >
           <AlertDialogContent data-testid="dialog-cancel-job">
             <AlertDialogHeader>
@@ -2083,9 +2140,107 @@ export default function MoverDashboard() {
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
+
+            {/* Piece-count discrepancy claim. Opt-in, and gated on evidence:
+                this is the only cancellation that pays the mover, so the photo
+                and the count are both required before Confirm unlocks. */}
+            <div className="space-y-3 rounded-lg border border-border/60 p-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={isPieceCountClaim}
+                  onChange={(e) => {
+                    setIsPieceCountClaim(e.target.checked);
+                    if (!e.target.checked) {
+                      setActualPieceCount("");
+                      setEvidencePhotoUrl(null);
+                      setEvidenceError(null);
+                    }
+                  }}
+                  className="mt-0.5 h-4 w-4 rounded border-input"
+                  data-testid="checkbox-piece-count-claim"
+                />
+                <span>
+                  The load has a different number of pieces than the customer
+                  declared
+                </span>
+              </label>
+
+              {isPieceCountClaim && (
+                <div className="space-y-3 pl-6">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="actual-piece-count"
+                      className="text-xs font-medium"
+                    >
+                      Pieces you counted on arrival
+                    </label>
+                    <input
+                      id="actual-piece-count"
+                      type="number"
+                      min={0}
+                      max={50}
+                      inputMode="numeric"
+                      value={actualPieceCount}
+                      onChange={(e) => setActualPieceCount(e.target.value)}
+                      className="h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      data-testid="input-actual-piece-count"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="evidence-photo"
+                      className="text-xs font-medium"
+                    >
+                      Upload photo of actual items
+                    </label>
+                    <input
+                      id="evidence-photo"
+                      type="file"
+                      accept="image/*"
+                      disabled={evidenceUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && cancelJobDialogBookingId) {
+                          void uploadEvidencePhoto(cancelJobDialogBookingId, file);
+                        }
+                      }}
+                      className="block w-full text-xs file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-1.5 file:text-xs file:font-medium"
+                      data-testid="input-evidence-photo"
+                    />
+                    {evidenceUploading && (
+                      <p className="text-xs text-muted-foreground">Uploading…</p>
+                    )}
+                    {evidenceError && (
+                      <p
+                        className="text-xs text-destructive"
+                        data-testid="text-evidence-error"
+                      >
+                        {evidenceError}
+                      </p>
+                    )}
+                    {evidencePhotoUrl && !evidenceUploading && (
+                      <img
+                        src={evidencePhotoUrl}
+                        alt="Evidence of actual items"
+                        className="mt-2 h-20 w-20 rounded-md object-cover ring-1 ring-border"
+                        data-testid="img-evidence-thumbnail"
+                      />
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    If the count differs from what the customer declared, 50% of the
+                    booking fee is recorded in your favour.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <AlertDialogFooter className="flex-col sm:flex-row gap-2">
               <AlertDialogCancel
-                onClick={() => setCancelJobDialogBookingId(null)}
+                onClick={resetCancelDialog}
                 data-testid="button-cancel-job-dismiss"
                 className="w-full sm:w-auto"
               >
@@ -2095,7 +2250,7 @@ export default function MoverDashboard() {
                 onClick={() => {
                   if (cancelJobDialogBookingId) moverCancelMutation.mutate(cancelJobDialogBookingId);
                 }}
-                disabled={moverCancelMutation.isPending}
+                disabled={moverCancelMutation.isPending || evidenceUploading || !claimReady}
                 data-testid="button-cancel-job-confirm"
                 className="w-full sm:w-auto bg-destructive text-destructive-foreground"
               >
