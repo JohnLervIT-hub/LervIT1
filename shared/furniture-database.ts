@@ -87,8 +87,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Bed',
     subcategory: 'Twin',
     keywords: ['twin', 'single', 'bed', 'storage', 'drawers', 'captain'],
-    dimensions_cm: { length: 191, width: 99, height: 43 },
-    volume_ft3: calcVolume(191, 99, 43),
+    dimensions_cm: { length: 200, width: 107, height: 42 },
+    volume_ft3: calcVolume(200, 107, 42),
     weight_kg: 55,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -442,7 +442,7 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     // "round sofa" and "curved sofa" all matched '2-seater loveseat sofa' at
     // similarity 1.000 — over the 0.70 threshold, so the matcher adopted the
     // loveseat's 38.27ft3 outright and discarded the vision model's own
-    // estimate. A round cuddler is roughly 2.5x that, so the load was quoted
+    // estimate. A cuddler is roughly 1.6x that, so the load was quoted
     // an SUV for a pickup job.
     // 'nest' lives here and 'nesting' on the modular sectionals below. A plain
     // "nest sofa" is this deep, enveloping shape; "nesting" means pieces that
@@ -450,10 +450,11 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     // separate rows makes each resolve on an exact match (+3) while the other
     // only partials (+1), so neither term is decided by array order.
     keywords: ['cuddle', 'snuggler', 'cuddler', 'nest', 'round', 'circular', 'curved', 'sofa', 'couch', 'oversized', 'deep-seat'],
-    // Bounding box, like every row here: a circular seat does not fill its
-    // square, but what has to fit in the vehicle is the box, not the cushion.
-    dimensions_cm: { length: 180, width: 180, height: 85 },
-    volume_ft3: calcVolume(180, 180, 85),
+    // Bounding box, like every row here. Marketed cuddlers are D-shaped at
+    // 54-64" wide rather than a full circle, so the box is rectangular; what
+    // has to fit in the vehicle is still the box, not the cushion.
+    dimensions_cm: { length: 160, width: 130, height: 85 },
+    volume_ft3: calcVolume(160, 130, 85),
     weight_kg: 85,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -514,8 +515,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Table',
     subcategory: 'Dining',
     keywords: ['dining', 'table', '4-person', 'four', 'kitchen'],
-    dimensions_cm: { length: 120, width: 75, height: 75 },
-    volume_ft3: calcVolume(120, 75, 75),
+    dimensions_cm: { length: 120, width: 100, height: 75 },
+    volume_ft3: calcVolume(120, 100, 75),
     weight_kg: 35,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -895,8 +896,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Washer',
     keywords: ['washing', 'machine', 'washer', 'front-load', 'laundry'],
-    dimensions_cm: { length: 60, width: 65, height: 85 },
-    volume_ft3: calcVolume(60, 65, 85),
+    dimensions_cm: { length: 68, width: 84, height: 99 },
+    volume_ft3: calcVolume(68, 84, 99),
     weight_kg: 75,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -910,8 +911,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Dryer',
     keywords: ['dryer', 'clothes', 'laundry', 'tumble'],
-    dimensions_cm: { length: 60, width: 65, height: 85 },
-    volume_ft3: calcVolume(60, 65, 85),
+    dimensions_cm: { length: 68, width: 84, height: 99 },
+    volume_ft3: calcVolume(68, 84, 99),
     weight_kg: 55,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -1045,8 +1046,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Washer',
     keywords: ['washing', 'machine', 'washer', 'top-load', 'laundry'],
-    dimensions_cm: { length: 60, width: 60, height: 105 },
-    volume_ft3: calcVolume(60, 60, 105),
+    dimensions_cm: { length: 68, width: 71, height: 107 },
+    volume_ft3: calcVolume(68, 71, 107),
     weight_kg: 65,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -1060,8 +1061,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Washer',
     keywords: ['washer', 'dryer', 'stacked', 'combo', 'laundry', 'stackable'],
-    dimensions_cm: { length: 65, width: 65, height: 180 },
-    volume_ft3: calcVolume(65, 65, 180),
+    dimensions_cm: { length: 68, width: 84, height: 183 },
+    volume_ft3: calcVolume(68, 84, 183),
     weight_kg: 130,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -1075,8 +1076,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Refrigerator',
     keywords: ['mini', 'fridge', 'bar', 'small', 'refrigerator', 'compact', 'dorm'],
-    dimensions_cm: { length: 48, width: 45, height: 50 },
-    volume_ft3: calcVolume(48, 45, 50),
+    dimensions_cm: { length: 48, width: 52, height: 85 },
+    volume_ft3: calcVolume(48, 52, 85),
     weight_kg: 20,
     load_size: 'boxes',
     vehicle: 'car',
@@ -1120,8 +1121,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Appliance',
     subcategory: 'Water Heater',
     keywords: ['water', 'heater', 'tank', 'hot', 'boiler'],
-    dimensions_cm: { length: 50, width: 50, height: 150 },
-    volume_ft3: calcVolume(50, 50, 150),
+    dimensions_cm: { length: 58, width: 58, height: 150 },
+    volume_ft3: calcVolume(58, 58, 150),
     weight_kg: 55,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -1426,8 +1427,8 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Bed',
     subcategory: 'Mattress',
     keywords: ['mattress', 'twin', 'single', 'bed', 'foam', 'spring'],
-    dimensions_cm: { length: 191, width: 99, height: 20 },
-    volume_ft3: calcVolume(191, 99, 20),
+    dimensions_cm: { length: 191, width: 99, height: 25 },
+    volume_ft3: calcVolume(191, 99, 25),
     weight_kg: 20,
     load_size: 'medium',
     vehicle: 'pickup',
