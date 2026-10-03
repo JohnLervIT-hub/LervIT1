@@ -454,6 +454,12 @@ export default function RequestMove() {
   // re-derives the recommended vehicle from the summed item volumes, because a
   // client-supplied value set the vehicle class and therefore the base fee.
   const [aiRecommendedVehicle, setAiRecommendedVehicle] = useState<string | undefined>(undefined);
+  // What the vision pass recommended for movers, kept separately because
+  // numberOfMovers is overwritten the moment the customer picks a different
+  // count. Without it the advisory below cannot tell "AI said 2, you chose 1"
+  // from "AI said 1" — heavyItem is true for a 35kg recliner the AI assigns a
+  // single mover, and for the manual Heavy Items toggle when no AI has run.
+  const [aiRecommendedMovers, setAiRecommendedMovers] = useState<number | undefined>(undefined);
 
   const handleContactCapture = useCallback(async (contact: { name: string; phone: string; email: string }) => {
     try {
@@ -1643,6 +1649,7 @@ export default function RequestMove() {
 
         setLoadSize(recommendedLoadSize);
         setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+        setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
         setHeavyItem(hasHeavyItems);
         setHasAutoAnalyzed(true);
 
@@ -1693,6 +1700,7 @@ export default function RequestMove() {
       // Nothing left — reset to manual defaults
       setAiDetectedVolume(undefined);
       setAiRecommendedVehicle(undefined);
+      setAiRecommendedMovers(undefined);
       setLoadSize('medium');
       setNumberOfMovers(1);
       setHeavyItem(false);
@@ -1706,6 +1714,7 @@ export default function RequestMove() {
 
     setLoadSize(plan.loadSize);
     setNumberOfMovers(plan.movers > 1 ? 2 : 1);
+    setAiRecommendedMovers(plan.movers > 1 ? 2 : 1);
     setHeavyItem(plan.hasHeavyItems);
   };
 
@@ -1746,6 +1755,7 @@ export default function RequestMove() {
     // Apply recommendations
     setLoadSize(recommendedLoadSize);
     setNumberOfMovers(maxMovers > 1 ? 2 : 1);
+    setAiRecommendedMovers(maxMovers > 1 ? 2 : 1);
     setHeavyItem(hasHeavyItems);
     
     toast({
@@ -2822,6 +2832,27 @@ export default function RequestMove() {
                               </Alert>
                             );
                           })()}
+
+                          {/* Soft advisory: the AI asked for 2 movers and the customer
+                              chose 1. Purely informational — the 1-mover button stays
+                              enabled, unlike the forcedTwoMovers lock above.
+                              Gated on aiRecommendedMovers === 2 rather than heavyItem
+                              alone, because heavyItem is true for a 35kg recliner the
+                              AI gives one mover, and for the manual Heavy Items toggle
+                              when no analysis has run — in both cases the copy's claim
+                              would be false. */}
+                          {!forcedTwoMovers && numberOfMovers === 1 && aiRecommendedMovers === 2 &&
+                            (heavyItem || aiRecommendedVehicle === 'van' || aiRecommendedVehicle === 'truck') && (
+                            <Alert className="mb-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" data-testid="alert-movers-advisory">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
+                                <strong>AI recommended 2 movers for this load.</strong> With 1 mover,
+                                you'll need to assist with carrying. Not recommended for heavy or
+                                large items.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+
                           <div className="grid grid-cols-2 gap-3 sm:gap-4">
                             <button
                               type="button"
