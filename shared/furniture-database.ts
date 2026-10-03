@@ -434,6 +434,44 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     insurance_level: 'high',
   },
   {
+    item_id: 'SOFA_CUDDLE_ROUND_001',
+    name: 'Round cuddle sofa / snuggler',
+    category: 'Sofa',
+    subcategory: 'Cuddle',
+    // No 'loveseat' here on purpose. Before this row existed, "cuddle sofa",
+    // "round sofa" and "curved sofa" all matched '2-seater loveseat sofa' at
+    // similarity 1.000 — over the 0.70 threshold, so the matcher adopted the
+    // loveseat's 38.27ft3 outright and discarded the vision model's own
+    // estimate. A round cuddler is roughly 2.5x that, so the load was quoted
+    // an SUV for a pickup job.
+    keywords: ['cuddle', 'snuggler', 'cuddler', 'round', 'circular', 'curved', 'sofa', 'couch', 'oversized', 'deep-seat'],
+    // Bounding box, like every row here: a circular seat does not fill its
+    // square, but what has to fit in the vehicle is the box, not the cushion.
+    dimensions_cm: { length: 180, width: 180, height: 85 },
+    volume_ft3: calcVolume(180, 180, 85),
+    weight_kg: 85,
+    load_size: 'medium',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
+  },
+  {
+    item_id: 'SOFA_CURVED_001',
+    name: 'Curved / crescent sofa (3-seat)',
+    category: 'Sofa',
+    subcategory: 'Curved',
+    keywords: ['curved', 'crescent', 'arc', 'banana', 'conversation', 'round', 'sofa', 'couch', '3-seat', 'three-seat'],
+    dimensions_cm: { length: 280, width: 120, height: 85 },
+    volume_ft3: calcVolume(280, 120, 85),
+    weight_kg: 90,
+    load_size: 'medium',
+    vehicle: 'pickup',
+    movers_required: 2,
+    handling_complexity: 'moderate',
+    insurance_level: 'medium',
+  },
+  {
     item_id: 'ARMCHAIR_001',
     name: 'Armchair / Accent chair',
     category: 'Chair',
