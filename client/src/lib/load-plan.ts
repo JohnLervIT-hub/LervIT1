@@ -27,15 +27,29 @@ const VEHICLE_TIER_RANK: Record<string, number> = { car: 0, pickup: 1, van: 2, t
 /**
  * Longest-side limits, in cm, for the dimension bump.
  *
- * VAN_MIN_CM is the length past which a load stops being a pickup job. It is
- * the 8-foot bed (244cm) with the tailgate down, which is how furniture
- * actually travels, NOT the 6.5ft (198cm) bed measured closed. The former
- * value of 200cm sat just under a 203cm queen mattress, so a 27 ft³, 40 kg
- * mattress was billed a cargo van — and it overrode the ground-truth database
- * tag ('pickup') to do it.
+ * VAN_MIN_CM is the length past which a load stops being a pickup job: an 8-foot
+ * bed (244cm) with the tailgate down, plus the overhang a strapped-and-flagged
+ * load legitimately carries. It was 200cm, which sat under a 203cm queen
+ * mattress and billed a 27 ft³ / 40 kg mattress as a cargo van; 244cm then
+ * still caught a 250cm sofa bed the database itself tags 'pickup'.
+ *
+ * 270cm is calibrated against the database rather than a spec sheet. Only two
+ * items have a longest side in 244-270cm: that 250cm sofa bed (tag 'pickup',
+ * so 244 contradicted ground truth) and a 257cm pool table (tag 'truck', which
+ * the vehicle floor pins to truck regardless of this limit). Every item longer
+ * than 270cm is tagged 'van' or 'truck' already, so the floor holds them there
+ * whatever this value is — raising it to 270 fixes the one disagreement and
+ * loosens nothing.
+ *
+ * PICKUP_MIN_CM stays 150. It only ever lifts car -> pickup, never to van, and
+ * it is the sole guard for a vision-estimated item that matched nothing in the
+ * database and so carries no vehicle tag to floor on. Raising it to 210 would
+ * change no database item (the floor catches all three light ones in that band
+ * — adult bicycle, twin and full mattresses, every one tagged 'pickup') while
+ * dropping unmatched 150-210cm items to an SUV that cannot carry them.
  */
 export const DIMENSION_LIMITS = {
-  VAN_MIN_CM: 244,
+  VAN_MIN_CM: 270,
   PICKUP_MIN_CM: 150,
 };
 
@@ -101,8 +115,8 @@ export function deriveLoadPlan(items: IdentifiedItem[]): LoadPlan | null {
   // ground-truth database. A 450 kg hot tub, a 520 kg pool table and a 422 kg
   // gun safe are tagged 'truck' there; volume and longest-side cannot express
   // that, so the load never lands below the highest tag it contains. This is
-  // also what makes the 244cm dimension limit safe: anything that genuinely
-  // needs a van despite being shorter than 8ft is tagged for one.
+  // also what makes DIMENSION_LIMITS.VAN_MIN_CM safe at its current value:
+  // anything that genuinely needs a van while shorter than that is tagged for one.
   const maxDbTier = items.reduce(
     (max, i) => Math.max(max, VEHICLE_TIER_RANK[i.vehicleType || "car"] ?? 0),
     0,
