@@ -864,10 +864,18 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
     // volume means we are about to quote a different object than the one in the
     // photo. Log it rather than silently overwriting a good measurement.
     if (hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
+      const ratio = match.item.volume_ft3 / hintVolumeFt3;
+      // Unconditional, so the hint is visible in Railway for every match and not
+      // only for the ones that trip the gate below. A ratio near 1.00 means the
+      // model's own measurement and the row it matched agree.
+      console.log(
+        '[Vision Engine 2.0] Volume hint:',
+        `${hintVolumeFt3.toFixed(1)}ft3, matched to: ${match.item.volume_ft3}ft3`,
+        `(ratio ${ratio.toFixed(2)})`,
+      );
       // Upper bound at 1.5x rather than 2x: the overshoot worth catching is a
       // tier above the one photographed (Small -> Medium L-shaped sectional is
       // 1.57x), which a 2x gate let through. Log only, no auto-correction.
-      const ratio = match.item.volume_ft3 / hintVolumeFt3;
       if (ratio > 1.5 || ratio < 0.5) {
         console.warn(
           '[Vision Engine 2.0] Match volume implausible vs vision estimate:',
