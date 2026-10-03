@@ -126,7 +126,7 @@ STORAGE:
 APPLIANCES:
 • Refrigerator (standard top-freezer): ~75×70×170cm, 90kg
 • French door refrigerator: ~90×80×180cm, 130kg
-• Washing machine (front-load): ~68×84×99cm, 75kg
+• Washing machine (front-load): ~70×86×99cm, 75kg
 • Clothes dryer: ~68×84×99cm, 55kg
 • Dishwasher: ~60×60×85cm, 45kg
 • Stove / Range (electric): ~76×70×115cm, 70kg
@@ -136,7 +136,7 @@ APPLIANCES:
 • Chest freezer: ~110×65×85cm, 55kg
 • Upright freezer: ~70×65×170cm, 80kg
 • Stove / Range (gas): ~76×70×115cm, 80kg
-• Washing machine (top-load): ~68×71×107cm, 65kg
+• Washing machine (top-load): ~70×76×112cm, 65kg
 • Stacked washer/dryer combo: ~68×84×183cm, 130kg
 • Mini fridge / Bar fridge: ~48×52×85cm, 20kg
 • Wall oven: ~60×60×90cm, 55kg
