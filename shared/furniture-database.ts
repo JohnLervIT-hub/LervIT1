@@ -312,8 +312,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     category: 'Sofa',
     subcategory: 'Sectional',
     keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large', 'oversized', '6-piece', 'theater', 'pit', 'u-shape', 'deep-seat'],
-    dimensions_cm: { length: 420, width: 300, height: 90 },
-    volume_ft3: calcVolume(420, 300, 90),
+    // Footprint, not the full horseshoe bounding box. 420x300 described the
+    // rectangle the piece sits inside, most of which is the empty floor in the
+    // middle of the U; 380x260 is the furniture itself. Stays monotonic over
+    // the Medium row (350x250x85) in every dimension.
+    dimensions_cm: { length: 380, width: 260, height: 90 },
+    volume_ft3: calcVolume(380, 260, 90),
     weight_kg: 240,
     load_size: 'apartment',
     vehicle: 'truck',

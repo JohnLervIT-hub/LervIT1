@@ -22,6 +22,12 @@ const CASES: Case[] = [
   { name: "U-shaped sectional sofa", hint: 103, expect: "SOFA_SECTIONAL_U_SM_001" },
   { name: "U-shaped sectional sofa", hint: 180, expect: "SOFA_SECTIONAL_U_SM_001" },
   { name: "U-shaped sectional sofa", hint: 262, expect: "SOFA_SECTIONAL_U_MD_001" },
+  // 321 is the case U_LG's footprint was re-measured for: against the old
+  // 420x300x90 bounding box (400.47 ft3) the MD/LG midpoint sat at 331.6, so
+  // 321 fell to Medium. Footprint dims put the midpoint at 288.3.
+  { name: "U-shaped sectional sofa", hint: 321, expect: "SOFA_SECTIONAL_U_LG_001" },
+  { name: "U-shaped sectional sofa", hint: 289, expect: "SOFA_SECTIONAL_U_LG_001" },
+  { name: "U-shaped sectional sofa", hint: 287, expect: "SOFA_SECTIONAL_U_MD_001" },
   { name: "U-shaped sectional sofa", hint: 395, expect: "SOFA_SECTIONAL_U_LG_001" },
   { name: "L-shaped sectional sofa", hint: 103, expect: "SOFA_SECTIONAL_L_SM_001" },
   { name: "L-shaped sectional sofa", hint: 162, expect: "SOFA_SECTIONAL_L_MD_001" },

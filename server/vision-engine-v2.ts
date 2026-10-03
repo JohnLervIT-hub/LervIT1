@@ -54,7 +54,7 @@ const SIMILARITY_THRESHOLD = 0.70;  // Match threshold for using database values
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;  // When to fully trust database match
 
 // AUTOGEN:REF_DIMS:START — regenerate with: npm run generate:dims (source: shared/furniture-database.ts)
-const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (use these):
+const REFERENCE_DIMENSIONS = `REFERENCE DIMENSIONS (plausibility anchors only — if the photo shows something different, trust the photo):
 
 BEDS:
 • Twin bed frame (standard): ~191×99×40cm, 35kg
@@ -76,18 +76,12 @@ BEDS:
 SOFAS:
 • 2-seater loveseat sofa: ~150×85×85cm, 45kg
 • 3-seater sofa: ~210×90×85cm, 70kg
-• Small L-shaped sectional sofa (2-piece, apartment-size): ~230×150×85cm, 70kg
-• Medium L-shaped sectional sofa (3-piece, standard): ~300×180×85cm, 120kg
-• Large L-shaped sectional sofa (4-5 piece, deep-seat, oversized): ~370×220×90cm, 170kg
-• Small U-shaped sectional sofa (compact, 3-piece): ~280×200×85cm, 130kg
-• Medium U-shaped sectional sofa (standard, 4-5 piece): ~350×250×85cm, 180kg
-• Large U-shaped sectional sofa (oversized, 6+ piece): ~420×300×90cm, 240kg
 • Twin sofa bed (loveseat sleeper, pull-out twin): ~170×90×85cm, 55kg
 • Full/Double sofa bed (3-seat sleeper, pull-out double): ~200×95×85cm, 75kg
 • Queen sofa bed (large sleeper, pull-out queen): ~230×100×90cm, 95kg
-• Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~250×170×85cm, 110kg
-• Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~290×200×90cm, 145kg
-• Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~340×220×90cm, 180kg
+• Small sectional sofa bed (2-piece L-shaped with pull-out sleeper): ~228×151×66cm, 110kg
+• Medium sectional sofa bed (3-piece L-shaped with pull-out sleeper and storage): ~240×160×83cm, 145kg
+• Large sectional sofa bed (4+ piece L/U-shaped with pull-out sleeper and storage): ~270×200×85cm, 180kg
 
 TABLES:
 • Dining table (4-person): ~120×75×75cm, 35kg
@@ -701,7 +695,7 @@ Do NOT include Small/Medium/Large in the sectional itemName. Size is determined 
 
 DIMENSION GUIDANCE FOR SECTIONALS (estimate carefully from the photo):
 L-shaped: compact fits ~230×150cm footprint; standard fills a corner ~270×200cm; large/oversized ~370×220cm
-U-shaped: compact ~280×200cm; standard ~350×250cm; large pit-style ~420×300cm
+U-shaped: compact ~280×200cm; standard ~350×250cm; large pit-style ~380×260cm
 
 SOFA BED / SLEEPER DETECTION (CRITICAL — check for these indicators):
 Before classifying any sofa, check for sofa bed / sleeper indicators:
