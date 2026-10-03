@@ -218,6 +218,22 @@ function capitalizeFirst(str: string): string {
 
 // Vehicle tiers, ranked smallest → largest. A load's vehicle is the max tier
 // across its identified items. VEHICLE_TIER_KEYS order must match the ranks.
+/**
+ * Longest-side limits, in cm, for the dimension bump in the three cascades below.
+ *
+ * VAN_MIN_CM is the length past which a load stops being a pickup job: an 8-foot
+ * bed (244cm) with the tailgate down, plus the overhang a strapped-and-flagged
+ * load legitimately carries. At 200cm it billed a 27 ft3 / 40 kg queen mattress
+ * and a 3.9 ft3 98-inch TV as cargo-van loads, and overrode the database's own
+ * 'pickup' tag on all 12 items it caught in 200-270cm.
+ *
+ * PICKUP_MIN_CM stays 150: it only ever lifts car -> pickup, never to van, and
+ * it is the one guard for a vision-estimated item that matched nothing in the
+ * database and so carries no vehicle tag to floor on.
+ */
+const VAN_MIN_CM = 270;
+const PICKUP_MIN_CM = 150;
+
 const VEHICLE_LABELS: Record<string, string> = {
   car: 'SUV',
   pickup: 'Pickup Truck',
@@ -1667,8 +1683,8 @@ export default function RequestMove() {
             );
           })
         );
-        if (maxDimension > 200 && tierIndex < 2)      tierIndex = 2;
-        else if (maxDimension > 150 && tierIndex < 1) tierIndex = 1;
+        if (maxDimension > VAN_MIN_CM && tierIndex < 2)      tierIndex = 2;
+        else if (maxDimension > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
         if (hasHeavyItems && tierIndex < 1)           tierIndex = 1;
 
         // DATABASE VEHICLE FLOOR: honour the per-item vehicle assignment from the ground
@@ -1781,8 +1797,8 @@ export default function RequestMove() {
         parseFloat(String(item.dimensionsHcm || 0))
       )
     ));
-    if (maxDim > 200 && tierIndex < 2)      tierIndex = 2;
-    else if (maxDim > 150 && tierIndex < 1) tierIndex = 1;
+    if (maxDim > VAN_MIN_CM && tierIndex < 2)      tierIndex = 2;
+    else if (maxDim > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1)     tierIndex = 1;
 
     // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
@@ -1861,8 +1877,8 @@ export default function RequestMove() {
         parseFloat(String(item.dimensionsHcm || 0))
       );
     }));
-    if (maxDimRecalc > 200 && tierIndex < 2) tierIndex = 2;
-    else if (maxDimRecalc > 150 && tierIndex < 1) tierIndex = 1;
+    if (maxDimRecalc > VAN_MIN_CM && tierIndex < 2) tierIndex = 2;
+    else if (maxDimRecalc > PICKUP_MIN_CM && tierIndex < 1) tierIndex = 1;
     if (hasHeavyItems && tierIndex < 1) tierIndex = 1;
 
     // DATABASE VEHICLE FLOOR: use the highest per-item vehicleType from the ground truth DB.
