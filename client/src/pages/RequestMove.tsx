@@ -404,7 +404,6 @@ export default function RequestMove() {
     subtotal: 0,
     total: 0,
     vehicleClass: 'A',
-    adjustedVolume: 0,
     rawVolume: 0,
     numberOfMovers: 1,
     forcedTwoMovers: false,
