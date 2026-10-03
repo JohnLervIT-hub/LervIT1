@@ -2075,15 +2075,15 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
  * 
  * Updated thresholds (2026):
  * Raw ft³ boundaries aligned with getVehicleClassFromVolume in shared/pricing.ts
- * (adjusted-volume thresholds of 60/150/350 divided by packingFactor 1.10):
- *   ≤54 ft³   → SUV (car)                   - Single chair, few boxes  [Class A]
- *   ≤136 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
+ * (adjusted-volume thresholds of 40/140/350 divided by packingFactor 1.10):
+ *   ≤36 ft³   → SUV (car)                   - Single chair, few boxes  [Class A]
+ *   ≤127 ft³  → Pickup Truck (pickup)       - Medium furniture         [Class B]
  *   ≤318 ft³  → Cargo Van (van)             - Bedroom sets, apartments [Class C]
  *   >318 ft³  → Moving Truck (truck)        - Full apartment           [Class E]
  */
 export const VEHICLE_VOLUME_THRESHOLDS = {
-  CAR_MAX: 54,       // raw ≤ 54 ft³   → Class A (SUV)
-  PICKUP_MAX: 136,   // raw ≤ 136 ft³  → Class B (Pickup Truck)
+  CAR_MAX: 36,       // raw ≤ 36 ft³   → Class A (SUV)
+  PICKUP_MAX: 127,   // raw ≤ 127 ft³  → Class B (Pickup Truck)
   VAN_MAX: 318,      // raw ≤ 318 ft³  → Class C (Cargo Van)
   // Above 318 ft³ → Class E (Moving Truck)
 };
@@ -2093,8 +2093,8 @@ export const VEHICLE_VOLUME_THRESHOLDS = {
  * Note: This uses TOTAL volume including quantity
  */
 export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // ≤54 ft³ → Class A
-  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // ≤136 ft³ → Class B
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'boxes';     // ≤36 ft³ → Class A
+  if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'medium'; // ≤127 ft³ → Class B
   if (volumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'large';     // ≤318 ft³ → Class C
   return 'apartment';  // >318 ft³ → Class E
 }
@@ -2104,8 +2104,8 @@ export function getLoadSizeFromVolume(volumeFt3: number): LoadSizeCategory {
  * This is the preferred method - uses volume directly without load size
  */
 export function getVehicleFromVolume(totalVolumeFt3: number): VehicleType {
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // ≤54 ft³ → Class A
-  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // ≤136 ft³ → Class B
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.CAR_MAX) return 'car';       // ≤36 ft³ → Class A
+  if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.PICKUP_MAX) return 'pickup'; // ≤127 ft³ → Class B
   if (totalVolumeFt3 <= VEHICLE_VOLUME_THRESHOLDS.VAN_MAX) return 'van';       // ≤318 ft³ → Class C
   return 'truck';  // >318 ft³ → Class E
 }

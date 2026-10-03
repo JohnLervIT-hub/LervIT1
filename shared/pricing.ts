@@ -174,7 +174,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     name: 'SUV',
     vehicleType: 'car',
     volumeRangeMin: 0,
-    volumeRangeMax: 60,
+    volumeRangeMax: 40,
     baseFee: PRICING_CONFIG.vehicleBaseFees.A,
     perKmRate: PRICING_CONFIG.kmRates.A,
     loadType: 'Small items, single chairs',
@@ -184,8 +184,8 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     class: 'B',
     name: 'Pickup Truck',
     vehicleType: 'pickup',
-    volumeRangeMin: 61,
-    volumeRangeMax: 150,
+    volumeRangeMin: 41,
+    volumeRangeMax: 140,
     baseFee: PRICING_CONFIG.vehicleBaseFees.B,
     perKmRate: PRICING_CONFIG.kmRates.B,
     loadType: 'Medium furniture, moderate loads',
@@ -195,7 +195,7 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
     class: 'C',
     name: 'Cargo Van',
     vehicleType: 'van',
-    volumeRangeMin: 151,
+    volumeRangeMin: 141,
     volumeRangeMax: 350,
     baseFee: PRICING_CONFIG.vehicleBaseFees.C,
     perKmRate: PRICING_CONFIG.kmRates.C,
@@ -218,16 +218,16 @@ export const VEHICLE_CLASSES: Record<VehicleClass, VehicleClassConfig> = {
 /**
  * Determine vehicle class from raw volume. Applies packing factor (1.10)
  * internally, so callers pass the raw sum of item volumes.
- *   adjusted ≤ 60   (raw ≤ ~54)   → A  (SUV)
- *   adjusted ≤ 150  (raw ≤ ~136)  → B  (Pickup Truck)
+ *   adjusted ≤ 40   (raw ≤ ~36)   → A  (SUV)
+ *   adjusted ≤ 140  (raw ≤ ~127)  → B  (Pickup Truck)
  *   adjusted ≤ 350  (raw ≤ ~318)  → C  (Cargo Van)
  *   adjusted > 350  (raw > ~318)  → E  (Moving Truck)
  */
 export function getVehicleClassFromVolume(rawVolumeCuft: number): VehicleClass {
   const adjusted = rawVolumeCuft * PRICING_CONFIG.packingFactor;
   if (adjusted > 350) return 'E';
-  if (adjusted > 150) return 'C';
-  if (adjusted > 60)  return 'B';
+  if (adjusted > 140) return 'C';
+  if (adjusted > 40)  return 'B';
   return 'A';
 }
 
