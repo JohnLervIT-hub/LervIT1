@@ -416,7 +416,12 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
   {
     item_id: 'SOFA_RECLINER_001',
     name: 'Recliner sofa (3-seat)',
-    category: 'Chair',
+    // 'Sofa', not 'Chair': a 3-seat recliner sofa is a sofa, and this was the
+    // only row in the database whose name said sofa while its category did not.
+    // findBestMatch penalises a sofa-named query by 0.5 on any non-Sofa row, so
+    // this row scored 0.667 against its OWN name while "Full/Double sofa bed"
+    // took it at 0.778 — a 57ft3 row answering for an 81ft3 one.
+    category: 'Sofa',
     subcategory: 'Recliner',
     keywords: ['recliner', 'reclining', 'sofa', 'lazy', 'electric', 'power'],
     dimensions_cm: { length: 230, width: 100, height: 100 },
