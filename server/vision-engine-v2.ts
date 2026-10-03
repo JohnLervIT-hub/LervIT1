@@ -864,8 +864,11 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
     // volume means we are about to quote a different object than the one in the
     // photo. Log it rather than silently overwriting a good measurement.
     if (hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
+      // Upper bound at 1.5x rather than 2x: the overshoot worth catching is a
+      // tier above the one photographed (Small -> Medium L-shaped sectional is
+      // 1.57x), which a 2x gate let through. Log only, no auto-correction.
       const ratio = match.item.volume_ft3 / hintVolumeFt3;
-      if (ratio > 2 || ratio < 0.5) {
+      if (ratio > 1.5 || ratio < 0.5) {
         console.warn(
           '[Vision Engine 2.0] Match volume implausible vs vision estimate:',
           `"${visionResult.itemName}" estimated ${hintVolumeFt3.toFixed(1)}ft3`,
@@ -970,6 +973,26 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
     // STEP 2.6: Detect quantity — prefer model-provided field, fall back to string parsing
     const quantityInfo = detectQuantity(visionResult.itemName);
     const quantity = visionResult.quantity ?? quantityInfo.quantity ?? 1;
+
+    // Volume is perItemVolume * quantity, and the model's `quantity` is taken on
+    // trust with no bounds check. The prompt names sectional tiers "(2-piece)",
+    // "(4-5 piece)", "(6+ piece)" and tells the model to count separable
+    // sections, so a 5-piece sectional reported as quantity 5 multiplies a
+    // 262 ft3 sofa into 1313 ft3 and a Moving Truck. detectQuantity cannot catch
+    // it — every numeric pattern there is ^-anchored, so "(4-5 piece)" parses as
+    // 1 — and a composite article is never photographed in multiples.
+    // Logged, not corrected, so the rate can be seen before changing any quote.
+    if (
+      quantity > 1 &&
+      quantityInfo.quantity === 1 &&
+      /sectional|sofa bed|sleeper/i.test(visionResult.itemName)
+    ) {
+      console.warn(
+        '[Vision Engine 2.0] Suspect quantity on a composite article:',
+        `"${visionResult.itemName}" quantity=${quantity} with no count in the name.`,
+        'Volume will be multiplied accordingly — likely a piece count, not an item count.',
+      );
+    }
 
     // Use single-item name for database matching if quantity > 1
     const matchName = quantity > 1 ? quantityInfo.singleItemName : visionResult.itemName;
