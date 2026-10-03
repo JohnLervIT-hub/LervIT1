@@ -84,6 +84,7 @@ SOFAS:
 • Recliner sofa (3-seat): ~230×100×100cm, 110kg
 • Round cuddle sofa / snuggler: ~160×130×85cm, 85kg
 • Curved / crescent sofa (3-seat): ~280×120×85cm, 90kg
+• Chaise lounge: ~165×65×88cm, 35kg
 
 TABLES:
 • Dining table (4-person): ~120×100×75cm, 35kg

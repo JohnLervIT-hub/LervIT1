@@ -428,6 +428,22 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     insurance_level: 'medium',
   },
   {
+    item_id: 'SOFA_CHAISE_001',
+    name: 'Chaise lounge',
+    category: 'Sofa',
+    subcategory: 'Chaise',
+    keywords: ['chaise', 'chaise lounge', 'lounge chair', 'daybed', 'recliner chair'],
+    dimensions_cm: { length: 165, width: 65, height: 88 },
+    volume_ft3: calcVolume(165, 65, 88),
+    weight_kg: 35,
+    movers_required: 1,
+    // Spec said 'standard', which is not in the handling_complexity union
+    // ('low' | 'medium' | 'slight' | 'moderate' | 'high' | 'very_high').
+    // 'low' is the nearest member and matches the 1-mover / 35kg profile.
+    handling_complexity: 'low',
+    insurance_level: 'standard',
+  },
+  {
     item_id: 'ARMCHAIR_001',
     name: 'Armchair / Accent chair',
     category: 'Chair',
