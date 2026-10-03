@@ -1983,8 +1983,14 @@ export function searchItemsByKeywords(keywords: string[]): FurnitureItem[] {
  * 
  * IMPROVED: Prevents false positives like "accent chair" → "AC (air conditioner)"
  * by requiring longer word matches and prioritizing exact category matches.
+ *
+ * `volumeHint` (ft³) breaks ties between rows that are equally good on name
+ * alone — in practice the SM/MD/LG tiers of one shape, which differ only by a
+ * size adjective the vision prompt is told NOT to emit ("shape only, NO size
+ * tier"). Without it the tie fell to whichever tier happened to sit first in
+ * FURNITURE_DATABASE, which is always the Small row.
  */
-export function findBestMatch(itemName: string): { item: FurnitureItem; similarity: number } | null {
+export function findBestMatch(itemName: string, volumeHint?: number): { item: FurnitureItem; similarity: number } | null {
   const nameLower = itemName.toLowerCase();
   const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
   
@@ -1994,10 +2000,14 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     nameLower.includes('sleeper') || nameLower.includes('pull-out') || nameLower.includes('pullout'));
   const hasSofaHint = !hasSofaBedHint && (nameLower.includes('sofa') || nameLower.includes('couch'));
   const hasBedHint = !hasSofaBedHint && nameLower.includes('bed');
-  const hasTableHint = nameLower.includes('table') || nameLower.includes('desk');
+  // Word-boundary, not substring: plain `includes('desk')` fired on "desktop
+  // computer", which handed the Table bonus to the office-desk row and a
+  // mismatch penalty to the actual PC row.
+  const hasTableHint = /\btable\b/.test(nameLower) || /\bdesks?\b/.test(nameLower);
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
+  let tied: FurnitureItem[] = [];
   
   for (const item of FURNITURE_DATABASE) {
     const itemNameLower = item.name.toLowerCase();
@@ -2053,19 +2063,35 @@ export function findBestMatch(itemName: string): { item: FurnitureItem; similari
     if (hasBedHint && item.category === 'Bed') matchCount += 2;
     if (hasTableHint && item.category === 'Table') matchCount += 2;
     
-    let similarity = totalWeight > 0 ? Math.min(matchCount / totalWeight, 1) : 0;
+    // Rank on the UNCLAMPED ratio. The keyword/category bonuses above add to
+    // matchCount without adding to totalWeight, so a good match routinely
+    // scores above 1 (16/9 for the right sectional shape, 11/9 for the wrong
+    // one). Clamping before the comparison flattened every one of those to
+    // exactly 1.0, which erased the shape signal entirely and handed the win
+    // to DB order. The clamp still applies to the score we report.
+    let score = totalWeight > 0 ? matchCount / totalWeight : 0;
+    score = score * (1 - categoryMismatchPenalty);
     
-    // Apply category mismatch penalty
-    similarity = similarity * (1 - categoryMismatchPenalty);
-    
-    if (similarity > bestScore) {
-      bestScore = similarity;
+    if (score > bestScore) {
+      bestScore = score;
       bestMatch = item;
+      tied = [item];
+    } else if (bestMatch && score === bestScore) {
+      tied.push(item);
     }
   }
   
+  // Genuine tie on name alone (the SM/MD/LG rows of one shape): let the
+  // measured volume pick the tier. Nearest centroid — the tiers are the only
+  // size signal the database carries.
+  if (tied.length > 1 && volumeHint !== undefined && Number.isFinite(volumeHint)) {
+    bestMatch = tied.reduce((best, item) =>
+      Math.abs(item.volume_ft3 - volumeHint) < Math.abs(best.volume_ft3 - volumeHint) ? item : best
+    );
+  }
+  
   if (bestMatch && bestScore > 0.3) {  // Minimum threshold for a match
-    return { item: bestMatch, similarity: bestScore };
+    return { item: bestMatch, similarity: Math.min(bestScore, 1) };
   }
   
   return null;
