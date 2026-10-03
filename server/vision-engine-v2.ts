@@ -178,10 +178,10 @@ SPECIALTY:
 • Moving box (medium): ~50×40×40cm, 20kg
 • Moving box (large): ~60×50×50cm, 25kg
 • Baby grand piano: ~161×149×101cm, 290kg
-• Grand piano (concert / full size): ~186×149×101cm, 325kg
+• Grand piano (concert / full size): ~272×149×101cm, 325kg
 • Hot tub / Spa (6-person): ~213×213×90cm, 450kg
 • Hot tub / Spa (4-person): ~185×185×85cm, 300kg
-• Gun safe (large, 30+ gun capacity): ~107×70×184cm, 422kg
+• Gun safe (large, 30+ gun capacity): ~56×76×154cm, 422kg
 • Gun safe (medium, 12-24 gun capacity): ~90×55×150cm, 180kg
 • Pool table / Billiard table (8-foot): ~257×145×81cm, 409kg
 • Pool table / Billiard table (9-foot): ~284×158×81cm, 520kg
