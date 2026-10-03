@@ -3,11 +3,6 @@ import { db } from './db';
 import { getBaseUrl } from './utils/urls';
 import { bookings, jobNotifications, users, BOOKING_STATUSES, abandonedBookings, movers, moverStripeAccounts, businessEvents, kpiTargets, moverActivityLog, reviews, googleReviews, inAppNotifications, quotes, leads, contentItems } from '@shared/schema';
 import { eq, lt, and, or, inArray, gte, isNotNull, isNull, lte, sql, desc, asc } from 'drizzle-orm';
-import {
-  PIECE_COUNT_DISPUTE_STATUS,
-  PIECE_COUNT_DISPUTE_RESOLUTION,
-  PIECE_COUNT_DISPUTE_WINDOW_MS,
-} from '@shared/schema';
 import { logEvent, logger } from './logger';
 import { notificationService } from './notifications';
 import { stripe } from './config/stripe';
@@ -123,11 +118,6 @@ export function initBackgroundJobs() {
   // Offset to minute :07 to spread load
   cron.schedule('7,22,37,52 * * * *', async () => {
     await withJobLock('expire_past_jobs', expirePastScheduledJobs);
-  }, TZ);
-
-  // Offset to minute :17 to stay clear of the other hourly jobs
-  cron.schedule('17 * * * *', async () => {
-    await withJobLock('expire_piece_count_disputes', expirePieceCountDisputes);
   }, TZ);
 
   // Offset to minute :02 (not :00) to avoid colliding with other hourly jobs
@@ -2574,67 +2564,3 @@ async function moverActivityRollup() {
   }
 }
 
-/**
- * Close the 24-hour piece-count dispute window on bookings the customer never
- * answered. Silence auto-approves — the mover's claim already carries a photo,
- * and leaving a payout open indefinitely is worse for both sides — but the
- * resolution records that no one responded, so ops can tell the two apart.
- */
-async function expirePieceCountDisputes(): Promise<void> {
-  const cutoff = new Date(Date.now() - PIECE_COUNT_DISPUTE_WINDOW_MS);
-
-  const expired = await db
-    .select({
-      id: bookings.id,
-      declaredPieceCount: bookings.declaredPieceCount,
-      actualPieceCountOnArrival: bookings.actualPieceCountOnArrival,
-      pieceCountEvidencePhotoUrl: bookings.pieceCountEvidencePhotoUrl,
-      pieceCountDiscrepancyPayout: bookings.pieceCountDiscrepancyPayout,
-    })
-    .from(bookings)
-    .where(
-      and(
-        eq(bookings.pieceCountDisputeStatus, PIECE_COUNT_DISPUTE_STATUS.PENDING_CUSTOMER),
-        lt(bookings.pieceCountDisputeOpenedAt, cutoff),
-      ),
-    );
-
-  if (expired.length === 0) return;
-
-  for (const row of expired) {
-    try {
-      await db
-        .update(bookings)
-        .set({
-          pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_CONFIRMED,
-          pieceCountDisputeResolvedAt: new Date(),
-          pieceCountDisputeResolution:
-            PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED_NO_RESPONSE,
-        })
-        .where(eq(bookings.id, row.id));
-
-      await notificationService.sendEmail({
-        to: process.env.OPS_EMAIL || 'support@lervit.com',
-        subject: `Piece-count claim auto-approved (no response) — booking ${row.id}`,
-        body:
-          `<p>The 24-hour dispute window closed with no customer response.</p><ul>` +
-          `<li><strong>Booking:</strong> ${row.id}</li>` +
-          `<li><strong>Customer declared:</strong> ${row.declaredPieceCount ?? '(never declared)'}</li>` +
-          `<li><strong>Mover's count on arrival:</strong> ${row.actualPieceCountOnArrival ?? '(none)'}</li>` +
-          `<li><strong>Recorded payout:</strong> ${row.pieceCountDiscrepancyPayout ?? '(none)'}</li>` +
-          `<li><strong>Mover photo:</strong> ${row.pieceCountEvidencePhotoUrl ?? '(none)'}</li>` +
-          `<li><strong>Resolution:</strong> ${PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED_NO_RESPONSE}</li>` +
-          `</ul>`,
-        type: 'booking_confirmation',
-      });
-    } catch (err) {
-      logEvent.error(
-        'piece_count_dispute_expiry_failed',
-        err instanceof Error ? err : new Error('expiry error'),
-        { bookingId: row.id },
-      );
-    }
-  }
-
-  logEvent.booking('piece_count_disputes_expired', { count: expired.length });
-}

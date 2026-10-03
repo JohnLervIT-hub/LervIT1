@@ -19,8 +19,6 @@ export interface FurnitureItem {
     height: number;
   };
   volume_ft3: number;
-  /** Max pieces for sectionals / sofa beds; undefined for non-sectional items. */
-  pieceCount?: number;
   weight_kg: number;
   load_size: LoadSizeCategory;
   vehicle: VehicleType;
@@ -243,7 +241,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'small', 'compact', 'apartment', '2-piece', 'two-piece', 'loveseat-chaise'],
     dimensions_cm: { length: 250, width: 213, height: 85 },
     volume_ft3: calcVolume(250, 213, 85),
-    pieceCount: 2,
     weight_kg: 70,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -259,7 +256,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'medium', 'standard', '3-piece', 'three-piece'],
     dimensions_cm: { length: 304, width: 261, height: 85 },
     volume_ft3: calcVolume(304, 261, 85),
-    pieceCount: 3,
     weight_kg: 120,
     load_size: 'large',
     vehicle: 'van',
@@ -275,7 +271,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['l-shaped', 'sectional', 'sofa', 'couch', 'corner', 'chaise', 'large', 'oversized', 'deep', '4-piece', '5-piece', 'modular', 'wide', 'deep-seat', 'nesting'],
     dimensions_cm: { length: 383, width: 289, height: 90 },
     volume_ft3: calcVolume(383, 289, 90),
-    pieceCount: 5,
     weight_kg: 170,
     load_size: 'apartment',
     vehicle: 'truck',
@@ -291,7 +286,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'small', 'compact', '3-piece', 'u-shape', 'nesting'],
     dimensions_cm: { length: 280, width: 200, height: 85 },
     volume_ft3: calcVolume(280, 200, 85),
-    pieceCount: 3,
     weight_kg: 130,
     load_size: 'large',
     vehicle: 'van',
@@ -307,7 +301,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'medium', 'standard', '4-piece', '5-piece', 'u-shape', 'nesting'],
     dimensions_cm: { length: 350, width: 250, height: 85 },
     volume_ft3: calcVolume(350, 250, 85),
-    pieceCount: 5,
     weight_kg: 180,
     load_size: 'large',
     vehicle: 'van',
@@ -323,7 +316,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['u-shaped', 'sectional', 'sofa', 'modular', 'large', 'oversized', '6-piece', 'theater', 'pit', 'u-shape', 'deep-seat', 'nesting'],
     dimensions_cm: { length: 420, width: 300, height: 90 },
     volume_ft3: calcVolume(420, 300, 90),
-    pieceCount: 6,
     weight_kg: 240,
     load_size: 'apartment',
     vehicle: 'truck',
@@ -339,7 +331,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sofa bed', 'sleeper', 'twin', 'loveseat', 'pull-out', 'pullout', 'convertible', 'small', 'compact', 'guest', 'fold-out'],
     dimensions_cm: { length: 170, width: 90, height: 85 },
     volume_ft3: calcVolume(170, 90, 85),
-    pieceCount: 1,
     weight_kg: 55,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -355,7 +346,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sofa bed', 'sleeper', 'full', 'double', '3-seat', 'pull-out', 'pullout', 'convertible', 'fold-out', 'standard'],
     dimensions_cm: { length: 200, width: 95, height: 85 },
     volume_ft3: calcVolume(200, 95, 85),
-    pieceCount: 1,
     weight_kg: 75,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -371,7 +361,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sofa bed', 'sleeper', 'queen', 'large', 'pull-out', 'pullout', 'convertible', 'fold-out', 'heavy', 'metal-frame'],
     dimensions_cm: { length: 230, width: 100, height: 90 },
     volume_ft3: calcVolume(230, 100, 90),
-    pieceCount: 1,
     weight_kg: 95,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -387,7 +376,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'pull-out', 'pullout', 'storage', 'small', '2-piece', 'convertible', 'chaise', 'corner'],
     dimensions_cm: { length: 250, width: 170, height: 85 },
     volume_ft3: calcVolume(250, 170, 85),
-    pieceCount: 2,
     weight_kg: 110,
     load_size: 'medium',
     vehicle: 'pickup',
@@ -403,7 +391,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'pull-out', 'pullout', 'storage', 'medium', '3-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy'],
     dimensions_cm: { length: 290, width: 200, height: 90 },
     volume_ft3: calcVolume(290, 200, 90),
-    pieceCount: 3,
     weight_kg: 145,
     load_size: 'large',
     vehicle: 'van',
@@ -419,7 +406,6 @@ export const FURNITURE_DATABASE: FurnitureItem[] = [
     keywords: ['sectional', 'sofa bed', 'sleeper', 'l-shaped', 'u-shaped', 'pull-out', 'pullout', 'storage', 'large', 'oversized', '4-piece', '5-piece', 'convertible', 'chaise', 'corner', 'deep-seat', 'heavy', 'modular', 'nesting'],
     dimensions_cm: { length: 340, width: 220, height: 90 },
     volume_ft3: calcVolume(340, 220, 90),
-    pieceCount: 3,
     weight_kg: 180,
     load_size: 'large',
     vehicle: 'van',

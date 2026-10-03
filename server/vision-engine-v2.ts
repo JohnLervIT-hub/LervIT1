@@ -238,10 +238,6 @@ export interface VisionEngineResult {
   // qualifies for a special-handling surcharge (piano, refrigerator, hot tub…).
   // Null for standard household items.
   premiumKey?: string | null;
-  // Assembled piece count from the matched row (sectionals, sofa beds). Null on
-  // the estimate and fallback paths, which have no row to read it from, and on
-  // rows that are single-piece by nature. Seeds the customer's dropdown.
-  pieceCount?: number | null;
   // False when the photo is a close-up or partial shot. Such a photo can be
   // identified but not measured — there is no way to know what else is in the
   // room — so the quote flow rejects it rather than pricing a fragment.
@@ -1056,7 +1052,6 @@ export async function identifyItemV2(photoUrl: string): Promise<VisionEngineResu
         matchedItem: item.item_id,
         processingTime: Date.now() - startTime,
         premiumKey: derivePremiumKey(visionResult.itemName, item.category, item.subcategory),
-        pieceCount: item.pieceCount ?? null,
       };
       
       logEvent.vision('database_match', {
@@ -1271,7 +1266,6 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
   confidence: number;
   sourceMetadata: string;
   fullSceneConfirmed: boolean;
-  pieceCount: number | null;
 } {
   // Map category to legacy format
   let legacyCategory: 'Furniture' | 'Appliance' | 'Fragile' | 'Oversized' | 'Bulky' | 'Electronics' | 'Other' = 'Other';
@@ -1316,7 +1310,6 @@ export function toIdentificationResult(v2Result: VisionEngineResult): {
     // Not persisted as a column: a rejected photo never becomes an item row, so
     // this only has to survive as far as the HTTP response.
     fullSceneConfirmed: v2Result.fullSceneConfirmed !== false,
-    pieceCount: v2Result.pieceCount ?? null,
     sourceMetadata: JSON.stringify({
       visionEngine: '2.0',
       source: v2Result.source,

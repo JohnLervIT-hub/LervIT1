@@ -288,26 +288,6 @@ export const bookings = pgTable("bookings", {
   // in_app_notifications.metadata).
   cancellationReason: text("cancellation_reason"),
   cancellationAnswers: text("cancellation_answers"),
-  // Piece-count accountability. `declaredPieceCount` is the sum the customer
-  // confirmed across multi-piece items; NULL means they never changed a
-  // default, which exempts the booking from the discrepancy rule.
-  // `actualPieceCountOnArrival` is what the mover counted when cancelling with
-  // reason 'piece_count_discrepancy', and the payout is what that earned them.
-  declaredPieceCount: integer("declared_piece_count"),
-  actualPieceCountOnArrival: integer("actual_piece_count_on_arrival"),
-  pieceCountDiscrepancyPayout: decimal("piece_count_discrepancy_payout", { precision: 10, scale: 2 }),
-  // Evidence for that payout. Required before the amount is recorded — without
-  // it the mover's own count is the only input to a money decision.
-  pieceCountEvidencePhotoUrl: text("piece_count_evidence_photo_url"),
-  pieceCountEvidenceUploadedAt: timestamp("piece_count_evidence_uploaded_at"),
-  // 24-hour customer dispute window over that claim. Status walks
-  // pending_customer -> customer_confirmed | customer_disputed -> ops_review ->
-  // resolved. NULL throughout for every booking with no claim against it.
-  pieceCountDisputeStatus: text("piece_count_dispute_status"),
-  pieceCountDisputeOpenedAt: timestamp("piece_count_dispute_opened_at"),
-  pieceCountDisputeResolvedAt: timestamp("piece_count_dispute_resolved_at"),
-  pieceCountDisputeCustomerPhotoUrl: text("piece_count_dispute_customer_photo_url"),
-  pieceCountDisputeResolution: text("piece_count_dispute_resolution"),
 
   // Client-generated per-attempt key (X-Idempotency-Key). Collapses a
   // double-submit onto one booking instead of creating a twin. Scoped by the
@@ -392,39 +372,10 @@ export const insertMoverSchema = createInsertSchema(movers).omit({
   completedTrips: true,
 });
 
-/** Dispute window vocabulary, shared so the route, the cron job and the UI agree. */
-export const PIECE_COUNT_DISPUTE_STATUS = {
-  PENDING_CUSTOMER: 'pending_customer',
-  CUSTOMER_CONFIRMED: 'customer_confirmed',
-  CUSTOMER_DISPUTED: 'customer_disputed',
-  OPS_REVIEW: 'ops_review',
-  RESOLVED: 'resolved',
-} as const;
-
-export const PIECE_COUNT_DISPUTE_RESOLUTION = {
-  AUTO_APPROVED: 'auto_approved',
-  AUTO_APPROVED_NO_RESPONSE: 'auto_approved_no_response',
-} as const;
-
-/** How long the customer has to confirm or contest a claim. */
-export const PIECE_COUNT_DISPUTE_WINDOW_MS = 24 * 60 * 60 * 1000;
-
 export const insertBookingSchema = createInsertSchema(bookings).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-  // Server-derived: set by the piece-count endpoint and the mover-cancel flow,
-  // never posted. Leaving them in would make each one a required request field.
-  declaredPieceCount: true,
-  actualPieceCountOnArrival: true,
-  pieceCountDiscrepancyPayout: true,
-  pieceCountEvidencePhotoUrl: true,
-  pieceCountEvidenceUploadedAt: true,
-  pieceCountDisputeStatus: true,
-  pieceCountDisputeOpenedAt: true,
-  pieceCountDisputeResolvedAt: true,
-  pieceCountDisputeCustomerPhotoUrl: true,
-  pieceCountDisputeResolution: true,
   paymentStatus: true,
   stripePaymentIntentId: true,
   notifiedAt: true,
@@ -595,11 +546,6 @@ export const identifiedItems = pgTable("identified_items", {
   recommendedMovers: integer("recommended_movers"),
   insuranceLevel: text("insurance_level"),
   confidence: decimal("confidence", { precision: 3, scale: 2 }),
-  // Pieces the customer declares for a multi-piece item (sectionals, sofa beds).
-  // Seeded at scan time from FurnitureItem.pieceCount, then writable by the
-  // customer via PATCH .../piece-count. NULL means "never set" — the mover sees
-  // nothing and the 50% discrepancy rule does not apply.
-  pieceCount: integer("piece_count"),
   sourceMetadata: text("source_metadata"),
   processingStatus: text("processing_status").notNull().default("pending"),
   errorMessage: text("error_message"),

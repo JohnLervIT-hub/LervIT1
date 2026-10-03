@@ -87,63 +87,7 @@ import {
   sumHandlingPremiums,
   VEHICLE_CAPACITY_RANGES,
 } from "@shared/pricing";
-import { FURNITURE_DATABASE } from "@shared/furniture-database";
-import { scaledVolume, getMinPieceCount } from "@shared/volume-utils";
-import {
-  PIECE_COUNT_DISPUTE_STATUS,
-  PIECE_COUNT_DISPUTE_RESOLUTION,
-  PIECE_COUNT_DISPUTE_WINDOW_MS,
-} from "@shared/schema";
 
-/** Mover-cancel reason that triggers the 50% piece-count discrepancy rule. */
-const PIECE_COUNT_DISCREPANCY_REASON = 'piece_count_discrepancy';
-
-/**
- * Ops mailbox for piece-count claims. There is no OPS_EMAIL in this codebase
- * today, so it falls back to the support address already used by the
- * mover-cancel customer email.
- */
-const OPS_EMAIL = process.env.OPS_EMAIL || 'support@lervit.com';
-
-/** One ops email for every outcome of a piece-count claim. */
-async function notifyOpsPieceCountClaim(opts: {
-  bookingId: string;
-  outcome: string;
-  declaredPieceCount: number | null;
-  actualPieceCount: number | null;
-  moverPhotoUrl: string | null;
-  customerPhotoUrl?: string | null;
-  payout: string | number | null;
-  resolution?: string | null;
-}): Promise<void> {
-  const rows: [string, unknown][] = [
-    ['Booking', opts.bookingId],
-    ['Outcome', opts.outcome],
-    ['Customer declared', opts.declaredPieceCount ?? '(never declared)'],
-    ["Mover's count on arrival", opts.actualPieceCount ?? '(none)'],
-    ['Recorded payout', opts.payout ?? '(none)'],
-    ['Resolution', opts.resolution ?? '(pending ops)'],
-    ['Mover photo', opts.moverPhotoUrl ?? '(none)'],
-    ['Customer photo', opts.customerPhotoUrl ?? '(none)'],
-  ];
-  try {
-    await notificationService.sendEmail({
-      to: OPS_EMAIL,
-      subject: `Piece-count claim ${opts.outcome} — booking ${opts.bookingId}`,
-      body: `<p>Piece-count discrepancy claim update.</p><ul>${rows
-        .map(([k, v]) => `<li><strong>${k}:</strong> ${he.escape(String(v))}</li>`)
-        .join('')}</ul>`,
-      type: 'booking_confirmation',
-    });
-  } catch (err) {
-    // Never let the ops email fail the customer's action.
-    logEvent.error(
-      'piece_count_ops_email_failed',
-      err instanceof Error ? err : new Error('email error'),
-      { bookingId: opts.bookingId, outcome: opts.outcome },
-    );
-  }
-}
 import he from "he";
 import { optimizeImageBuffer } from "./image-optimizer";
 import { createAgentQueue, QUEUE_NAMES } from "./agents/queue";
@@ -4631,10 +4575,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dimensionsWcm: toNum(it.dimensionsWcm),
           dimensionsHcm: toNum(it.dimensionsHcm),
           userCorrected: it.userCorrected === true,
-          pieceCount:
-            typeof it.pieceCount === 'number' && it.pieceCount > 0
-              ? Math.floor(it.pieceCount)
-              : null,
         }));
       const hasKeyedPremiums = detectedItems.some((d: { premiumKey: string | null }) => !!d.premiumKey);
 
@@ -4665,17 +4605,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? sumHandlingPremiums(detectedItems)
         : undefined;
 
-      // Declared piece count for the load: the sum of whatever the customer
-      // confirmed in the piece-count dialog. Null when they confirmed nothing,
-      // which is what exempts the booking from the 50% discrepancy rule.
-      // detectedItems is an untyped map result, so this is written as a loop
-      // rather than a generic reduce.
-      let declaredPieceCountTotal: number | null = null;
-      for (const it of detectedItems as { pieceCount: number | null }[]) {
-        if (it.pieceCount !== null) {
-          declaredPieceCountTotal = (declaredPieceCountTotal ?? 0) + it.pieceCount;
-        }
-      }
 
       // Hand-corrected lines move the price, so record that they happened. The
       // figures themselves still originate on the client either way — this is
@@ -4803,10 +4732,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(bookingData.aiWeightClass && { aiWeightClass: bookingData.aiWeightClass }),
         // Derived from the summed item volumes above, not from the request body.
         ...(derivedRecommendedVehicle && { aiRecommendedVehicle: derivedRecommendedVehicle }),
-        // Summed from the piece counts the customer confirmed, never posted as a
-        // total. Stays absent when nothing was confirmed, so the booking is
-        // exempt from the 50% discrepancy rule.
-        ...(declaredPieceCountTotal !== null && { declaredPieceCount: declaredPieceCountTotal }),
         ...(bookingData.aiConfidenceScore !== undefined && { aiConfidenceScore: bookingData.aiConfidenceScore }),
         // Persist the measured volume, not just the loadSize bucket it was
         // rounded into: dispatch reads it back to pick the vehicle class.
@@ -5639,346 +5564,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mover cancels an accepted (confirmed) booking and triggers re-dispatch
-  // Customer confirms how many pieces of a multi-piece item are actually moving.
-  //
-  // This is the one price input the customer controls, overriding the read-only
-  // rule in DetectedItemsSummary (34e1603), and the UI shows the 50% discrepancy
-  // warning before every change. The volume is still recomputed HERE, from the
-  // stored row and the matched database row, never from a client-supplied number.
-  app.patch(
-    "/api/bookings/:bookingId/items/:itemId/piece-count",
-    async (req: Request, res: Response) => {
-      try {
-        if (!requireUser(req, res)) return;
-        const user = (req as any).user;
-        const { bookingId, itemId } = req.params;
-
-        const parsed = z
-          .object({ pieceCount: z.number().int().min(1).max(20) })
-          .safeParse(req.body);
-        if (!parsed.success) {
-          return res.status(400).json({ error: "pieceCount must be an integer 1-20" });
-        }
-        const requested = parsed.data.pieceCount;
-
-        const booking = await storage.getBooking(bookingId);
-        if (!booking) return res.status(404).json({ error: "Booking not found" });
-        if (booking.customerId !== user.id && user.role !== "admin") {
-          return res.status(403).json({ error: "Not authorized" });
-        }
-
-        const items = await storage.getIdentifiedItemsByBooking(bookingId);
-        const row = items.find((i) => i.id === itemId);
-        if (!row) return res.status(404).json({ error: "Item not found on this booking" });
-
-        // basePieces and baseVolume come from the matched ground-truth row, not
-        // from volume_cuft — that column gets overwritten by this very endpoint,
-        // so reading it back would compound on every change.
-        let matchedId: string | undefined;
-        let quantity = 1;
-        try {
-          const meta = row.sourceMetadata ? JSON.parse(row.sourceMetadata) : {};
-          matchedId = typeof meta.matchedItem === "string" ? meta.matchedItem : undefined;
-          const q = Number(meta.quantity);
-          if (q > 0) quantity = Math.floor(q);
-        } catch {
-          /* unparseable metadata leaves the defaults */
-        }
-        const dbRow = matchedId
-          ? FURNITURE_DATABASE.find((f) => f.item_id === matchedId)
-          : undefined;
-        const basePieces = dbRow?.pieceCount;
-        if (!dbRow || !basePieces || basePieces <= 1) {
-          return res
-            .status(400)
-            .json({ error: "This item does not have an adjustable piece count" });
-        }
-        if (requested > basePieces) {
-          return res
-            .status(400)
-            .json({ error: `pieceCount cannot exceed ${basePieces} for this item` });
-        }
-        // Shape floor, enforced here as well as in the dropdown: an L-shaped
-        // sectional is a run plus a return, a U-shaped one a run plus two, and
-        // the UI option list is not a security boundary.
-        const minPieces = Math.min(
-          getMinPieceCount(dbRow.name, dbRow.subcategory),
-          basePieces,
-        );
-        if (requested < minPieces) {
-          return res.status(400).json({
-            error: `pieceCount cannot be below ${minPieces} for this item shape`,
-          });
-        }
-
-        const baseVolume = Math.round(dbRow.volume_ft3 * quantity * 100) / 100;
-        const newVolume = scaledVolume(baseVolume, basePieces, requested);
-
-        await storage.updateIdentifiedItem(itemId, {
-          pieceCount: requested,
-          volumeCuft: newVolume.toString(),
-        });
-
-        // Re-sum the load and re-derive the class through the canonical helpers,
-        // so this path cannot drift from the one that priced the booking.
-        const refreshed = await storage.getIdentifiedItemsByBooking(bookingId);
-        const completed = refreshed.filter((i) => i.processingStatus === "completed");
-        const summed = completed.reduce(
-          (sum, i) => sum + (parseFloat(i.volumeCuft || "0") || 0),
-          0,
-        );
-        const maxLengthCm = completed.reduce(
-          (max, i) =>
-            Math.max(
-              max,
-              parseFloat(i.dimensionsLcm || "0") || 0,
-              parseFloat(i.dimensionsWcm || "0") || 0,
-              parseFloat(i.dimensionsHcm || "0") || 0,
-            ),
-          0,
-        );
-        const totalVolume = Math.round(summed * 100) / 100;
-        const vehicleClass = getVehicleClassFromVolumeAndLength(totalVolume, maxLengthCm);
-
-        // Sum of every piece count the customer has actually confirmed. Null
-        // while nothing has been confirmed, which keeps the booking exempt from
-        // the discrepancy rule.
-        const declaredTotal = refreshed.reduce<number | null>((acc, i) => {
-          if (typeof i.pieceCount !== "number") return acc;
-          return (acc ?? 0) + i.pieceCount;
-        }, null);
-
-        await storage.updateBooking(bookingId, {
-          aiDetectedVolumeCuft: totalVolume > 0 ? totalVolume.toString() : null,
-          aiRecommendedVehicle: vehicleTypeFromClass(vehicleClass),
-          declaredPieceCount: declaredTotal,
-        });
-
-        logEvent.booking("piece_count_declared", {
-          bookingId,
-          itemId,
-          matchedItem: matchedId ?? null,
-          basePieces,
-          declaredPieces: requested,
-          baseVolumeCuft: baseVolume,
-          itemVolumeCuft: newVolume,
-          totalVolumeCuft: totalVolume,
-          vehicleClass,
-        });
-
-        res.json({
-          itemId,
-          pieceCount: requested,
-          basePieces,
-          itemVolumeCuft: newVolume,
-          totalVolumeCuft: totalVolume,
-          vehicleClass,
-          vehicleType: vehicleTypeFromClass(vehicleClass),
-          declaredPieceCount: declaredTotal,
-        });
-      } catch (error) {
-        logEvent.error(
-          "piece_count_update_error",
-          error instanceof Error ? error : new Error("Unknown error"),
-          { bookingId: req.params.bookingId, itemId: req.params.itemId },
-        );
-        res.status(500).json({ error: "Failed to update piece count" });
-      }
-    },
-  );
-
-  // Photo evidence for a piece-count discrepancy claim.
-  //
-  // A dedicated endpoint rather than /api/upload/images, which is
-  // unauthenticated and booking-agnostic: this photo decides a payout, so it is
-  // tied to the assigned mover and the booking it concerns. Same
-  // ObjectStorageService + optimizeImageBuffer pipeline, so it lands in the
-  // same bucket as every other booking photo.
-  app.post(
-    "/api/bookings/:bookingId/piece-count-evidence",
-    upload.single('photo'),
-    async (req: Request, res: Response) => {
-      try {
-        if (!requireUser(req, res)) return;
-        const user = (req as any).user;
-        const { bookingId } = req.params;
-
-        if (!req.file) return res.status(400).json({ error: "No photo uploaded" });
-
-        const booking = await storage.getBooking(bookingId);
-        if (!booking) return res.status(404).json({ error: "Booking not found" });
-
-        // Either side of the claim may upload here: the mover's arrival photo and
-        // the customer's rebuttal are the same kind of artifact and belong on the
-        // same authenticated, booking-scoped path.
-        const isCustomer = booking.customerId === user.id;
-        if (!isCustomer) {
-          const mover = await storage.getMoverByUserId(user.id);
-          if (!mover || booking.moverId !== mover.id) {
-            return res
-              .status(403)
-              .json({ error: "You are not a party to this booking" });
-          }
-        }
-
-        const objectStorageService = new ObjectStorageService();
-        let url: string;
-        try {
-          const rawBuffer = fs.readFileSync(req.file.path);
-          const optimized = await optimizeImageBuffer(
-            rawBuffer,
-            req.file.originalname,
-            req.file.mimetype,
-          );
-          url = await objectStorageService.uploadBuffer(
-            optimized.buffer,
-            optimized.filename,
-            optimized.mimetype,
-            user.id,
-          );
-          fs.unlinkSync(req.file.path);
-        } catch (uploadError) {
-          logEvent.error(
-            'piece_count_evidence_upload_failed',
-            uploadError instanceof Error ? uploadError : new Error('upload error'),
-            { bookingId, userId: user.id },
-          );
-          // Local fallback, same as /api/upload/images: a storage outage must not
-          // block a mover who is standing in front of the wrong load.
-          url = `/uploads/${req.file.filename}`;
-        }
-
-        logEvent.booking('piece_count_evidence_uploaded', {
-          bookingId,
-          uploadedBy: isCustomer ? 'customer' : 'mover',
-          userId: user.id,
-          url,
-        });
-
-        res.json({ url });
-      } catch (error) {
-        logEvent.error(
-          'piece_count_evidence_error',
-          error instanceof Error ? error : new Error('Unknown error'),
-          { bookingId: req.params.bookingId },
-        );
-        res.status(500).json({ error: "Failed to upload evidence photo" });
-      }
-    },
-  );
-
-  // Customer confirms or contests a piece-count claim, inside the 24h window.
-  app.post(
-    "/api/bookings/:bookingId/piece-count-dispute",
-    async (req: Request, res: Response) => {
-      try {
-        if (!requireUser(req, res)) return;
-        const user = (req as any).user;
-        const { bookingId } = req.params;
-
-        const parsed = z
-          .object({
-            action: z.enum(['confirm', 'dispute']),
-            evidencePhotoUrl: z.string().trim().min(1).optional(),
-          })
-          .safeParse(req.body);
-        if (!parsed.success) {
-          return res.status(400).json({ error: "action must be 'confirm' or 'dispute'" });
-        }
-        const { action, evidencePhotoUrl } = parsed.data;
-
-        const booking = await storage.getBooking(bookingId);
-        if (!booking) return res.status(404).json({ error: "Booking not found" });
-        // The customer's own claim to answer — admins excluded on purpose, since
-        // ops act through the resolution field rather than by impersonation.
-        if (booking.customerId !== user.id) {
-          return res.status(403).json({ error: "Not authorized" });
-        }
-
-        // 409 before 400: "already actioned" is the more specific truth when a
-        // resolved claim is also past its window.
-        if (booking.pieceCountDisputeStatus !== PIECE_COUNT_DISPUTE_STATUS.PENDING_CUSTOMER) {
-          return res.status(409).json({
-            error: "This claim has already been actioned",
-            status: booking.pieceCountDisputeStatus ?? null,
-          });
-        }
-
-        const openedAt = booking.pieceCountDisputeOpenedAt
-          ? new Date(booking.pieceCountDisputeOpenedAt).getTime()
-          : null;
-        if (openedAt === null || Date.now() - openedAt > PIECE_COUNT_DISPUTE_WINDOW_MS) {
-          return res.status(400).json({ error: "The 24-hour dispute window has expired" });
-        }
-
-        if (action === 'dispute' && !evidencePhotoUrl) {
-          return res.status(400).json({
-            error: "evidencePhotoUrl is required when disputing — upload a photo of your items first",
-          });
-        }
-
-        const now = new Date();
-        if (action === 'confirm') {
-          await storage.updateBooking(bookingId, {
-            pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_CONFIRMED,
-            pieceCountDisputeResolvedAt: now,
-            pieceCountDisputeResolution: PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED,
-          });
-          await notifyOpsPieceCountClaim({
-            bookingId,
-            outcome: 'cleared for payout (customer confirmed)',
-            declaredPieceCount: booking.declaredPieceCount ?? null,
-            actualPieceCount: booking.actualPieceCountOnArrival ?? null,
-            moverPhotoUrl: booking.pieceCountEvidencePhotoUrl ?? null,
-            payout: booking.pieceCountDiscrepancyPayout ?? null,
-            resolution: PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED,
-          });
-          logEvent.booking('piece_count_dispute_confirmed', { bookingId, customerId: user.id });
-          return res.json({
-            status: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_CONFIRMED,
-            resolution: PIECE_COUNT_DISPUTE_RESOLUTION.AUTO_APPROVED,
-          });
-        }
-
-        // Disputed. No resolution is written — ops decide that, so the payout
-        // stays unsettled rather than being auto-cleared either way.
-        await storage.updateBooking(bookingId, {
-          pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_DISPUTED,
-          pieceCountDisputeCustomerPhotoUrl: evidencePhotoUrl ?? null,
-        });
-        await notifyOpsPieceCountClaim({
-          bookingId,
-          outcome: 'DISPUTED — manual review required',
-          declaredPieceCount: booking.declaredPieceCount ?? null,
-          actualPieceCount: booking.actualPieceCountOnArrival ?? null,
-          moverPhotoUrl: booking.pieceCountEvidencePhotoUrl ?? null,
-          customerPhotoUrl: evidencePhotoUrl ?? null,
-          payout: booking.pieceCountDiscrepancyPayout ?? null,
-          resolution: null,
-        });
-        logEvent.booking('piece_count_dispute_raised', { bookingId, customerId: user.id });
-        res.json({ status: PIECE_COUNT_DISPUTE_STATUS.CUSTOMER_DISPUTED, resolution: null });
-      } catch (error) {
-        logEvent.error(
-          'piece_count_dispute_error',
-          error instanceof Error ? error : new Error('Unknown error'),
-          { bookingId: req.params.bookingId },
-        );
-        res.status(500).json({ error: "Failed to record your response" });
-      }
-    },
-  );
-
   app.post("/api/bookings/:id/mover-cancel", async (req: Request, res: Response) => {
     try {
       if (!requireUser(req, res)) return;
       const user = (req as any).user;
       const bookingId = req.params.id;
-      const { reason, actualPieceCount, evidencePhotoUrl } = req.body as {
-        reason?: string;
-        actualPieceCount?: number;
-        evidencePhotoUrl?: string;
-      };
+      const { reason } = req.body as { reason?: string };
 
       const booking = await storage.getBooking(bookingId);
       if (!booking) return res.status(404).json({ error: "Booking not found" });
@@ -5989,73 +5580,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You are not assigned to this booking" });
       }
 
-      // PIECE-COUNT DISCREPANCY. The customer declares a piece count for
-      // multi-piece items and is warned that a mismatch on arrival can cost them
-      // 50% of the booking fee. A mover claiming it must state what they counted.
-      const isPieceCountClaim = reason === PIECE_COUNT_DISCREPANCY_REASON;
-      let discrepancyPayout: number | null = null;
-      let actualCount: number | null = null;
-      let evidenceUrl: string | null = null;
-
-      if (isPieceCountClaim) {
-        const parsedCount = z.number().int().min(0).max(50).safeParse(actualPieceCount);
-        if (!parsedCount.success) {
-          return res.status(400).json({
-            error:
-              "actualPieceCount (integer 0-50) is required when cancelling for a piece count discrepancy",
-          });
-        }
-        actualCount = parsedCount.data;
-
-        // Evidence gate. Checked before anything is written, so a claim without
-        // a photo leaves the booking untouched rather than half-recorded.
-        const parsedUrl = z.string().trim().min(1).safeParse(evidencePhotoUrl);
-        if (!parsedUrl.success) {
-          return res.status(400).json({
-            error:
-              "evidencePhotoUrl is required when cancelling for a piece count discrepancy — upload a photo of the actual items first",
-          });
-        }
-        evidenceUrl = parsedUrl.data;
-
-        const declared = booking.declaredPieceCount;
-        if (typeof declared !== "number") {
-          // Never declared anything, so there is nothing to have misdeclared.
-          // Falls through to the ordinary cancellation rules below.
-          logEvent.booking("piece_count_claim_no_declaration", {
-            bookingId,
-            moverId: mover.id,
-            actualPieceCount: actualCount,
-          });
-        } else if (actualCount !== declared) {
-          // "Booking fee" is read as the booking total. Confirm this is the
-          // intended base before this goes anywhere near a real payout — the
-          // alternatives on the row are baseFee and moverNetAmount.
-          const bookingFee = parseFloat(booking.price || "0") || 0;
-          discrepancyPayout = Math.round(bookingFee * 0.5 * 100) / 100;
-          logEvent.booking("piece_count_discrepancy_confirmed", {
-            bookingId,
-            moverId: mover.id,
-            declaredPieceCount: declared,
-            actualPieceCount: actualCount,
-            bookingFee,
-            payout: discrepancyPayout,
-          });
-        } else {
-          logEvent.booking("piece_count_claim_matched", {
-            bookingId,
-            moverId: mover.id,
-            declaredPieceCount: declared,
-            actualPieceCount: actualCount,
-          });
-        }
-      }
-
-      // Only allowed before the trip has started (confirmed status only)
-      if (booking.status !== "confirmed") {
-        return res.status(400).json({ error: "You can only cancel before the trip has started" });
-      }
-
       logEvent.booking('mover_cancelled_confirmed_job', { bookingId, moverId: mover.id, reason });
 
       // Detach the mover and reset to pending so it can be re-dispatched
@@ -6063,22 +5587,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         moverId: null,
         status: "pending",
         preSelectedMoverId: null,
-        ...(isPieceCountClaim
-          ? {
-              cancellationReason: PIECE_COUNT_DISCREPANCY_REASON,
-              actualPieceCountOnArrival: actualCount,
-              // Evidence and payout land in the same write: the amount is never
-              // stored without the photo that justifies it.
-              pieceCountEvidencePhotoUrl: evidenceUrl,
-              pieceCountEvidenceUploadedAt: new Date(),
-              pieceCountDiscrepancyPayout:
-                discrepancyPayout === null ? null : discrepancyPayout.toString(),
-              // The payout is recorded but not settled: the customer gets 24
-              // hours to confirm or contest before anything is cleared.
-              pieceCountDisputeStatus: PIECE_COUNT_DISPUTE_STATUS.PENDING_CUSTOMER,
-              pieceCountDisputeOpenedAt: new Date(),
-            }
-          : {}),
       });
 
       // They are no longer on this job, so the hold taken at acceptance goes back.
@@ -6121,55 +5629,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Open the dispute window with the customer. In-app plus email; there is
-      // no push provider in this codebase, only the mover WebSocket.
-      if (isPieceCountClaim && customer) {
-        const deadline = new Date(Date.now() + PIECE_COUNT_DISPUTE_WINDOW_MS);
-        const declaredText =
-          typeof booking.declaredPieceCount === 'number'
-            ? String(booking.declaredPieceCount)
-            : 'no count';
-        const body =
-          `Your mover reported ${actualCount} pieces on arrival. You declared ` +
-          `${declaredText}. You have 24 hours to confirm or dispute this before ` +
-          `the cancellation is processed. Open the app to review.`;
-        try {
-          await storage.createNotification({
-            userId: customer.id,
-            type: 'booking_update',
-            title: 'Action required: piece count dispute on your move',
-            message: body,
-            bookingId: booking.id,
-            actionUrl: `/my-bookings?booking=${booking.id}`,
-            isRead: false,
-          });
-        } catch (notifyErr) {
-          logEvent.error(
-            'piece_count_dispute_notification_failed',
-            notifyErr instanceof Error ? notifyErr : new Error('notify error'),
-            { bookingId },
-          );
-        }
-        try {
-          await notificationService.sendEmail({
-            to: customer.email,
-            subject: 'Action required: piece count dispute on your move',
-            body:
-              `<p>Hi ${he.escape(customer.name)},</p><p>${he.escape(body)}</p>` +
-              `<p>Confirm or dispute by ${deadline.toUTCString()}.</p>` +
-              `<p><a href="${getBaseUrl()}/my-bookings?booking=${booking.id}">Review your booking</a></p>` +
-              `<p>The LervIT Team</p>`,
-            type: 'booking_confirmation',
-          });
-        } catch (emailErr) {
-          logEvent.error(
-            'piece_count_dispute_email_failed',
-            emailErr instanceof Error ? emailErr : new Error('email error'),
-            { bookingId },
-          );
-        }
-      }
-
       // Re-dispatch to other nearby movers (exclude the cancelling mover)
       const refreshedBooking = await storage.getBooking(bookingId);
       if (refreshedBooking) {
@@ -6181,19 +5640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({
-        message: "Booking cancelled and job re-dispatched to other movers",
-        ...(isPieceCountClaim
-          ? {
-              declaredPieceCount: booking.declaredPieceCount ?? null,
-              actualPieceCountOnArrival: actualCount,
-              evidencePhotoUrl: evidenceUrl,
-              // Recorded on the booking; no transfer is initiated here. Paying it
-              // out needs a Stripe Connect transfer through moverPayouts.
-              discrepancyPayout,
-            }
-          : {}),
-      });
+      res.json({ message: "Booking cancelled and job re-dispatched to other movers" });
     } catch (error) {
       logEvent.error('mover_cancel_job_error', error instanceof Error ? error : new Error('Unknown error'), { bookingId: req.params.id });
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to cancel booking" });
@@ -12124,9 +11571,6 @@ Respond with VALID JSON only:
               recommendedMovers: result.recommendedMovers,
               insuranceLevel: result.insuranceLevel,
               confidence: result.confidence.toString() as any,
-              // Without this the piece-count dropdown never renders: the client
-              // gates on it, and every field here is copied by hand.
-              pieceCount: result.pieceCount ?? null,
               sourceMetadata: result.sourceMetadata,
             });
             items.push({ ...identifiedItem, fullSceneConfirmed: result.fullSceneConfirmed });
@@ -12152,9 +11596,6 @@ Respond with VALID JSON only:
               recommendedMovers: result.recommendedMovers,
               insuranceLevel: result.insuranceLevel,
               confidence: result.confidence.toString(),
-              // Same omission as above. This is the pre-booking quote branch, so
-              // it is the one the customer actually sees.
-              pieceCount: result.pieceCount ?? null,
               sourceMetadata: result.sourceMetadata,
             });
           }

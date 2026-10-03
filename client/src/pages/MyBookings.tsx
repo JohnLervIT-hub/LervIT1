@@ -27,7 +27,6 @@ import { format, isValid } from "date-fns";
 
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { PieceCountDisputeBanner } from "@/components/PieceCountDisputeBanner";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { generatePriceExplanation, AI_FEATURES } from "@shared/ai";
@@ -559,16 +558,6 @@ export default function MyBookings() {
                   booking.status === 'in_transit' ? 'bg-primary' :
                   booking.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
                 }`} />
-
-                {/* Piece-count claim: the customer's 24h window to confirm or
-                    contest, or a read-only line once it is settled. */}
-                <PieceCountDisputeBanner
-                  bookingId={booking.id}
-                  disputeStatus={(booking as { pieceCountDisputeStatus?: string | null }).pieceCountDisputeStatus ?? null}
-                  disputeOpenedAt={(booking as { pieceCountDisputeOpenedAt?: string | null }).pieceCountDisputeOpenedAt ?? null}
-                  declaredPieceCount={(booking as { declaredPieceCount?: number | null }).declaredPieceCount ?? null}
-                  actualPieceCountOnArrival={(booking as { actualPieceCountOnArrival?: number | null }).actualPieceCountOnArrival ?? null}
-                />
 
                 {/* Urgent Payment Banner for pending_payment bookings */}
                 {booking.status === 'pending_payment' && (

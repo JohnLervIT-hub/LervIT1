@@ -1,18 +1,6 @@
-import { memo, useState } from "react";
+import { memo } from "react";
 import { CheckCircle2, Loader2, AlertCircle, Package, Truck, Weight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { scaledVolume, getMinPieceCount } from "@shared/volume-utils";
-import { FURNITURE_DATABASE } from "@shared/furniture-database";
 import { getVehicleDisplayName } from "@/lib/utils";
 import type { VehicleType } from "@shared/furniture-database";
 import type { IdentifiedItem } from "@shared/schema";
@@ -27,15 +15,6 @@ import type { IdentifiedItem } from "@shared/schema";
  * volume is the whole basis of the quote. A customer who spots a mistake uses
  * the notes field; a wrong photo is removed from the upload grid (which drops
  * its item too).
- *
- * ONE EXCEPTION, added deliberately: piece count on multi-piece items
- * (sectionals, sofa beds). A 3-piece sectional with one piece left behind is a
- * different load, and nothing else in the flow can express that. It is still a
- * customer-controlled price input, so it is fenced: the choice is capped at the
- * catalogue's assembled piece count, every change goes through an accountability
- * dialog stating that a mismatch on arrival can cost 50% of the booking fee, and
- * the volume is recomputed server-side from the matched row — the client sends a
- * piece count, never a volume.
  *
  * Also absent by design: any vehicle cascade. The old card carried a 70-line
  * getVehicleRecommendation() that re-derived volume thresholds, weight bumps,
@@ -151,59 +130,6 @@ interface DetectedItemsSummaryProps {
   confidence?: number | null;
   totalWeight?: number | null;
   className?: string;
-  /**
-   * Present once the booking exists, in which case a confirmed piece count is
-   * PATCHed server-side. In the pre-booking quote flow there is no booking and
-   * no identified_items row yet, so the change is reported upward only and
-   * rides along in the booking-creation payload.
-   */
-  bookingId?: string | null;
-  /**
-   * Called after the customer confirms a piece count, with the server-recomputed
-   * item volume when a bookingId was available and the locally-scaled one
-   * otherwise. The parent owns the quote total, so it applies the change.
-   */
-  onPieceCountChange?: (
-    itemId: string,
-    pieceCount: number,
-    scaledItemVolumeFt3: number,
-  ) => void;
-}
-
-/** Assembled piece count for a row, or null when it is not adjustable. */
-function readPieceCount(item: IdentifiedItem): number | null {
-  const n = (item as { pieceCount?: number | null }).pieceCount;
-  return typeof n === "number" && n > 1 ? n : null;
-}
-
-/**
- * Smallest count this row may be reduced to.
- *
- * identified_items has no subcategory column and its `itemName` is the vision
- * model's phrasing, so the shape is read from the matched catalogue row where
- * one is recorded, falling back to the stored name.
- */
-function readMinPieceCount(item: IdentifiedItem): number {
-  let matchedId: string | undefined;
-  try {
-    const meta = item.sourceMetadata ? JSON.parse(item.sourceMetadata) : {};
-    matchedId = typeof meta.matchedItem === "string" ? meta.matchedItem : undefined;
-  } catch {
-    /* fall through to the stored name */
-  }
-  const row = matchedId
-    ? FURNITURE_DATABASE.find((f) => f.item_id === matchedId)
-    : undefined;
-  return row
-    ? getMinPieceCount(row.name, row.subcategory)
-    : getMinPieceCount(item.itemName ?? "");
-}
-
-/** "L" / "U", for the minimum explained in the dialog. Null when there is none. */
-function shapeLabel(minPieces: number): string | null {
-  if (minPieces >= 3) return "U";
-  if (minPieces === 2) return "L";
-  return null;
 }
 
 export const DetectedItemsSummary = memo(function DetectedItemsSummary({
@@ -214,23 +140,7 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
   confidence,
   totalWeight,
   className,
-  bookingId,
-  onPieceCountChange,
 }: DetectedItemsSummaryProps) {
-  // Confirmed selections, keyed by item id. Absent means "catalogue default".
-  const [selected, setSelected] = useState<Record<string, number>>({});
-  // The change awaiting confirmation. The dropdown does not move until the
-  // customer accepts the warning.
-  const [pendingChange, setPendingChange] = useState<{
-    itemId: string;
-    itemName: string;
-    basePieces: number;
-    minPieces: number;
-    requested: number;
-    baseVolume: number;
-  } | null>(null);
-  const [saving, setSaving] = useState(false);
-
   if (items.length === 0) return null;
 
   const completed = items.filter((i) => i.processingStatus === "completed");
@@ -246,59 +156,6 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
     totalWeight != null && totalWeight > 0 ? totalWeight : totalWeightKg(completed);
 
   const style = (vehicle && TIER_STYLES[vehicle]) || NEUTRAL_STYLE;
-
-  // Rows the customer may adjust: a catalogue piece count above 1.
-  const adjustable = completed
-    .map((item) => {
-      const basePieces = readPieceCount(item);
-      if (basePieces === null) return null;
-      const minPieces = Math.min(readMinPieceCount(item), basePieces);
-      // Nothing to choose between: an L-shaped 2-piece cannot go below 2, so a
-      // one-option dropdown would only invite a click that changes nothing.
-      if (basePieces <= minPieces) return null;
-      // Clamp, in case a selection predates a change to the minimum.
-      const stored = selected[item.id] ?? basePieces;
-      return {
-        item,
-        basePieces,
-        minPieces,
-        baseVolume: parseFloat(item.volumeCuft || "0") || 0,
-        current: Math.min(Math.max(stored, minPieces), basePieces),
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
-
-  async function confirmPendingChange() {
-    if (!pendingChange) return;
-    const { itemId, requested, basePieces, baseVolume } = pendingChange;
-    setSaving(true);
-    try {
-      let itemVolume = scaledVolume(baseVolume, basePieces, requested);
-      if (bookingId) {
-        // Server recomputes from the matched catalogue row; its number wins.
-        const res = await fetch(
-          `/api/bookings/${bookingId}/items/${itemId}/piece-count`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ pieceCount: requested }),
-          },
-        );
-        if (!res.ok) throw new Error("piece count update failed");
-        const body = (await res.json()) as { itemVolumeCuft?: number };
-        if (typeof body.itemVolumeCuft === "number") itemVolume = body.itemVolumeCuft;
-      }
-      setSelected((prev) => ({ ...prev, [itemId]: requested }));
-      onPieceCountChange?.(itemId, requested, itemVolume);
-      setPendingChange(null);
-    } catch {
-      // Leave the dropdown where it was: a failed save must not look applied.
-      setPendingChange(null);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className={`space-y-3 ${className ?? ""}`}>
@@ -320,119 +177,6 @@ export const DetectedItemsSummary = memo(function DetectedItemsSummary({
             </div>
           </div>
         )}
-
-        {/* Piece count — the one editable price input here, see the header note. */}
-        {adjustable.length > 0 && (
-          <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
-            {adjustable.map(({ item, basePieces, minPieces, baseVolume, current }) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3"
-                data-testid={`piece-count-row-${item.id}`}
-              >
-                <label
-                  htmlFor={`piece-count-${item.id}`}
-                  className="text-sm text-muted-foreground min-w-0 truncate"
-                >
-                  <span className="font-medium text-foreground">
-                    {item.itemName?.trim() || "Item"}
-                  </span>{" "}
-                  — Pieces:
-                </label>
-                <select
-                  id={`piece-count-${item.id}`}
-                  value={current}
-                  disabled={saving}
-                  onChange={(e) =>
-                    setPendingChange({
-                      itemId: item.id,
-                      itemName: item.itemName?.trim() || "item",
-                      basePieces,
-                      minPieces,
-                      requested: Number(e.target.value),
-                      baseVolume,
-                    })
-                  }
-                  className="h-9 shrink-0 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-testid={`select-piece-count-${item.id}`}
-                >
-                  {Array.from(
-                    { length: basePieces - minPieces + 1 },
-                    (_, i) => minPieces + i,
-                  ).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-            <p className="text-xs text-muted-foreground">
-              Leaving a piece behind? Set the number travelling with you — it changes
-              your estimate.
-            </p>
-          </div>
-        )}
-
-        <AlertDialog
-          open={pendingChange !== null}
-          onOpenChange={(open) => {
-            // "Go back", Escape and overlay clicks all land here. The dropdown
-            // never moved, so dismissing is already a revert.
-            if (!open && !saving) setPendingChange(null);
-          }}
-        >
-          <AlertDialogContent data-testid="dialog-confirm-piece-count">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm piece count</AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                <div className="space-y-3">
-                  <p>
-                    You've selected{" "}
-                    <span className="font-semibold text-foreground">
-                      {pendingChange?.requested}
-                    </span>{" "}
-                    {pendingChange?.requested === 1 ? "piece" : "pieces"} for your{" "}
-                    <span className="font-semibold text-foreground">
-                      {pendingChange?.itemName}
-                    </span>
-                    . Your move estimate will be updated to reflect this.
-                  </p>
-                  {pendingChange !== null && pendingChange.minPieces > 1 && (
-                    <p className="text-muted-foreground">
-                      Minimum for {shapeLabel(pendingChange.minPieces)}-shaped
-                      sectionals is {pendingChange.minPieces} pieces.
-                    </p>
-                  )}
-                  <p className="rounded-md bg-amber-50 p-3 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                    ⚠️ If your mover arrives and finds a different number of pieces
-                    than declared, they may cancel the job and retain 50% of the
-                    booking fee.
-                  </p>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={saving} data-testid="button-piece-count-back">
-                Go back
-              </AlertDialogCancel>
-              <AlertDialogAction
-                disabled={saving}
-                onClick={(e) => {
-                  e.preventDefault();
-                  void confirmPendingChange();
-                }}
-                data-testid="button-piece-count-confirm"
-              >
-                {saving
-                  ? "Saving…"
-                  : `Confirm ${pendingChange?.requested} ${
-                      pendingChange?.requested === 1 ? "piece" : "pieces"
-                    }`}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         {pending.length > 0 && (
           <div className="flex items-center gap-2.5 mt-2" data-testid="text-detected-pending">

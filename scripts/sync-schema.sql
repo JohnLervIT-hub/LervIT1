@@ -1754,30 +1754,3 @@ ALTER TABLE bookings
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_customer_idempotency_key_unique
   ON bookings (customer_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
-
--- ===== 0038: piece-count accountability =====
--- Mirrors migrations/0038_piece_count_accountability.sql. sync-schema.sql is
--- what actually runs on deploy (startup-migrate.js), so the columns must be here
--- too or the feature ships against a database that lacks them.
-ALTER TABLE identified_items
-  ADD COLUMN IF NOT EXISTS piece_count integer DEFAULT NULL;
-
-ALTER TABLE bookings
-  ADD COLUMN IF NOT EXISTS declared_piece_count              integer        DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS actual_piece_count_on_arrival     integer        DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS piece_count_discrepancy_payout    numeric(10, 2) DEFAULT NULL;
-
--- ===== 0039: piece-count discrepancy photo evidence =====
--- IF NOT EXISTS is mandatory here: this file runs on every boot.
-ALTER TABLE bookings
-  ADD COLUMN IF NOT EXISTS piece_count_evidence_photo_url   text      DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS piece_count_evidence_uploaded_at timestamp DEFAULT NULL;
-
--- ===== 0040: piece-count dispute window =====
--- IF NOT EXISTS is mandatory here: this file runs on every boot.
-ALTER TABLE bookings
-  ADD COLUMN IF NOT EXISTS piece_count_dispute_status             text      DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS piece_count_dispute_opened_at          timestamp DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS piece_count_dispute_resolved_at        timestamp DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS piece_count_dispute_customer_photo_url text      DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS piece_count_dispute_resolution         text      DEFAULT NULL;

@@ -50,9 +50,6 @@ async function processVisionJob(
     recommendedMovers: result.movers_required,
     insuranceLevel: result.insurance_level,
     confidence: result.confidence.toString(),
-    // Seeded at scan time so the mover view and the discrepancy rule have a
-    // baseline even if the customer never opens the dropdown.
-    pieceCount: result.pieceCount ?? null,
     sourceMetadata: JSON.stringify({
       source: result.source,
       matchedItem: result.matchedItem,
