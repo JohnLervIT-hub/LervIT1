@@ -670,11 +670,23 @@ IGNORE:
 - Items at edges clearly not the subject
 
 IDENTIFY:
-1. Item type (be specific: "Small L-shaped sectional sofa", "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
+1. Item type (be specific: "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
 4. Size indicators (Queen, King, 3-seater, L-shaped, etc.)
 5. Material if visible (leather, fabric, wood, metal, glass)
+
+SECTIONAL SHAPE — DECIDE THIS FIRST, BEFORE SIZE:
+Count the ARMS/RETURNS that turn away from the longest run of seating:
+• ONE return (the seating turns a single corner, forming an "L") = L-SHAPED.
+• TWO returns, one at EACH end, facing each other across the room, so the
+  seating wraps three sides of the space = U-SHAPED. Sometimes sold as a "pit"
+  or "theater" sectional.
+Check this deliberately. A U-shaped sectional photographed from one end can look
+L-shaped because the far return is foreshortened or cropped — look for seating
+coming back toward the camera on BOTH sides. If you can see two opposing returns,
+it is U-SHAPED even when only part of the second one is visible.
+Do not default to L-shaped: state the shape you can actually see.
 
 SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine size tier):
 For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
@@ -833,13 +845,35 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
   item?: FurnitureItem;
   similarity: number;
 } {
+  // The model's own estimated dimensions, as a volume, so the matcher can pick
+  // the right size variant when several rows score identically.
+  const est = visionResult.estimatedDimensions;
+  const hintVolumeFt3 =
+    est && est.length_cm > 0 && est.width_cm > 0 && est.height_cm > 0
+      ? (est.length_cm * est.width_cm * est.height_cm) / 28316.8
+      : undefined;
+
   // Use the item name to find best match
-  const match = findBestMatch(visionResult.itemName);
+  const match = findBestMatch(visionResult.itemName, hintVolumeFt3);
   
   if (match && match.similarity >= SIMILARITY_THRESHOLD) {
     console.log('[Vision Engine 2.0] Database match found:', 
       match.item.name, 
       `(similarity: ${(match.similarity * 100).toFixed(1)}%)`);
+    // A match replaces the model's dimensions outright, so a wildly different
+    // volume means we are about to quote a different object than the one in the
+    // photo. Log it rather than silently overwriting a good measurement.
+    if (hintVolumeFt3 !== undefined && hintVolumeFt3 > 0) {
+      const ratio = match.item.volume_ft3 / hintVolumeFt3;
+      if (ratio > 2 || ratio < 0.5) {
+        console.warn(
+          '[Vision Engine 2.0] Match volume implausible vs vision estimate:',
+          `"${visionResult.itemName}" estimated ${hintVolumeFt3.toFixed(1)}ft3`,
+          `-> matched "${match.item.name}" at ${match.item.volume_ft3}ft3`,
+          `(${ratio.toFixed(2)}x)`,
+        );
+      }
+    }
     return {
       matched: true,
       item: match.item,
