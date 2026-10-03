@@ -690,11 +690,12 @@ IDENTIFY:
 1. Item type (be specific: "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
-4. Size indicators (Queen, King, 3-seater, L-shaped, etc.) — put these IN "itemName"
-5. Material if visible (leather, fabric, wood, metal, glass) — put this IN "itemName" too
-
-There is no separate field for 4 or 5. "itemName" is the only text that is
-matched against the item catalogue, so anything you leave out of it is lost.
+4. Size indicators (Queen, King, 3-seater, L-shaped, etc.) — these DO belong in
+   "itemName": they decide which size variant of an item is matched.
+5. Material if visible (leather, fabric, wood, metal, glass) — note it only when
+   it genuinely identifies the item (e.g. "leather recliner"). Do NOT pad
+   "itemName" with colours, finishes or filler adjectives: "grey modern fabric
+   3-seater sofa" identifies nothing that "3-seater sofa" does not.
 
 SECTIONAL SHAPE — DECIDE THIS FIRST, BEFORE SIZE:
 Count the ARMS/RETURNS that turn away from the longest run of seating:

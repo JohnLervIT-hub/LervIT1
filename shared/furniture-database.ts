@@ -2088,12 +2088,42 @@ export function findBestMatch(
   // every sofa-bed row unreachable while 'sofa' still matched, handing the win to
   // the first ordinary sofa in the array.
   const nameLower = itemName.toLowerCase().replace(/sofa[\s-]?bed/g, 'sofa bed');
-  const nameWords = nameLower.split(/\s+/).filter(w => w.length > 2);
+  const allWords = nameLower.split(/\s+/).filter(w => w.length > 2);
+
+  // Only words that SOME row can match count toward the denominator.
+  //
+  // Every word used to add 3 to totalWeight whether or not it could ever match
+  // anything, so a score was diluted linearly by pure description. The same item
+  // scored 1.000 as "3-seater sofa" and 0.611 as "large grey fabric modern
+  // 3-seater sofa" — correctly ranked first both times, but under the 0.70
+  // threshold at six words, so it was discarded in favour of a Layer-2 estimate.
+  // Colours, finishes and filler adjectives are noise, not evidence of a
+  // mismatch, and the prompt asks the model for exactly that kind of detail.
+  const nameWords = allWords.filter(word =>
+    FURNITURE_DATABASE.some(item => {
+      const haystack = [
+        ...item.name.toLowerCase().split(/\s+/),
+        ...item.keywords,
+        item.subcategory.toLowerCase(),
+      ];
+      return haystack.some(iw => {
+        if (iw === word) return true;
+        if (Math.min(iw.length, word.length) < 4) return false;
+        return iw.includes(word) || word.includes(iw);
+      });
+    }),
+  );
   
-  // Extract key category hints from the input name
-  const hasChairHint = nameLower.includes('chair');
-  const hasSofaHint = nameLower.includes('sofa') || nameLower.includes('couch');
-  const hasBedHint = nameLower.includes('bed');
+  // Extract key category hints from the input name.
+  //
+  // Word-boundary matched, not substring: `includes('table')` fired on
+  // "Portable air conditioner" and "Portable heater", so both took the 0.5
+  // category-mismatch penalty against their own row and scored 0.611 — under
+  // the 0.70 threshold, which meant neither could ever resolve to ground truth.
+  const word = (w: string) => new RegExp(`\\b${w}\\b`).test(nameLower);
+  const hasChairHint = word('chair');
+  const hasSofaHint = word('sofa') || word('couch');
+  const hasBedHint = word('bed');
   // A sofa bed names both families, so the two hints above fight each other:
   // hasBedHint fired a 0.5 mismatch penalty on the correct row, because a sofa
   // bed is category 'Sofa', not 'Bed'. Recognising the compound lets the Sofa Bed
@@ -2105,9 +2135,10 @@ export function findBestMatch(
   // 'desk' must not fire on "desktop": a 2.21 ft3 "Desktop computer (tower)"
   // was earning the Table bonus and matching "Office desk (standard)" at
   // 29.8 ft3, a 13x overestimate.
+  // The old 'desktop' guard is now redundant — \bdesk\b does not match
+  // "desktop" — but it is kept so the intent stays readable.
   const hasTableHint =
-    nameLower.includes('table') ||
-    (nameLower.includes('desk') && !nameLower.includes('desktop'));
+    word('table') || (word('desk') && !nameLower.includes('desktop'));
   
   let bestMatch: FurnitureItem | null = null;
   let bestScore = 0;
@@ -2119,16 +2150,55 @@ export function findBestMatch(
     const allItemWords = [...itemNameLower.split(/\s+/), ...itemKeywords];
     
     // CATEGORY MISMATCH PENALTY: If input clearly says "chair" but item is not a Chair, penalize heavily
+    //
+    // 'Other' is exempt. It is the catch-all for pianos, pool tables, hot tubs,
+    // safes, massage chairs and treadmills, so penalising it for containing a
+    // family word is always wrong: "Pool table" lost half its score to the table
+    // hint and was beaten by "Dining table (4-person)" — 106.6 ft3 quoted as
+    // 31.78 — and "Massage chair" lost half to the chair hint.
     let categoryMismatchPenalty = 0;
-    if (hasChairHint && item.category !== 'Chair') categoryMismatchPenalty = 0.5;
-    if (hasSofaHint && item.category !== 'Sofa') categoryMismatchPenalty = 0.5;
+    // Declared out here: the category-match bonuses below read it too.
+    const isSofaBedRow = item.subcategory === 'Sofa Bed';
+    // A row is only penalised for a family word it does not itself carry.
+    //
+    // The penalty exists to stop "accent chair" matching an air conditioner, not
+    // to punish a row whose own name contains the word. Three rows were losing
+    // half their score to a word printed on them: "Pool table" and
+    // "Nightstand / Bedside table" (category Other and Dresser, both containing
+    // "table") and "Massage chair" (category Other, containing "chair").
+    const rowText = `${itemNameLower} ${item.keywords.join(' ')}`;
+    const rowHas = (w: string) => new RegExp(`\\b${w}\\b`).test(rowText);
+    {
+      if (hasChairHint && item.category !== 'Chair' && !rowHas('chair')) {
+        categoryMismatchPenalty = 0.5;
+      }
+      if (
+        hasSofaHint &&
+        item.category !== 'Sofa' &&
+        !rowHas('sofa') &&
+        !rowHas('couch')
+      ) {
+        categoryMismatchPenalty = 0.5;
+      }
     // A Sofa Bed row is exempt: it is category 'Sofa' by design, so the bed hint
     // would otherwise penalise the one family the query actually named.
-    const isSofaBedRow = item.subcategory === 'Sofa Bed';
-    if (hasBedHint && item.category !== 'Bed' && !(hasSofaBedHint && isSofaBedRow)) {
-      categoryMismatchPenalty = 0.5;
+      if (
+        hasBedHint &&
+        item.category !== 'Bed' &&
+        !(hasSofaBedHint && isSofaBedRow) &&
+        !rowHas('bed')
+      ) {
+        categoryMismatchPenalty = 0.5;
+      }
+      if (
+        hasTableHint &&
+        item.category !== 'Table' &&
+        !rowHas('table') &&
+        !rowHas('desk')
+      ) {
+        categoryMismatchPenalty = 0.5;
+      }
     }
-    if (hasTableHint && item.category !== 'Table') categoryMismatchPenalty = 0.5;
     
     // Calculate similarity based on word matching
     let matchCount = 0;
@@ -2152,6 +2222,13 @@ export function findBestMatch(
         matchCount += 1;
         totalWeight += 3;
       } else {
+        // Full weight, deliberately. Dropping a miss to 1 lifted every verbose
+        // name over the threshold, but it also turned two safe rejections into
+        // confident errors: "Black folding electric treadmill" resolved to
+        // "Recliner sofa (3-seat)" at 1.000 on the shared keyword 'electric',
+        // and "Office desk (standard)" lost to "L-shaped desk". A rejection
+        // falls through to a Layer-2 estimate, which is wrong by a margin; a
+        // confident wrong row is wrong by a vehicle class.
         totalWeight += 3;
       }
     }
