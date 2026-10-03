@@ -634,6 +634,14 @@ interface VisionDetectionResult {
     width_cm: number;
     height_cm: number;
   };
+  /** calculateVolumeFt3 of estimatedDimensions, or null when the model gave none. */
+  estimatedVolumeFt3?: number | null;
+  brand?: string | null;
+  material?: string | null;
+  style?: string | null;
+  color?: string | null;
+  /** One sentence on the cues behind the size estimate. Logged, not persisted. */
+  reasoning?: string | null;
   estimatedWeight?: number;
   quantity?: number;
   /** False only when the item is genuinely unidentifiable — see the fullScene prompt field. */
@@ -686,8 +694,9 @@ IDENTIFY:
 1. Item type (be specific: "Queen platform bed", "6-drawer dresser", "Travel backpack", "Large suitcase")
 2. Category: Bed, Sofa, Table, Chair, Dresser, Appliance, Electronics, Storage, Outdoor, Luggage, Other
 3. Subcategory (e.g., Twin, Queen, King for beds; Loveseat, 3-Seater, Sectional, Sofa Bed for sofas; Backpack, Suitcase, Duffel, Handbag for luggage)
-4. Size indicators (Queen, King, 3-seater, L-shaped, etc.) — these DO belong in
-   "itemName": they decide which size variant of an item is matched.
+4. Size indicators (Queen, King, 3-seater, etc.) — these DO belong in
+   "itemName": they decide which size variant of an item is matched. The ONE
+   exception is sectionals, which are shape-only — see SECTIONAL SIZE below.
 5. Material if visible (leather, fabric, wood, metal, glass) — note it only when
    it genuinely identifies the item (e.g. "leather recliner"). Do NOT pad
    "itemName" with colours, finishes or filler adjectives: "grey modern fabric
@@ -705,33 +714,13 @@ coming back toward the camera on BOTH sides. If you can see two opposing returns
 it is U-SHAPED even when only part of the second one is visible.
 Do not default to L-shaped: state the shape you can actually see.
 
-SECTIONAL SOFA SIZE CLASSIFICATION (CRITICAL — use visual cues to determine size tier):
-For sectional sofas, you MUST classify as Small, Medium, or Large based on these cues:
-• Count the number of seat cushions visible
-• Check seat depth (standard ~55cm vs deep-seat ~70cm+)
-• Look for a chaise or ottoman section, and judge how long it is
-• Compare to nearby objects (doors are ~200cm tall, standard doorways ~80cm wide)
-• Count how many separable pieces/sections you can identify
-Estimate the total footprint from room context and proportions, then pick the
-tier whose footprint it is closest to.
-
-L-SHAPED SECTIONAL TIERS:
-• SMALL (2-piece, apartment-size): 2-3 seat cushions, compact chaise (~140cm or less), fits against one wall. Footprint ~220×150cm or less. ~230×150×85cm, 70kg
-• MEDIUM (3-piece, standard): 4-5 seat cushions, longer chaise, fills a corner. Footprint ~270×200cm. ~270×200×85cm, 120kg
-• LARGE (4-5 piece, oversized/deep-seat): 6+ seat cushions, wide/deep seats, long chaise or oversized ottoman. Footprint ~370×220cm or more. ~370×220×90cm, 170kg
-
-U-SHAPED SECTIONAL TIERS:
-• SMALL (compact, 3-piece): 5-6 seat cushions, narrow arms. ~280×200×85cm, 130kg
-• MEDIUM (standard, 4-5 piece): 7-8 seat cushions, standard depth. ~350×250×85cm, 180kg
-• LARGE (oversized, 6+ piece): 9+ seat cushions, theater/pit style, deep seats. ~420×300×90cm, 240kg
-
-SECTIONAL SMALL/MEDIUM TIEBREAK:
-For L-shaped and U-shaped sectionals only, when you are uncertain between SMALL
-and MEDIUM, default to SMALL. This is a deliberate exception to the general
-SIZING RULE below. It does not apply to any other item type, and it does not
-apply to the MEDIUM/LARGE boundary — there, keep rounding up.
-
-Include the size tier in the item name (e.g., "Small L-shaped sectional sofa", "Large U-shaped sectional sofa").
+SECTIONAL SIZE — DO NOT GUESS A TIER:
+Do NOT classify a sectional as Small, Medium or Large, and do NOT put a size word
+in "itemName". Report the shape only: "L-shaped sectional sofa", "U-shaped
+sectional sofa". The size variant is chosen downstream from the footprint you
+report in "estimatedDimensions", so spend the effort on measuring that footprint
+rather than on picking a label. Measure the whole footprint including the chaise,
+not just the longest run of seating.
 
 SOFA BED / SLEEPER DETECTION (CRITICAL — check for these indicators):
 Before classifying any sofa, check for sofa bed / sleeper indicators:
@@ -758,9 +747,15 @@ SECTIONAL SOFA BED TIERS:
 
 Include "sofa bed" in the item name (e.g., "Medium sectional sofa bed", "Queen sofa bed").
 
-PROVIDE ACCURATE DIMENSION ESTIMATES based on item type:
-- Use standard furniture dimensions for the identified type
-- Be consistent: same item type = same dimensions
+DIMENSION ESTIMATION — reason from what is in the frame:
+- Use room context clues: door frames (~200cm tall), ceiling height (~240cm),
+  floor tiles (~30cm), windows, and people if present
+- Use brand recognition: if you recognise the model, use its known published
+  dimensions
+- Use proportional reasoning: compare the item to other objects in the frame
+- State in "reasoning" which cues you actually used
+- The reference list below is an anchor for plausibility, not a lookup table: if
+  the photo clearly shows something bigger or smaller, report what you see
 
 ${REFERENCE_DIMENSIONS}
 
@@ -793,7 +788,8 @@ If the image shows a scene with many cardboard moving boxes (not a single item):
 SIZING RULE:
 When uncertain between two size estimates, always choose the LARGER option.
 Moving trucks need real-world space. Underestimating causes job failures and driver disputes.
-The one exception is the sectional SMALL/MEDIUM tiebreak stated above.
+This applies to size wording in "itemName"; it does not license padding
+"estimatedDimensions" above what the photo supports.
 
 QUANTITY FIELD:
 For sets or counted items, include quantity.
@@ -817,11 +813,16 @@ answer false. When in any doubt whatsoever, answer true.
 
 Return ONLY valid JSON (no markdown):
 {
-  "itemName": "detailed descriptive name",
+  "itemName": "short furniture type name; shape-only for sectionals (e.g. 'L-shaped sectional sofa', 'sofa', 'dining table')",
   "category": "category from list above",
   "subcategory": "specific subcategory",
-  "confidence": 0.0-1.0,
+  "brand": "brand/model if visible or recognisable from design (e.g. 'IKEA FRIHETEN'), else null",
   "estimatedDimensions": { "length_cm": number, "width_cm": number, "height_cm": number },
+  "material": "primary material (e.g. 'fabric', 'leather', 'wood', 'glass')",
+  "style": "style descriptor (e.g. 'modern', 'traditional', 'scandinavian')",
+  "color": "primary color",
+  "confidence": 0.0-1.0,
+  "reasoning": "one sentence: which visual cues you used to estimate size (room context, door frame, floor tiles, proportions, brand recognition)",
   "estimatedWeight": number in kg,
   "quantity": number (default 1),
   "fullScene": true   // default true; false ONLY if the item is unidentifiable
@@ -834,7 +835,7 @@ Return ONLY valid JSON (no markdown):
         ],
       },
     ],
-    max_tokens: 500,
+    max_tokens: 700,  // five extra fields + a sentence of reasoning no longer fit in 500
     temperature: 0,
     seed: 42,
   });
@@ -846,17 +847,56 @@ Return ONLY valid JSON (no markdown):
   }
   
   const result = JSON.parse(content);
-  
+
+  // Accept both key spellings. The prompt asks for *_cm, but a model that follows
+  // the plain English of the field names returns length/width/height; reading only
+  // one spelling would silently drop the estimate and fall back to defaults.
+  const rawDims = result.estimatedDimensions;
+  const dimsNum = (...candidates: unknown[]): number | undefined => {
+    for (const c of candidates) {
+      const n = typeof c === 'string' ? Number(c) : c;
+      if (typeof n === 'number' && Number.isFinite(n) && n > 0) return n;
+    }
+    return undefined;
+  };
+  const lengthCm = rawDims ? dimsNum(rawDims.length_cm, rawDims.length) : undefined;
+  const widthCm  = rawDims ? dimsNum(rawDims.width_cm,  rawDims.width)  : undefined;
+  const heightCm = rawDims ? dimsNum(rawDims.height_cm, rawDims.height) : undefined;
+  const estimatedDimensions =
+    lengthCm !== undefined && widthCm !== undefined && heightCm !== undefined
+      ? { length_cm: lengthCm, width_cm: widthCm, height_cm: heightCm }
+      : undefined;
+
+  // Volume straight from the model's estimate. null — not 0 — when it gave none,
+  // so the matcher's hint stays absent rather than becoming a 0ft3 target.
+  const estimatedVolumeFt3 = estimatedDimensions
+    ? calculateVolumeFt3(estimatedDimensions.length_cm, estimatedDimensions.width_cm, estimatedDimensions.height_cm)
+    : null;
+
+  console.log(
+    `[Vision] ${result.itemName} | brand: ${result.brand ?? 'none'}` +
+    ` | dims: ${JSON.stringify(estimatedDimensions ?? null)}` +
+    ` | vol: ${estimatedVolumeFt3} ft3 | reasoning: ${result.reasoning ?? 'none'}`,
+  );
   console.log('[Vision Engine 2.0] Vision detected:', result.itemName, 
     `(${result.category}/${result.subcategory})`,
     `confidence: ${result.confidence}`);
   
+  const asText = (v: unknown): string | null =>
+    typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+
   return {
     itemName: result.itemName || 'Unknown Item',
     category: result.category || 'Other',
     subcategory: result.subcategory || 'Unknown',
     confidence: result.confidence || 0.5,
-    estimatedDimensions: result.estimatedDimensions,
+    estimatedDimensions,
+    estimatedVolumeFt3,
+    brand: asText(result.brand),
+    material: asText(result.material),
+    style: asText(result.style),
+    color: asText(result.color),
+    reasoning: asText(result.reasoning),
     estimatedWeight: result.estimatedWeight,
     quantity: typeof result.quantity === 'number' ? result.quantity : undefined,
     // Fail open: only an explicit false rejects the photo. A model that omits
@@ -874,11 +914,12 @@ function matchWithDatabase(visionResult: VisionDetectionResult): {
   similarity: number;
 } {
   // The model's own estimated dimensions, as a volume, so the matcher can pick
-  // the right size variant when several rows score identically.
-  const est = visionResult.estimatedDimensions;
+  // the right size variant when several rows score identically. With sectionals
+  // now reported shape-only, this hint is the ONLY thing that separates the
+  // small/medium/large rows — they tie on name tokens by construction.
   const hintVolumeFt3 =
-    est && est.length_cm > 0 && est.width_cm > 0 && est.height_cm > 0
-      ? (est.length_cm * est.width_cm * est.height_cm) / 28316.8
+    visionResult.estimatedVolumeFt3 != null && visionResult.estimatedVolumeFt3 > 0
+      ? visionResult.estimatedVolumeFt3
       : undefined;
 
   // Use the item name to find best match, with the model's subcategory as a hint
