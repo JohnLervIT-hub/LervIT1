@@ -246,14 +246,7 @@ const TRUCK_REQUIRED_ITEMS = [
   'pool table',
   'hot tub',
   'gun safe',
-  'safe',
   'billiard',
-  'washing machine',
-  'washer',
-  'dryer',
-  'refrigerator',
-  'fridge',
-  'freezer',
   'motorcycle',
 ] as const;
 
