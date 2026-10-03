@@ -165,24 +165,30 @@ export const LOAD_SIZE_CEILING_TIER = 'apartment';
 /**
  * Class boundaries in RAW ft³ — the same unit the Recommendations card shows.
  *
- * Published ranges: SUV 0-40, Pickup 41-140, Cargo Van 141-350, Truck 351+.
+ * Published ranges: SUV 0-20, Pickup 21-130, Cargo Van 131-255, Truck 256+.
  *
- * History, because the numbers look unchanged but the behaviour is not: these
- * were once 40/140/350 in "adjusted" ft³, with a packingFactor of 1.10 applied
- * inside the classifier, which put the real raw cutoffs at 36.36/127.27/318.18.
- * The card showed raw volume beside a range quoted in adjusted ft³, so a 127.6
- * ft³ load read as a Pickup while classing as a Cargo Van. The factor is gone
- * and these are now raw, which also widens every class by ~10%: a load between
- * 36.36 and 40, 127.27 and 140, or 318.18 and 350 ft³ classes one tier lower
- * than it used to, and prices accordingly.
+ * Tightened from 40/140/350 on 2026-10-03. Every boundary moved down, so loads
+ * reclassify UPWARD and price higher: 20-40 ft³ goes SUV→Pickup, 130-140 goes
+ * Pickup→Cargo Van, and 255-350 goes Cargo Van→Truck. The SUV ceiling is the
+ * sharpest cut — it halved — so single-item jobs that used to take a car now
+ * quote as a pickup.
+ *
+ * Earlier history, because the numbers once looked unchanged while the behaviour
+ * was not: the boundaries were originally 40/140/350 in "adjusted" ft³, with a
+ * packingFactor of 1.10 applied inside the classifier, putting the real raw
+ * cutoffs at 36.36/127.27/318.18. The card showed raw volume beside a range
+ * quoted in adjusted ft³, so a 127.6 ft³ load read as a Pickup while classing as
+ * a Cargo Van. The factor is gone and these are raw.
  *
  * VEHICLE_CLASSES and VEHICLE_CAPACITY_RANGES derive from this object rather
  * than restating it, which is how the three sets drifted apart before.
+ * VEHICLE_VOLUME_THRESHOLDS in shared/furniture-database.ts mirrors it by hand
+ * (that file cannot import this one without a cycle) — change both together.
  */
 export const VEHICLE_CLASS_MAX_RAW_FT3 = {
-  A: 40,
-  B: 140,
-  C: 350,
+  A: 20,
+  B: 130,
+  C: 255,
 } as const;
 
 // ===== VEHICLE CLASS CATALOG (display metadata) =====
